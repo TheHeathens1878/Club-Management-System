@@ -1,0 +1,31 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+.next/
+out/
+dist/
+.expo/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# env — secrets live in Vercel/EAS/Supabase config (PLAN §2.6)
+.env
+.env.*
+!.env.example
+
+# supabase local
+supabase/.branches/
+supabase/.temp/
+
+# misc
+.DS_Store
+*.log
+.vercel
+coverage/
+
+# claude local overrides
+.claude/settings.local.json
+

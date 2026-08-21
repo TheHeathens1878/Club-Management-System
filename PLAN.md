@@ -56,7 +56,7 @@ The club currently runs four separate systems:
 
 | Task | Description | Acceptance criteria | Status |
 |---|---|---|---|
-| P0.1 | Create monorepo (Turborepo + pnpm): `apps/web`, `apps/mobile`, `packages/shared`, `packages/db` (migrations + generated types), `supabase/` (CLI config) | Repo builds; CI runs lint + typecheck + tests on PR | ☐ |
+| P0.1 | Create monorepo (Turborepo + pnpm): `apps/web`, `apps/mobile`, `packages/shared`, `packages/db` (migrations + generated types), `supabase/` (CLI config) | Repo builds; CI runs lint + typecheck + tests on PR | ☑ 2026-08-21 — scaffold builds; `turbo lint typecheck test` green locally; CI workflow added (first PR will prove it) |
 | P0.2 | Link Supabase CLI to project `rwpglslbkhsqyxjhnpue`; pull current schema into versioned migrations as baseline | `supabase db diff` is clean against prod; baseline migration committed | ☐ |
 | P0.3 | Set up CI (GitHub Actions): typecheck, tests, `supabase db lint`, migration dry-run against a branch DB | CI green on a no-op PR; required checks configured | ☐ |
 | P0.4 | Import existing function-room app code into `apps/web` (or link as first app if it stays separate short-term — confirm with Adam) | Existing room booking works unchanged from monorepo deploy | ☐ |
