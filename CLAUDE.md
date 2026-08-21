@@ -5,6 +5,9 @@ branch; RLS on every table; no auto-merge on anything touching member data,
 safeguarding, messaging, auth, payments or RLS. Update task statuses in PLAN.md
 as you complete them.
 
+## Sub-agents
+Always use Opus (`model: "opus"`) for sub-agents spawned via the Agent tool.
+
 ## Systems in scope
 - Supabase aomsc-function-room (rwpglslbkhsqyxjhnpue) — the target platform.
 - Neon (pitch booking) — SOURCE for the Phase 3 migration. READ-ONLY, never write to it.

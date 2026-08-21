@@ -36,3 +36,17 @@ pnpm build
 All schema changes are Supabase CLI migrations in `supabase/migrations/`, rehearsed on a
 Supabase branch before merging. Every table ships with RLS. After any migration, regenerate
 `packages/db/src/database.types.ts` in the same PR (PLAN §2.7).
+
+### One-time CLI link (P0.2 — needs Adam's credentials)
+
+The baseline `supabase/migrations/20260821000000_baseline.sql` was reconstructed from the live
+prod catalogs and **must not be re-run against prod**. To finish linking:
+
+```sh
+npx supabase login                                   # or set SUPABASE_ACCESS_TOKEN
+npx supabase link --project-ref rwpglslbkhsqyxjhnpue # prompts for the DB password
+npx supabase migration repair --status applied 20260821000000
+npx supabase db diff --linked                        # expect: no schema changes found
+```
+
+If the diff is not empty, amend the baseline (never prod) until it is, then commit.
