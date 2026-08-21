@@ -5,6 +5,10 @@ branch; RLS on every table; no auto-merge on anything touching member data,
 safeguarding, messaging, auth, payments or RLS. Update task statuses in PLAN.md
 as you complete them.
 
+## Attribution
+No "Co-Authored-By: Claude" trailers in commit messages and no Claude/AI
+authorship notes in code or comments.
+
 ## Sub-agents
 Always use Opus (`model: "opus"`) for sub-agents spawned via the Agent tool.
 
