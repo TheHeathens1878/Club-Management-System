@@ -192,6 +192,220 @@ export type Database = {
           },
         ]
       }
+      bookings: {
+        Row: {
+          anonymised_at: string | null
+          balance_due_date: string | null
+          balance_reminder_sent_at: string | null
+          base_hire_pence: number
+          blocked_from: string
+          blocked_until: string
+          booker_email: string
+          booker_first_name: string | null
+          booker_last_name: string | null
+          booker_name: string
+          booker_person_id: string | null
+          booker_phone: string | null
+          booker_profile_id: string | null
+          calendar_event_id: string | null
+          cancellation_warning_sent_at: string | null
+          child_name: string | null
+          child_team: string | null
+          confirmation_note: string | null
+          created_at: string
+          created_by: string | null
+          deposit_due_date: string | null
+          deposit_pence: number | null
+          deposit_reminder_sent_at: string | null
+          deposit_terms_accepted_at: string | null
+          ends_at: string
+          estimated_guests: number | null
+          extras_total_pence: number
+          id: string
+          internal_notes: string | null
+          is_member: boolean
+          kind: Database["public"]["Enums"]["booking_kind"]
+          legacy_room_booking_id: string | null
+          member_discount_pence: number
+          member_number: string | null
+          membership_type: string | null
+          notes: string | null
+          occasion: string | null
+          payment_method: string | null
+          payment_received_at: string | null
+          payment_received_by: string | null
+          payment_reference: string | null
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          post_buffer_minutes: number
+          pre_buffer_minutes: number
+          quote_followup_sent_at: string | null
+          recurrence_group_id: string | null
+          resource_id: string
+          security_deposit_nudge_sent_at: string | null
+          security_deposit_pence: number
+          security_deposit_returned_at: string | null
+          security_deposit_returned_method: string | null
+          security_deposit_returned_note: string | null
+          selected_extras: Json
+          starts_at: string
+          status: Database["public"]["Enums"]["booking_status"]
+          stripe_checkout_id: string | null
+          stripe_ref: string | null
+          team_name: string | null
+          thank_you_sent_at: string | null
+          total_pence: number | null
+          updated_at: string
+        }
+        Insert: {
+          anonymised_at?: string | null
+          balance_due_date?: string | null
+          balance_reminder_sent_at?: string | null
+          base_hire_pence?: number
+          blocked_from: string
+          blocked_until: string
+          booker_email: string
+          booker_first_name?: string | null
+          booker_last_name?: string | null
+          booker_name: string
+          booker_person_id?: string | null
+          booker_phone?: string | null
+          booker_profile_id?: string | null
+          calendar_event_id?: string | null
+          cancellation_warning_sent_at?: string | null
+          child_name?: string | null
+          child_team?: string | null
+          confirmation_note?: string | null
+          created_at?: string
+          created_by?: string | null
+          deposit_due_date?: string | null
+          deposit_pence?: number | null
+          deposit_reminder_sent_at?: string | null
+          deposit_terms_accepted_at?: string | null
+          ends_at: string
+          estimated_guests?: number | null
+          extras_total_pence?: number
+          id?: string
+          internal_notes?: string | null
+          is_member?: boolean
+          kind?: Database["public"]["Enums"]["booking_kind"]
+          legacy_room_booking_id?: string | null
+          member_discount_pence?: number
+          member_number?: string | null
+          membership_type?: string | null
+          notes?: string | null
+          occasion?: string | null
+          payment_method?: string | null
+          payment_received_at?: string | null
+          payment_received_by?: string | null
+          payment_reference?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          post_buffer_minutes?: number
+          pre_buffer_minutes?: number
+          quote_followup_sent_at?: string | null
+          recurrence_group_id?: string | null
+          resource_id: string
+          security_deposit_nudge_sent_at?: string | null
+          security_deposit_pence?: number
+          security_deposit_returned_at?: string | null
+          security_deposit_returned_method?: string | null
+          security_deposit_returned_note?: string | null
+          selected_extras?: Json
+          starts_at: string
+          status?: Database["public"]["Enums"]["booking_status"]
+          stripe_checkout_id?: string | null
+          stripe_ref?: string | null
+          team_name?: string | null
+          thank_you_sent_at?: string | null
+          total_pence?: number | null
+          updated_at?: string
+        }
+        Update: {
+          anonymised_at?: string | null
+          balance_due_date?: string | null
+          balance_reminder_sent_at?: string | null
+          base_hire_pence?: number
+          blocked_from?: string
+          blocked_until?: string
+          booker_email?: string
+          booker_first_name?: string | null
+          booker_last_name?: string | null
+          booker_name?: string
+          booker_person_id?: string | null
+          booker_phone?: string | null
+          booker_profile_id?: string | null
+          calendar_event_id?: string | null
+          cancellation_warning_sent_at?: string | null
+          child_name?: string | null
+          child_team?: string | null
+          confirmation_note?: string | null
+          created_at?: string
+          created_by?: string | null
+          deposit_due_date?: string | null
+          deposit_pence?: number | null
+          deposit_reminder_sent_at?: string | null
+          deposit_terms_accepted_at?: string | null
+          ends_at?: string
+          estimated_guests?: number | null
+          extras_total_pence?: number
+          id?: string
+          internal_notes?: string | null
+          is_member?: boolean
+          kind?: Database["public"]["Enums"]["booking_kind"]
+          legacy_room_booking_id?: string | null
+          member_discount_pence?: number
+          member_number?: string | null
+          membership_type?: string | null
+          notes?: string | null
+          occasion?: string | null
+          payment_method?: string | null
+          payment_received_at?: string | null
+          payment_received_by?: string | null
+          payment_reference?: string | null
+          payment_status?: Database["public"]["Enums"]["payment_status"]
+          post_buffer_minutes?: number
+          pre_buffer_minutes?: number
+          quote_followup_sent_at?: string | null
+          recurrence_group_id?: string | null
+          resource_id?: string
+          security_deposit_nudge_sent_at?: string | null
+          security_deposit_pence?: number
+          security_deposit_returned_at?: string | null
+          security_deposit_returned_method?: string | null
+          security_deposit_returned_note?: string | null
+          selected_extras?: Json
+          starts_at?: string
+          status?: Database["public"]["Enums"]["booking_status"]
+          stripe_checkout_id?: string | null
+          stripe_ref?: string | null
+          team_name?: string | null
+          thank_you_sent_at?: string | null
+          total_pence?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_booker_person_id_fkey"
+            columns: ["booker_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_booker_profile_id_fkey"
+            columns: ["booker_profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_resource_id_fkey"
+            columns: ["resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clubhouse_checklist_runs: {
         Row: {
           checklist_id: string
@@ -658,6 +872,78 @@ export type Database = {
         }
         Relationships: []
       }
+      payments: {
+        Row: {
+          amount_pence: number
+          authorised_by_email: string | null
+          authorised_by_name: string | null
+          authorised_by_profile: string | null
+          booking_id: string
+          created_at: string
+          id: string
+          legacy_booking_payment_id: string | null
+          method: string | null
+          note: string | null
+          paid_at: string
+          reference: string | null
+          source: string
+          stripe_payment_intent_id: string | null
+          sumup_checkout_id: string | null
+          sumup_txn_code: string | null
+        }
+        Insert: {
+          amount_pence: number
+          authorised_by_email?: string | null
+          authorised_by_name?: string | null
+          authorised_by_profile?: string | null
+          booking_id: string
+          created_at?: string
+          id?: string
+          legacy_booking_payment_id?: string | null
+          method?: string | null
+          note?: string | null
+          paid_at?: string
+          reference?: string | null
+          source?: string
+          stripe_payment_intent_id?: string | null
+          sumup_checkout_id?: string | null
+          sumup_txn_code?: string | null
+        }
+        Update: {
+          amount_pence?: number
+          authorised_by_email?: string | null
+          authorised_by_name?: string | null
+          authorised_by_profile?: string | null
+          booking_id?: string
+          created_at?: string
+          id?: string
+          legacy_booking_payment_id?: string | null
+          method?: string | null
+          note?: string | null
+          paid_at?: string
+          reference?: string | null
+          source?: string
+          stripe_payment_intent_id?: string | null
+          sumup_checkout_id?: string | null
+          sumup_txn_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_authorised_by_profile_fkey"
+            columns: ["authorised_by_profile"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       people: {
         Row: {
           address: Json | null
@@ -802,6 +1088,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      resources: {
+        Row: {
+          active: boolean
+          amenities: string[]
+          capacity: number | null
+          created_at: string
+          default_post_buffer_minutes: number
+          default_pre_buffer_minutes: number
+          description: string | null
+          extra_hour_pence: number | null
+          extras_config: Json
+          id: string
+          information: string | null
+          legacy_function_room_id: string | null
+          name: string
+          price_note: string | null
+          price_pence_fixed: number | null
+          price_pence_full_day: number | null
+          price_pence_half_day: number | null
+          price_pence_per_hour: number | null
+          sort_order: number
+          standard_hours: number | null
+          standard_price_pence: number | null
+          type: Database["public"]["Enums"]["resource_type"]
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          amenities?: string[]
+          capacity?: number | null
+          created_at?: string
+          default_post_buffer_minutes?: number
+          default_pre_buffer_minutes?: number
+          description?: string | null
+          extra_hour_pence?: number | null
+          extras_config?: Json
+          id?: string
+          information?: string | null
+          legacy_function_room_id?: string | null
+          name: string
+          price_note?: string | null
+          price_pence_fixed?: number | null
+          price_pence_full_day?: number | null
+          price_pence_half_day?: number | null
+          price_pence_per_hour?: number | null
+          sort_order?: number
+          standard_hours?: number | null
+          standard_price_pence?: number | null
+          type: Database["public"]["Enums"]["resource_type"]
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          amenities?: string[]
+          capacity?: number | null
+          created_at?: string
+          default_post_buffer_minutes?: number
+          default_pre_buffer_minutes?: number
+          description?: string | null
+          extra_hour_pence?: number | null
+          extras_config?: Json
+          id?: string
+          information?: string | null
+          legacy_function_room_id?: string | null
+          name?: string
+          price_note?: string | null
+          price_pence_fixed?: number | null
+          price_pence_full_day?: number | null
+          price_pence_half_day?: number | null
+          price_pence_per_hour?: number | null
+          sort_order?: number
+          standard_hours?: number | null
+          standard_price_pence?: number | null
+          type?: Database["public"]["Enums"]["resource_type"]
+          updated_at?: string
+        }
+        Relationships: []
       }
       room_bookings: {
         Row: {
@@ -1236,6 +1600,96 @@ export type Database = {
           profiles_linked: number
         }[]
       }
+      booking_conflicts: {
+        Args: {
+          p_ends_at: string
+          p_exclude_booking_id?: string
+          p_post_buffer_minutes?: number
+          p_pre_buffer_minutes?: number
+          p_resource_id: string
+          p_starts_at: string
+        }
+        Returns: {
+          anonymised_at: string | null
+          balance_due_date: string | null
+          balance_reminder_sent_at: string | null
+          base_hire_pence: number
+          blocked_from: string
+          blocked_until: string
+          booker_email: string
+          booker_first_name: string | null
+          booker_last_name: string | null
+          booker_name: string
+          booker_person_id: string | null
+          booker_phone: string | null
+          booker_profile_id: string | null
+          calendar_event_id: string | null
+          cancellation_warning_sent_at: string | null
+          child_name: string | null
+          child_team: string | null
+          confirmation_note: string | null
+          created_at: string
+          created_by: string | null
+          deposit_due_date: string | null
+          deposit_pence: number | null
+          deposit_reminder_sent_at: string | null
+          deposit_terms_accepted_at: string | null
+          ends_at: string
+          estimated_guests: number | null
+          extras_total_pence: number
+          id: string
+          internal_notes: string | null
+          is_member: boolean
+          kind: Database["public"]["Enums"]["booking_kind"]
+          legacy_room_booking_id: string | null
+          member_discount_pence: number
+          member_number: string | null
+          membership_type: string | null
+          notes: string | null
+          occasion: string | null
+          payment_method: string | null
+          payment_received_at: string | null
+          payment_received_by: string | null
+          payment_reference: string | null
+          payment_status: Database["public"]["Enums"]["payment_status"]
+          post_buffer_minutes: number
+          pre_buffer_minutes: number
+          quote_followup_sent_at: string | null
+          recurrence_group_id: string | null
+          resource_id: string
+          security_deposit_nudge_sent_at: string | null
+          security_deposit_pence: number
+          security_deposit_returned_at: string | null
+          security_deposit_returned_method: string | null
+          security_deposit_returned_note: string | null
+          selected_extras: Json
+          starts_at: string
+          status: Database["public"]["Enums"]["booking_status"]
+          stripe_checkout_id: string | null
+          stripe_ref: string | null
+          team_name: string | null
+          thank_you_sent_at: string | null
+          total_pence: number | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "bookings"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      booking_has_conflict: {
+        Args: {
+          p_ends_at: string
+          p_exclude_booking_id?: string
+          p_post_buffer_minutes?: number
+          p_pre_buffer_minutes?: number
+          p_resource_id: string
+          p_starts_at: string
+        }
+        Returns: boolean
+      }
       current_person_id: { Args: never; Returns: string }
       has_active_consent: {
         Args: {
@@ -1298,6 +1752,13 @@ export type Database = {
         | "member"
         | "parent"
         | "hirer"
+      booking_kind: "hire" | "block" | "fixture" | "maintenance"
+      booking_status:
+        | "enquiry"
+        | "quoted"
+        | "pending"
+        | "confirmed"
+        | "cancelled"
       consent_type: "app_account" | "unsupervised_messaging"
       guardian_relationship:
         | "parent"
@@ -1306,6 +1767,8 @@ export type Database = {
         | "foster_carer"
         | "legal_guardian"
         | "other"
+      payment_status: "unpaid" | "deposit_paid" | "paid"
+      resource_type: "function_room" | "pitch"
       user_role:
         | "committee"
         | "bar"
@@ -1449,6 +1912,14 @@ export const Constants = {
         "parent",
         "hirer",
       ],
+      booking_kind: ["hire", "block", "fixture", "maintenance"],
+      booking_status: [
+        "enquiry",
+        "quoted",
+        "pending",
+        "confirmed",
+        "cancelled",
+      ],
       consent_type: ["app_account", "unsupervised_messaging"],
       guardian_relationship: [
         "parent",
@@ -1458,6 +1929,8 @@ export const Constants = {
         "legal_guardian",
         "other",
       ],
+      payment_status: ["unpaid", "deposit_paid", "paid"],
+      resource_type: ["function_room", "pitch"],
       user_role: [
         "committee",
         "bar",
