@@ -655,6 +655,47 @@ export type Database = {
         }
         Relationships: []
       }
+      person_roles: {
+        Row: {
+          granted_at: string
+          granted_by: string | null
+          id: string
+          notes: string | null
+          person_id: string
+          revoked_at: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+        }
+        Insert: {
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          notes?: string | null
+          person_id: string
+          revoked_at?: string | null
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Update: {
+          granted_at?: string
+          granted_by?: string | null
+          id?: string
+          notes?: string | null
+          person_id?: string
+          revoked_at?: string | null
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_roles_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           bar_contracted_hours: number | null
@@ -1121,6 +1162,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      backfill_person_roles: {
+        Args: never
+        Returns: {
+          roles_created: number
+        }[]
+      }
       backfill_profiles_people: {
         Args: never
         Returns: {
@@ -1130,11 +1177,36 @@ export type Database = {
         }[]
       }
       current_person_id: { Args: never; Returns: string }
+      has_any_role: {
+        Args: { p_roles: Database["public"]["Enums"]["app_role"][] }
+        Returns: boolean
+      }
+      has_role: {
+        Args: { p_role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
       is_bar_manager: { Args: never; Returns: boolean }
+      is_club_admin: { Args: never; Returns: boolean }
       is_committee: { Args: never; Returns: boolean }
       is_minor: { Args: { person_id: string }; Returns: boolean }
       is_minor_dob: { Args: { d: string }; Returns: boolean }
+      is_safeguarding_lead: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
+      map_user_role_to_app_role: {
+        Args: { p_role: Database["public"]["Enums"]["user_role"] }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      map_user_role_to_app_role_strict: {
+        Args: { p_role: Database["public"]["Enums"]["user_role"] }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      person_has_role: {
+        Args: {
+          p_person_id: string
+          p_role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
       split_person_name: {
         Args: { p_full_name: string }
         Returns: {
@@ -1144,6 +1216,14 @@ export type Database = {
       }
     }
     Enums: {
+      app_role:
+        | "club_admin"
+        | "safeguarding_lead"
+        | "coach"
+        | "staff"
+        | "member"
+        | "parent"
+        | "hirer"
       guardian_relationship:
         | "parent"
         | "step_parent"
@@ -1285,6 +1365,15 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: [
+        "club_admin",
+        "safeguarding_lead",
+        "coach",
+        "staff",
+        "member",
+        "parent",
+        "hirer",
+      ],
       guardian_relationship: [
         "parent",
         "step_parent",
