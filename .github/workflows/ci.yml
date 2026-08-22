@@ -9,6 +9,9 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   verify:
     name: Lint, typecheck, test
@@ -16,9 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
+      - uses: pnpm/action-setup@v4 # version comes from package.json "packageManager"
 
       - uses: actions/setup-node@v4
         with:
@@ -34,4 +35,43 @@ jobs:
           EXPO_PUBLIC_SUPABASE_URL: https://example.supabase.co
           EXPO_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder
 
-  # P0.3 adds: supabase db lint + migration dry-run against a branch DB.
+  database:
+    name: Migrations apply cleanly, db lint, prod dry-run
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      # 1. Apply every migration (and seed.sql) from scratch to a fresh local
+      #    Postgres. This proves the migration chain is replayable (PLAN §2.1)
+      #    without touching any hosted project.
+      - name: Apply migrations to a fresh local database
+        run: |
+          supabase db start
+          supabase db reset --local
+
+      # 2. Static analysis of the resulting schema (plpgsql_check on every
+      #    function; fails on errors).
+      - name: supabase db lint
+        run: supabase db lint --local --level error --fail-on error
+
+      # 3. Dry-run against the linked production project: confirms exactly
+      #    which migrations *would* be applied and that the history is in
+      #    sync. Nothing is written. Skipped when the secrets are absent
+      #    (e.g. PRs from forks).
+      - name: Dry-run push against production (no changes made)
+        if: ${{ env.SUPABASE_ACCESS_TOKEN != '' && env.SUPABASE_DB_PASSWORD != '' }}
+        run: |
+          supabase link --project-ref rwpglslbkhsqyxjhnpue
+          supabase migration list
+          supabase db push --dry-run
+
+      - name: Stop local database
+        if: always()
+        run: supabase stop --no-backup
