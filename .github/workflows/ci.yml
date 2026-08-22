@@ -5,9 +5,11 @@ on:
   push:
     branches: [main]
 
+# Superseded PR pushes cancel their older run; main runs are never cancelled
+# (a branch-delete event once cancelled a main run as "lower priority").
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
