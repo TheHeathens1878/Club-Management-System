@@ -72,8 +72,8 @@ select policies_are(
   'public',
   'people',
   array['people_committee_read', 'people_committee_insert', 'people_committee_update',
-        'people_self_read'],
-  'public.people has exactly the three committee policies plus the P1.2 self-read, and no others'
+        'people_self_read', 'people_guardian_read'],
+  'public.people has exactly the three committee policies plus the P1.2 self-read and the P1.3 guardian read, and no others'
 );
 
 select is_empty(
@@ -330,6 +330,11 @@ select throws_ok(
   null,
   'and TRUNCATE ... CASCADE, which gets past the foreign key, is stopped by trg_people_deny_truncate'
 );
+
+-- Since P1.3 the cascade also reaches public.guardianships, which carries its
+-- own trg_guardianships_deny_truncate (SG-2, applied to that table for the
+-- truncate half only). Either guard raising P0001 satisfies the assertion
+-- above, and both firing is the intended belt-and-braces.
 
 select * from finish();
 

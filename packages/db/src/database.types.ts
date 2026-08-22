@@ -469,6 +469,57 @@ export type Database = {
         }
         Relationships: []
       }
+      guardianships: {
+        Row: {
+          child_person_id: string
+          created_at: string
+          created_by: string | null
+          ended_at: string | null
+          guardian_person_id: string
+          id: string
+          notes: string | null
+          relationship: Database["public"]["Enums"]["guardian_relationship"]
+          updated_at: string
+        }
+        Insert: {
+          child_person_id: string
+          created_at?: string
+          created_by?: string | null
+          ended_at?: string | null
+          guardian_person_id: string
+          id?: string
+          notes?: string | null
+          relationship: Database["public"]["Enums"]["guardian_relationship"]
+          updated_at?: string
+        }
+        Update: {
+          child_person_id?: string
+          created_at?: string
+          created_by?: string | null
+          ended_at?: string | null
+          guardian_person_id?: string
+          id?: string
+          notes?: string | null
+          relationship?: Database["public"]["Enums"]["guardian_relationship"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardianships_child_person_id_fkey"
+            columns: ["child_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardianships_guardian_person_id_fkey"
+            columns: ["guardian_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       holiday_requests: {
         Row: {
           created_at: string
@@ -1078,6 +1129,7 @@ export type Database = {
           profiles_linked: number
         }[]
       }
+      current_person_id: { Args: never; Returns: string }
       is_bar_manager: { Args: never; Returns: boolean }
       is_committee: { Args: never; Returns: boolean }
       is_minor: { Args: { person_id: string }; Returns: boolean }
@@ -1092,6 +1144,13 @@ export type Database = {
       }
     }
     Enums: {
+      guardian_relationship:
+        | "parent"
+        | "step_parent"
+        | "grandparent"
+        | "foster_carer"
+        | "legal_guardian"
+        | "other"
       user_role:
         | "committee"
         | "bar"
@@ -1226,6 +1285,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      guardian_relationship: [
+        "parent",
+        "step_parent",
+        "grandparent",
+        "foster_carer",
+        "legal_guardian",
+        "other",
+      ],
       user_role: [
         "committee",
         "bar",
@@ -1237,3 +1304,4 @@ export const Constants = {
     },
   },
 } as const
+
