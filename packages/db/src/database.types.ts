@@ -614,6 +614,7 @@ export type Database = {
           full_name: string | null
           holiday_allowance_days: number | null
           id: string
+          person_id: string
           role: Database["public"]["Enums"]["user_role"]
         }
         Insert: {
@@ -625,6 +626,7 @@ export type Database = {
           full_name?: string | null
           holiday_allowance_days?: number | null
           id: string
+          person_id: string
           role?: Database["public"]["Enums"]["user_role"]
         }
         Update: {
@@ -636,9 +638,18 @@ export type Database = {
           full_name?: string | null
           holiday_allowance_days?: number | null
           id?: string
+          person_id?: string
           role?: Database["public"]["Enums"]["user_role"]
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: true
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       room_bookings: {
         Row: {
@@ -1059,11 +1070,26 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      backfill_profiles_people: {
+        Args: never
+        Returns: {
+          people_created: number
+          people_ids: string[]
+          profiles_linked: number
+        }[]
+      }
       is_bar_manager: { Args: never; Returns: boolean }
       is_committee: { Args: never; Returns: boolean }
       is_minor: { Args: { person_id: string }; Returns: boolean }
       is_minor_dob: { Args: { d: string }; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
+      split_person_name: {
+        Args: { p_full_name: string }
+        Returns: {
+          first_name: string
+          last_name: string
+        }[]
+      }
     }
     Enums: {
       user_role:

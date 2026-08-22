@@ -20,7 +20,7 @@
 
 begin;
 
-select plan(31);
+select plan(33);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -28,6 +28,11 @@ select plan(31);
 -- Inserting into auth.users fires the baseline's on_auth_user_created trigger,
 -- which creates the matching public.profiles row as 'member'; the role is then
 -- corrected. profiles is the only role source until P1.4.
+--
+-- Since P1.2 that trigger also creates one public.people row per login, so the
+-- three inserts below produce three people before the two explicit fixtures —
+-- five in total. Each actor can therefore see their own person row via
+-- people_self_read, which is what the read counts below reflect.
 
 insert into auth.users (id, email) values
   ('33333333-3333-4333-8333-000000000001', 'committee@test.invalid'),
@@ -58,8 +63,9 @@ select is(
 select policies_are(
   'public',
   'people',
-  array['people_committee_read', 'people_committee_insert', 'people_committee_update'],
-  'public.people has exactly the three committee policies and no others'
+  array['people_committee_read', 'people_committee_insert', 'people_committee_update',
+        'people_self_read'],
+  'public.people has exactly the three committee policies plus the P1.2 self-read, and no others'
 );
 
 select is_empty(
@@ -158,15 +164,23 @@ select throws_ok(
 reset role;
 
 -- ---------------------------------------------------------------------------
--- An ordinary member — has the grant, has no policy, so sees nothing
+-- An ordinary member — has the grant, and since P1.2 has exactly one policy
+-- that matches: people_self_read.
 -- ---------------------------------------------------------------------------
 
 set local request.jwt.claims to '{"sub":"33333333-3333-4333-8333-000000000003","role":"authenticated"}';
 set local role authenticated;
 
-select is_empty(
+select results_eq(
+  $$select count(*)::int from public.people$$,
+  array[1],
+  'an ordinary member sees exactly one person row (P1.2 people_self_read)'
+);
+
+select results_eq(
   $$select id from public.people$$,
-  'an ordinary member sees no people (no self-read until P1.2 links profiles)'
+  $$select person_id from public.profiles where id = '33333333-3333-4333-8333-000000000003'$$,
+  'and it is their own person, not anyone else''s'
 );
 
 reset role;
@@ -179,9 +193,12 @@ reset role;
 set local request.jwt.claims to '{"sub":"33333333-3333-4333-8333-000000000002","role":"authenticated"}';
 set local role authenticated;
 
-select is_empty(
+-- Their own row and no more: SAFEGUARDING.md §1.3 denies staff access to
+-- *member and child* data, which their own record is not.
+select results_eq(
   $$select id from public.people$$,
-  'bar/clubhouse staff read no person records (SAFEGUARDING.md §1.3)'
+  $$select person_id from public.profiles where id = '33333333-3333-4333-8333-000000000002'$$,
+  'bar/clubhouse staff read only their own person record (SAFEGUARDING.md §1.3)'
 );
 
 select throws_ok(
@@ -213,8 +230,8 @@ set local role authenticated;
 
 select results_eq(
   $$select count(*)::int from public.people$$,
-  array[2],
-  'committee reads every person row'
+  array[5],
+  'committee reads every person row (2 fixtures + 1 per login created by handle_new_user)'
 );
 
 select lives_ok(
@@ -283,11 +300,27 @@ select throws_ok(
   'the table owner is stopped by trg_people_deny_hard_delete'
 );
 
+-- Two answers since P1.2, and both are refusals.
+--
+-- A bare TRUNCATE no longer reaches the trigger at all: public.profiles.person_id
+-- references public.people, and Postgres rejects truncating a table referenced by
+-- a foreign key before any BEFORE TRUNCATE trigger fires (0A000). That is an
+-- extra layer, not a lost one — but the SG-2 guard must still be shown to be the
+-- thing doing the work, so the CASCADE form (which satisfies the FK objection by
+-- offering to truncate profiles too) is asserted as well, and that one is stopped
+-- by the trigger.
 select throws_ok(
   $$truncate public.people$$,
+  '0A000',
+  null,
+  'the table owner cannot truncate public.people — it is referenced by profiles.person_id'
+);
+
+select throws_ok(
+  $$truncate public.people cascade$$,
   'P0001',
   null,
-  'the table owner is stopped by trg_people_deny_truncate'
+  'and TRUNCATE ... CASCADE, which gets past the foreign key, is stopped by trg_people_deny_truncate'
 );
 
 select * from finish();
