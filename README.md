@@ -7,7 +7,7 @@ See [PLAN.md](PLAN.md) for phases and hard rules.
 
 | Path | Purpose |
 |---|---|
-| `apps/web` | Next.js web app (Vercel) |
+| `apps/web` | Next.js web app (Vercel) — the function-room booking app, imported in P0.4. See [apps/web/README.md](apps/web/README.md) for its layout, env vars and cron routes |
 | `apps/mobile` | Expo app (iOS + Android, EAS) |
 | `packages/shared` | `@club/shared` — Supabase client factory, zod schemas, utils |
 | `packages/db` | `@club/db` — generated Database types (`supabase gen types`) |
