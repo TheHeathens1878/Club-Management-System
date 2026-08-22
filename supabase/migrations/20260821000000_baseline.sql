@@ -28,10 +28,12 @@
 --   * Schema only. No data. The seed rows that live in bank_holidays,
 --     site_settings and email_templates are data, not schema — see
 --     supabase/seed.sql.
---   * Grants are omitted deliberately: production carries only the stock
---     Supabase defaults (ALL privileges to anon/authenticated/service_role via
---     `alter default privileges`, PUBLIC EXECUTE on functions). Nothing is
---     revoked, so the platform defaults reproduce prod exactly.
+--   * Grants: production carries only the stock Supabase defaults (ALL
+--     privileges to anon/authenticated/service_role via `alter default
+--     privileges`, PUBLIC EXECUTE on functions); nothing is revoked. They are
+--     nevertheless stated explicitly in section 9 because the CLI's local
+--     shadow database does not apply the hosted default privileges, and
+--     without them `supabase db diff` reports every grant as missing.
 --   * There are no views, materialized views, storage buckets, storage
 --     policies, table/column comments, cron jobs or realtime publications
 --     beyond the Supabase defaults.
@@ -42,7 +44,7 @@
 --   1. Extensions          6. Row Level Security
 --   2. Types               7. Policies
 --   3. Tables              8. auth.users trigger
---   4. Indexes
+--   4. Indexes             9. Grants
 --   5. Functions & triggers
 -- =============================================================================
 
@@ -836,6 +838,22 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+
+-- =============================================================================
+-- 9. GRANTS
+-- =============================================================================
+-- Identical to what Supabase's default privileges produce on a hosted project
+-- (verified against prod: 420 table grants, all three API roles, nothing
+-- revoked). Stated explicitly so the schema is reproducible in environments
+-- that lack those defaults (CLI shadow DB, plain Postgres in CI). RLS is what
+-- actually restricts access; these grants are the platform norm.
+
+grant usage on schema public to anon, authenticated, service_role;
+
+grant all privileges on all tables    in schema public to anon, authenticated, service_role;
+grant all privileges on all sequences in schema public to anon, authenticated, service_role;
+grant all privileges on all routines  in schema public to anon, authenticated, service_role;
 
 
 -- =============================================================================

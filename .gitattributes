@@ -1,0 +1,9 @@
+# Keep LF in the repo and in working copies on every platform, so that SQL
+# migrations apply with identical bytes from Windows, CI and macOS. (Function
+# bodies are stored verbatim by Postgres, so CRLF drift shows up in db diff.)
+* text=auto eol=lf
+*.sql text eol=lf
+*.png binary
+*.jpg binary
+*.ico binary
+*.woff2 binary
