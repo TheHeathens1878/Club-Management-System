@@ -469,6 +469,66 @@ export type Database = {
         }
         Relationships: []
       }
+      guardian_consents: {
+        Row: {
+          child_person_id: string
+          consent_type: Database["public"]["Enums"]["consent_type"]
+          expires_at: string | null
+          granted_at: string
+          granted_by: string | null
+          guardian_person_id: string
+          id: string
+          notes: string | null
+          notice_version: string
+          revoked_at: string | null
+          revoked_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          child_person_id: string
+          consent_type: Database["public"]["Enums"]["consent_type"]
+          expires_at?: string | null
+          granted_at?: string
+          granted_by?: string | null
+          guardian_person_id: string
+          id?: string
+          notes?: string | null
+          notice_version: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          child_person_id?: string
+          consent_type?: Database["public"]["Enums"]["consent_type"]
+          expires_at?: string | null
+          granted_at?: string
+          granted_by?: string | null
+          guardian_person_id?: string
+          id?: string
+          notes?: string | null
+          notice_version?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "guardian_consents_child_person_id_fkey"
+            columns: ["child_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "guardian_consents_guardian_person_id_fkey"
+            columns: ["guardian_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       guardianships: {
         Row: {
           child_person_id: string
@@ -1177,12 +1237,24 @@ export type Database = {
         }[]
       }
       current_person_id: { Args: never; Returns: string }
+      has_active_consent: {
+        Args: {
+          p_child_person_id: string
+          p_consent_type: Database["public"]["Enums"]["consent_type"]
+        }
+        Returns: boolean
+      }
       has_any_role: {
         Args: { p_roles: Database["public"]["Enums"]["app_role"][] }
         Returns: boolean
       }
       has_role: {
         Args: { p_role: Database["public"]["Enums"]["app_role"] }
+        Returns: boolean
+      }
+      is_account_eligible: { Args: { p_person_id: string }; Returns: boolean }
+      is_at_least_age: {
+        Args: { d: string; p_years: number }
         Returns: boolean
       }
       is_bar_manager: { Args: never; Returns: boolean }
@@ -1192,6 +1264,7 @@ export type Database = {
       is_minor_dob: { Args: { d: string }; Returns: boolean }
       is_safeguarding_lead: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
+      is_supervision_exempt: { Args: { p_person_id: string }; Returns: boolean }
       map_user_role_to_app_role: {
         Args: { p_role: Database["public"]["Enums"]["user_role"] }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -1207,6 +1280,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       split_person_name: {
         Args: { p_full_name: string }
         Returns: {
@@ -1224,6 +1298,7 @@ export type Database = {
         | "member"
         | "parent"
         | "hirer"
+      consent_type: "app_account" | "unsupervised_messaging"
       guardian_relationship:
         | "parent"
         | "step_parent"
@@ -1374,6 +1449,7 @@ export const Constants = {
         "parent",
         "hirer",
       ],
+      consent_type: ["app_account", "unsupervised_messaging"],
       guardian_relationship: [
         "parent",
         "step_parent",
