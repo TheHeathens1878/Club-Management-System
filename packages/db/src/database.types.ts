@@ -547,6 +547,63 @@ export type Database = {
         }
         Relationships: []
       }
+      people: {
+        Row: {
+          address: Json | null
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          dob: string | null
+          email: string | null
+          first_name: string
+          id: string
+          last_name: string
+          legal_hold: boolean
+          notes: string | null
+          phone: string | null
+          preferred_name: string | null
+          pseudonymised_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: Json | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          dob?: string | null
+          email?: string | null
+          first_name: string
+          id?: string
+          last_name: string
+          legal_hold?: boolean
+          notes?: string | null
+          phone?: string | null
+          preferred_name?: string | null
+          pseudonymised_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: Json | null
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
+          dob?: string | null
+          email?: string | null
+          first_name?: string
+          id?: string
+          last_name?: string
+          legal_hold?: boolean
+          notes?: string | null
+          phone?: string | null
+          preferred_name?: string | null
+          pseudonymised_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           bar_contracted_hours: number | null
@@ -1004,6 +1061,8 @@ export type Database = {
     Functions: {
       is_bar_manager: { Args: never; Returns: boolean }
       is_committee: { Args: never; Returns: boolean }
+      is_minor: { Args: { person_id: string }; Returns: boolean }
+      is_minor_dob: { Args: { d: string }; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
     }
     Enums: {
