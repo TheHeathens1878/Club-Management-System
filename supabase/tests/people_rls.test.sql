@@ -48,6 +48,14 @@ insert into public.people (id, first_name, last_name, dob) values
   ('44444444-4444-4444-8444-000000000001', 'Seed', 'Person', date '1990-01-01'),
   ('44444444-4444-4444-8444-000000000002', 'Second', 'Person', null);
 
+-- The committee read assertion below compares against the owner's view of the
+-- table, captured here, rather than a hard-coded count: on a prod-shaped
+-- database (preview branch, prod itself) people already holds the P1.2
+-- backfill rows, and the test must pass there too. A transaction-local
+-- setting is used rather than a temp table because the impersonated role
+-- could not read a table owned by the test runner.
+select set_config('test.people_total', (select count(*)::text from public.people), true);
+
 -- ---------------------------------------------------------------------------
 -- Schema-level assertions (as the owner; no impersonation yet)
 -- ---------------------------------------------------------------------------
@@ -230,8 +238,8 @@ set local role authenticated;
 
 select results_eq(
   $$select count(*)::int from public.people$$,
-  array[5],
-  'committee reads every person row (2 fixtures + 1 per login created by handle_new_user)'
+  $$select current_setting('test.people_total')::int$$,
+  'committee reads every person row (all pre-existing rows + 2 fixtures + 1 per login created by handle_new_user)'
 );
 
 select lives_ok(
