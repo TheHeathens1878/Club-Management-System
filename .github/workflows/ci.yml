@@ -58,12 +58,22 @@ jobs:
           supabase db start
           supabase db reset --local
 
-      # 2. Static analysis of the resulting schema (plpgsql_check on every
-      #    function; fails on errors).
-      - name: supabase db lint
-        run: supabase db lint --local --level error --fail-on error
+      # 2. pgTAP tests (supabase/tests/*.test.sql). These are where the
+      #    SAFEGUARDING.md invariants are proved: every one of them attempts
+      #    the prohibited action and expects it to fail.
+      - name: supabase test db
+        run: supabase test db
 
-      # 3. Dry-run against the linked production project: confirms exactly
+      # 3. Static analysis of the resulting schema (plpgsql_check on every
+      #    function; fails on errors).
+      #    Scoped to `public` on purpose: seed.sql installs pgTAP into
+      #    `extensions` for step 2, and plpgsql_check reports errors in pgTAP's
+      #    own function bodies (deferred temp-table references, version-guarded
+      #    catalog columns). We lint our schema, not a third-party extension's.
+      - name: supabase db lint
+        run: supabase db lint --local --schema public --level error --fail-on error
+
+      # 4. Dry-run against the linked production project: confirms exactly
       #    which migrations *would* be applied and that the history is in
       #    sync. Nothing is written. Skipped when the secrets are absent
       #    (e.g. PRs from forks).
