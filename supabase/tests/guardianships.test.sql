@@ -154,10 +154,10 @@ select is(
 select policies_are(
   'public',
   'guardianships',
-  array['guardianships_guardian_read', 'guardianships_committee_read',
-        'guardianships_committee_insert', 'guardianships_committee_update',
-        'guardianships_committee_delete'],
-  'guardianships has exactly the guardian read plus the four committee policies'
+  array['guardianships_guardian_read', 'guardianships_admin_read',
+        'guardianships_admin_insert', 'guardianships_admin_update',
+        'guardianships_admin_delete'],
+  'guardianships has exactly the guardian read plus the four admin-role policies (renamed from _committee_ by P1.4 §11)'
 );
 
 -- 13, 14, 15, 16

@@ -27,7 +27,14 @@ select plan(33);
 -- ---------------------------------------------------------------------------
 -- Inserting into auth.users fires the baseline's on_auth_user_created trigger,
 -- which creates the matching public.profiles row as 'member'; the role is then
--- corrected. profiles is the only role source until P1.4.
+-- corrected.
+--
+-- Since P1.4 that correction ALSO reaches public.person_roles: the
+-- trg_profiles_sync_person_roles trigger maps 'committee' -> club_admin and
+-- 'staff' -> staff, which is what the policies below now key off. `profiles`
+-- remains the thing the test writes; it is no longer the thing the policy
+-- reads, and the fact that these assertions are unchanged is the P1.4
+-- regression check.
 --
 -- Since P1.2 that trigger also creates one public.people row per login, so the
 -- three inserts below produce three people before the two explicit fixtures —
@@ -71,9 +78,9 @@ select is(
 select policies_are(
   'public',
   'people',
-  array['people_committee_read', 'people_committee_insert', 'people_committee_update',
+  array['people_admin_read', 'people_admin_insert', 'people_admin_update',
         'people_self_read', 'people_guardian_read'],
-  'public.people has exactly the three committee policies plus the P1.2 self-read and the P1.3 guardian read, and no others'
+  'public.people has exactly the three P1.4 admin-role policies plus the P1.2 self-read and the P1.3 guardian read, and no others'
 );
 
 select is_empty(

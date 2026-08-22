@@ -405,15 +405,20 @@ select throws_ok(
 -- reconciling prod against a fresh environment. On prod the same row carries
 -- 38 / 38 and the 38 ids.
 
+-- Scoped by `entity` since P1.4: that migration writes its own single
+-- `migration.backfill` row for public.person_roles, following the same
+-- convention. The action is shared; the entity is what distinguishes them.
 select is(
-  (select count(*)::int from public.audit_log where action = 'migration.backfill'),
+  (select count(*)::int from public.audit_log
+    where action = 'migration.backfill' and entity = 'profiles'),
   1,
-  'the migration wrote exactly one migration.backfill audit row'
+  'the migration wrote exactly one migration.backfill audit row for profiles'
 );
 
 select results_eq(
   $$select actor_id, actor_email, entity, detail ->> 'migration'
-      from public.audit_log where action = 'migration.backfill'$$,
+      from public.audit_log
+     where action = 'migration.backfill' and entity = 'profiles'$$,
   $$values (null::uuid, 'migration'::text, 'profiles'::text,
             '20260822110000_profiles_person_link'::text)$$,
   'the audit row follows the existing audit_log conventions (actor_id null, actor_email migration)'
@@ -429,7 +434,8 @@ select results_eq(
 );
 
 select is(
-  (select count(*)::int from public.audit_log where action = 'migration.backfill'),
+  (select count(*)::int from public.audit_log
+    where action = 'migration.backfill' and entity = 'profiles'),
   1,
   'and writes no further audit row — the audit row belongs to the migration, not the function'
 );
