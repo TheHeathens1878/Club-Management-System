@@ -76,6 +76,7 @@ New tables land alongside existing ones; nothing is dropped.
 | P1.4 | `roles` / person_roles: `club_admin`, `safeguarding_lead`, `coach`, `staff`, `member`, `parent`, `hirer` — replaces any ad-hoc role flags | RLS helper functions (`has_role()`) used by all subsequent policies | ☐ |
 | P1.5 | `resources` (type: `function_room`, `pitch`, extensible) and unified `bookings` + generalised `booking_payments` | New booking API path works for a test pitch resource; conflict-check function has tests | ☐ |
 | P1.6 | Migrate `function_rooms`/`room_bookings`/`booking_payments`/`booking_emails` data into the unified structure; keep legacy tables as read-only views or renamed `_legacy` | Row counts reconcile; web app reads/writes unified tables; audit_log records migration | ☐ |
+| P1.7 | `guardian_consents` (per child, per purpose, granted by an active guardian; revocable; audited), `consent_type` enum, safeguarding settings in `site_settings` (`min_account_age` 13, `unsupervised_messaging_min_age` 14, admin-editable, DB-validated), SG-10 account-eligibility trigger on `profiles`, `handle_new_user()` invite flow | Violation tests for SG-10; under-age signup refused; invited eligible minor succeeds; settings validation; audit rows | ☐ |
 
 ---
 
@@ -122,7 +123,7 @@ Design against `SAFEGUARDING.md` first. P5.1 is a written spec, human-reviewed b
 | Task | Description | Acceptance criteria | Status |
 |---|---|---|---|
 | P5.1 | Messaging spec against **Cheshire FA safeguarding guidance** (per Q6): conversation types (`dm`, `group`, `team`, `announcement`), participant rules, retention, moderation & export. Encode adult/minor rules as testable invariants, each citing the guidance it implements; Adam verifies citations against current published Cheshire FA / FA Safeguarding Children Policy | Adam approves spec | ☐ |
-| P5.2 | Schema: `conversations`, `conversation_participants` (with `last_read_message_id`, joined/left), `messages` (reply_to, soft-delete), attachments in Supabase Storage | RLS: participants only; DB-level enforcement of §2.4 invariants with tests that attempt violations and fail | ☐ |
+| P5.2 | Schema: `conversations`, `conversation_participants` (with `last_read_message_id`, joined/left), `messages` (reply_to, soft-delete), attachments in Supabase Storage; implements SG-1.9 and SG-9 | RLS: participants only; DB-level enforcement of §2.4 invariants with tests that attempt violations and fail | ☐ |
 | P5.3 | Team conversations auto-membership: triggers sync participants from `team_memberships` + guardians of minor players | Adding a player adds their guardians; leaving team marks participant left (history retained) | ☐ |
 | P5.4 | Realtime delivery in web app: subscribe, send, read receipts, typing indicator (broadcast) | Two-browser manual test passes; unread counts correct | ☐ |
 | P5.5 | Push fan-out: DB webhook → Edge Function → Expo push API for offline participants; respects preferences (P4.4) | Push received on test devices; no push for muted conversations | ☐ |

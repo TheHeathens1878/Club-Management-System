@@ -25,11 +25,13 @@ The tasks in scope today are:
 | P1.1 | `people`, `is_minor` | SG-0 |
 | P1.3 | `guardianships` | SG-4, and SG-1.8 (guardianship-change guard) |
 | P1.4 | `roles` / `person_roles`, `has_role()` | SG-3, SG-6, and the helper every other policy uses |
+| P1.7 | `guardian_consents`, `consent_type`, safeguarding settings in `site_settings`, the `profiles` eligibility trigger | SG-10, and the SG-0.1 / SG-0.2 helpers that SG-1.9 and SG-9 depend on |
 | P2.1 | `teams`, `team_memberships` | SG-6 (both the staff-side and composition-side guards) |
 | P2.2 | `registrations`, consent capture | SG-5 |
 | P4.3 | `certifications`, `safeguarding_concerns` | SG-3, SG-6, SG-7, SG-8 |
 | P4.5 | media, photo consent | SG-5, SG-7 |
 | P5.1–P5.6 | messaging | SG-1, SG-2, SG-7, SG-8 |
+| P5.2 | `conversations`, `conversation_participants`, `messages` | SG-1 in full **including SG-1.9**, SG-2, and the SG-9 oversight accessors |
 
 ### 1.2 The governing principle
 
@@ -109,6 +111,45 @@ Notes:
   team, so unknown DOB should be limited to legacy imports (Phase 3) and hirers
   — and hirers are excluded from member messaging entirely (confirm in P5.1).
 
+### 1.5 Two derived terms: account-eligible and supervision-exempt
+
+SG-0 is unchanged — a minor is a person under 18. Some minors may nevertheless
+hold an app account, and some may message adults without a guardian present.
+Both are narrow, consented exceptions, and both need a name so that SG-1.9, SG-9
+and SG-10 can be stated precisely.
+
+> **SG-0.1 (definitional).** An **account-eligible minor** is a minor who, on
+> the date of evaluation, is at least `safeguarding.min_account_age` years old
+> **and** for whom an active (granted, not revoked) `app_account` consent is
+> held, given by an adult holding an active guardianship to them (SG-10).
+
+> **SG-0.2 (definitional).** A **supervision-exempt minor** is a minor who, on
+> the date of evaluation, is at least
+> `safeguarding.unsupervised_messaging_min_age` years old **and** for whom an
+> active `unsupervised_messaging` consent is held on the same terms (SG-10).
+
+Notes:
+
+- **Both are derived, never stored**, for the same reason SG-0 is a function and
+  not a column: they depend on `now()`, on an admin-editable setting, and on a
+  consent that can be revoked between one evaluation and the next. The
+  enforceable form is `public.is_account_eligible(person_id uuid)` and
+  `public.is_supervision_exempt(person_id uuid)`, both `STABLE`, both called by
+  triggers and policies alike.
+- **Supervision-exemption presupposes account-eligibility.** The settings are
+  constrained so that `min_account_age ≤ unsupervised_messaging_min_age`
+  (SG-10), and a minor with no app account has no conversation to be exempt in.
+- **Unknown DOB is never eligible and never exempt.** SG-0 treats unknown as a
+  minor; an unknown DOB also fails every "at least *n* years old" test, so both
+  terms fail closed exactly as §1.2 requires.
+- **Neither term survives adulthood in any special sense.** At 18 the person is
+  simply an adult and neither term applies; the consent rows are retained as
+  history (SG-8), not as a continuing permission.
+- **Consent is per child and per purpose.** Holding `app_account` says nothing
+  about `unsupervised_messaging`; a guardian who wants their child to have an
+  account but always to be accompanied in conversations with adults grants the
+  first and withholds the second, and that is the expected default.
+
 ---
 
 ## 2. Framework
@@ -132,13 +173,15 @@ guidance at spec time — exactly what Q6 requires before P5.1 is approved.
 
 | Ref | Rule area (as we understand it) | Invariants it supports | Verified source |
 |---|---|---|---|
-| C1 | **Safe communication with under-18s.** Adults in positions of trust should not communicate one-to-one and privately with a child; communications should be transparent and include the child's parent/guardian, and ideally take place in group settings | SG-1 | `[Adam to verify against current published guidance — URL/section]` |
+| C1 | **Safe communication with under-18s.** Adults in positions of trust should not communicate one-to-one and privately with a child; communications should be transparent and include the child's parent/guardian, and ideally take place in group settings | SG-1 (including SG-1.9) | `[Adam to verify against current published guidance — URL/section]` |
 | C2 | **Photography and filming.** Consent is required before images of children are taken and before they are published or shared; consent is recorded per child and is withdrawable | SG-5 | `[Adam to verify against current published guidance — URL/section]` |
 | C3 | **DBS checks and safeguarding qualifications.** Those in eligible roles working with children require an in-date FA DBS check and the relevant safeguarding/first-aid qualifications | SG-6 | `[Adam to verify against current published guidance — URL/section]` |
-| C4 | **Reporting concerns.** Concerns are reported to the Club Welfare Officer and, as appropriate, to the County FA Designated Safeguarding Officer and statutory agencies; records are kept confidential and shared strictly on a need-to-know basis | SG-3, SG-7 | `[Adam to verify against current published guidance — URL/section]` |
-| C5 | **Record keeping and retention.** Safeguarding records are retained securely for a defined period and are not destroyed prematurely | SG-2, SG-8 | `[Adam to verify against current published guidance — URL/section]` |
-| C6 | **Club Welfare Officer role.** An affiliated club with youth teams must appoint a Club Welfare Officer, who is DBS-checked and trained | SG-3, SG-6 | `[Adam to verify against current published guidance — URL/section]` |
-| C7 | **UK GDPR / Data Protection Act 2018.** Not FA guidance, but binding: lawful basis, data minimisation, storage limitation, and the heightened protection owed to children's data | SG-2, SG-5, SG-7, SG-8 | `[Adam to verify — ICO children's code / UK GDPR Art. 5]` |
+| C4 | **Reporting concerns.** Concerns are reported to the Club Welfare Officer and, as appropriate, to the County FA Designated Safeguarding Officer and statutory agencies; records are kept confidential and shared strictly on a need-to-know basis | SG-3, SG-7, SG-9 | `[Adam to verify against current published guidance — URL/section]` |
+| C5 | **Record keeping and retention.** Safeguarding records are retained securely for a defined period and are not destroyed prematurely | SG-2, SG-8, SG-9 | `[Adam to verify against current published guidance — URL/section]` |
+| C6 | **Club Welfare Officer role.** An affiliated club with youth teams must appoint a Club Welfare Officer, who is DBS-checked and trained | SG-3, SG-6, SG-9 | `[Adam to verify against current published guidance — URL/section]` |
+| C7 | **UK GDPR / Data Protection Act 2018.** Not FA guidance, but binding: lawful basis, data minimisation, storage limitation, and the heightened protection owed to children's data | SG-2, SG-5, SG-7, SG-8, SG-9, SG-10 | `[Adam to verify — ICO children's code / UK GDPR Art. 5]` |
+| C8 | **Young match officials and other under-18s in club roles.** Under-18s act as referees, assistant referees and helpers; guidance addresses how adults supervise and communicate with them, and the fact that they are children first and officials second | SG-1.9, SG-9 | `[Adam to verify against current published guidance — URL/section]` |
+| C9 | **Parental consent for a child's online account.** A child's use of an online service run by the club requires the consent of a person with parental responsibility; the consent is recorded, is specific to what it permits, and is withdrawable — and below a stated age no account is offered at all | SG-0.1, SG-0.2, SG-10 | `[Adam to verify — FA guidance on club use of online platforms, plus the ICO Age Appropriate Design Code and the UK age of digital consent under UK GDPR Art. 8 as implemented by the Data Protection Act 2018]` |
 
 **No invariant below may be implemented until its citation row is filled in.**
 Implementation of the *mechanism* may proceed; sign-off may not.
@@ -162,15 +205,19 @@ happy path does not satisfy the invariant.
 
 **Statement.** A conversation must never be in a state where its set of active
 participants consists of exactly one adult and exactly one minor, unless the
-adult is a guardian of that minor. Any operation that would produce such a state
-is rejected.
+adult is a guardian of that minor **or the narrow supervision-exempt case of
+SG-1.9 is satisfied**. Any operation that would produce such a state is
+rejected.
 
-**Guidance.** C1.
+**Guidance.** C1, and C8 for the SG-1.9 exception.
 
 **Enforcement.** Triggers — on `conversation_participants` (INSERT, UPDATE of
-`left_at`), on `messages` (INSERT), on `people` (UPDATE of `dob`, SG-1.2) and on
+`left_at`), on `messages` (INSERT), on `people` (UPDATE of `dob`, SG-1.2), on
 `guardianships` (DELETE, and UPDATE of `guardian_person_id` /
-`child_person_id`, SG-1.8) — plus a nightly re-evaluation job. A `CHECK`
+`child_person_id`, SG-1.8), on `guardian_consents` (UPDATE of `revoked_at`,
+SG-1.9) and on `public.site_settings` (UPDATE of
+`safeguarding.unsupervised_messaging_min_age`, SG-1.9) — plus a nightly
+re-evaluation job. A `CHECK`
 constraint cannot express it: the predicate spans rows. Triggers rather than
 policies, because the invariant must also bind `service_role` and the table
 owner (§1.2). **The trigger list is the invariant:** any table whose change can
@@ -183,7 +230,8 @@ administrative/oversight capacity — see SG-1.5). The conversation is
 **non-compliant** when:
 
 `count(A) = 2 AND exactly one of A is a minor (SG-0) AND no adult in A is a
-guardian of that minor`
+guardian of that minor AND NOT (that minor is supervision-exempt (SG-0.2) AND
+the conversation is flagged supervised_by_lead)`
 
 **Edge cases — all of these are part of the invariant and all need tests:**
 
@@ -268,13 +316,90 @@ guardian of that minor`
   `guardianship_delete_allowed_when_no_affected_conversation`. All four run as
   `club_admin` **and** as `service_role`, since SG-4's RLS is what grants the
   write and the trigger is what must survive the bypass.
+- **SG-1.9 The minor is supervision-exempt.** **Permitted, conditionally** —
+  this is the one exception to SG-1 other than SG-1.4, and it exists for a real
+  case: a 14-year-old referee has to be able to agree a kick-off time or a
+  postponement with an adult fixtures secretary, and putting a parent in every
+  such exchange is not workable. Adam's decision, 2026-08-22.
+
+  **Rule.** An adult↔minor conversation with no guardian participant is
+  permitted **only** when both of the following hold, and it is rejected the
+  moment either stops holding:
+
+  1. **Every** minor among the active participants (SG-1.5) is a
+     supervision-exempt minor (SG-0.2) — at or above
+     `safeguarding.unsupervised_messaging_min_age`, with an active
+     `unsupervised_messaging` consent granted by an active guardian (SG-10);
+     and
+  2. the conversation carries `conversations.supervised_by_lead = true`, which
+     places it inside SG-9's visibility.
+
+  **Below the threshold nothing changes.** For a minor who is not
+  supervision-exempt, SG-1 applies exactly as written and a guardian must be a
+  participant. The default position for a child under
+  `unsupervised_messaging_min_age` (14 as shipped) is therefore unaltered by
+  this sub-case, and no consent can waive it — the guardian's only route is to
+  join the conversation.
+
+  **The flag is set by the trigger, not by the client.** `supervised_by_lead` is
+  written by the same trigger that admits the conversation, so no caller can
+  obtain the exemption while opting out of oversight, and a `BEFORE UPDATE`
+  guard **rejects clearing it** while any minor participant is active. The
+  exemption and the visibility are one decision, not two.
+
+  **Consent revocation and a raised age re-check, on the SG-1.8 pattern.**
+  Consent is revocable (SG-10) and the age is admin-editable, so the thing that
+  makes such a conversation permissible can be withdrawn with nothing at all
+  happening in `conversations`, `conversation_participants` or `messages` —
+  precisely the SG-1.8 situation, and the same remedy applies:
+
+  - A trigger on `guardian_consents` (`BEFORE UPDATE OF revoked_at`) finds every
+    live conversation that is permitted *only* by the consent being revoked, and
+    **rejects the revocation unless every one of those conversations is already
+    closed** (`conversations.closed_at IS NOT NULL`).
+  - A trigger on `public.site_settings` fires when
+    `safeguarding.unsupervised_messaging_min_age` is **raised**, runs the same
+    evaluation for every minor the raise drops below the threshold, and
+    **rejects the setting change unless every affected conversation is closed**.
+    Lowering the setting can only make conversations permissible and needs no
+    check.
+
+  Reject-unless-closed rather than a flat reject, for SG-1.8's reason and one
+  more: a flat reject would make a consent unrevocable, and a consent that
+  cannot be withdrawn is not consent. Rather than auto-closing the
+  conversations, which would hide a safeguarding-relevant transition from the
+  guardian who asked for it, the guardian or administrator closes them and then
+  revokes — two deliberate steps, with the message history preserved for SG-8.
+  The error names the conversations, as SG-1.2's and SG-1.8's do.
+
+  Note the deliberate asymmetry with SG-10: raising `min_account_age` is
+  *reported*, because an account held by a child who has become too young for
+  one is a paperwork gap; raising `unsupervised_messaging_min_age` is
+  *rejected-unless-closed*, because the state it would leave behind is a live
+  adult↔minor 1:1 with no guardian — a prohibited state under SG-1 itself.
+
+  Tests: `supervision_exempt_minor_can_dm_adult_without_guardian`,
+  `minor_below_unsupervised_age_cannot_dm_adult_without_guardian`,
+  `minor_without_unsupervised_consent_cannot_dm_adult_without_guardian`,
+  `exempt_and_non_exempt_minor_with_one_adult_throws`,
+  `exempt_dm_is_flagged_supervised_by_lead`,
+  `clearing_supervised_by_lead_with_active_minor_throws`,
+  `consent_revocation_blocked_while_dependent_conversation_open`,
+  `consent_revocation_allowed_after_conversation_closed`,
+  `raising_unsupervised_age_blocked_while_dependent_conversation_open`,
+  `raising_unsupervised_age_allowed_after_conversation_closed`,
+  `lowering_unsupervised_age_allowed`. All run as `club_admin` **and** as
+  `service_role`, for SG-1.8's reason.
 
 **Implemented by.** P1.3 (the SG-1.8 guardianships trigger ships with the
-table), P5.1 (spec), P5.2 (participant/message/DOB triggers + tests), P5.3
-(auto-membership must add guardians of minor players, which is what keeps team
-conversations compliant by construction). Where P1.3 lands before the messaging
-tables exist, the SG-1.8 trigger is written in P1.3 as a no-op-if-absent guard
-and completed in P5.2; the P5.2 PR is not complete without its tests.
+table), P1.7 (`guardian_consents`, the settings and the SG-0.2 helper the
+sub-case is stated in terms of), P5.1 (spec), P5.2 (participant/message/DOB
+triggers, the SG-1.9 sub-case, the `supervised_by_lead` flag and its guard, the
+consent and settings triggers, and the tests), P5.3 (auto-membership must add
+guardians of minor players, which is what keeps team conversations compliant by
+construction). Where P1.3 lands before the messaging tables exist, the SG-1.8
+trigger is written in P1.3 as a no-op-if-absent guard and completed in P5.2; the
+P5.2 PR is not complete without its tests.
 
 ---
 
@@ -688,8 +813,11 @@ Proposed values, to be fixed in P4.3 and reused verbatim thereafter:
 | `safeguarding.concern.read` | `safeguarding_concerns` | `{ "concern_ref": … }` |
 | `safeguarding.concern.create` | `safeguarding_concerns` | `{ "channel": "web"｜"mobile" }` |
 | `safeguarding.concern.update` | `safeguarding_concerns` | changed fields, **never** the narrative text |
-| `messaging.conversation.export` | `conversations` | `{ "message_count": n, "includes_deleted": true, "reason": "…" }` |
-| `messaging.conversation.admin_read` | `conversations` | `{ "reason": "…" }` |
+| `messaging.conversation.export` | `conversations` | `{ "message_count": n, "includes_deleted": true, "reason": "…", "includes_minor": true }` |
+| `messaging.conversation.admin_read` | `conversations` | `{ "reason": "…", "includes_minor": true }` |
+| `safeguarding.consent.granted` | `guardian_consents` | `{ "child_person_id": …, "guardian_person_id": …, "consent_type": "app_account", "notice_version": … }` (SG-10) |
+| `safeguarding.consent.revoked` | `guardian_consents` | `{ "child_person_id": …, "consent_type": "unsupervised_messaging" }` (SG-10) |
+| `settings.changed` | `site_settings` | `{ "key": "safeguarding.min_account_age", "old": 13, "new": 14 }` (SG-10) |
 | `media.bulk_export` | `media_albums` | `{ "item_count": n, "excluded_unconsented": n }` |
 | `safeguarding.certification.change` | `certifications` | `{ "type": "dbs", "old_expiry": …, "new_expiry": … }` |
 | `safeguarding.certification.exemption` | `certification_exemptions` | `{ "person_id": …, "team_id": …, "expires_on": …, "event": "granted"｜"used"｜"expired" }` (SG-6) |
@@ -755,6 +883,268 @@ P4.3 (concern retention), P4.5 (media retention).
 
 ---
 
+### SG-9 — Minors' private messages are visible to the safeguarding lead
+
+**Statement.** A holder of `safeguarding_lead` or `club_admin` may open or
+export **any** conversation in which a minor is, or has been, a participant —
+including a private one-to-one — and every such access is audit-logged. The
+access happens only through a `SECURITY DEFINER` accessor: no role holds a table
+grant that would let it read a conversation it does not participate in.
+
+This is what makes SG-1.9 acceptable rather than reckless. The exemption removes
+the guardian from the room; it does not make the room private.
+
+**Guidance.** C1 (transparency is the point of the guardian requirement, and
+oversight is how transparency survives the guardian's absence), C4 (need-to-know
+sharing), C6, C7, C8.
+
+**Enforcement.** Privileges and `SECURITY DEFINER` functions, exactly as SG-3
+— not RLS, and for the same reason: `service_role` holds `BYPASSRLS` and a
+policy that widened reads for administrators would widen them for every Edge
+Function too, with no audit row written.
+
+1. **No widened table grant, ever.** The `messages` and `conversations` policies
+   written in P5.2 are participant-scoped and stay that way. There is no
+   "admin can read all conversations" policy, because such a policy is a silent
+   read: it produces the data and leaves no trace.
+2. **Two accessors, and only they.**
+   `public.read_conversation_as_lead(conversation_id uuid, reason text)` and
+   `public.export_conversation_as_lead(conversation_id uuid, reason text)`,
+   `SECURITY DEFINER`, `SET search_path = public`, `EXECUTE` revoked from
+   `PUBLIC` and from `anon` by name and granted to `authenticated`. Each checks
+   `public.has_role('safeguarding_lead')` or `public.has_role('club_admin')`
+   and raises otherwise.
+3. **`reason` is mandatory and non-empty.** A blank or whitespace-only reason
+   raises; there is no default. The reason is the difference between oversight
+   and browsing, and it is the field the club will be asked about if the access
+   is ever challenged.
+4. **Scoped to conversations involving a minor.** The accessors raise for a
+   conversation that has never had a minor participant. This document authorises
+   oversight of children's messages; it does not authorise reading adult
+   members' private messages, and the mechanism must not quietly provide it.
+5. **Audit before returning (SG-7).** `messaging.conversation.admin_read` /
+   `messaging.conversation.export` on entity `conversations`, `entity_id` the
+   conversation id, `detail` carrying the reason, the message count and
+   `includes_minor` — and **never a message body**, per SG-7's rule that
+   `detail` must not contain the content whose access it records. The row is
+   written even when the conversation is empty or the export returns nothing.
+6. **Reading is not participating (SG-1.5).** Neither accessor may create a
+   `conversation_participants` row, so an oversight read can neither satisfy nor
+   break SG-1.
+
+**Told in advance, and shown while it is true.** Monitoring that nobody knows
+about is surveillance. Two requirements, one of them testable in the database:
+
+- **At consent time:** the `unsupervised_messaging` consent screen states
+  plainly, to the guardian and to the child, that conversations permitted by
+  this consent can be read and exported by the club's safeguarding lead. The
+  consent row records which version of that notice was shown
+  (`guardian_consents.notice_version`), so what they were told is evidenceable
+  later — that part is a data requirement and is tested.
+- **While it is true:** any conversation flagged `supervised_by_lead` shows a
+  persistent banner to every participant saying so. That is a UI requirement and
+  is an acceptance criterion of P5.4 (web) and P6.3 (mobile), not a database
+  invariant — but a conversation that is monitored without the banner is a
+  defect, not a cosmetic issue.
+
+**Retention (SG-8) applies unchanged.** Being monitored neither extends nor
+shortens a conversation's retention; supervised conversations sit in the
+ordinary "message content" category and legal hold behaves as it does anywhere
+else. An export is a copy that leaves the system: the audit row is the club's
+record that it was made, and the exported file is handled under the same
+retention as the conversation it came from.
+
+**Test.** `lead_can_read_conversation_with_minor`,
+`club_admin_can_read_conversation_with_minor`,
+`coach_calling_accessor_throws`, `member_calling_accessor_throws`,
+`accessor_read_writes_audit_row`,
+`accessor_export_writes_audit_row_with_message_count`,
+`accessor_with_blank_reason_throws`,
+`accessor_on_conversation_without_any_minor_throws`,
+`accessor_audit_detail_contains_no_message_body`,
+`accessor_read_does_not_create_participant_row` (the SG-1.5 pairing),
+`audit_row_written_even_when_conversation_has_no_messages`,
+`conversation_accessor_execute_revoked_from_public`,
+`no_admin_read_policy_on_messages_for_api_roles` — a privilege/policy
+assertion: `authenticated` reading a conversation it does not participate in
+returns zero rows even when it holds `safeguarding_lead`, proving the accessor
+is the only path,
+and `consent_row_records_notice_version`.
+
+**Implemented by.** P1.7 (`notice_version` on the consent row), P5.2 (the
+accessors, the `supervised_by_lead` flag, the participant-scoped policies they
+sit beside), P5.4 / P6.3 (the banner), P5.6 (export tooling and retention),
+P4.3 (`public.write_audit()` and the SG-7 conventions the accessors call).
+
+---
+
+### SG-10 — A minor may hold an app account only with consent
+
+**Statement.** A `profiles` row — an app account — may exist for a **known**
+minor only while that minor is an account-eligible minor (SG-0.1): at or above
+`safeguarding.min_account_age`, with an active `app_account` consent granted by
+an adult holding an active guardianship to them. Creating one otherwise is
+rejected, as is a `dob` correction that turns an existing account holder into an
+ineligible minor.
+
+**Guidance.** C9, C7, C1.
+
+**Enforcement.** Triggers, because this must bind the auth admin path: signup
+runs as `service_role` through `handle_new_user()`, so RLS on `profiles` never
+sees it (§1.2).
+
+- **`BEFORE INSERT ON public.profiles`.** If the linked person is a known minor
+  and `public.is_account_eligible(person_id)` is false, raise `P0001` naming
+  which limb failed — too young, or no active consent — so the administrator or
+  the signup screen can say something useful.
+- **The single `people` `UPDATE OF dob` trigger** re-runs the same check for a
+  person who already holds a profile. This is the third invariant carried by
+  that one trigger, alongside SG-1.2 and SG-6 tier 1(c); §4's "one dob trigger,
+  never two competing ones" still holds.
+- **Consent, recorded per child and per purpose.** `guardian_consents` holds one
+  row per grant: child, guardian, `consent_type`, `granted_at`/`granted_by`,
+  `revoked_at`/`revoked_by`, `expires_at` (left null until **D12** is settled;
+  `has_active_consent()` treats a past `expires_at` as inactive from the day it
+  exists, so settling D12 later is a data change rather than a schema change),
+  `notice_version`. A trigger requires, at grant
+  time, that the child is a minor (`is_minor`) and that the granting adult holds
+  an **active** guardianship to that child — the link, never the `parent` role
+  (§1.3). A partial unique index on `(child_person_id, consent_type) WHERE
+  revoked_at IS NULL` means one live consent per purpose at a time.
+- **Revocation is a column, not a delete.** `deny_hard_delete()` and
+  `deny_truncate()` are attached to `guardian_consents` and `DELETE`/`TRUNCATE`
+  revoked from `anon`, `authenticated` and `service_role`. This **extends SG-2's
+  named list of four tables** and is recorded as a strengthening under §6.2: the
+  evidence that a consent was given, by whom, and when it was withdrawn is
+  exactly the record a safeguarding enquiry would ask for, and a consent that
+  can be deleted leaves the club unable to show either that it had permission or
+  that it acted on the withdrawal.
+- **Every grant and revoke audit-logged** — `safeguarding.consent.granted` /
+  `safeguarding.consent.revoked` (SG-7).
+- **RLS on `guardian_consents`:** a guardian may read, grant and revoke consents
+  for their own children (via `current_person_id()` plus an active
+  guardianship); the child reads their own; `club_admin` and
+  `safeguarding_lead` read all and may revoke; nobody else sees the table.
+
+**Revoking `app_account` consent does not delete the account.** It blocks the
+creation of a new profile and is reported to the `safeguarding_lead`; it does
+not cascade into destroying an existing one. Deleting a person's account is an
+administrative act with its own audit trail and its own conversation with the
+family — a trigger that did it as a side effect of a consent edit would be a
+worse outcome than the gap it closes, and it would take the child's message
+history with it (SG-2, SG-8).
+
+**The settings.** Both ages are admin-editable in the app and live in the
+existing `public.site_settings` key/value table:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `safeguarding.min_account_age` | `13` | Youngest age at which a minor may hold an app account at all (SG-0.1) |
+| `safeguarding.unsupervised_messaging_min_age` | `14` | Youngest age at which a minor may be supervision-exempt (SG-0.2, SG-1.9) |
+
+**Validated in the database, not in the settings screen.** A
+`BEFORE INSERT OR UPDATE` trigger on `site_settings` for keys beginning
+`safeguarding.` requires:
+
+- the value to be an integer (a settings table is `text`; "fourteen" or `14 `
+  must not become a silently-failing comparison);
+- `min_account_age ≤ unsupervised_messaging_min_age < 18` — each write
+  evaluated against the other key's *current* value, so neither editing order
+  can pass through an invalid pair;
+- a floor of **13** on `min_account_age`, the UK age of digital consent (C9),
+  unless Adam decides otherwise — **Open Decision D11**.
+
+Reads go through `public.safeguarding_setting_int(key text)`, `STABLE`, which
+returns the documented default when the row is absent, so a deleted or renamed
+settings row fails closed to 13/14 rather than to "no limit". Every change
+writes a `settings.changed` audit row (SG-7) carrying the key, the old value and
+the new.
+
+**Lowering an age is not retroactive; raising one is reported.**
+
+- **Lowering `min_account_age`** grants nobody anything automatically: a
+  newly-old-enough child still needs a consent before an account can exist, so
+  there is nothing to re-check.
+- **Raising `min_account_age`** leaves accounts held by children now below it.
+  They are **reported nightly** to the `safeguarding_lead` and `club_admin`,
+  **not auto-disabled** — **Open Decision D10**. Auto-disabling cuts a child off
+  from the club's messaging with no human in the loop, at the moment they may
+  most need to reach a trusted adult; doing nothing leaves a rule that is not
+  the rule. A report with a one-click suspend is the recommendation, on the same
+  reasoning as SG-6 tier 3.
+- Raising `unsupervised_messaging_min_age` is **not** merely reported: see
+  SG-1.9, where it is rejected unless the affected conversations are closed.
+
+**The signup path, and the invite flow.** Because the trigger binds
+`handle_new_user()`, a minor cannot obtain an account unaided — which is the
+intent. The route that does work is an invite: an adult with an active
+guardianship creates the child's `people` row and grants the `app_account`
+consent, and the resulting signup carries that person's id.
+`handle_new_user()` therefore honours `raw_user_meta_data->>'person_id'`:
+where it names a person who has an active `app_account` consent and no profile
+yet, that person is adopted; in every other case it creates a new person exactly
+as it does today. It never matches on email — P1.2's decision is untouched and
+is doubly important here, since families share addresses.
+
+**Unknown DOB: the one place this invariant does not fail closed, deliberately,
+and Adam should confirm it.** SG-0 treats an unknown `dob` as a minor. Read
+literally, SG-10 would then refuse *every* account whose DOB the club does not
+hold — including every ordinary adult self-signup, since `handle_new_user()`
+creates the person with `dob` NULL, and including the three
+`auth.admin.createUser()` paths the live function-room app already uses. The
+invariant is therefore scoped to a **known** minor
+(`people.dob IS NOT NULL AND public.is_minor_dob(dob)`), and an unknown-DOB
+person may hold a profile. What makes that tolerable is that it buys an attacker
+nothing: SG-0 still treats them as a minor everywhere it matters — SG-1 refuses
+them a 1:1 with an adult, SG-5 gives them no photo consent, SG-6 counts them as
+a minor in a team — so the account exists but is the *most* constrained kind of
+account, not the least. Mitigations: unknown-DOB profiles appear in the same
+nightly report as the raised-age cases, and P2.2 makes `dob` mandatory at
+registration (D1). This is a documented deviation from §1.2's fail-closed
+principle and needs Adam's agreement under §6.2.
+
+**Test.** Eligibility: `profile_for_minor_without_consent_throws`,
+`profile_for_minor_below_min_account_age_throws_even_with_consent`,
+`profile_for_minor_with_revoked_consent_throws`,
+`profile_for_eligible_minor_succeeds`,
+`profile_for_unknown_dob_person_allowed` (documents the boundary above; flip it
+if Adam decides otherwise),
+`revoking_app_account_consent_does_not_delete_existing_profile`,
+`dob_correction_making_profile_holder_an_ineligible_minor_throws`.
+Consent integrity: `consent_granted_by_non_guardian_throws`,
+`consent_granted_by_ended_guardianship_throws`,
+`consent_for_adult_child_throws`,
+`duplicate_active_consent_throws`,
+`consent_after_revocation_can_be_granted_again`,
+`hard_delete_consent_throws`, `truncate_consents_throws`,
+`consent_grant_writes_audit_row`, `consent_revoke_writes_audit_row`,
+`guardian_sees_only_own_children_consents`,
+`coach_reads_zero_consents`.
+Settings: `min_account_age_below_floor_throws`,
+`min_account_age_above_unsupervised_age_throws`,
+`unsupervised_age_of_18_or_more_throws`,
+`non_integer_safeguarding_setting_throws`,
+`safeguarding_setting_int_returns_default_when_row_absent`,
+`settings_change_writes_audit_row`.
+Signup: `underage_signup_without_consent_refused`,
+`invited_eligible_minor_signup_succeeds`,
+`handle_new_user_ignores_person_id_without_active_consent`,
+`handle_new_user_ignores_person_id_that_already_has_a_profile`,
+`adult_signup_unaffected`.
+
+The eligibility and signup tests run as `authenticated`, as `service_role`
+**and** as the table owner: the trigger, not a grant or a policy, is what must
+refuse.
+
+**Implemented by.** P1.7 (enum, table, helpers, settings, validation, the
+`profiles` trigger, `handle_new_user()`, tests), P2.2 (adds the SG-5
+photo-consent values to `consent_type`; whether `photo_consents` then becomes a
+view over `guardian_consents` or stays a separate table is P2.2's decision and
+must not change SG-5's meaning), P5.2 (SG-1.9's use of these helpers), P6.2 /
+apps/web admin (settings screen, guardian consent UI, child invite flow).
+
+---
+
 ## 4. Data model implications
 
 A checklist for the Phase 1/2/4/5 tasks. No SQL here — this is what the
@@ -767,9 +1157,24 @@ invariants above *require to exist*.
 - [ ] `people.pseudonymised_at timestamptz` (SG-8)
 - [ ] `guardianships(guardian_person_id, child_person_id, relationship, created_at, created_by)` with the SG-4 constraints, unique pair, and no-self-reference check
 - [ ] A `BEFORE DELETE` / `BEFORE UPDATE OF guardian_person_id, child_person_id` trigger on `guardianships` implementing SG-1.8 (reject unless every affected conversation is closed)
-- [ ] One `people` `UPDATE OF dob` trigger, carrying **both** SG-1.2 and SG-6 tier 1(c) — not two triggers on the same column
+- [ ] One `people` `UPDATE OF dob` trigger, carrying SG-1.2, SG-6 tier 1(c) **and** SG-10's re-check — not several triggers on the same column
 - [ ] `person_roles(person_id, role, granted_at, granted_by)` and `public.has_role(role)` / `public.has_role(person_id, role)` — used by *every* policy from here on
 - [ ] A designation of which roles are **child-facing** (drives SG-6) — a lookup table, not a hard-coded list in a trigger
+
+**Consents and safeguarding settings (P1.7)**
+- [ ] `public.consent_type` enum — `app_account`, `unsupervised_messaging`; P2.2 adds the SG-5 photo-consent values by `alter type … add value`
+- [ ] `guardian_consents(id, child_person_id, guardian_person_id, consent_type, granted_at, granted_by, revoked_at, revoked_by, expires_at, notice_version, notes)` — partial unique `(child_person_id, consent_type) where revoked_at is null`; `expires_at` null until D12 is settled, and honoured by `has_active_consent()` from the outset
+- [ ] A trigger on `guardian_consents` requiring, at grant time, `is_minor(child_person_id)` and an **active** guardianship from the granting adult to that child (the link, never the `parent` role)
+- [ ] `deny_hard_delete()` + `deny_truncate()` on `guardian_consents`, with `DELETE`/`TRUNCATE` revoked from `anon`, `authenticated` **and `service_role`** — an extension of SG-2's four tables, recorded under §6.2
+- [ ] Grant/revoke audit triggers writing `safeguarding.consent.granted` / `safeguarding.consent.revoked` (SG-7)
+- [ ] `guardian_consents.notice_version` — which version of the SG-9 monitoring notice the guardian and child were shown at consent time
+- [ ] `public.has_active_consent(child_person_id uuid, consent_type public.consent_type)` — `STABLE`, `SECURITY DEFINER`, `search_path = public`, `EXECUTE` revoked from `public` and `anon` by name (the P1.1 lesson)
+- [ ] `public.is_account_eligible(person_id uuid)` (SG-0.1) and `public.is_supervision_exempt(person_id uuid)` (SG-0.2), declared the same way
+- [ ] `public.safeguarding_setting_int(key text)` reading `public.site_settings`, returning the documented default when the row is absent
+- [ ] `site_settings` rows `safeguarding.min_account_age` (13) and `safeguarding.unsupervised_messaging_min_age` (14), seeded if absent
+- [ ] A `BEFORE INSERT OR UPDATE` validation trigger on `site_settings` for `safeguarding.%` keys (integer; `min_account_age ≤ unsupervised_messaging_min_age < 18`; floor 13 per D11) plus a `settings.changed` audit trigger
+- [ ] A `BEFORE INSERT` trigger on `profiles` implementing SG-10 — the layer that binds the auth admin path, which RLS cannot reach
+- [ ] `handle_new_user()` honouring `raw_user_meta_data->>'person_id'`: adopt that person when it has an active `app_account` consent and no profile yet (the invite route for an account-eligible minor); otherwise create a new person exactly as today, and never match on email (P1.2)
 
 **Teams (P2.1)**
 - [ ] A way to answer "does this team contain minors?" cheaply — a `STABLE` function over `team_memberships` + `is_minor`; SG-6's triggers call it on every assignment
@@ -798,8 +1203,10 @@ invariants above *require to exist*.
 - [ ] `conversations(type, created_by, legal_hold, closed_at)` — types `dm`, `group`, `team`, `announcement`
 - [ ] `conversation_participants(conversation_id, person_id, joined_at, left_at, last_read_message_id, basis)` — `basis` distinguishes a genuine participant from an oversight/administrative presence (SG-1.5)
 - [ ] `messages(conversation_id, sender_person_id, body, reply_to_id, created_at, deleted_at, deleted_by, redacted_at, redaction_reason)`
-- [ ] `conversations.closed_at` is load-bearing, not cosmetic: SG-1.8 keys off it
-- [ ] The SG-1 evaluation function, called by triggers on `conversation_participants`, `messages`, `people.dob` and `guardianships`, and by the nightly checker
+- [ ] `conversations.closed_at` is load-bearing, not cosmetic: SG-1.8 and SG-1.9 both key off it
+- [ ] `conversations.supervised_by_lead boolean not null default false` (SG-1.9) — written by the trigger that admits the conversation, never by the client, and not clearable while a minor participant is active
+- [ ] The SG-1 evaluation function, called by triggers on `conversation_participants`, `messages`, `people.dob`, `guardianships`, `guardian_consents` (revocation) and `site_settings` (a raised `unsupervised_messaging_min_age`), and by the nightly checker
+- [ ] `public.read_conversation_as_lead(conversation_id, reason)` and `public.export_conversation_as_lead(conversation_id, reason)` — `SECURITY DEFINER`, no widened table grant behind them, mandatory non-empty `reason`, refusing conversations that have never held a minor, each writing its SG-7 row before returning (SG-9)
 - [ ] `deny_hard_delete()` (`BEFORE DELETE ... FOR EACH ROW`) applied to `messages`, `conversation_participants`, `safeguarding_concerns`, `audit_log`
 - [ ] `deny_truncate()` (`BEFORE TRUNCATE ... FOR EACH STATEMENT`) applied to the same four tables — the delete trigger does not fire on `TRUNCATE`
 - [ ] `REVOKE DELETE, TRUNCATE` on those four tables from `anon`, `authenticated` **and `service_role`**, re-asserted after any blanket grant
@@ -809,6 +1216,7 @@ invariants above *require to exist*.
 - [ ] `public.audit_log` gains the SG-2 delete guard **and** truncate guard
 - [ ] The `audit_read` policy is re-expressed against `person_roles`, and safeguarding actions are narrowed to `safeguarding_lead`/`club_admin`
 - [ ] A single `public.write_audit(action, entity, entity_id, detail)` helper so `actor_id`/`actor_email` are populated consistently
+- [ ] The SG-7 action vocabulary gains `safeguarding.consent.granted` / `safeguarding.consent.revoked` on `guardian_consents`, `settings.changed` on `site_settings`, and `includes_minor` in the `detail` of the two `messaging.conversation.*` actions
 
 ---
 
@@ -825,6 +1233,9 @@ invariants above *require to exist*.
 | **D7** | Retention periods (SG-8), especially for `safeguarding_concerns` — this is a legal/policy question and the numbers in §3 SG-8 are placeholders | Confirm against FA/Cheshire FA guidance and the ICO before the retention job is enabled. The job ships in dry-run |
 | **D8** | Fill in the §2.3 citation table against currently published FA / Cheshire FA guidance (this is `PLAN.md` Q6, and blocks P5.1 sign-off) | Adam to complete. Record the URLs and the date checked |
 | **D9** | Who is the named Club Welfare Officer, and does a second person hold `safeguarding_lead` for continuity? | At least two, or an absence leaves concerns unreadable by anyone |
+| **D10** | SG-10: when `safeguarding.min_account_age` is **raised**, what happens to accounts already held by children who are now below it — auto-disable, or report? | Report nightly to the `safeguarding_lead` with a one-click suspend; do not auto-disable. Cutting a child off from the club's messaging with no human in the loop is the wrong default, and the SG-6 tier-3 reasoning applies unchanged. (Raising `unsupervised_messaging_min_age` is a different case and is already decided — SG-1.9, reject-unless-closed) |
+| **D11** | SG-10: should `min_account_age` have a hard floor of **13** in the database, or may an admin set it lower? | Keep the floor at 13, the UK age of digital consent (C9). It is one constant in one validation function, so lowering it later is a small, deliberate, reviewable change — which is exactly what it should be |
+| **D12** | Does an `unsupervised_messaging` consent **expire** — per season, annually, or only on revocation? | Recommend per season, re-confirmed at registration (P2.2). A consent given for a 14-year-old two seasons ago is not evidence of a current decision, and re-asking costs a checkbox. If Adam prefers "until revoked", the expiry column still exists and is simply left null |
 
 ---
 
@@ -852,3 +1263,23 @@ invariants above *require to exist*.
 - **2026-08-22 — Codex review on PR #3:** four P1 findings (service_role
   bypass, TRUNCATE, guardianship-change re-evaluation, team-composition
   certification check) incorporated into SG-3 / SG-2 / SG-1 / SG-6.
+- **2026-08-22 — child accounts, guardian consent and configurable ages
+  (Adam's decision):** children may hold their own app account where a guardian
+  consents; the minimum account age is admin-editable, default 13; up to 14 a
+  guardian must still be a participant in any adult↔child conversation, so SG-1
+  is unchanged below the threshold; from 14 (also admin-editable), with a
+  guardian's `unsupervised_messaging` consent, a child may message an adult
+  one-to-one — the driving case is young referees — and any conversation
+  involving a minor can be opened or exported by the `safeguarding_lead` or
+  `club_admin` through a logged accessor, rather than by copying message content
+  into `audit_log`. Added: SG-0.1 / SG-0.2 (§1.5 defined terms), sub-case
+  SG-1.9 with its consent-revocation and setting-raise guards on the SG-1.8
+  reject-unless-closed pattern, **SG-9** (visibility of minors' private
+  messages), **SG-10** (account eligibility, `guardian_consents`, and the two
+  `site_settings` keys with DB validation); citation rows **C8** and **C9**
+  added and awaiting verification; open decisions **D10**–**D12** raised; §4
+  extended. Implemented by the new task **P1.7** and by **P5.2**. Two points
+  need Adam's explicit agreement beyond the decision itself: the unknown-DOB
+  carve-out in SG-10 (a documented deviation from §1.2's fail-closed principle,
+  without which every adult self-signup would be refused), and the extension of
+  SG-2's delete/truncate guards to `guardian_consents` (a strengthening, §6.2).
