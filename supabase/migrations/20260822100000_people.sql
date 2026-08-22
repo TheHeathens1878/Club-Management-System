@@ -455,6 +455,13 @@ revoke delete, truncate on public.people from anon, authenticated, service_role;
 -- both that the person exists and that they are an adult.
 revoke all privileges on function public.is_minor_dob(date) from public;
 revoke all privileges on function public.is_minor(uuid) from public;
+-- Hosted Supabase's default ACL (`alter default privileges for role postgres
+-- ... grant execute on functions to anon, authenticated, service_role`) gives
+-- anon an *explicit* EXECUTE grant on every new function, which revoking from
+-- PUBLIC does not touch. Revoke from anon by name — found by the P1.1
+-- rehearsal on a preview branch, where the local shadow DB had passed.
+revoke all privileges on function public.is_minor_dob(date) from anon;
+revoke all privileges on function public.is_minor(uuid) from anon;
 
 grant execute on function public.is_minor_dob(date) to authenticated, service_role;
 grant execute on function public.is_minor(uuid) to authenticated, service_role;
