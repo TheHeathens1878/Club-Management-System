@@ -102,20 +102,50 @@ to merge by hand.
 | `WaitingListEntry`, `WaitingListNote`, `WaitingListAgeGroupConfig`, `WaitingListAccess` | **new tables `waiting_list_entries`, `waiting_list_notes`, `waiting_list_age_groups`** (P3.3 migration, RLS: club_admin + coaches granted per age group) | the public `/waiting-list` and `/recruitment` forms must keep working from the new web app (P3.4 smoke test) |
 | `TeamApplication` | `waiting_list_entries` with `team_preference` set and `source = 'team_application'` | |
 
-## 5. Requires the read-only connection
+## 5. Data findings (read-only connection, 2026-08-23)
 
-- row counts per table (all 62) and `min/max(createdAt)`; bookings per year
-- `count(*) filter (where "dateOfBirth" is null)` on `User` by role — drives the unknown-DOB decision in P3.2 §3
-- `count(*)` of `@placeholder.invalid` users; of `isActive=false`; hash prefix distribution (`left("passwordHash",4)`) to confirm `$2a$` only
-- `User.email` values that already exist in prod `auth.users` (the merge list)
-- `Booking` rows that overlap on the same pitch with status CONFIRMED (GiST rejections to expect)
-- `UserContact.relationship` distinct values (for the enum mapping)
-- `Team.name` collisions with prod `teams`
-- attachment count and total `sizeBytes` (Vercel Blob re-upload budget)
-- the hand-run SQL blocks in `HANDOVER.md` — verify they were applied (`WaitingListEntry.school` exists, `UNCONTACTABLE` in the enum)
+Connected as `claude_ro` (SELECT only; `has_table_privilege('"User"','INSERT') = false`), Postgres 17.11, database `neondb`, **pooler host** in `.env.neon` (pg_dump for P3.3 needs the direct host — swap `-pooler` out of the hostname). 57 tables + `_prisma_migrations` (27 of 59 migrations recorded; the rest were applied by hand — every Prisma model has its table) + Neon's sample `playing_with_neon` (ignored).
+
+### 5.1 Volumes — this is a small dataset
+
+| Table | Rows | Notes |
+|---|---|---|
+| `User` | **61** | OWNER 1, ADMIN 4, COACH 47, PARENT 4, PLAYER 5. All `isActive`. Hash prefix **`$2a$` × 61** (bcrypt, Strategy A confirmed). 3 `@placeholder.invalid` locked players. No bad or case-duplicate emails |
+| `User.dateOfBirth` | **NULL for all 56 adults**; known for 4 of 5 players (all four are minors, each with a `UserContact` guardian) | `medicalNotes`, emergency contact, address, `sex`: **0 rows** — D-P3-1 is moot |
+| `UserContact` | 4 | relationship = "Son" ×4 → `parent` |
+| `Team` | 73 (67 active, 5 recruiting) | 72 distinct names: "Lions" exists at U05 and U18 → `name` must carry the age group (`U05 Lions`), matching the live register page. **0 collisions** with prod `teams` (prod has 0 teams) |
+| `UserTeam` | 70 | coach/parent/player ↔ team |
+| `Venue` / `Pitch` | 5 / 15 (13 active) | Ashton Park ×2, AoM Sports Club ×5, Dainewell Park ×2, Weathercock Farm ×2, Wellfield Junior School ×4; types 5/7/9/11-a-side. Prod `resources(type='pitch')` = 0 |
+| `Booking` | 76 | CONFIRMED 49 MATCH + 21 TRAINING, CANCELLED 3, REJECTED 2, PENDING 1; all 2026-05-23 → 2026-08-30; **0 overlapping confirmed pairs**, 0 bad ranges, every row has a team and a creator |
+| `TrainingSession` / `…Team` | 6 / 12 | one recurring group, 2026-06-01 → 07-06 |
+| `Closure` | 6 | all VENUE scope, active |
+| `PitchTimeslot` | 88 | weekly slot templates |
+| Chat: `TeamMessage` 4, `CoachGroupMessage` 2, `LobbyPost` 11 (10 deleted), attachments **0**, polls/events **0** | | 2 teams with chat, 3 coach groups (55 members, 87 eligible teams) |
+| `WaitingListEntry` | 73 | PENDING 48, CONTACTED 9, TRIALLING 5, REJECTED 10, WITHDRAWN 1; 39 with `dataConsent`; DOBs 2014–2022; 68 distinct parent emails. `WaitingListNote` 14, `WaitingListAccess` 62, `WaitingListAgeGroupConfig` 14, `TeamApplication` 1 |
+| `Notification` 640, `PushSubscription` 2, `BookingAvailability` 2, attendance 0, `PasswordResetToken` 9, `RoleAuditLog` 0, `VenueDocument` 3 | | not migrated |
+
+`HANDOVER.md`'s hand-run SQL was applied (`school`, `healthConditions`, `reconfirmRequestedAt` exist; `UNCONTACTABLE` in the enum).
+
+### 5.2 Prod overlap
+
+- **6 Neon emails already exist in prod `auth.users` / `people`** (the function-room admins who also use the pitch app). Per the P1.2 identity rule these are *not* auto-linked: the import creates no auth row for them (it would fail on the unique email anyway) and lists the six in the reconcile report for Adam to merge by hand — or, simpler, **D-P3-5: treat an exact email match with an existing `auth.users` row as the same person** (attach roles/memberships to the existing `people` row, keep their current Supabase password). Recommendation: D-P3-5, because these six are all staff Adam knows.
+- prod `seasons.is_current` = 0 rows → P3.3 must create the 2026/27 season before memberships import.
+
+### 5.3 Consequences for §4 (simplifications)
+
+- **Chat (§4.3): drop.** 7 live messages, 10 of 11 lobby posts deleted, 0 attachments. Team conversations come from P5.3 as normal; D-P3-4 is moot.
+- **Attendance/availability (D-P3-3): drop** — 2 rows.
+- **Medical/emergency/address (D-P3-1): moot** — no data.
+- **The real decision is DOB.** 56 adults (1 owner, 4 admins, 47 coaches, 4 parents) have no DOB; SG-0 treats NULL as minor, so an imported coach could not be staff on a team, could not be in a DM with another adult, etc. Options for **D-P3-6**:
+  1. *(recommended)* Import adults with `dob` NULL **and** mark them `people.legacy_adult_attested = true` (new column, settable only by the import and `club_admin`, attested by Adam who knows all 56), and let `is_minor()` return false when the flag is set and dob is NULL. First login forces DOB entry (profile-completion gate, already planned in P1.7's open items), after which the flag is irrelevant. This is the P1.7 unknown-DOB carve-out, scoped to imported rows.
+  2. Collect all 56 DOBs from people before cutover (a form + chasing) — blocks Q5 "ASAP".
+  3. Import with NULL and no carve-out — coaches become unusable until an admin enters each DOB by hand.
+- **SG-6 (D-P3-2)** is unchanged: no `certifications` rows exist in prod, so coach memberships import as history (`left_at = now()`) *or* Adam enters certifications first. With only 47 coaches and 73 teams the alternative — import live memberships with a temporary `certification_exemptions` row per coach, expiring in 60 days — is proportionate; recommendation: exemptions, so the club is usable on day one.
 
 ## 6. Approval
 
-- [ ] Adam confirms §2 (bcrypt import, Strategy A; locked placeholder accounts get no login).
-- [ ] D-P3-1 medical/emergency data placement; D-P3-2 SG-6 handling of imported coach/player memberships; D-P3-3 attendance/availability history (drop vs. keep in `neon_legacy` only); D-P3-4 chat attachments (re-upload vs. drop).
-- [ ] Adam provides the read-only Neon URL; §5 is then filled in and this file re-reviewed before P3.2.
+- [ ] Adam confirms §2 (bcrypt import, Strategy A; the 3 locked placeholder accounts get no login).
+- [ ] D-P3-2 coach memberships: 60-day `certification_exemptions` (recommended) vs. history-only.
+- [ ] D-P3-5 the 6 email matches: same person (recommended) vs. manual merge.
+- [ ] D-P3-6 adult DOB: option 1 carve-out (recommended) vs. collect first vs. none.
+- [x] Read-only Neon URL provided and verified; §5 filled in (2026-08-23).
