@@ -11,6 +11,8 @@ import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 
 export type TeamFixture = {
   id: string;
+  /** `fixtures.booking_id` — the pitch slot the fixture was allocated, if any. */
+  bookingId: string | null;
   kickoffAt: string;
   isHome: boolean;
   opponent: string;
@@ -31,7 +33,26 @@ export function fixtureStatusVariant(
   return "default";
 }
 
-export function FixturesTable({ fixtures }: { fixtures: TeamFixture[] }) {
+/**
+ * The Attendance column (gap 8).
+ *
+ * Attendance lives on the BOOKING, not the fixture — `/pitches/[bookingId]` is
+ * the availability and attendance sheet — so a fixture that has not been given
+ * a pitch has nowhere to send anybody. Rather than a dead link, those rows say
+ * why in a `title` the staff member can hover: the fix is to allocate a pitch,
+ * and that is done on the Pitches screen.
+ *
+ * The link is offered to team staff and administrators only, and even for them
+ * `/pitches/[bookingId]` reads as the caller — it shows the sheet only to
+ * whoever `is_team_staff()` or the admin roles admit.
+ */
+export function FixturesTable({
+  fixtures,
+  canManage,
+}: {
+  fixtures: TeamFixture[];
+  canManage: boolean;
+}) {
   if (fixtures.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
@@ -52,7 +73,8 @@ export function FixturesTable({ fixtures }: { fixtures: TeamFixture[] }) {
             <th className="py-2 pr-3 font-medium">Competition</th>
             <th className="py-2 pr-3 font-medium">Season</th>
             <th className="py-2 pr-3 font-medium">Pitch</th>
-            <th className="py-2 font-medium">Status</th>
+            <th className="py-2 pr-3 font-medium">Status</th>
+            {canManage && <th className="py-2 font-medium">Attendance</th>}
           </tr>
         </thead>
         <tbody>
@@ -76,7 +98,7 @@ export function FixturesTable({ fixtures }: { fixtures: TeamFixture[] }) {
                 <td className="py-2 pr-3">
                   {fixture.pitchName ?? (fixture.isHome ? "Not allocated" : "—")}
                 </td>
-                <td className="py-2">
+                <td className="py-2 pr-3">
                   <div className="flex flex-wrap items-center gap-1">
                     <Badge variant={fixtureStatusVariant(fixture.status)} className="capitalize">
                       {fixture.status}
@@ -84,6 +106,25 @@ export function FixturesTable({ fixtures }: { fixtures: TeamFixture[] }) {
                     {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
                   </div>
                 </td>
+                {canManage && (
+                  <td className="whitespace-nowrap py-2">
+                    {fixture.bookingId ? (
+                      <Link
+                        href={`/pitches/${fixture.bookingId}#attendance`}
+                        className="font-medium text-primary underline-offset-4 hover:underline"
+                      >
+                        Attendance
+                      </Link>
+                    ) : (
+                      <span
+                        className="text-muted-foreground"
+                        title="Allocate a pitch first — attendance is kept against the pitch booking."
+                      >
+                        Attendance
+                      </span>
+                    )}
+                  </td>
+                )}
               </tr>
             );
           })}

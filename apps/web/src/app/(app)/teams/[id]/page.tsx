@@ -49,7 +49,7 @@ const OVERVIEW_LIMIT = 3;
  * from the select text, and only a literal carries that type.
  */
 const FIXTURE_SELECT =
-  "id,kickoff_at,is_home,opponent,competition,status,venue_text,allocation_conflict,seasons(name),resources!fixtures_venue_resource_id_fkey(name)";
+  "id,booking_id,kickoff_at,is_home,opponent,competition,status,venue_text,allocation_conflict,seasons(name),resources!fixtures_venue_resource_id_fkey(name)";
 
 /** The payload `migrate_neon()` queues for a held-back membership. */
 function pendingMembershipPayload(payload: unknown): {
@@ -181,6 +181,7 @@ export default async function TeamPage({
     ]);
     overviewFixtures = (fixturesResult.data ?? []).map((row) => ({
       id: row.id,
+      bookingId: row.booking_id,
       kickoffAt: row.kickoff_at,
       isHome: row.is_home,
       opponent: row.opponent,
@@ -431,6 +432,7 @@ export default async function TeamPage({
     fixturesFailed = !!fixturesResult.error;
     fixtures = (fixturesResult.data ?? []).map((row) => ({
       id: row.id,
+      bookingId: row.booking_id,
       kickoffAt: row.kickoff_at,
       isHome: row.is_home,
       opponent: row.opponent,
@@ -667,7 +669,7 @@ export default async function TeamPage({
                     Could not load this team&apos;s fixtures.
                   </p>
                 ) : (
-                  <FixturesTable fixtures={fixtures} />
+                  <FixturesTable fixtures={fixtures} canManage={canManageTeam} />
                 )}
               </CardContent>
             </Card>

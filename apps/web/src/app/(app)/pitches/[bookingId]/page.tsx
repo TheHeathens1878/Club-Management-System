@@ -299,7 +299,9 @@ export default async function BookingDetailPage({
         </Card>
 
         {canMarkAttendance && (
-          <Card>
+          /* The team page links here as `#attendance`, so the sheet is what a
+             coach lands on rather than the top of the booking. */
+          <Card id="attendance" className="scroll-mt-6">
             <CardHeader>
               <CardTitle className="text-base">Roster and attendance</CardTitle>
               <p className="text-sm text-muted-foreground">

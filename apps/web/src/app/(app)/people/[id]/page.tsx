@@ -68,12 +68,32 @@ function formEntries(form: Json | null): { key: string; value: string }[] {
   }));
 }
 
-export default async function PersonPage({ params }: { params: Promise<{ id: string }> }) {
+/**
+ * `/people` hands its own query string over in `from`, so Back returns to the
+ * page, chip and filters the reader left rather than to an unfiltered page 1.
+ * Only a relative query string is honoured — anything else falls back to the
+ * bare list, so the parameter cannot be used to bounce somebody off-site.
+ */
+function backHref(from: string | undefined): string {
+  if (!from) return "/people";
+  const query = new URLSearchParams(from);
+  const text = query.toString();
+  return text ? `/people?${text}` : "/people";
+}
+
+export default async function PersonPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+}) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
 
   const { id } = await params;
+  const { from } = await searchParams;
   const supabase = await createClient();
 
   const { data: person } = await supabase.from("people").select("*").eq("id", id).maybeSingle();
@@ -171,7 +191,10 @@ export default async function PersonPage({ params }: { params: Promise<{ id: str
         title={name}
         subtitle={person.email ?? "No email on file"}
         action={
-          <Link href="/people" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href={backHref(from)}
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
             <ChevronLeft className="h-4 w-4" /> Back to people
           </Link>
         }
