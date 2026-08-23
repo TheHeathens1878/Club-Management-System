@@ -21,8 +21,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   buildFixturesUrl,
-  classifyResponse,
-  fetchFullTimePage,
+  fetchViaPgNet,
   fixturesForTeam,
   FullTimeUrlError,
   parseCsvFixtures,
@@ -163,6 +162,7 @@ export async function previewManualUrl(
   ftTeamNameOverride?: string,
 ): Promise<ManualPreview> {
   await requireCommittee();
+  const admin = createAdminClient();
 
   const names = await resolveTeamName(teamId, ftTeamNameOverride);
   if (names === null) return { ok: false, message: "That team no longer exists." };
@@ -189,8 +189,8 @@ export async function previewManualUrl(
 
   const fetchedUrl = buildFixturesUrl(ids);
   await limiter.wait();
-  const response = await fetchFullTimePage(fetchedUrl);
-  const outcome = classifyResponse(response.status, response.html);
+  const response = await fetchViaPgNet(admin, fetchedUrl);
+  const outcome = response.classification;
 
   if (outcome === "challenge") {
     return { ok: false, message: CHALLENGE_MESSAGE, fetchedUrl, httpStatus: response.status };

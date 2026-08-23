@@ -104,6 +104,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   const link: FullTimeLinkView | null = linkRow
     ? {
         source_url: linkRow.source_url,
+        widget_code: linkRow.widget_code,
         league_id: linkRow.league_id,
         ft_season_id: linkRow.ft_season_id,
         division_id: linkRow.division_id,
@@ -354,9 +355,10 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           <CardHeader>
             <CardTitle>FA Full-Time link</CardTitle>
             <p className="text-sm text-muted-foreground">
-              The FA publishes no fixtures API, so fixtures are read from public Full-Time pages. Paste the
-              team&apos;s Full-Time address, preview what the parser reads, then save. Re-linking for a new
-              season or a new league updates this link and keeps the fixtures already imported.
+              The FA publishes no fixtures API, so fixtures and results are read from the team&apos;s Full-Time
+              widget — the &ldquo;add to your website&rdquo; snippet. Paste it, preview what the parser reads,
+              then save. Imports run nightly; re-linking for a new season updates this link and keeps the
+              fixtures already imported.
             </p>
           </CardHeader>
           <CardContent>

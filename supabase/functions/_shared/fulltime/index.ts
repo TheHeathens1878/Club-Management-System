@@ -12,6 +12,7 @@ export * from "./errors.ts";
 export * from "./fetch.ts";
 export * from "./html.ts";
 export * from "./parse.ts";
+export * from "./pgnet.ts";
 export * from "./ref.ts";
 export * from "./team.ts";
 export * from "./time.ts";

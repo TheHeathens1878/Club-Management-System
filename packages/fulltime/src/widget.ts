@@ -1,13 +1,17 @@
 /**
- * The Full-Time embed widget.
+ * The Full-Time embed widget — the import source.
  *
  * Full-Time hands clubs a snippet — a `<div id="lrep<code>">`, `var lrcode =
  * '<code>'`, and `<script src="https://fulltime.thefa.com/client/api/cs1.js">` —
  * which loads `https://fulltime.thefa.com/js/cs1.html?cs=<code>`: a line of
- * JavaScript that sets the div's innerHTML to a fixtures table. It is meant for
- * browsers, and a browser is exactly what Cloudflare lets through where it
- * blocks every cloud IP. So the admin's browser loads the widget and hands the
- * rendered table here.
+ * JavaScript that sets the div's innerHTML to the team's fixtures and results
+ * table for the season. It is already scoped to one team and keyed by the same
+ * `displayFixture.html?id=` the page scraper uses, so the two reconcile onto
+ * the same rows.
+ *
+ * Fetching it: Cloudflare fingerprints the TLS client, not the IP — Deno's
+ * `fetch()` is refused where libcurl is let through — so the importer fetches
+ * through pg_net (see `pgnet.ts`) and hands the body here.
  *
  * The table has no header row. It alternates a date row —
  *
@@ -20,6 +24,7 @@
 
 import { extractTables, hrefsIn, textOf } from "./html.ts";
 import { fixtureIdFromHref, stableExternalRef } from "./ref.ts";
+import { normaliseTeamName } from "./team.ts";
 import { londonToInstant, parseClockTime } from "./time.ts";
 import type { FixtureStatus, ParsedFixture, ParsedPage } from "./types.ts";
 
@@ -65,7 +70,48 @@ export function widgetUrl(code: string): string {
 export function widgetHtmlFrom(payload: string): string {
   const m = /innerHTML\s*=\s*'([\s\S]*)';?\s*$/.exec(payload.trim());
   if (!m) return payload;
-  return (m[1] ?? "").replace(/\\'/g, "'").replace(/\\n/g, "\n");
+  // Undo JavaScript string-literal escaping (`\'` in "St Mary's", `\/`, `\n`…).
+  return (m[1] ?? "").replace(
+    /\\(u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[\s\S])/g,
+    (_whole: string, esc: string): string => {
+      switch (esc[0]) {
+        case "u":
+        case "x":
+          return String.fromCharCode(parseInt(esc.slice(1), 16));
+        case "n":
+          return "\n";
+        case "r":
+          return "\r";
+        case "t":
+          return "\t";
+        case "\n":
+          return "";
+        default:
+          return esc;
+      }
+    },
+  );
+}
+
+/**
+ * The one team every fixture has in common — the team the widget was
+ * generated for. `undefined` when there are no fixtures or no single team is
+ * in all of them (a division widget, say).
+ */
+export function widgetTeamName(fixtures: readonly ParsedFixture[]): string | undefined {
+  if (fixtures.length === 0) return undefined;
+  const counts = new Map<string, { name: string; count: number }>();
+  for (const fixture of fixtures) {
+    for (const name of new Set([fixture.homeTeam, fixture.awayTeam])) {
+      const key = normaliseTeamName(name);
+      if (key === "") continue;
+      const entry = counts.get(key);
+      if (entry) entry.count += 1;
+      else counts.set(key, { name, count: 1 });
+    }
+  }
+  const everywhere = [...counts.values()].filter((entry) => entry.count === fixtures.length);
+  return everywhere.length === 1 ? everywhere[0]?.name : undefined;
 }
 
 const SCORE = /^\s*(\d{1,3})\s*$/;
