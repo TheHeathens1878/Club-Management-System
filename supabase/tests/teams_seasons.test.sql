@@ -18,7 +18,12 @@
 
 begin;
 
-select plan(73);
+select plan(75);
+
+-- SG-6 tier-1 enforcement is OFF in production (FA Clubs Portal is the record;
+-- see the 2026-08-23 amendment in SAFEGUARDING.md). These tests exercise the
+-- machinery, so they run with the switch on.
+update public.site_settings set value = '1' where key = 'safeguarding.sg6_enforcement';
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -350,6 +355,22 @@ set local role authenticated;
 select is((select count(*) from public.team_memberships), current_setting('t.tm_all')::bigint, 'club_admin sees every membership');
 select lives_ok($$insert into public.teams (name) values ('Admin Made')$$, 'club_admin can create a team');
 reset role;
+
+-- ---------------------------------------------------------------------------
+-- D. The production state: SG-6 enforcement OFF (FA Clubs Portal is the
+--    record — SAFEGUARDING.md amendment 2026-08-23). The same insert that
+--    threw above is permitted with the switch off.
+-- ---------------------------------------------------------------------------
+update public.site_settings set value = '0' where key = 'safeguarding.sg6_enforcement';
+select lives_ok(
+  $$insert into public.team_memberships (person_id, team_id, season_id, role)
+    values (current_setting('t.other')::uuid, '7e7e7e7e-1111-4111-8111-000000000001', '5e5e5e5e-1111-4111-8111-000000000001', 'coach')$$,
+  'with enforcement off, an uncertified coach may join a youth team');
+select lives_ok(
+  $$insert into public.team_memberships (person_id, team_id, season_id, role)
+    values ('c2c2c2c2-1111-4111-8111-000000000001', '7e7e7e7e-1111-4111-8111-000000000002', '5e5e5e5e-1111-4111-8111-000000000001', 'player')$$,
+  'with enforcement off, a minor may join a team with an uncertified coach');
+update public.site_settings set value = '1' where key = 'safeguarding.sg6_enforcement';
 
 -- anon: nothing
 set local role anon;

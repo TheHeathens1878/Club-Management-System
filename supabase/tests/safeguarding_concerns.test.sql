@@ -9,6 +9,11 @@ begin;
 
 select plan(60);
 
+-- SG-6 tier-1 enforcement is OFF in production (FA Clubs Portal is the record;
+-- see the 2026-08-23 amendment in SAFEGUARDING.md). These tests exercise the
+-- machinery, so they run with the switch on.
+update public.site_settings set value = '1' where key = 'safeguarding.sg6_enforcement';
+
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a8a8a8a8-1111-4111-8111-000000000001', 'c-admin@test.invalid',  '{"full_name": "Ada Admin"}'::jsonb),
   ('a8a8a8a8-1111-4111-8111-000000000002', 'c-lead@test.invalid',   '{"full_name": "Lee Lead"}'::jsonb),

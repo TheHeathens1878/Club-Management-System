@@ -674,6 +674,18 @@ export).
 
 ### SG-6 — Certification currency gates work with children
 
+> **Amendment (Adam, 2026-08-23, migration `20260824240000_sg6_enforcement_off.sql`).**
+> Tier-1 enforcement is now a switch —
+> `site_settings['safeguarding.sg6_enforcement']` (integer, `1` = enforce,
+> `0` = off) — **and the club runs with it OFF**: DBS checks and safeguarding
+> qualifications are recorded and enforced on the **FA Clubs Portal**, the
+> FA's own system of record, and duplicating the hard block in-app refused
+> legitimate approvals for paperwork already verified there. The shared
+> evaluator, certifications, exemptions, expiry nudges and the compliance
+> report all remain (they record and report; they no longer refuse), and every
+> tier-1 test below still runs with the switch set to `1` so the machinery
+> cannot rot. Flipping the switch back to `1` restores the rule below in full.
+
 **Statement.** A person may not hold the `coach` role (or any role designated as
 child-facing) for a team containing minors unless they hold an in-date DBS check
 and the safeguarding qualification required by C3.

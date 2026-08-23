@@ -18,6 +18,11 @@ begin;
 
 select plan(116);
 
+-- SG-6 tier-1 enforcement is OFF in production (SAFEGUARDING.md amendment
+-- 2026-08-23); this suite exercises the pending-queue + exemption machinery,
+-- so it runs with the switch on.
+update public.site_settings set value = '1' where key = 'safeguarding.sg6_enforcement';
+
 -- ---------------------------------------------------------------------------
 -- Fixtures: an admin, a lead-to-be, and Eve — an existing account whose email
 -- the Neon export also carries (D-P3-5 / 3a)
