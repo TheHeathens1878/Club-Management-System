@@ -114,14 +114,42 @@ export function widgetTeamName(fixtures: readonly ParsedFixture[]): string | und
   return everywhere.length === 1 ? everywhere[0]?.name : undefined;
 }
 
-const SCORE = /^\s*(\d{1,3})\s*$/;
+const NUMBER = /^\d{1,3}$/;
+const SCORE_PAIR = /^(\d{1,3})\s*[-–—]\s*(\d{1,3})$/;
+const SEPARATOR = /^(?:v|vs)\.?$|^[-–—]$/i;
+const TYPE_LETTER = /^[A-Za-z]{1,3}$/;
+const NOTHING_TO_SHOW = /^\s*no\s+(results|fixtures|matches|games)\b/i;
 const STATUS_WORDS: ReadonlyArray<readonly [RegExp, FixtureStatus]> = [
   [/abandon/i, "abandoned"],
   [/cancell?ed|\bvoid\b/i, "cancelled"],
   [/postpon|(?:^|\s)p(?:\s|$)|(?:^|\s)pp(?:\s|$)/i, "postponed"],
 ];
 
-/** Parse the widget table into fixtures. Never throws; unreadable rows become warnings. */
+function statusWordIn(text: string): FixtureStatus | undefined {
+  if (text.length > 20) return undefined;
+  for (const [pattern, status] of STATUS_WORDS) {
+    if (pattern.test(text)) return status;
+  }
+  return undefined;
+}
+
+/**
+ * What a fixture row is between date rows: the team variant carries a kick-off
+ * date and time; a club variant's "Postponed" group carries a status and no
+ * date at all.
+ */
+type RowContext = { date?: string; time?: string; status?: FixtureStatus };
+
+/**
+ * Parse the widget table into fixtures. Never throws; unreadable rows become
+ * warnings.
+ *
+ * Handles every widget variant seen so far by classifying cells rather than
+ * counting them: the team widget's seven columns
+ * (`type | home | score | v | score | away | venue`), the club fixtures
+ * widget's five (`type | home | v | away | venue` — no score columns at all),
+ * and results variants that print `3 - 1` in a single cell.
+ */
 export function parseWidgetHtml(payload: string): ParsedPage {
   const html = widgetHtmlFrom(payload);
   const fixtures: ParsedFixture[] = [];
@@ -132,15 +160,30 @@ export function parseWidgetHtml(payload: string): ParsedPage {
     return { seasons: [], teams: [], fixtures, warnings: ["The widget returned no fixtures table."] };
   }
 
-  let current: { date: string; time?: string } | undefined;
+  let current: RowContext | undefined;
+  let undated = 0;
   for (const row of table.rows) {
     const cells = row.cells.filter((c) => c.tag === "td");
     if (cells.length === 0) continue;
+    const fixtureId = hrefsIn(row.html).map(fixtureIdFromHref).find((id): id is string => id !== undefined);
 
-    if (cells.length === 1) {
-      const parsed = parseWidgetDate(cells[0]?.text ?? "");
-      if (parsed) current = parsed;
-      else if ((cells[0]?.text ?? "").trim() !== "") warnings.push(`Could not read a date row: ${row.text.slice(0, 80)}`);
+    // Rows that are not a fixture: date headings, group status headings
+    // ("Postponed"), "No Results", the League | Table footer.
+    if (fixtureId === undefined) {
+      const text = row.text.trim();
+      const parsedDate = parseWidgetDate(text);
+      if (parsedDate) {
+        current = parsedDate;
+        continue;
+      }
+      const groupStatus = statusWordIn(text);
+      if (groupStatus) {
+        current = { status: groupStatus };
+        continue;
+      }
+      if (cells.length === 1 && text !== "" && !NOTHING_TO_SHOW.test(text)) {
+        warnings.push(`Could not read a date row: ${text.slice(0, 80)}`);
+      }
       continue;
     }
 
@@ -148,44 +191,71 @@ export function parseWidgetHtml(payload: string): ParsedPage {
       warnings.push(`Fixture row before any date row: ${row.text.slice(0, 80)}`);
       continue;
     }
-    // Footer/navigation rows ("League | Table" links) carry no fixture link.
-    if (cells.length < 6) {
-      if (hrefsIn(row.html).some((h) => fixtureIdFromHref(h) !== undefined)) {
-        warnings.push(`Unexpected row shape (${cells.length} cells): ${row.text.slice(0, 80)}`);
-      }
+    // A "Postponed" group prints no date, and a fixture without a kick-off
+    // date cannot be imported; the row keeps its last imported date instead.
+    if (current.date === undefined) {
+      undated += 1;
       continue;
     }
 
-    const type = (cells[0]?.text ?? "").trim().toUpperCase();
-    const homeTeam = (cells[1]?.text ?? "").trim();
-    const homeScoreText = (cells[2]?.text ?? "").trim();
-    const middle = (cells[3]?.text ?? "").trim();
-    const awayScoreText = (cells[4]?.text ?? "").trim();
-    const awayTeam = (cells[5]?.text ?? "").trim();
-    const venue = (cells[6]?.text ?? "").trim() || undefined;
-    if (!homeTeam || !awayTeam) {
+    // Classify the cells: the optional type letter comes first, the first two
+    // longer texts are the teams, digits between them are the score, and
+    // whatever text follows the away team is the venue.
+    let type = "";
+    const texts: string[] = [];
+    const numbers: number[] = [];
+    let homeScore: number | undefined;
+    let awayScore: number | undefined;
+    let cellStatus: FixtureStatus | undefined;
+    let first = true;
+    for (const cell of cells) {
+      const text = cell.text.trim();
+      if (text === "") {
+        first = false;
+        continue;
+      }
+      if (first && TYPE_LETTER.test(text) && !SEPARATOR.test(text)) {
+        type = text.toUpperCase();
+        first = false;
+        continue;
+      }
+      first = false;
+      if (SEPARATOR.test(text) && texts.length === 1) continue;
+      const pair = SCORE_PAIR.exec(text);
+      if (pair && texts.length === 1) {
+        homeScore = Number(pair[1]);
+        awayScore = Number(pair[2]);
+        continue;
+      }
+      const word = statusWordIn(text);
+      if (word && texts.length <= 1) {
+        cellStatus = cellStatus ?? word;
+        continue;
+      }
+      if (NUMBER.test(text) && texts.length >= 1 && texts.length <= 2) {
+        numbers.push(Number(text));
+        continue;
+      }
+      texts.push(text);
+    }
+
+    const [homeTeam, awayTeam, ...rest] = texts;
+    if (homeTeam === undefined || awayTeam === undefined) {
       warnings.push(`Fixture row without both teams: ${row.text.slice(0, 80)}`);
       continue;
     }
-
-    let status: FixtureStatus = "scheduled";
-    for (const [pattern, s] of STATUS_WORDS) {
-      if (pattern.test(`${middle} ${homeScoreText} ${awayScoreText}`)) { status = s; break; }
+    if (homeScore === undefined && numbers.length === 2) {
+      homeScore = numbers[0];
+      awayScore = numbers[1];
     }
-    let homeScore: number | undefined;
-    let awayScore: number | undefined;
-    if (SCORE.test(homeScoreText) && SCORE.test(awayScoreText)) {
-      homeScore = Number(homeScoreText);
-      awayScore = Number(awayScoreText);
-      if (status === "scheduled") status = "played";
-    }
-
-    const fixtureId = hrefsIn(row.html).map(fixtureIdFromHref).find((id): id is string => id !== undefined);
+    const played = homeScore !== undefined && awayScore !== undefined;
+    const status: FixtureStatus = cellStatus ?? current.status ?? (played ? "played" : "scheduled");
+    const venue = rest.join(", ") || undefined;
     const { date, time } = current;
 
     fixtures.push({
       externalRef: stableExternalRef({
-        ...(fixtureId === undefined ? {} : { externalRef: fixtureId }),
+        externalRef: fixtureId,
         date,
         homeTeam,
         awayTeam,
@@ -196,13 +266,35 @@ export function parseWidgetHtml(payload: string): ParsedPage {
       ...(time === undefined ? {} : { time }),
       homeTeam,
       awayTeam,
-      ...(homeScore === undefined ? {} : { homeScore }),
-      ...(awayScore === undefined ? {} : { awayScore }),
+      ...(played ? { homeScore, awayScore } : {}),
       status,
       ...(venue ? { venue } : {}),
       raw: textOf(row.html).replace(/\s+/g, " ").trim(),
     });
   }
+  if (undated > 0) {
+    warnings.push(
+      `${undated} fixture${undated === 1 ? "" : "s"} under a Postponed heading had no kick-off date and were left as previously imported.`,
+    );
+  }
 
   return { seasons: [], teams: [], fixtures, warnings };
+}
+
+/**
+ * Which of the club's own (short) team names a widget team name refers to:
+ * `Ashton On Mersey FC U14 Mavericks` → `U14 Mavericks`. A name that matches
+ * none — an opponent — or more than one comes back `undefined`.
+ */
+export function matchClubTeam(
+  widgetTeamName: string,
+  clubTeamNames: readonly string[],
+): string | undefined {
+  const full = normaliseTeamName(widgetTeamName);
+  if (full === "") return undefined;
+  const hits = clubTeamNames.filter((short) => {
+    const s = normaliseTeamName(short);
+    return s !== "" && (full === s || full.endsWith(` ${s}`));
+  });
+  return hits.length === 1 ? hits[0] : undefined;
 }

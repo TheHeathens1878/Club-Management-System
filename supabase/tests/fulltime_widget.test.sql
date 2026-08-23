@@ -6,7 +6,7 @@
 
 begin;
 
-select plan(28);
+select plan(32);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a7a7a7a7-1111-4111-8111-000000000001', 'w-admin@test.invalid', '{"full_name": "Ada Admin"}'::jsonb),
@@ -109,14 +109,33 @@ select is(public.fulltime_source_url('728576966', 'https://fulltime.thefa.com/fi
   'https://fulltime.thefa.com/js/cs1.html?cs=728576966', 'a widget link prefetches the widget');
 select is(public.fulltime_source_url(null, 'https://fulltime.thefa.com/fixtures.html?league=1'),
   'https://fulltime.thefa.com/fixtures.html?league=1', 'a page link prefetches the page');
-select is(public.fulltime_prefetch(), 2, 'prefetch queues one request per enabled link');
+-- Club codes come from site_settings; malformed values are ignored.
+select is((select count(*) from public.fulltime_club_codes()), 0::bigint, 'no club codes configured yet');
+insert into public.site_settings (key, value) values
+  ('fulltime_club_fixtures_code', '885630049'),
+  ('fulltime_club_results_code', 'not-a-code');
 select results_eq(
-  $$select url from public.fulltime_prefetched('7d7d7d7d-1111-4111-8111-000000000001')$$,
-  $$values ('https://fulltime.thefa.com/js/cs1.html?cs=728576966'::text)$$, 'the prefetch is found for the team');
-update public.fulltime_prefetches set created_at = now() - interval '2 hours' where team_id = '7d7d7d7d-1111-4111-8111-000000000001';
-select is((select count(*) from public.fulltime_prefetched('7d7d7d7d-1111-4111-8111-000000000001')), 0::bigint,
+  $$select kind, code from public.fulltime_club_codes()$$,
+  $$values ('fixtures'::text, '885630049'::text)$$,
+  'club codes read from site_settings, malformed values filtered');
+update public.site_settings set value = '114930447' where key = 'fulltime_club_results_code';
+
+-- Two team links share one widget URL with the second team; prefetch queues
+-- each distinct URL once: shared team URL + two club URLs = 3.
+update public.team_fulltime_links
+  set widget_code = '728576966', source_url = 'https://fulltime.thefa.com/js/cs1.html?cs=728576966'
+  where team_id = '7d7d7d7d-1111-4111-8111-000000000002';
+select is(public.fulltime_prefetch(), 3, 'prefetch queues each distinct URL once (shared link + 2 club codes)');
+select results_eq(
+  $$select count(*) from public.fulltime_prefetched_url('https://fulltime.thefa.com/js/cs1.html?cs=728576966')$$,
+  $$values (1::bigint)$$, 'the prefetch is found by URL');
+select is((select count(*) from public.fulltime_prefetches where url = 'https://fulltime.thefa.com/js/cs1.html?cs=114930447' and team_id is null), 1::bigint,
+  'a club widget prefetch carries no team');
+update public.fulltime_prefetches set created_at = now() - interval '2 hours';
+select is((select count(*) from public.fulltime_prefetched_url('https://fulltime.thefa.com/js/cs1.html?cs=728576966')), 0::bigint,
   'a stale prefetch is not offered');
 select ok(not has_function_privilege('authenticated', 'public.fulltime_prefetch()', 'EXECUTE'), 'prefetch is service_role only');
+select ok(not has_function_privilege('authenticated', 'public.fulltime_club_codes()', 'EXECUTE'), 'club codes are service_role only');
 
 -- A coach can do neither.
 set local request.jwt.claims to '{"sub":"a7a7a7a7-1111-4111-8111-000000000002","role":"authenticated"}';

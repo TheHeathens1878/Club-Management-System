@@ -4,7 +4,25 @@ Fixtures and results come from each team's Full-Time **widget** — the
 "add to your website" snippet Full-Time generates for a team. The import runs
 nightly in the cloud; nothing needs to run on a club PC.
 
-## Linking a team (once per season)
+## Linking the club (once per season) — recommended
+
+1. On fulltime.thefa.com open the club and choose **Add to your website** twice:
+   once for the club **fixtures** widget and once for the club **results**
+   widget. Each snippet carries its own `var lrcode`.
+2. In the app: **Teams → Club Full-Time widgets**. Paste both snippets, click
+   **Test & preview** (it lists which teams matched and how many fixtures
+   each gets), then **Save codes**. **Import all teams now** runs straight
+   away; otherwise the nightly run picks them up.
+3. Every active team is matched by name — the widget's
+   "Ashton On Mersey FC U14 Mavericks" feeds the team named "U14 Mavericks".
+   The preview flags club-side names that match no team. A team with its own
+   per-team link keeps that source instead of the club feed.
+4. New season: paste the new season's snippets over the old ones.
+
+The club fixtures widget carries no scores; results arrive through the club
+results widget once matches are played.
+
+## Linking one team (alternative)
 
 1. On fulltime.thefa.com open the team's league, pick the team, and choose
    **Add to your website** (the *team fixtures* widget). Copy the snippet — it

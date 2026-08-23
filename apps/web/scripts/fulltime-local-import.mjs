@@ -35,6 +35,7 @@ import {
   parseFullTimeUrl,
   parseWidgetHtml,
   RateLimiter,
+  matchClubTeam,
   widgetTeamName,
   widgetUrl,
 } from "../../../packages/fulltime/src/index.ts";
@@ -158,4 +159,97 @@ for (const t of list) {
     console.log(`  ${t.team_name}: error — ${msg}`);
   }
 }
+
+// Club-wide widgets feed every active team without its own link (mirrors the
+// Edge Function; see supabase/functions/fulltime-import).
+async function importClub() {
+  const { data: settings } = await admin
+    .from("site_settings")
+    .select("key,value")
+    .in("key", ["fulltime_club_fixtures_code", "fulltime_club_results_code"]);
+  const codes = (settings ?? []).filter((s) => /^\d{6,12}$/.test(s.value));
+  if (codes.length === 0) return;
+
+  const pages = [];
+  const pageWarnings = [];
+  let sourceUrl = "";
+  for (const s of codes) {
+    const url = widgetUrl(s.value);
+    if (s.key.includes("fixtures") || sourceUrl === "") sourceUrl = url;
+    await limiter.wait();
+    const res = await fetchFullTimePage(url);
+    if (classifyResponse(res.status, res.html) !== "ok") {
+      console.log(`  club ${s.key}: HTTP ${res.status}`);
+      failed += 1;
+      continue;
+    }
+    const page = parseWidgetHtml(res.html);
+    pages.push(page);
+    pageWarnings.push(...page.warnings);
+  }
+  if (pages.length === 0) return;
+
+  const byRef = new Map();
+  for (const page of pages) {
+    for (const f of page.fixtures) {
+      const seen = byRef.get(f.externalRef);
+      if (!seen || f.homeScore !== undefined || f.status !== "scheduled") byRef.set(f.externalRef, f);
+    }
+  }
+  const fixtures = [...byRef.values()];
+
+  const [{ data: teamRows }, { data: season }] = await Promise.all([
+    admin.from("teams").select("id,name").eq("active", true),
+    admin.from("seasons").select("id").eq("is_current", true).limit(1).maybeSingle(),
+  ]);
+  if (!season) {
+    console.log("  club: no current season set");
+    failed += 1;
+    return;
+  }
+  const linked = new Set((targets ?? []).map((t) => t.team_id));
+  const teams = (teamRows ?? []).filter((t) => !linked.has(t.id) && (!onlyTeam || t.id === onlyTeam));
+  const names = teams.map((t) => t.name);
+
+  for (const team of teams) {
+    const mine = fixtures.flatMap((f) => {
+      const isHome = matchClubTeam(f.homeTeam, names) === team.name;
+      const isAway = matchClubTeam(f.awayTeam, names) === team.name;
+      if (!isHome && !isAway) return [];
+      return [{ ...f, isHome, opponent: isHome ? f.awayTeam : f.homeTeam }];
+    });
+    if (mine.length === 0) continue;
+    const payload = mine.map((f) => ({
+      externalRef: f.externalRef,
+      kickoffAt: f.kickoffAt,
+      opponent: f.opponent,
+      isHome: f.isHome,
+      competition: f.competition ?? null,
+      status: f.status,
+      homeScore: f.homeScore ?? null,
+      awayScore: f.awayScore ?? null,
+      venue: f.venue ?? null,
+    }));
+    if (dryRun) {
+      console.log(`  ${team.name} (club feed): dry-run fixtures=${payload.length}`);
+      continue;
+    }
+    const { data, error: importError } = await admin.rpc("import_fixtures", {
+      p_team_id: team.id,
+      p_season_id: season.id,
+      p_fixtures: payload,
+      p_trigger: onlyTeam ? "manual_widget" : "scheduled",
+      p_source_url: sourceUrl,
+      p_warnings: pageWarnings,
+    });
+    if (importError) {
+      failed += 1;
+      console.log(`  ${team.name} (club feed): error — ${importError.message}`);
+    } else {
+      console.log(`  ${team.name} (club feed): ok ${JSON.stringify(data)}`);
+    }
+  }
+}
+
+await importClub();
 process.exit(failed > 0 ? 1 : 0);
