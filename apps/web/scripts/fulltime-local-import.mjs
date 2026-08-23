@@ -3,7 +3,7 @@
  * FA Full-Time importer that runs from a club PC — the fallback.
  *
  * The nightly import normally runs in the cloud (supabase/functions/fulltime-import,
- * fetching through pg_net — see 20260824140000_fulltime_pgnet_fetch.sql). This
+ * fetching through pg_net — see 20260824170000_fulltime_pgnet_fetch.sql). This
  * script is the same import — same targets, same parser, same `import_fixtures()`
  * RPC and the same failure recording — executed from an ordinary home/office
  * connection with a plain HTTP client, for the day Cloudflare changes its mind

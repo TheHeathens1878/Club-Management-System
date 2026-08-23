@@ -6,7 +6,7 @@
  * the address: a Deno `fetch()` from an Edge Function is refused (403) with
  * exactly the headers that get libcurl a 200. pg_net is libcurl. So the
  * database issues the request (`fulltime_http_get`, which adds the headers
- * Cloudflare wants — see 20260824140000_fulltime_pgnet_fetch.sql) and the
+ * Cloudflare wants — see 20260824170000_fulltime_pgnet_fetch.sql) and the
  * caller polls `fulltime_http_result` for the body.
  *
  * Returns the same {@link FullTimeResponse} shape as {@link fetchFullTimePage}
