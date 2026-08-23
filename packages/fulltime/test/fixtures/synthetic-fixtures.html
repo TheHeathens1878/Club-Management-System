@@ -1,0 +1,187 @@
+<!--
+  SYNTHETIC FIXTURE — hand-written, NOT a recorded Full-Time page.
+
+  The real snapshots in this directory were fetched off-season (2026-08-23), so
+  fulltime.thefa.com had no upcoming fixtures to show us and ft-fixtures.html
+  came back with an empty filter form and no table at all. This file fills that
+  gap: it reproduces the row markup Full-Time uses (verified against the single
+  real result row in ft-league.html and ft-team.html) and adds the row shapes
+  we could not capture live —
+
+    * an unplayed row whose kick-off time is in the date cell;
+    * an unplayed row whose kick-off time is in the score cell instead;
+    * a cup row (type C) with no displayFixture link, so the parser has to fall
+      back to a hashed external_ref;
+    * a postponed row ("P - P" in the score cell, "Postponed" in a status
+      column);
+    * an abandoned row that still carries a score, so the status word has to
+      win over the digits;
+    * a cancelled row;
+    * two rows either side of a British Summer Time boundary (26/10/25 is GMT,
+      30/03/26 is BST) so the wall-clock conversion is pinned in both;
+    * a date-grouping row, which must be skipped in silence;
+    * a malformed row, which must produce a warning and not an exception.
+
+  Unlike the recorded pages, this file is ours to edit. If Full-Time's markup
+  changes, re-record the real snapshots first and only then adjust this one to
+  match — otherwise the tests will keep passing against markup that no longer
+  exists.
+-->
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Fixtures | Winchester &amp; District Football League</title>
+  </head>
+  <body>
+    <form id="form1">
+      <select name="selectedSeason" id="form1_selectedSeason">
+        <option value="736475439">2024-25</option>
+        <option value="249484346" selected="selected">2025-26</option>
+      </select>
+      <select name="selectedTeam" id="form1_selectedTeam">
+        <option value="">All</option>
+        <option value="607526097">Whalesmead Thistle</option>
+        <option value="607526098">Angel FC</option>
+        <option value="607526099">Otterbourne Rovers</option>
+      </select>
+    </form>
+
+    <div class="fixtures-table table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Type</th>
+            <th class="left">Date / Time</th>
+            <th>Home Team</th>
+            <th>Score</th>
+            <th>Away Team</th>
+            <th>Competition</th>
+            <th>Venue</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="fixture-date-group">
+            <td colspan="8">Saturday 6 September 2025</td>
+          </tr>
+
+          <tr class="">
+            <td class="color-dark-grey bold cell-divider">L</td>
+            <td class="left cell-divider">
+              <span class="spacer-right">06/09/25</span>
+              <span class="color-dark-grey">15:00</span>
+            </td>
+            <td class="home-team right">
+              <a href="/displayFixture.html?id=30111004">Angel FC</a>
+            </td>
+            <td class="score">
+              <a href="/displayFixture.html?id=30111004">3 - 1<br></a>
+            </td>
+            <td class="road-team left cell-divider">
+              <a href="/displayFixture.html?id=30111004">Compton Corinthians</a>
+            </td>
+            <td>Division One</td>
+            <td>Angel Park</td>
+            <td></td>
+          </tr>
+
+          <tr class="">
+            <td class="color-dark-grey bold cell-divider">L</td>
+            <td class="left cell-divider">
+              <span class="spacer-right">26/10/25</span>
+              <span class="color-dark-grey">14:00</span>
+            </td>
+            <td class="home-team right">
+              <a href="/displayFixture.html?id=30111001">Whalesmead Thistle</a>
+            </td>
+            <td class="score">
+              <a href="/displayFixture.html?id=30111001">14:00<br></a>
+            </td>
+            <td class="road-team left cell-divider">
+              <a href="/displayFixture.html?id=30111001">Angel FC</a>
+            </td>
+            <td>Division One</td>
+            <td>Whalesmead Rec</td>
+            <td></td>
+          </tr>
+
+          <tr class="">
+            <td class="color-dark-grey bold cell-divider">L</td>
+            <td class="left cell-divider">
+              <span class="spacer-right">08/11/25</span>
+              <span class="color-dark-grey">14:00</span>
+            </td>
+            <td class="home-team right">
+              <a href="/displayFixture.html?id=30111003">Otterbourne Rovers</a>
+            </td>
+            <td class="score">
+              <a href="/displayFixture.html?id=30111003">P - P<br></a>
+            </td>
+            <td class="road-team left cell-divider">
+              <a href="/displayFixture.html?id=30111003">Angel FC</a>
+            </td>
+            <td>Division One</td>
+            <td>Otterbourne Rec</td>
+            <td>Postponed</td>
+          </tr>
+
+          <tr class="">
+            <td class="color-dark-grey bold cell-divider">L</td>
+            <td class="left cell-divider">
+              <span class="spacer-right">27/12/25</span>
+              <span class="color-dark-grey">10:30</span>
+            </td>
+            <td class="home-team right">Angel FC</td>
+            <td class="score">Cancelled</td>
+            <td class="road-team left cell-divider">Twyford Wanderers</td>
+            <td>Division One</td>
+            <td>Angel Park</td>
+            <td></td>
+          </tr>
+
+          <tr class="">
+            <td class="color-dark-grey bold cell-divider">C</td>
+            <td class="left cell-divider">30/03/26</td>
+            <td class="home-team right">Angel FC</td>
+            <td class="score">19:45</td>
+            <td class="road-team left cell-divider">Whalesmead Thistle</td>
+            <td>Hampshire Sunday Cup</td>
+            <td>Angel Park</td>
+            <td></td>
+          </tr>
+
+          <tr class="">
+            <td class="color-dark-grey bold cell-divider">F</td>
+            <td class="left cell-divider">
+              <span class="spacer-right">02/08/25</span>
+              <span class="color-dark-grey">11:00</span>
+            </td>
+            <td class="home-team right">Angel FC</td>
+            <td class="score">2 - 2</td>
+            <td class="road-team left cell-divider">Hursley Park</td>
+            <td>Pre-season friendly</td>
+            <td>Angel Park</td>
+            <td>Abandoned</td>
+          </tr>
+
+          <tr class="">
+            <td class="color-dark-grey bold cell-divider">?</td>
+            <td class="left cell-divider">date to be confirmed</td>
+            <td class="home-team right">
+              <a href="/displayFixture.html?id=30111006"></a>
+            </td>
+            <td class="score">
+              <a href="/displayFixture.html?id=30111006">v</a>
+            </td>
+            <td class="road-team left cell-divider">
+              <a href="/displayFixture.html?id=30111006">Sparsholt Athletic</a>
+            </td>
+            <td>Division One</td>
+            <td></td>
+            <td></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </body>
+</html>

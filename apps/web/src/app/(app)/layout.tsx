@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionProfile, isStaff, isBarManager, isCommittee, isBooker } from "@/lib/auth";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { CalendarDays, Clock, LogOut, Settings, Beer } from "lucide-react";
+import { CalendarDays, Clock, LogOut, Settings, Beer, Users } from "lucide-react";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionProfile();
@@ -16,6 +16,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const showBookings = isStaff(role);
   const showBar = isBarManager(role);
   const showSettings = isCommittee(role);
+  // Teams, seasons and the Full-Time links are committee-and-above (P2.3).
+  const showTeams = isCommittee(role);
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
@@ -49,6 +51,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
             >
               <Beer className="h-4 w-4" /> Bar
+            </Link>
+          )}
+
+          {showTeams && (
+            <Link
+              href="/teams"
+              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+            >
+              <Users className="h-4 w-4" /> Teams
             </Link>
           )}
 
