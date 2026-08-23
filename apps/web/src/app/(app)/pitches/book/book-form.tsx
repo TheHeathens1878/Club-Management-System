@@ -13,6 +13,11 @@
  * The weekly repeat is shown only for training: a one-off block booking that
  * silently recurred twenty times is the sort of surprise a pitch diary never
  * recovers from.
+ *
+ * The pitch follows the team — a coach who picks their under-12s gets the
+ * under-12s' home pitch already selected — but only until they touch the pitch
+ * select themselves. After that, changing the team leaves their choice alone:
+ * a default that silently undoes a deliberate pick is worse than no default.
  */
 
 import Link from "next/link";
@@ -41,16 +46,23 @@ export function BookForm({
   pitches,
   isAdmin,
   defaultTeamId,
+  homePitchByTeam,
   today,
 }: {
   teams: TeamOption[];
   pitches: PitchOption[];
   isAdmin: boolean;
   defaultTeamId: string | null;
+  /** `teams.home_resource_id` by team id, already filtered to bookable pitches. */
+  homePitchByTeam: Record<string, string>;
   today: string;
 }) {
   const [state, action, pending] = useActionState(createPitchBooking, EMPTY_BOOKING_STATE);
-  const [teamId, setTeamId] = useState(defaultTeamId ?? teams[0]?.id ?? "");
+  const initialTeamId = defaultTeamId ?? teams[0]?.id ?? "";
+  const [teamId, setTeamId] = useState(initialTeamId);
+  const [resourceId, setResourceId] = useState(homePitchByTeam[initialTeamId] ?? "");
+  /** Once the pitch has been chosen by hand, the team stops overriding it. */
+  const [pitchTouched, setPitchTouched] = useState(false);
   const [kind, setKind] = useState<PitchBookingKind>("training");
   const [repeats, setRepeats] = useState(false);
 
@@ -66,7 +78,11 @@ export function BookForm({
             name="team_id"
             required
             value={teamId}
-            onChange={(event) => setTeamId(event.target.value)}
+            onChange={(event) => {
+              const next = event.target.value;
+              setTeamId(next);
+              if (!pitchTouched) setResourceId(homePitchByTeam[next] ?? "");
+            }}
           >
             <option value="" disabled>
               Choose a team…
@@ -81,13 +97,23 @@ export function BookForm({
 
         <div className="space-y-1">
           <Label htmlFor="resource_id">Pitch</Label>
-          <Select id="resource_id" name="resource_id" required defaultValue="">
+          <Select
+            id="resource_id"
+            name="resource_id"
+            required
+            value={resourceId}
+            onChange={(event) => {
+              setPitchTouched(true);
+              setResourceId(event.target.value);
+            }}
+          >
             <option value="" disabled>
               Choose a pitch…
             </option>
             {pitches.map((pitch) => (
               <option key={pitch.id} value={pitch.id}>
                 {pitch.name}
+                {pitch.id === homePitchByTeam[teamId] ? " (home)" : ""}
               </option>
             ))}
           </Select>

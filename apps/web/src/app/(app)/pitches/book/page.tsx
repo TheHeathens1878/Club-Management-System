@@ -39,6 +39,17 @@ export default async function BookPitchPage({
   const defaultTeamId =
     requestedTeam && access.teams.some((t) => t.id === requestedTeam) ? requestedTeam : null;
 
+  // Each team's home pitch, so the form can open on it. Only pitches this
+  // caller can actually see are offered, so a home pitch that has been
+  // deactivated simply leaves the select on "choose a pitch".
+  const bookable = new Set(pitches.map((pitch) => pitch.id));
+  const homePitchByTeam: Record<string, string> = {};
+  for (const team of access.teams) {
+    if (team.homeResourceId !== null && bookable.has(team.homeResourceId)) {
+      homePitchByTeam[team.id] = team.homeResourceId;
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -84,6 +95,7 @@ export default async function BookPitchPage({
                 pitches={pitches}
                 isAdmin={access.isAdmin}
                 defaultTeamId={defaultTeamId}
+                homePitchByTeam={homePitchByTeam}
                 today={todayLondon()}
               />
             )}

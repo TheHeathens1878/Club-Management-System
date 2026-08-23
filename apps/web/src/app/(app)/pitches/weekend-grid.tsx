@@ -22,7 +22,14 @@ import { X } from "lucide-react";
 
 export type GridDay = { date: string; label: string };
 
-type Selection = { fixtureId: string; label: string; resourceId: string; when: string };
+type Selection = {
+  fixtureId: string;
+  label: string;
+  resourceId: string;
+  /** The fixture's team's home pitch, so a move offers it labelled "(home)". */
+  homeResourceId: string | null;
+  when: string;
+};
 
 const TIMES = slotTimes();
 
@@ -37,11 +44,14 @@ export function WeekendPitchGrid({
   days,
   pitches,
   entries,
+  homePitchByTeam,
 }: {
   days: GridDay[];
   pitches: PitchOption[];
   /** Live bookings in the window, keyed by pitch id. */
   entries: Record<string, GridEntry[]>;
+  /** `teams.home_resource_id` by team id; a team without one is simply absent. */
+  homePitchByTeam: Record<string, string>;
 }) {
   const [selected, setSelected] = useState<Selection | null>(null);
 
@@ -76,6 +86,7 @@ export function WeekendPitchGrid({
             fixtureId={selected.fixtureId}
             pitches={pitches}
             currentResourceId={selected.resourceId}
+            homeResourceId={selected.homeResourceId}
             allowUnallocate
             compact
           />
@@ -88,6 +99,7 @@ export function WeekendPitchGrid({
           day={day}
           pitches={pitches}
           entries={entries}
+          homePitchByTeam={homePitchByTeam}
           onSelect={setSelected}
         />
       ))}
@@ -115,11 +127,13 @@ function DayTable({
   day,
   pitches,
   entries,
+  homePitchByTeam,
   onSelect,
 }: {
   day: GridDay;
   pitches: PitchOption[];
   entries: Record<string, GridEntry[]>;
+  homePitchByTeam: Record<string, string>;
   onSelect: (selection: Selection) => void;
 }) {
   // The label goes in the first cell an entry occupies on this day, so a
@@ -187,6 +201,10 @@ function DayTable({
                                   fixtureId,
                                   label: cell.entry.label,
                                   resourceId: pitch.id,
+                                  homeResourceId:
+                                    cell.entry.teamId === null
+                                      ? null
+                                      : homePitchByTeam[cell.entry.teamId] ?? null,
                                   when: `${day.label} · on ${pitch.name}`,
                                 })
                               }

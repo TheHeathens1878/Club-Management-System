@@ -25,9 +25,10 @@ import {
   type PendingRow,
   type TeamRoleValue,
 } from "./members-panel";
+import { MatchDayPanel, type MatchDayPitch } from "./matchday-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
 import { RecruitingPanel } from "./recruiting-panel";
-import { loadTeamPitchBookings } from "@/lib/pitch-booking-data";
+import { loadPitches, loadTeamPitchBookings } from "@/lib/pitch-booking-data";
 
 /** Next 20 fixtures, read-only — the importer (P2.4) is what writes them. */
 const UPCOMING_LIMIT = 20;
@@ -288,7 +289,16 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   // This team's pitch diary (gap 3). Read as the caller: a coach gets the rows
   // through `bookings_team_staff_read`, and anyone else this page admits falls
   // back to `pitch_calendar()`, which carries no booker PII.
-  const pitchBookings = await loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT);
+  // The match-day card's pitch picker. `loadPitches()` reads the active pitch
+  // resources as the caller (`resources_public_read`), and `type = 'pitch'` is
+  // the same predicate `trg_teams_home_resource_guard` enforces — so the list
+  // cannot offer something the database would then refuse.
+  const [pitchBookings, matchDayPitches] = await Promise.all([
+    loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT),
+    loadPitches(),
+  ]);
+  const homePitch: MatchDayPitch | null =
+    matchDayPitches.find((pitch) => pitch.id === team.home_resource_id) ?? null;
 
   const pending: PendingRow[] = (pendingRows ?? [])
     .map((row) => ({ row, parsed: pendingMembershipPayload(row.payload) }))
@@ -318,6 +328,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
       <div className="max-w-4xl space-y-6 p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={team.active ? "success" : "muted"}>{team.active ? "Active" : "Inactive"}</Badge>
+          {homePitch && <Badge variant="muted">Home pitch: {homePitch.name}</Badge>}
           {link && (
             <Badge variant={link.enabled ? "default" : "muted"}>
               {link.enabled ? "Full-Time import enabled" : "Full-Time import paused"}
@@ -502,6 +513,39 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
               teamId={team.id}
               items={pitchBookings}
               canManage={committee || teamStaff === true}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Where this team plays and how long a match takes. Written through
+            the caller's own client, so `teams_staff_update` lets a coach
+            maintain it and `trg_teams_home_resource_guard` is what refuses a
+            home resource that is not a pitch. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Match day</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              The team&apos;s home pitch and the shape of its matches. Allocating a home fixture on{" "}
+              <Link href="/pitches" className="underline underline-offset-2">
+                Pitches
+              </Link>{" "}
+              starts from the home pitch, and the halves and half time give new fixtures their pitch
+              slot in place of the club&apos;s standard 90 minutes.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <MatchDayPanel
+              teamId={team.id}
+              canEdit={committee || teamStaff === true}
+              pitches={matchDayPitches}
+              values={{
+                home_resource_id: team.home_resource_id,
+                match_halves: team.match_halves,
+                half_length_minutes: team.half_length_minutes,
+                half_time_minutes: team.half_time_minutes,
+                default_pre_buffer_minutes: team.default_pre_buffer_minutes,
+                default_post_buffer_minutes: team.default_post_buffer_minutes,
+              }}
             />
           </CardContent>
         </Card>

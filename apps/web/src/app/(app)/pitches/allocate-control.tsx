@@ -8,7 +8,14 @@
  *
  * Buffers are left blank by default and the pitch's own defaults are shown as
  * the placeholder: an admin who types nothing gets the club's standing rule,
- * and an admin who types something can see what they are overriding.
+ * and an admin who types something can see what they are overriding. A blank
+ * box is resolved by `allocate_fixture()` itself — argument, then the team's
+ * default, then the pitch's — so the hint says "or the team's" rather than
+ * claiming the pitch always wins.
+ *
+ * A fixture whose team has a home pitch opens on it, labelled "(home)". Every
+ * other pitch stays in the list: this is where the cursor starts, not a rule
+ * about where the team may play.
  */
 
 import { useState } from "react";
@@ -29,17 +36,25 @@ export function AllocateControl({
   fixtureId,
   pitches,
   currentResourceId = null,
+  homeResourceId = null,
   allowUnallocate = false,
   compact = false,
 }: {
   fixtureId: string;
   pitches: PitchOption[];
   currentResourceId?: string | null;
+  /** `teams.home_resource_id` — where the select opens when nothing is set. */
+  homeResourceId?: string | null;
   allowUnallocate?: boolean;
   compact?: boolean;
 }) {
   const router = useRouter();
-  const [resourceId, setResourceId] = useState(currentResourceId ?? pitches[0]?.id ?? "");
+  // An inactive or deleted home pitch is not in the list, so it cannot be the
+  // starting value — fall back the way this control always has.
+  const home = pitches.some((option) => option.id === homeResourceId) ? homeResourceId : null;
+  const [resourceId, setResourceId] = useState(
+    currentResourceId ?? home ?? pitches[0]?.id ?? "",
+  );
   const [pre, setPre] = useState("");
   const [post, setPost] = useState("");
   const [busy, setBusy] = useState<null | "allocate" | "unallocate">(null);
@@ -119,6 +134,7 @@ export function AllocateControl({
               <option key={option.id} value={option.id}>
                 {option.name}
                 {option.id === currentResourceId ? " (current)" : ""}
+                {option.id === home ? " (home)" : ""}
               </option>
             ))}
           </select>
@@ -159,8 +175,9 @@ export function AllocateControl({
 
       {pitch && (
         <p className="text-[11px] text-muted-foreground">
-          Leave the buffers blank to use {pitch.name}&apos;s defaults —{" "}
-          {pitch.defaultPreBufferMinutes} min before, {pitch.defaultPostBufferMinutes} min after.
+          Leave the buffers blank to use the team&apos;s defaults, or {pitch.name}&apos;s where the
+          team has none — {pitch.defaultPreBufferMinutes} min before,{" "}
+          {pitch.defaultPostBufferMinutes} min after.
         </p>
       )}
 

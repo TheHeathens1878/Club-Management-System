@@ -70,7 +70,7 @@ export default async function PitchesPage({
   const range = weekendWindow(weekend);
 
   const admin = createAdminClient();
-  const [pitchesResult, unallocatedResult, gridResult, flaggedResult, auditResult] =
+  const [pitchesResult, unallocatedResult, gridResult, flaggedResult, auditResult, teamsResult] =
     await Promise.all([
       admin
         .from("resources")
@@ -86,7 +86,7 @@ export default async function PitchesPage({
         // One string literal, not a concatenation: supabase-js infers the row
         // type from the select text, and only a literal carries that type.
         .select(
-          "id,kickoff_at,opponent,competition,duration_minutes,venue_resource_id,teams(name),resources!fixtures_venue_resource_id_fkey(name)",
+          "id,kickoff_at,opponent,competition,duration_minutes,team_id,venue_resource_id,teams(name),resources!fixtures_venue_resource_id_fkey(name)",
         )
         .eq("allocation_conflict", true)
         .order("kickoff_at"),
@@ -97,6 +97,11 @@ export default async function PitchesPage({
         .eq("entity", "fixtures")
         .order("created_at", { ascending: false })
         .limit(CONFLICT_AUDIT_LIMIT),
+      // Where each team plays (20260824200000). One lookup serves all three
+      // places a pitch is chosen on this screen — the unallocated list, the
+      // flagged list and the grid's "Move to…" panel — because the view and
+      // the grid function both carry `team_id` and neither can embed it.
+      admin.from("teams").select("id,home_resource_id"),
     ]);
 
   const pitches: PitchOption[] = (pitchesResult.data ?? []).map((row) => ({
@@ -105,6 +110,11 @@ export default async function PitchesPage({
     defaultPreBufferMinutes: row.default_pre_buffer_minutes,
     defaultPostBufferMinutes: row.default_post_buffer_minutes,
   }));
+
+  const homePitchByTeam: Record<string, string> = {};
+  for (const row of teamsResult.data ?? []) {
+    if (row.home_resource_id !== null) homePitchByTeam[row.id] = row.home_resource_id;
+  }
 
   // Latest conflict detail per fixture — the rows arrive newest first, so the
   // first one seen for a fixture is the one to show.
@@ -160,7 +170,11 @@ export default async function PitchesPage({
 
   const flagged = flaggedResult.data ?? [];
   const loadError =
-    pitchesResult.error ?? unallocatedResult.error ?? gridResult.error ?? flaggedResult.error;
+    pitchesResult.error ??
+    unallocatedResult.error ??
+    gridResult.error ??
+    flaggedResult.error ??
+    teamsResult.error;
 
   return (
     <>
@@ -229,7 +243,13 @@ export default async function PitchesPage({
                           <span className="break-words">Clashed with {conflict.text}</span>
                         </p>
                       )}
-                      <AllocateControl fixtureId={fixture.id} pitches={pitches} />
+                      <AllocateControl
+                        fixtureId={fixture.id}
+                        pitches={pitches}
+                        homeResourceId={
+                          fixture.team_id ? homePitchByTeam[fixture.team_id] ?? null : null
+                        }
+                      />
                     </li>
                   );
                 })}
@@ -276,7 +296,12 @@ export default async function PitchesPage({
             </div>
           </CardHeader>
           <CardContent>
-            <WeekendPitchGrid days={days} pitches={pitches} entries={gridEntries} />
+            <WeekendPitchGrid
+              days={days}
+              pitches={pitches}
+              entries={gridEntries}
+              homePitchByTeam={homePitchByTeam}
+            />
           </CardContent>
         </Card>
 
@@ -328,6 +353,7 @@ export default async function PitchesPage({
                         fixtureId={fixture.id}
                         pitches={pitches}
                         currentResourceId={fixture.venue_resource_id}
+                        homeResourceId={homePitchByTeam[fixture.team_id] ?? null}
                         allowUnallocate
                       />
                     </li>

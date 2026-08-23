@@ -51,7 +51,13 @@ export const MAX_REPEAT_WEEKS = 20;
 /** How far ahead the `pitch_calendar()` fallback looks, in days. */
 export const CALENDAR_FALLBACK_DAYS = 60;
 
-export type TeamOption = { id: string; name: string; ageGroup: string | null };
+export type TeamOption = {
+  id: string;
+  name: string;
+  ageGroup: string | null;
+  /** `teams.home_resource_id` — where the booking form's pitch select opens. */
+  homeResourceId: string | null;
+};
 
 export type PitchOption = { id: string; name: string };
 
