@@ -1277,6 +1277,79 @@ export type Database = {
           },
         ]
       }
+      registrations: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          form: Json
+          form_version: string
+          id: string
+          person_id: string
+          season_id: string
+          status: Database["public"]["Enums"]["registration_status"]
+          submitted_at: string
+          submitted_by: string | null
+          team_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          form?: Json
+          form_version?: string
+          id?: string
+          person_id: string
+          season_id: string
+          status?: Database["public"]["Enums"]["registration_status"]
+          submitted_at?: string
+          submitted_by?: string | null
+          team_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          form?: Json
+          form_version?: string
+          id?: string
+          person_id?: string
+          season_id?: string
+          status?: Database["public"]["Enums"]["registration_status"]
+          submitted_at?: string
+          submitted_by?: string | null
+          team_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "registrations_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "registrations_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "registrations_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resources: {
         Row: {
           active: boolean
@@ -2036,6 +2109,7 @@ export type Database = {
         Returns: boolean
       }
       is_account_eligible: { Args: { p_person_id: string }; Returns: boolean }
+      is_active_guardian_of: { Args: { p_child: string }; Returns: boolean }
       is_at_least_age: {
         Args: { d: string; p_years: number }
         Returns: boolean
@@ -2139,7 +2213,13 @@ export type Database = {
         | "safeguarding_children"
         | "first_aid"
         | "coaching_badge"
-      consent_type: "app_account" | "unsupervised_messaging"
+      consent_type:
+        | "app_account"
+        | "unsupervised_messaging"
+        | "photo_team_album"
+        | "photo_club_website"
+        | "photo_social_media"
+        | "photo_press"
       guardian_relationship:
         | "parent"
         | "step_parent"
@@ -2148,6 +2228,7 @@ export type Database = {
         | "legal_guardian"
         | "other"
       payment_status: "unpaid" | "deposit_paid" | "paid"
+      registration_status: "pending" | "approved" | "rejected" | "withdrawn"
       resource_type: "function_room" | "pitch"
       team_role: "player" | "coach" | "assistant_coach" | "manager"
       user_role:
@@ -2307,7 +2388,14 @@ export const Constants = {
         "first_aid",
         "coaching_badge",
       ],
-      consent_type: ["app_account", "unsupervised_messaging"],
+      consent_type: [
+        "app_account",
+        "unsupervised_messaging",
+        "photo_team_album",
+        "photo_club_website",
+        "photo_social_media",
+        "photo_press",
+      ],
       guardian_relationship: [
         "parent",
         "step_parent",
@@ -2317,6 +2405,7 @@ export const Constants = {
         "other",
       ],
       payment_status: ["unpaid", "deposit_paid", "paid"],
+      registration_status: ["pending", "approved", "rejected", "withdrawn"],
       resource_type: ["function_room", "pitch"],
       team_role: ["player", "coach", "assistant_coach", "manager"],
       user_role: [

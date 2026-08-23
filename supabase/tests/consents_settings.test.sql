@@ -190,8 +190,8 @@ select has_table('public', 'guardian_consents', 'public.guardian_consents exists
 -- unsupervised_messaging; P2.2 adds the SG-5 photo-consent values".
 select enum_has_labels(
   'public', 'consent_type',
-  array['app_account', 'unsupervised_messaging'],
-  'consent_type carries exactly the two purposes SG-10 names — P2.2 adds the photo values'
+  array['app_account', 'unsupervised_messaging', 'photo_team_album', 'photo_club_website', 'photo_social_media', 'photo_press'],
+  'consent_type carries the two SG-10 purposes plus the four SG-5 photo values P2.2 added'
 );
 
 -- 3..9
