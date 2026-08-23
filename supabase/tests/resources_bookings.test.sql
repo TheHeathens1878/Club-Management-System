@@ -107,8 +107,8 @@ select policies_are('public', 'bookings',
   'bookings policy list');
 select policies_are('public', 'payments',
   array['payments_staff_read', 'payments_staff_insert', 'payments_staff_update',
-        'payments_admin_delete', 'payments_booker_read'],
-  'payments policy list');
+        'payments_admin_delete', 'payments_booker_read', 'payments_subscription_read'],
+  'payments policy list (P4.1 adds payments_subscription_read)');
 
 -- ---------------------------------------------------------------------------
 -- B. Privileges

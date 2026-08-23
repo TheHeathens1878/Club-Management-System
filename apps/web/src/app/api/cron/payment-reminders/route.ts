@@ -39,6 +39,7 @@ async function paidMap(admin: ReturnType<typeof createAdminClient>, ids: string[
   if (ids.length === 0) return map;
   const { data } = await admin.from("payments").select("booking_id,amount_pence").in("booking_id", ids);
   for (const p of data ?? []) {
+    if (!p.booking_id) continue; // ledger rows for subscriptions carry no booking
     map.set(p.booking_id, (map.get(p.booking_id) ?? 0) + p.amount_pence);
   }
   return map;
