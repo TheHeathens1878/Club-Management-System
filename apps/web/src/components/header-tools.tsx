@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Bell, CalendarRange } from "lucide-react";
+import { Bell } from "lucide-react";
 
 import { buttonVariants } from "@/components/ui/button";
 import { loadUnreadNotificationCount } from "@/lib/notifications-data";
-import { canViewPitchCalendar } from "@/lib/pitch-calendar-data";
 
 /**
  * The two things the app chrome carries that are not a section of the nav:
@@ -22,10 +21,8 @@ import { canViewPitchCalendar } from "@/lib/pitch-calendar-data";
  * is every navigation; there is no polling and no client subscription.
  */
 export async function HeaderTools() {
-  const [unread, canSeeCalendar] = await Promise.all([
-    loadUnreadNotificationCount(),
-    canViewPitchCalendar(),
-  ]);
+  // The pitch calendar link lives in the capability nav (lib/nav.ts).
+  const unread = await loadUnreadNotificationCount();
 
   return (
     <div className="flex flex-col gap-0.5">
@@ -50,14 +47,6 @@ export async function HeaderTools() {
         )}
       </Link>
 
-      {canSeeCalendar && (
-        <Link
-          href="/pitches/calendar"
-          className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-        >
-          <CalendarRange className="h-4 w-4" /> Pitch calendar
-        </Link>
-      )}
     </div>
   );
 }
