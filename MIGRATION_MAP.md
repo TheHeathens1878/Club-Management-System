@@ -144,8 +144,8 @@ Connected as `claude_ro` (SELECT only; `has_table_privilege('"User"','INSERT') =
 
 ## 6. Approval
 
-- [ ] Adam confirms §2 (bcrypt import, Strategy A; the 3 locked placeholder accounts get no login).
-- [ ] D-P3-2 coach memberships: 60-day `certification_exemptions` (recommended) vs. history-only.
-- [ ] D-P3-5 the 6 email matches: same person (recommended) vs. manual merge.
-- [ ] D-P3-6 adult DOB: option 1 carve-out (recommended) vs. collect first vs. none.
+- [x] Adam confirms §2 (bcrypt import, Strategy A; the 3 locked placeholder accounts get no login) — 2026-08-23.
+- [x] D-P3-2 coach memberships: `certification_exemptions` (2a; 30 days — the constraint maximum — renewable) — 2026-08-23.
+- [x] D-P3-5 the 6 email matches: same person (3a) — 2026-08-23.
+- [x] D-P3-6 adult DOB: 1a — implemented as deferred activation behind a first-login DOB gate rather than a relaxed SG-0 (DECISIONS.md 2026-08-23) — 2026-08-23.
 - [x] Read-only Neon URL provided and verified; §5 filled in (2026-08-23).
