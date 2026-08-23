@@ -76,17 +76,20 @@ function importBadge(status: string | null) {
 export function FullTimePanel({
   teamId,
   teamName,
+  defaultFtName,
   link,
   clubSeasons,
 }: {
   teamId: string;
   teamName: string;
+  /** "Ashton On Mersey FC <team>" — how Full-Time prints this team. */
+  defaultFtName: string;
   link: FullTimeLinkView | null;
   clubSeasons: ClubSeasonView[];
 }) {
   const router = useRouter();
   const [input, setInput] = useState(link?.widget_code ?? link?.source_url ?? "");
-  const [ftTeamName, setFtTeamName] = useState(link?.ft_team_name ?? teamName);
+  const [ftTeamName, setFtTeamName] = useState(link?.ft_team_name ?? defaultFtName);
   const [enabled, setEnabled] = useState(link?.enabled ?? true);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
   const [busy, setBusy] = useState<null | "preview" | "save" | "remove" | "toggle" | "import">(null);
@@ -330,7 +333,7 @@ export function FullTimePanel({
             id="ft-team-name"
             value={ftTeamName}
             onChange={(e) => setFtTeamName(e.target.value)}
-            placeholder={teamName}
+            placeholder={defaultFtName}
           />
           <p className="text-xs text-muted-foreground">
             Read from the widget automatically when you preview. Only needed by hand for a page address,
@@ -442,11 +445,23 @@ function PreviewBlock({
           Widget code <span className="font-mono">{preview.widgetCode}</span>
           {preview.ftTeamName ? (
             <>
-              {" "}· team on Full-Time: <span className="font-medium">{preview.ftTeamName}</span>
+              {" "}· matched as <span className="font-medium">{preview.ftTeamName}</span>
             </>
           ) : null}
         </p>
       )}
+
+      {preview.detectedTeamName &&
+        preview.ftTeamName &&
+        preview.detectedTeamName !== preview.ftTeamName && (
+          <p className="flex items-start gap-1.5 text-xs text-amber-700">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              This widget belongs to <span className="font-medium">{preview.detectedTeamName}</span> — only
+              fixtures involving <span className="font-medium">{preview.ftTeamName}</span> would import.
+            </span>
+          </p>
+        )}
 
       {preview.ids && (
         <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-3">

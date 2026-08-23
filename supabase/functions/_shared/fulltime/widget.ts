@@ -289,12 +289,54 @@ export function parseWidgetHtml(payload: string): ParsedPage {
 export function matchClubTeam(
   widgetTeamName: string,
   clubTeamNames: readonly string[],
+  clubPrefix?: string,
 ): string | undefined {
-  const full = normaliseTeamName(widgetTeamName);
+  const full = foldTeamName(widgetTeamName);
   if (full === "") return undefined;
+  const prefix = clubPrefix === undefined ? undefined : foldTeamName(clubPrefix);
+  const rest =
+    prefix !== undefined && full.startsWith(`${prefix} `) ? full.slice(prefix.length + 1) : undefined;
+
   const hits = clubTeamNames.filter((short) => {
-    const s = normaliseTeamName(short);
-    return s !== "" && (full === s || full.endsWith(` ${s}`));
+    const exact = foldTeamName(short);
+    if (exact === "") return false;
+    if (full === exact) return true;
+    // The club's own record may carry a section qualifier Full-Time does not
+    // print ("U14 Ravens Girls" vs "Ashton On Mersey FC U14 Ravens").
+    const bare = exact.replace(/\s+(girls|boys|ladies|men|women)$/, "");
+    if (prefix === undefined) {
+      // No club prefix to anchor on: suffix match, exact names only. This is
+      // deliberately narrow — "AFC Urmston Meadowside U14 Mavericks" must not
+      // claim a club team called "U14 Mavericks".
+      return full.endsWith(` ${exact}`);
+    }
+    if (rest === undefined) return false;
+    // Anchored on the club's name; the remainder may carry a squad qualifier
+    // the club record folds together ("U8 Sparrows Orange" → "U08 Sparrows Girls").
+    return rest === exact || rest === bare || rest.startsWith(`${bare} `);
   });
   return hits.length === 1 ? hits[0] : undefined;
+}
+
+/**
+ * {@link normaliseTeamName} plus the folds that make Full-Time's spelling and
+ * the club's own comparable: zero-padded age groups ("U08" → "u8").
+ */
+export function foldTeamName(name: string): string {
+  return normaliseTeamName(name).replace(/\bu0(\d)\b/g, "u$1");
+}
+
+/** Every widget code in a paste that may hold several snippets. */
+export function widgetCodesFrom(input: string): string[] {
+  const codes = new Set<string>();
+  for (const m of input.matchAll(/lrcode\s*=\s*['"](\d{6,12})['"]|lrep(\d{6,12})|[?&]cs=(\d{6,12})\b/g)) {
+    const code = m[1] ?? m[2] ?? m[3];
+    if (code) codes.add(code);
+  }
+  if (codes.size === 0) {
+    for (const m of input.matchAll(/(?:^|\s)(\d{6,12})(?=\s|$)/g)) {
+      if (m[1]) codes.add(m[1]);
+    }
+  }
+  return [...codes];
 }

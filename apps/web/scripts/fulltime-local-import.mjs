@@ -36,6 +36,7 @@ import {
   parseWidgetHtml,
   RateLimiter,
   matchClubTeam,
+  widgetCodesFrom,
   widgetTeamName,
   widgetUrl,
 } from "../../../packages/fulltime/src/index.ts";
@@ -105,8 +106,20 @@ async function importTarget(t) {
     return { team: t.team_name, status: cls, error: msg };
   }
   const parsed = parse(res.html);
-  const teamName = (t.widget_code && widgetTeamName(parsed.fixtures)) || t.ft_team_name;
-  const mine = fixturesForTeam(parsed, teamName);
+  // Mirror the Edge Function: the saved name decides which side is ours; the
+  // widget-proved name only fills in when it corroborates it.
+  const detected = t.widget_code ? widgetTeamName(parsed.fixtures) : undefined;
+  let teamName = t.ft_team_name;
+  let mine = fixturesForTeam(parsed, teamName);
+  if (mine.length === 0 && detected && matchClubTeam(detected, [t.ft_team_name])) {
+    teamName = detected;
+    mine = fixturesForTeam(parsed, teamName);
+  }
+  if (parsed.fixtures.length > 0 && mine.length === 0 && detected) {
+    const msg = `This widget appears to belong to "${detected}", not "${t.ft_team_name}" — check the pasted snippet.`;
+    await recordFailure(t, "error", pageUrl, msg);
+    return { team: t.team_name, status: "error", error: msg };
+  }
   const payload = mine.map((f) => ({
     externalRef: f.externalRef,
     kickoffAt: f.kickoffAt,
@@ -167,14 +180,14 @@ async function importClub() {
     .from("site_settings")
     .select("key,value")
     .in("key", ["fulltime_club_fixtures_code", "fulltime_club_results_code"]);
-  const codes = (settings ?? []).filter((s) => /^\d{6,12}$/.test(s.value));
+  const codes = (settings ?? []).flatMap((s) => widgetCodesFrom(s.value).map((code) => ({ key: s.key, code })));
   if (codes.length === 0) return;
 
   const pages = [];
   const pageWarnings = [];
   let sourceUrl = "";
   for (const s of codes) {
-    const url = widgetUrl(s.value);
+    const url = widgetUrl(s.code);
     if (s.key.includes("fixtures") || sourceUrl === "") sourceUrl = url;
     await limiter.wait();
     const res = await fetchFullTimePage(url);
@@ -198,10 +211,17 @@ async function importClub() {
   }
   const fixtures = [...byRef.values()];
 
-  const [{ data: teamRows }, { data: season }] = await Promise.all([
+  const [{ data: teamRows }, { data: season }, { data: clubNameRow }] = await Promise.all([
     admin.from("teams").select("id,name").eq("active", true),
     admin.from("seasons").select("id").eq("is_current", true).limit(1).maybeSingle(),
+    admin.from("site_settings").select("value").eq("key", "fulltime_club_name").maybeSingle(),
   ]);
+  const clubPrefix = (clubNameRow?.value ?? "").trim();
+  if (clubPrefix === "") {
+    console.log("  club: site_settings fulltime_club_name is not set");
+    failed += 1;
+    return;
+  }
   if (!season) {
     console.log("  club: no current season set");
     failed += 1;
@@ -213,8 +233,8 @@ async function importClub() {
 
   for (const team of teams) {
     const mine = fixtures.flatMap((f) => {
-      const isHome = matchClubTeam(f.homeTeam, names) === team.name;
-      const isAway = matchClubTeam(f.awayTeam, names) === team.name;
+      const isHome = matchClubTeam(f.homeTeam, names, clubPrefix) === team.name;
+      const isAway = matchClubTeam(f.awayTeam, names, clubPrefix) === team.name;
       if (!isHome && !isAway) return [];
       return [{ ...f, isHome, opponent: isHome ? f.awayTeam : f.homeTeam }];
     });

@@ -30,6 +30,7 @@ import {
   FullTimeUrlError,
   parseFixturesPage,
   parseFullTimeUrl,
+  matchClubTeam,
   parseWidgetHtml,
   RateLimiter,
   teamNamesIn,
@@ -90,6 +91,8 @@ export type PreviewResult = {
   httpStatus?: number;
   /** The name the fixtures were matched against. */
   ftTeamName?: string;
+  /** The team the widget itself appears to belong to (in every fixture). */
+  detectedTeamName?: string;
   rows?: PreviewRow[];
   /** How many fixtures matched in total, before the preview limit. */
   matchedCount?: number;
@@ -114,6 +117,24 @@ async function requireCommittee() {
   const session = await getSessionProfile();
   if (!session || !isCommittee(session.profile?.role)) redirect("/room-bookings");
   return session;
+}
+
+/**
+ * The default Full-Time team name: the club's name as Full-Time prints it
+ * (site_settings `fulltime_club_name`), then the team's own name —
+ * "Ashton On Mersey FC U14 Mavericks".
+ */
+async function defaultFtTeamName(
+  admin: ReturnType<typeof createAdminClient>,
+  teamName: string,
+): Promise<string> {
+  const { data } = await admin
+    .from("site_settings")
+    .select("value")
+    .eq("key", "fulltime_club_name")
+    .maybeSingle();
+  const clubName = (data?.value ?? "").trim() || "Ashton On Mersey FC";
+  return `${clubName} ${teamName}`.trim();
 }
 
 function revalidateTeam(teamId: string) {
@@ -220,25 +241,38 @@ export async function previewFullTimeLink(
     if (failed) return failed;
 
     const parsed = parseWidgetHtml(response.html);
+    // The expected name decides which side is ours; the name the widget itself
+    // proves is only adopted when it corroborates the expected one — a wrongly
+    // pasted widget must not preview (or import) another club's season.
     const detected = widgetTeamName(parsed.fixtures);
-    const ftTeamName = detected ?? ((ftTeamNameOverride ?? "").trim() || team.name);
-    const { rows, matchedCount } = previewRows(parsed, ftTeamName);
+    const wanted = (ftTeamNameOverride ?? "").trim() || (await defaultFtTeamName(admin, team.name));
+    let ftTeamName = wanted;
+    let { rows, matchedCount } = previewRows(parsed, ftTeamName);
+    if (matchedCount === 0 && detected && matchClubTeam(detected, [wanted, team.name])) {
+      ftTeamName = detected;
+      ({ rows, matchedCount } = previewRows(parsed, ftTeamName));
+    }
+    const wrongWidget =
+      parsed.fixtures.length > 0 && matchedCount === 0 && detected !== undefined;
     return {
       outcome: "ok",
       message:
         parsed.fixtures.length === 0
           ? "The widget returned no fixtures — Full-Time may not have published this season's yet. The link can still be saved; the nightly import will pick them up when they appear."
-          : matchedCount === 0
-            ? "No fixtures in the widget involve this team — check the team name matches Full-Time's."
-            : "",
+          : wrongWidget
+            ? `This widget appears to belong to "${detected}", not "${ftTeamName}" — it looks like the wrong team's snippet. Nothing would be imported.`
+            : matchedCount === 0
+              ? "No fixtures in the widget involve this team — check the team name matches Full-Time's."
+              : "",
       source: "widget",
       widgetCode,
       fetchedUrl,
       httpStatus: response.status,
       ftTeamName,
+      detectedTeamName: detected,
       rows,
       matchedCount,
-      teamNames: detected ? [] : teamNamesIn(parsed.fixtures),
+      teamNames: matchedCount === 0 ? teamNamesIn(parsed.fixtures) : [],
       warnings: parsed.warnings.slice(0, 10),
     };
   }
@@ -319,7 +353,12 @@ export async function saveFullTimeLink(
 ): Promise<{ error?: string }> {
   const session = await requireCommittee();
   const admin = createAdminClient();
-  const ftTeamName = input.ftTeamName.trim() || null;
+  // A blank name still stores the full default — "Ashton On Mersey FC U14
+  // Mavericks" — because the importer matches on it and a bare team name
+  // matches nothing in a widget.
+  const { data: team } = await admin.from("teams").select("name").eq("id", teamId).maybeSingle();
+  const ftTeamName =
+    input.ftTeamName.trim() || (team ? await defaultFtTeamName(admin, team.name) : null);
 
   // The paste is re-read server side; nothing the browser sent back is trusted
   // beyond filling in blanks a page URL did not carry.
