@@ -2,6 +2,14 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import type { Database } from "@club/db";
 import { NextResponse, type NextRequest } from "next/server";
 
+import {
+  ROLE_VIEW_COOKIE,
+  ROLE_VIEW_HOME,
+  ROLE_VIEW_PROMPTED_COOKIE,
+  isRoleView,
+} from "@/lib/role-view";
+import { isBookerRole } from "@/lib/types";
+
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
 export async function middleware(request: NextRequest) {
@@ -68,6 +76,34 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // The root path is the club's public function-room page. Somebody who is
+  // signed in as a member of the club has no business landing there: send them
+  // to the home screen of the view they last chose, or — if they have not
+  // chosen — to /welcome, which works out whether there is even a choice to
+  // make. Bookers are left alone: the public page IS their page.
+  if (user && path === "/" && request.method === "GET") {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    if (!isBookerRole(profile?.role)) {
+      const stored = request.cookies.get(ROLE_VIEW_COOKIE)?.value;
+      const url = request.nextUrl.clone();
+      url.search = "";
+      if (isRoleView(stored)) {
+        url.pathname = ROLE_VIEW_HOME[stored];
+      } else {
+        url.pathname = "/welcome";
+        url.searchParams.set("first", "1");
+      }
+      const redirectResponse = NextResponse.redirect(url);
+      for (const cookie of response.cookies.getAll()) redirectResponse.cookies.set(cookie);
+      return redirectResponse;
+    }
+  }
+
   // P3.3 first-login gate: an account imported from the pitch-booking app
   // must record its date of birth before anything else (SG-0 treats an
   // unknown DOB as a minor, so the person's teams stay hidden until then).
@@ -89,12 +125,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // Gap 4 first-login nudge: someone who has never said which hat they wear is
-  // sent to /welcome once. It runs AFTER the DOB gate above on purpose — an
+  // First-login nudge: someone who has never said which hat they wear is sent
+  // to /welcome once. It runs AFTER the DOB gate above on purpose — an
   // imported account finishes that first — and only on a GET, so a server
   // action POST is never turned into a redirect. `club.role_view_prompted` is
   // set here so it happens exactly once whether or not they pick a tile;
   // `club.role_view` is written only when they actually choose one.
+  //
+  // `?first=1` marks this as the nudge rather than a deliberate visit to "My
+  // role". /welcome uses it to send somebody with exactly one qualifying view
+  // straight on to it instead of showing a one-tile picker, and somebody with
+  // none of them gets the "not linked yet" page — never a list of things to
+  // ask for, because attachment to a team happens on the registration forms.
   if (
     user &&
     !isPublic &&
@@ -104,16 +146,17 @@ export async function middleware(request: NextRequest) {
     !path.startsWith("/portal") &&
     !path.startsWith("/api") &&
     !path.startsWith("/auth") &&
-    !request.cookies.has("club.role_view") &&
-    !request.cookies.has("club.role_view_prompted")
+    !request.cookies.has(ROLE_VIEW_COOKIE) &&
+    !request.cookies.has(ROLE_VIEW_PROMPTED_COOKIE)
   ) {
     const url = request.nextUrl.clone();
     url.pathname = "/welcome";
     url.search = "";
+    url.searchParams.set("first", "1");
     const redirectResponse = NextResponse.redirect(url);
     // Carry over anything the session refresh above wrote.
     for (const cookie of response.cookies.getAll()) redirectResponse.cookies.set(cookie);
-    redirectResponse.cookies.set("club.role_view_prompted", "1", {
+    redirectResponse.cookies.set(ROLE_VIEW_PROMPTED_COOKIE, "1", {
       path: "/",
       maxAge: 60 * 60 * 24 * 365,
       sameSite: "lax",

@@ -1,33 +1,51 @@
 "use server";
 
 /**
- * The first-login role tiles (gap 4).
+ * The login tiles.
  *
- * Two quite different writes live here:
+ * Two writes used to live here; one of them has gone. There is no longer any
+ * way to CREATE an `account_requests` row from the app: a player or a parent
+ * is attached to a team through the club's registration forms, and asking for
+ * it in here only ever produced a queue that duplicated them. What remains:
  *
- *   · `setRoleView` stores a *presentation preference* in a cookie. It grants
- *     nothing, so it needs no authorisation and touches no table.
- *   · `createAccountRequest` / `withdrawAccountRequest` write
- *     `account_requests` through the user-scoped client. The self-insert
- *     policy requires `person_id = current_person_id()`, and the self-withdraw
- *     policy only lets a pending row of one's own become `withdrawn`. Nothing
- *     here decides who becomes a coach — `approve_account_request()` does, and
- *     the SG-6 guard sits underneath it.
+ *   · `setRoleView` stores which of the club's five kinds of user this person
+ *     is looking at the app as. It grants nothing and touches no table — but it
+ *     is still checked against the database's own answer before it is written,
+ *     so a hand-rolled POST cannot park an unqualified view in the cookie.
+ *   · `withdrawAccountRequest` writes `account_requests` through the
+ *     user-scoped client. The self-withdraw policy only lets a pending row of
+ *     one's own become `withdrawn`. Requests made before this change still show
+ *     on /welcome read-only, and this is how someone takes one back.
  */
 
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 
-import { isRequestedRole, requiresTeam } from "@/lib/account-requests";
-import { getCurrentPersonId } from "@/lib/person";
-import { ROLE_VIEW_COOKIE, ROLE_VIEW_PROMPTED_COOKIE, isRoleView, type RoleView } from "@/lib/role-view";
+import { getCapabilities } from "@/lib/capabilities";
+import {
+  ROLE_VIEW_COOKIE,
+  ROLE_VIEW_HOME,
+  ROLE_VIEW_PROMPTED_COOKIE,
+  isRoleView,
+  qualifiesForView,
+  type RoleView,
+} from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 const PATH = "/welcome";
 const ONE_YEAR = 60 * 60 * 24 * 365;
 
+/**
+ * Pick a tile: store the view and land on that view's own home screen.
+ * A view the database does not back is refused outright — this is the only
+ * writer of the cookie, so an unqualified value can never get into it.
+ */
 export async function setRoleView(view: RoleView): Promise<void> {
   if (!isRoleView(view)) return;
+  const capabilities = await getCapabilities();
+  if (!qualifiesForView(view, capabilities)) return;
+
   const store = await cookies();
   store.set(ROLE_VIEW_COOKIE, view, {
     path: "/",
@@ -42,52 +60,12 @@ export async function setRoleView(view: RoleView): Promise<void> {
     sameSite: "lax",
     httpOnly: false,
   });
+
   revalidatePath("/", "layout");
+  redirect(ROLE_VIEW_HOME[view]);
 }
 
 export type RequestState = { error?: string; notice?: string };
-
-export async function createAccountRequest(
-  _prev: RequestState,
-  formData: FormData,
-): Promise<RequestState> {
-  const role = String(formData.get("requested_role") ?? "").trim();
-  const teamId = String(formData.get("team_id") ?? "").trim();
-  const message = String(formData.get("message") ?? "").trim();
-
-  if (!isRequestedRole(role)) return { error: "Choose what you are asking for." };
-  if (requiresTeam(role) && !teamId) return { error: "Choose a team." };
-
-  const personId = await getCurrentPersonId();
-  if (!personId) {
-    return {
-      error:
-        "Your sign-in is not linked to a member record yet, so a request cannot be attributed. Please contact the club.",
-    };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("account_requests").insert({
-    person_id: personId,
-    requested_role: role,
-    team_id: requiresTeam(role) ? teamId : null,
-    message: message || null,
-  });
-
-  if (error) {
-    if (error.code === "23505") {
-      return { error: "You already have a request waiting for that role — a club administrator will get to it." };
-    }
-    if (error.code === "42501") {
-      return { error: "A request can only be made for your own account." };
-    }
-    // A database rule that refuses in terms (P0001) is quoted as it stands.
-    return { error: error.message };
-  }
-
-  revalidatePath(PATH);
-  return { notice: "Request sent. A club administrator will review it." };
-}
 
 export async function withdrawAccountRequest(
   _prev: RequestState,
