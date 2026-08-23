@@ -72,7 +72,7 @@ select enum_has_labels('public', 'booking_status',
   array['enquiry', 'quoted', 'pending', 'confirmed', 'cancelled'], 'booking_status labels');
 select enum_has_labels('public', 'payment_status', array['unpaid', 'deposit_paid', 'paid'],
   'payment_status labels');
-select enum_has_labels('public', 'booking_kind', array['hire', 'block', 'fixture', 'maintenance'],
+select enum_has_labels('public', 'booking_kind', array['hire', 'block', 'fixture', 'maintenance', 'training'],
   'booking_kind labels');
 
 select ok((select relrowsecurity from pg_class where oid = 'public.resources'::regclass), 'RLS on resources');
@@ -103,7 +103,8 @@ select policies_are('public', 'resources',
   'resources policy list');
 select policies_are('public', 'bookings',
   array['bookings_staff_read', 'bookings_staff_insert', 'bookings_staff_update',
-        'bookings_admin_delete', 'bookings_booker_read'],
+        'bookings_admin_delete', 'bookings_booker_read',
+        'bookings_team_staff_read', 'bookings_team_staff_insert', 'bookings_team_staff_update'],
   'bookings policy list');
 select policies_are('public', 'payments',
   array['payments_staff_read', 'payments_staff_insert', 'payments_staff_update',
