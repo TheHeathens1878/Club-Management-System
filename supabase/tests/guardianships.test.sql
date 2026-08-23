@@ -513,8 +513,8 @@ reset role;
 -- 53
 select is(
   (select to_regclass('public.conversations')::text),
-  null,
-  'public.conversations does not exist yet — which is why the guard above was permissive'
+  'conversations',
+  'public.conversations exists (P5.2 replaced the scaffold body; messaging.test.sql carries the SG-1.8 tests)'
 );
 
 -- 54
