@@ -224,10 +224,17 @@ select throws_ok(
   $$insert into public.certification_exemptions (person_id, team_id, reason, granted_by_person_id, expires_on)
     values (current_setting('t.other')::uuid, '7e7e7e7e-1111-4111-8111-000000000001', 'paperwork pending', current_setting('t.admin')::uuid, current_date + 7)$$,
   'P0001', null, 'exemption_granted_by_club_admin_throws');
--- exemption_longer_than_30_days_throws
+-- exemption_longer_than_30_days_throws. The cap is anchored to the LONDON
+-- date of the grant (migration: `(granted_at at time zone 'Europe/London')::date
+-- + 30`), so the test must count from the same clock — `current_date` is the
+-- UTC day, which sits one behind London between 23:00 and 00:00 UTC in summer,
+-- and counting from it made this test (and everything downstream of the row it
+-- then accidentally inserted) flake in that window. Seen live in CI at
+-- 2026-08-23T23:01Z.
 select throws_ok(
   $$insert into public.certification_exemptions (person_id, team_id, reason, granted_by_person_id, expires_on)
-    values (current_setting('t.other')::uuid, '7e7e7e7e-1111-4111-8111-000000000001', 'paperwork pending', current_setting('t.lead')::uuid, current_date + 31)$$,
+    values (current_setting('t.other')::uuid, '7e7e7e7e-1111-4111-8111-000000000001', 'paperwork pending', current_setting('t.lead')::uuid,
+            (now() at time zone 'Europe/London')::date + 31)$$,
   '23514', null, 'exemption_longer_than_30_days_throws');
 select throws_ok(
   $$insert into public.certification_exemptions (person_id, team_id, reason, granted_by_person_id, expires_on)
