@@ -82,6 +82,21 @@ function toItem(row: BookingSelectRow): PitchBookingItem {
   };
 }
 
+/** The team columns the booking form needs, including its home pitch. */
+function toTeamOption(row: {
+  id: string;
+  name: string;
+  age_group: string | null;
+  home_resource_id: string | null;
+}): TeamOption {
+  return {
+    id: row.id,
+    name: row.name,
+    ageGroup: row.age_group,
+    homeResourceId: row.home_resource_id,
+  };
+}
+
 export type PitchBookingAccess = {
   /** `current_person_id()` — null when the sign-in is not linked to a member. */
   personId: string | null;
@@ -122,17 +137,17 @@ export async function loadPitchBookingAccess(): Promise<PitchBookingAccess> {
   if (isAdmin) {
     const { data } = await supabase
       .from("teams")
-      .select("id,name,age_group")
+      .select("id,name,age_group,home_resource_id")
       .eq("active", true)
       .order("name");
-    teams = (data ?? []).map((row) => ({ id: row.id, name: row.name, ageGroup: row.age_group }));
+    teams = (data ?? []).map(toTeamOption);
   } else if (staffTeamIds.length > 0) {
     const { data } = await supabase
       .from("teams")
-      .select("id,name,age_group")
+      .select("id,name,age_group,home_resource_id")
       .in("id", staffTeamIds)
       .order("name");
-    teams = (data ?? []).map((row) => ({ id: row.id, name: row.name, ageGroup: row.age_group }));
+    teams = (data ?? []).map(toTeamOption);
   }
 
   return { personId, isAdmin, staffTeamIds, teams };
