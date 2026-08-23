@@ -5,7 +5,7 @@
 // alone.
 //
 // WHAT IT DOES. Drains up to 100 `queued` rows from `outbound_messages` and
-// hands each to its provider — Resend for email, Twilio for SMS, Expo for push,
+// hands each to its provider — Microsoft Graph for email, Twilio for SMS, Expo for push,
 // nothing at all for in_app (the row itself is the message; marking it sent is
 // the delivery). Every row ends the run in a terminal state: `sent` or
 // `failed`. There is no retry loop and no back-off timer here; a failed row is
@@ -42,32 +42,66 @@ const BATCH = 100;
 // Providers
 // ---------------------------------------------------------------------------
 
+// Email goes out through Microsoft Graph from the club mailbox, exactly as the
+// web app's room-booking emails do (apps/web/src/lib/email.ts): same Azure app
+// registration, same MAIL_FROM, so there is one sender identity and one SPF/DKIM
+// story for the club. Client-credentials token per invocation (Graph tokens
+// last ~1 h; an invocation sends at most 100 mails).
+let graphToken: { value: string; expires: number } | null = null;
+
+async function getGraphToken(): Promise<string> {
+  if (graphToken && graphToken.expires > Date.now() + 60_000) return graphToken.value;
+  const tenant = optionalEnv("AZURE_TENANT_ID")!;
+  const form = new URLSearchParams({
+    client_id: optionalEnv("AZURE_CLIENT_ID")!,
+    client_secret: optionalEnv("AZURE_CLIENT_SECRET")!,
+    scope: "https://graph.microsoft.com/.default",
+    grant_type: "client_credentials",
+  });
+  const res = await fetch(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+  });
+  const payload = await res.text();
+  if (!res.ok) throw new Error(`graph token ${res.status}: ${payload.slice(0, 300)}`);
+  const parsed = JSON.parse(payload) as { access_token: string; expires_in: number };
+  graphToken = { value: parsed.access_token, expires: Date.now() + parsed.expires_in * 1000 };
+  return graphToken.value;
+}
+
 async function sendEmail(row: OutboundRow): Promise<Delivery> {
-  const secrets = checkSecrets(["RESEND_API_KEY", "COMMS_FROM_EMAIL"]);
+  const secrets = checkSecrets(["AZURE_TENANT_ID", "AZURE_CLIENT_ID", "AZURE_CLIENT_SECRET", "MAIL_FROM"]);
   if (!secrets.ok) return { ok: false, error: `email not configured: ${secrets.missing.join(", ")} not set` };
   if (!row.to_address) return { ok: false, error: "no email address on the message" };
 
-  const res = await fetch("https://api.resend.com/emails", {
+  let token: string;
+  try {
+    token = await getGraphToken();
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+
+  const from = optionalEnv("MAIL_FROM")!;
+  const res = await fetch(`https://graph.microsoft.com/v1.0/users/${encodeURIComponent(from)}/sendMail`, {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${optionalEnv("RESEND_API_KEY")}`,
-      "content-type": "application/json",
-    },
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: JSON.stringify({
-      from: optionalEnv("COMMS_FROM_EMAIL"),
-      to: [row.to_address],
-      subject: row.subject ?? "(no subject)",
-      text: row.body ?? "",
+      message: {
+        subject: row.subject ?? "(no subject)",
+        body: { contentType: "Text", content: row.body ?? "" },
+        toRecipients: [{ emailAddress: { address: row.to_address } }],
+      },
+      saveToSentItems: true,
     }),
   });
 
-  const payload = await res.text();
-  if (!res.ok) return { ok: false, error: `resend ${res.status}: ${payload.slice(0, 400)}` };
-  let id: string | null = null;
-  try {
-    id = (JSON.parse(payload) as { id?: string }).id ?? null;
-  } catch { /* a 2xx with an unparseable body still counts as sent */ }
-  return { ok: true, provider: "resend", ref: id };
+  if (!res.ok) {
+    const payload = await res.text();
+    return { ok: false, error: `graph ${res.status}: ${payload.slice(0, 400)}` };
+  }
+  // sendMail returns 202 with no body; Graph's request id is the best reference we get.
+  return { ok: true, provider: "microsoft-graph", ref: res.headers.get("request-id") };
 }
 
 async function sendSms(row: OutboundRow): Promise<Delivery> {
