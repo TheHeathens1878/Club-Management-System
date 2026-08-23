@@ -33,6 +33,21 @@ export async function isClubAdmin(): Promise<boolean> {
 }
 
 /**
+ * Does the caller hold a `waiting_list_access` row for any age group?
+ *
+ * `wl_access_self_read` lets someone see their own grants and nothing else, so
+ * this is a safe question for any signed-in user to ask. Club administrators
+ * reach the desk through `is_club_admin()` instead — they need no grant.
+ */
+export async function hasWaitingListAccess(): Promise<boolean> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("waiting_list_access")
+    .select("age_group", { count: "exact", head: true });
+  return (count ?? 0) > 0;
+}
+
+/**
  * A display name the caller is entitled to see, for a set of people.
  *
  * Tries the bulk `people` read first (RLS decides what comes back — self,

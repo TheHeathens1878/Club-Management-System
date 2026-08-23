@@ -44,6 +44,12 @@ export async function middleware(request: NextRequest) {
     path.startsWith("/apply") ||
     path.startsWith("/endorse") ||
     path.startsWith("/book") ||
+    // P3.4: the player waiting list form is public, but only at its own path —
+    // /waiting-list/manage is the staff desk and stays behind the sign-in. The
+    // /recruitment redirect is served from next.config before middleware runs;
+    // it is listed here so a direct hit can never bounce to /login instead.
+    path === "/waiting-list" ||
+    path.startsWith("/recruitment") ||
     // Server-to-server callbacks with no session — they guard themselves:
     // the SumUp webhook + payment-return are idempotent and keyed by checkout
     // id; the cron route checks CRON_SECRET.
