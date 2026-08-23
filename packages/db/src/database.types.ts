@@ -79,6 +79,59 @@ export type Database = {
         }
         Relationships: []
       }
+      booking_comms: {
+        Row: {
+          body: string | null
+          booking_id: string
+          cc: string | null
+          channel: string
+          id: string
+          kind: string
+          legacy_booking_email_id: string | null
+          sent_at: string
+          sent_by: string | null
+          sent_by_name: string | null
+          subject: string
+          to_address: string
+        }
+        Insert: {
+          body?: string | null
+          booking_id: string
+          cc?: string | null
+          channel?: string
+          id?: string
+          kind?: string
+          legacy_booking_email_id?: string | null
+          sent_at?: string
+          sent_by?: string | null
+          sent_by_name?: string | null
+          subject: string
+          to_address: string
+        }
+        Update: {
+          body?: string | null
+          booking_id?: string
+          cc?: string | null
+          channel?: string
+          id?: string
+          kind?: string
+          legacy_booking_email_id?: string | null
+          sent_at?: string
+          sent_by?: string | null
+          sent_by_name?: string | null
+          subject?: string
+          to_address?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_comms_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       booking_emails: {
         Row: {
           body: string | null
@@ -1727,12 +1780,31 @@ export type Database = {
         Args: { p_role: Database["public"]["Enums"]["user_role"] }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      migrate_room_bookings: {
+        Args: never
+        Returns: {
+          bookings_removed: number
+          bookings_upserted: number
+          comms_upserted: number
+          payments_upserted: number
+          resources_upserted: number
+        }[]
+      }
       person_has_role: {
         Args: {
           p_person_id: string
           p_role: Database["public"]["Enums"]["app_role"]
         }
         Returns: boolean
+      }
+      reconcile_room_bookings: {
+        Args: never
+        Returns: {
+          check: string
+          legacy: number
+          ok: boolean
+          unified: number
+        }[]
       }
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       split_person_name: {
@@ -1741,6 +1813,15 @@ export type Database = {
           first_name: string
           last_name: string
         }[]
+      }
+      write_audit: {
+        Args: {
+          p_action: string
+          p_detail?: Json
+          p_entity: string
+          p_entity_id?: string
+        }
+        Returns: number
       }
     }
     Enums: {
