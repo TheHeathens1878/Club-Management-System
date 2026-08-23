@@ -6,7 +6,7 @@
 
 begin;
 
-select plan(22);
+select plan(28);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a7a7a7a7-1111-4111-8111-000000000001', 'w-admin@test.invalid', '{"full_name": "Ada Admin"}'::jsonb),
@@ -101,6 +101,22 @@ select results_eq(
 select throws_ok(
   $$select * from public.fulltime_http_result(-1)$$,
   '22023', null, 'an unknown request id cannot be read');
+
+-- -----------------------------------------------------------------------------
+-- Nightly prefetch
+-- -----------------------------------------------------------------------------
+select is(public.fulltime_source_url('728576966', 'https://fulltime.thefa.com/fixtures.html?league=1'),
+  'https://fulltime.thefa.com/js/cs1.html?cs=728576966', 'a widget link prefetches the widget');
+select is(public.fulltime_source_url(null, 'https://fulltime.thefa.com/fixtures.html?league=1'),
+  'https://fulltime.thefa.com/fixtures.html?league=1', 'a page link prefetches the page');
+select is(public.fulltime_prefetch(), 2, 'prefetch queues one request per enabled link');
+select results_eq(
+  $$select url from public.fulltime_prefetched('7d7d7d7d-1111-4111-8111-000000000001')$$,
+  $$values ('https://fulltime.thefa.com/js/cs1.html?cs=728576966'::text)$$, 'the prefetch is found for the team');
+update public.fulltime_prefetches set created_at = now() - interval '2 hours' where team_id = '7d7d7d7d-1111-4111-8111-000000000001';
+select is((select count(*) from public.fulltime_prefetched('7d7d7d7d-1111-4111-8111-000000000001')), 0::bigint,
+  'a stale prefetch is not offered');
+select ok(not has_function_privilege('authenticated', 'public.fulltime_prefetch()', 'EXECUTE'), 'prefetch is service_role only');
 
 -- A coach can do neither.
 set local request.jwt.claims to '{"sub":"a7a7a7a7-1111-4111-8111-000000000002","role":"authenticated"}';

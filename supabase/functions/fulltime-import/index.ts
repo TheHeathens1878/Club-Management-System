@@ -18,7 +18,7 @@
 // Auth: the function accepts the service-role key (cron) or a club_admin's JWT
 // (manual trigger from the teams screen). Everything else is 401.
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { adminClient, json, requireServiceRole, userClient, type Client } from "../_shared/auth.ts";
 import {
   buildFixturesUrl,
   fetchViaPgNet,
@@ -47,22 +47,13 @@ type Target = {
   widget_code: string | null;
 };
 
-const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-
-function json(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
-}
-
 async function isAuthorised(req: Request): Promise<boolean> {
-  const auth = req.headers.get("authorization") ?? "";
-  const token = auth.replace(/^Bearer\s+/i, "");
-  if (!token) return false;
-  if (token === SERVICE_KEY) return true;
-  // A user JWT: must be a club_admin (has_role runs as that user).
-  const asUser = createClient(SUPABASE_URL, Deno.env.get("SUPABASE_ANON_KEY")!, {
-    global: { headers: { Authorization: `Bearer ${token}` } },
-  });
+  // The scheduler (pg_cron → invoke_edge_function) presents the service-role
+  // key; `requireServiceRole` also accepts the gateway-verified service JWT.
+  if (requireServiceRole(req)) return true;
+  // A user JWT: must be a club_admin (is_club_admin runs as that user).
+  const asUser = userClient(req);
+  if (!asUser) return false;
   const { data, error } = await asUser.rpc("is_club_admin");
   return !error && data === true;
 }
@@ -85,9 +76,31 @@ function sourceFor(t: Target): { url: string; parse: (html: string) => ParsedPag
   return { url, parse: (html) => parseFixturesPage(html) };
 }
 
-async function importTarget(admin: ReturnType<typeof createClient>, t: Target, trigger: string) {
-  const { url, parse } = sourceFor(t);
-  const res = await fetchViaPgNet(admin, url);
+/**
+ * The nightly run is reached *through* pg_net, and pg_net serves its queue in
+ * serial batches — a fetch queued from here would wait for the invocation
+ * itself to finish. So the scheduler prefetches first (`fulltime_prefetch()`,
+ * 03:12 UTC) and this picks the response up; any other caller fetches live.
+ */
+const limiter = new RateLimiter(DEFAULT_MIN_INTERVAL_MS);
+
+async function fetchFor(admin: Client, t: Target, url: string) {
+  const { data } = await admin.rpc("fulltime_prefetched", { p_team_id: t.team_id });
+  const pre = (Array.isArray(data) ? data[0] : data) as { request_id: number; url: string } | undefined;
+  if (pre) {
+    // A page-URL prefetch is the division page without `selectedTeam`; the
+    // team filter after parsing makes that equivalent.
+    const res = await fetchViaPgNet(admin, pre.url, { requestId: pre.request_id, timeoutMs: 10_000 });
+    if (res.status !== 0) return res;
+  }
+  await limiter.wait();
+  return fetchViaPgNet(admin, url);
+}
+
+async function importTarget(admin: Client, t: Target, trigger: string) {
+  const { url: wanted, parse } = sourceFor(t);
+  const res = await fetchFor(admin, t, wanted);
+  const url = res.url;
   if (res.classification !== "ok") {
     await admin.rpc("record_fixture_import_failure", {
       p_team_id: t.team_id,
@@ -144,7 +157,7 @@ async function importTarget(admin: ReturnType<typeof createClient>, t: Target, t
 
 Deno.serve(async (req) => {
   if (!(await isAuthorised(req))) return json({ error: "unauthorised" }, 401);
-  const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
+  const admin = adminClient();
   const body = req.method === "POST" ? await req.json().catch(() => ({})) : {};
   const onlyTeam: string | undefined = body?.team_id;
 
@@ -152,10 +165,8 @@ Deno.serve(async (req) => {
   if (error) return json({ error: error.message }, 500);
   const list = (targets as Target[]).filter((t) => !onlyTeam || t.team_id === onlyTeam);
 
-  const limiter = new RateLimiter(DEFAULT_MIN_INTERVAL_MS);
   const results = [];
   for (const t of list) {
-    await limiter.wait();
     const trigger = onlyTeam ? (t.widget_code ? "manual_widget" : "manual_url") : "scheduled";
     try {
       results.push(await importTarget(admin, t, trigger));

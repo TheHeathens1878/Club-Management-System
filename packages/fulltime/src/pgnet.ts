@@ -28,6 +28,11 @@ export type PgNetFetchOptions = {
   timeoutMs?: number;
   /** Poll interval. Default 500 ms. */
   pollMs?: number;
+  /**
+   * A request already queued by `fulltime_http_get` (or by the nightly
+   * `fulltime_prefetch()`); skips queueing and just collects the body.
+   */
+  requestId?: number | string;
   /** Injectable for tests. */
   sleep?: (ms: number) => Promise<void>;
   now?: () => number;
@@ -65,11 +70,17 @@ export async function fetchViaPgNet(
     error,
   });
 
-  const issued = await client.rpc("fulltime_http_get", { p_url: url });
-  if (issued.error) return failure(`fulltime_http_get: ${issued.error.message}`);
-  const id = issued.data;
-  if (typeof id !== "number" && typeof id !== "string") {
-    return failure("fulltime_http_get returned no request id");
+  let id: number | string;
+  if (opts.requestId !== undefined) {
+    id = opts.requestId;
+  } else {
+    const issued = await client.rpc("fulltime_http_get", { p_url: url });
+    if (issued.error) return failure(`fulltime_http_get: ${issued.error.message}`);
+    const got = issued.data;
+    if (typeof got !== "number" && typeof got !== "string") {
+      return failure("fulltime_http_get returned no request id");
+    }
+    id = got;
   }
 
   const started = now();

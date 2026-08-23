@@ -76,3 +76,15 @@ describe("fetchViaPgNet", () => {
     expect(slow.error).toContain("did not answer");
   });
 });
+
+describe("fetchViaPgNet with a prefetched request", () => {
+  it("skips fulltime_http_get and reads the given request id", async () => {
+    const c = client({
+      results: [{ data: [{ done: true, status_code: 200, content: "<table></table>", error_msg: null }], error: null }],
+    });
+    const res = await fetchViaPgNet(c.rpc, "https://fulltime.thefa.com/js/cs1.html?cs=1", { ...noSleep, requestId: 77 });
+    expect(res).toMatchObject({ status: 200, classification: "ok" });
+    expect(c.calls.map((x) => x.fn)).toEqual(["fulltime_http_result"]);
+    expect(c.calls[0]?.args).toEqual({ p_id: 77 });
+  });
+});
