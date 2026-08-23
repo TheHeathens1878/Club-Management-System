@@ -17,6 +17,7 @@ import {
   Plus,
 } from "lucide-react";
 import { createSeason, createTeam, setCurrentSeason, setTeamActive } from "./actions";
+import { ClubWidgetsPanel } from "./club-widgets-panel";
 
 /** How the last import went, as a badge the admin can read at a glance. */
 function importBadge(status: string | null): { label: string; variant: "success" | "warning" | "destructive" | "muted" } {
@@ -53,17 +54,22 @@ export default async function TeamsPage({
   const { saved, error: errorParam } = await searchParams;
   const admin = createAdminClient();
 
-  const [teamsResult, linksResult, seasonsResult] = await Promise.all([
+  const [teamsResult, linksResult, seasonsResult, clubCodesResult] = await Promise.all([
     admin.from("teams").select("*").order("sort_order").order("name"),
     admin
       .from("team_fulltime_links")
       .select("team_id,enabled,last_import_status,last_import_at,last_import_count,last_error"),
     admin.from("seasons").select("*").order("starts_on", { ascending: false }),
+    admin
+      .from("site_settings")
+      .select("key,value")
+      .in("key", ["fulltime_club_fixtures_code", "fulltime_club_results_code"]),
   ]);
 
   const teams = teamsResult.data ?? [];
   const seasons = seasonsResult.data ?? [];
   const linkByTeam = new Map((linksResult.data ?? []).map((l) => [l.team_id, l]));
+  const clubCodes = new Map((clubCodesResult.data ?? []).map((s) => [s.key, s.value]));
   const loadError = teamsResult.error ?? linksResult.error ?? seasonsResult.error;
 
   return (
@@ -197,6 +203,26 @@ export default async function TeamsPage({
                 <Plus className="h-3.5 w-3.5" /> Create team
               </button>
             </form>
+          </CardContent>
+        </Card>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Club-wide Full-Time widgets                                      */}
+        {/* ---------------------------------------------------------------- */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Club Full-Time widgets</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              One pair of codes for the whole club: Full-Time&apos;s club <em>fixtures</em> and club{" "}
+              <em>results</em> widgets. Every active team is matched by name and imported nightly — no
+              per-team setup. A team with its own Full-Time link below keeps that instead.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ClubWidgetsPanel
+              fixturesCode={clubCodes.get("fulltime_club_fixtures_code") ?? null}
+              resultsCode={clubCodes.get("fulltime_club_results_code") ?? null}
+            />
           </CardContent>
         </Card>
 

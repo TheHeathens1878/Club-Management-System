@@ -20,11 +20,10 @@
 
 import { adminClient, json, requireServiceRole, userClient, type Client } from "../_shared/auth.ts";
 import {
-  buildFixturesUrl,
+  matchClubTeam,
   fetchViaPgNet,
   fixturesForTeam,
   parseFixturesPage,
-  parseFullTimeUrl,
   parseWidgetHtml,
   widgetTeamName,
   widgetUrl,
@@ -58,39 +57,31 @@ async function isAuthorised(req: Request): Promise<boolean> {
   return !error && data === true;
 }
 
-/** Where to fetch for a target and how to read what comes back. */
+/**
+ * Where to fetch for a target and how to read what comes back. A page link
+ * fetches the stored canonical URL — the same one the prefetch step queues.
+ */
 function sourceFor(t: Target): { url: string; parse: (html: string) => ParsedPage } {
   if (t.widget_code) {
     return { url: widgetUrl(t.widget_code), parse: parseWidgetHtml };
   }
-  const ids = parseFullTimeUrl(t.source_url);
-  const url = buildFixturesUrl(
-    {
-      leagueId: t.league_id || ids.leagueId,
-      seasonId: t.ft_season_id || ids.seasonId,
-      divisionId: t.division_id ?? ids.divisionId,
-      fixtureGroupKey: t.fixture_group_key ?? ids.fixtureGroupKey,
-    },
-    { teamId: t.ft_team_id ?? undefined },
-  );
-  return { url, parse: (html) => parseFixturesPage(html) };
+  return { url: t.source_url, parse: (html) => parseFixturesPage(html) };
 }
 
 /**
  * The nightly run is reached *through* pg_net, and pg_net serves its queue in
  * serial batches — a fetch queued from here would wait for the invocation
  * itself to finish. So the scheduler prefetches first (`fulltime_prefetch()`,
- * 03:12 UTC) and this picks the response up; any other caller fetches live.
+ * 03:12 UTC, one request per distinct URL) and this picks the response up;
+ * any other caller fetches live.
  */
 const limiter = new RateLimiter(DEFAULT_MIN_INTERVAL_MS);
 
-async function fetchFor(admin: Client, t: Target, url: string) {
-  const { data } = await admin.rpc("fulltime_prefetched", { p_team_id: t.team_id });
-  const pre = (Array.isArray(data) ? data[0] : data) as { request_id: number; url: string } | undefined;
+async function fetchFor(admin: Client, url: string) {
+  const { data } = await admin.rpc("fulltime_prefetched_url", { p_url: url });
+  const pre = (Array.isArray(data) ? data[0] : data) as { request_id: number } | undefined;
   if (pre) {
-    // A page-URL prefetch is the division page without `selectedTeam`; the
-    // team filter after parsing makes that equivalent.
-    const res = await fetchViaPgNet(admin, pre.url, { requestId: pre.request_id, timeoutMs: 10_000 });
+    const res = await fetchViaPgNet(admin, url, { requestId: pre.request_id, timeoutMs: 10_000 });
     if (res.status !== 0) return res;
   }
   await limiter.wait();
@@ -98,9 +89,8 @@ async function fetchFor(admin: Client, t: Target, url: string) {
 }
 
 async function importTarget(admin: Client, t: Target, trigger: string) {
-  const { url: wanted, parse } = sourceFor(t);
-  const res = await fetchFor(admin, t, wanted);
-  const url = res.url;
+  const { url, parse } = sourceFor(t);
+  const res = await fetchFor(admin, url);
   if (res.classification !== "ok") {
     await admin.rpc("record_fixture_import_failure", {
       p_team_id: t.team_id,
@@ -155,6 +145,108 @@ async function importTarget(admin: Client, t: Target, trigger: string) {
   return { team: t.team_name, status: "ok", result: data, warnings: warnings.length };
 }
 
+// ---------------------------------------------------------------------------
+// Club-wide widgets: two site_settings codes (fixtures + results) feed every
+// active team that has no per-team link. Widget team names are matched onto
+// the club's own team names by suffix ("Ashton On Mersey FC U14 Mavericks" →
+// "U14 Mavericks"); a name that matches none or several is left alone.
+// ---------------------------------------------------------------------------
+
+type ClubFixture = ReturnType<typeof parseWidgetHtml>["fixtures"][number];
+
+/** Fixtures + results merged by ref, preferring the row that knows more. */
+function mergeByRef(pages: ParsedPage[]): ClubFixture[] {
+  const byRef = new Map<string, ClubFixture>();
+  for (const page of pages) {
+    for (const f of page.fixtures) {
+      const seen = byRef.get(f.externalRef);
+      const better = f.homeScore !== undefined || f.status !== "scheduled";
+      if (!seen || better) byRef.set(f.externalRef, f);
+    }
+  }
+  return [...byRef.values()];
+}
+
+async function importClub(admin: Client, linkedTeamIds: Set<string>, onlyTeam: string | undefined, trigger: string) {
+  const results: unknown[] = [];
+  const { data: codesData } = await admin.rpc("fulltime_club_codes");
+  const codes = (codesData ?? []) as Array<{ kind: string; code: string }>;
+  if (codes.length === 0) return results;
+
+  const pages: ParsedPage[] = [];
+  const pageWarnings: string[] = [];
+  let sourceUrl = "";
+  for (const c of codes) {
+    const url = widgetUrl(c.code);
+    if (c.kind === "fixtures" || sourceUrl === "") sourceUrl = url;
+    const res = await fetchFor(admin, url);
+    if (res.classification !== "ok") {
+      results.push({ club: c.kind, status: res.classification, error: res.error ?? `HTTP ${res.status}` });
+      continue;
+    }
+    const page = parseWidgetHtml(res.html);
+    pages.push(page);
+    pageWarnings.push(...page.warnings);
+  }
+  if (pages.length === 0) return results;
+  const fixtures = mergeByRef(pages);
+
+  const [{ data: teamRows }, { data: season }] = await Promise.all([
+    admin.from("teams").select("id,name").eq("active", true),
+    admin.from("seasons").select("id").eq("is_current", true).limit(1).maybeSingle(),
+  ]);
+  if (!season) {
+    results.push({ club: "all", status: "error", error: "No current season is set." });
+    return results;
+  }
+  const teams = ((teamRows ?? []) as Array<{ id: string; name: string }>).filter(
+    (t) => !linkedTeamIds.has(t.id) && (!onlyTeam || t.id === onlyTeam),
+  );
+  const names = teams.map((t) => t.name);
+
+  for (const team of teams) {
+    const mine = fixtures.flatMap((f) => {
+      const isHome = matchClubTeam(f.homeTeam, names) === team.name;
+      const isAway = matchClubTeam(f.awayTeam, names) === team.name;
+      if (!isHome && !isAway) return [];
+      return [{ ...f, isHome, opponent: isHome ? f.awayTeam : f.homeTeam }];
+    });
+    if (mine.length === 0) continue; // not in the club feed — no noisy run row
+    const payload = mine.map((f) => ({
+      externalRef: f.externalRef,
+      kickoffAt: f.kickoffAt,
+      opponent: f.opponent,
+      isHome: f.isHome,
+      competition: f.competition ?? null,
+      status: f.status,
+      homeScore: f.homeScore ?? null,
+      awayScore: f.awayScore ?? null,
+      venue: f.venue ?? null,
+    }));
+    const { data, error } = await admin.rpc("import_fixtures", {
+      p_team_id: team.id,
+      p_season_id: season.id,
+      p_fixtures: payload,
+      p_trigger: trigger,
+      p_source_url: sourceUrl,
+      p_warnings: pageWarnings,
+    });
+    if (error) {
+      await admin.rpc("record_fixture_import_failure", {
+        p_team_id: team.id,
+        p_trigger: trigger,
+        p_status: "error",
+        p_source_url: sourceUrl,
+        p_error: error.message,
+      });
+      results.push({ team: team.name, via: "club", status: "error", error: error.message });
+    } else {
+      results.push({ team: team.name, via: "club", status: "ok", result: data });
+    }
+  }
+  return results;
+}
+
 Deno.serve(async (req) => {
   if (!(await isAuthorised(req))) return json({ error: "unauthorised" }, 401);
   const admin = adminClient();
@@ -165,7 +257,7 @@ Deno.serve(async (req) => {
   if (error) return json({ error: error.message }, 500);
   const list = (targets as Target[]).filter((t) => !onlyTeam || t.team_id === onlyTeam);
 
-  const results = [];
+  const results: unknown[] = [];
   for (const t of list) {
     const trigger = onlyTeam ? (t.widget_code ? "manual_widget" : "manual_url") : "scheduled";
     try {
@@ -177,6 +269,16 @@ Deno.serve(async (req) => {
       });
       results.push({ team: t.team_name, status: "error", error: msg });
     }
+  }
+
+  // Teams without their own link are fed from the club-wide widgets.
+  try {
+    const linkedTeamIds = new Set((targets as Target[]).map((t) => t.team_id));
+    results.push(
+      ...(await importClub(admin, linkedTeamIds, onlyTeam, onlyTeam ? "manual_widget" : "scheduled")),
+    );
+  } catch (e) {
+    results.push({ club: "all", status: "error", error: e instanceof Error ? e.message : String(e) });
   }
   return json({ ran: results.length, results });
 });

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  matchClubTeam,
   parseWidgetDate,
   parseWidgetHtml,
   widgetCodeFrom,
@@ -97,5 +98,51 @@ describe("widget additions", () => {
       ["1", "played", 3, 1],
       ["2", "postponed", undefined, undefined],
     ]);
+  });
+});
+
+describe("club widgets", () => {
+  const page = parseWidgetHtml(fixture("widget-club-885630049.html"));
+
+  it("reads the whole club's fixtures from the five-cell club variant", () => {
+    expect(page.fixtures.length).toBeGreaterThan(150);
+    // Undated "Postponed" groups are reported once, not per row; the only
+    // other warning in this recording is a real notice row the league posted.
+    expect(page.warnings).toEqual([
+      "Could not read a date row: All Cheshire East pitches closed until 20/9 due to weather",
+      "5 fixtures under a Postponed heading had no kick-off date and were left as previously imported.",
+    ]);
+    const mavs = fixturesForTeam(page, "Ashton On Mersey FC U14 Mavericks");
+    expect(mavs.length).toBeGreaterThan(15);
+    expect(new Set(page.fixtures.map((f) => f.externalRef)).size).toBe(page.fixtures.length);
+    const first = page.fixtures[0]!;
+    expect(first.date).toBe("2026-09-06");
+    expect(first.time).toBe("10:00");
+    expect(first.homeScore).toBeUndefined();
+    // A club feed names no single team.
+    expect(widgetTeamName(page.fixtures)).toBeUndefined();
+  });
+
+  it("treats an empty club results widget as nothing to show", () => {
+    const empty = parseWidgetHtml(fixture("widget-club-noresults.html"));
+    expect(empty.fixtures).toEqual([]);
+    expect(empty.warnings).toEqual([]);
+  });
+
+  it("matches widget team names onto the club's own short names", () => {
+    const clubTeams = ["U14 Mavericks", "U13 Dragons", "U14 Bulls"];
+    expect(matchClubTeam("Ashton On Mersey FC U14 Mavericks", clubTeams)).toBe("U14 Mavericks");
+    expect(matchClubTeam("Ashton On Mersey FC U13 Dragons", clubTeams)).toBe("U13 Dragons");
+    expect(matchClubTeam("Cheadle & Gatley Junior U14 Hurricanes", clubTeams)).toBeUndefined();
+    // Ambiguity is refused, not guessed.
+    expect(matchClubTeam("Ashton On Mersey FC U14 Mavericks", ["U14 Mavericks", "Mavericks"])).toBeUndefined();
+  });
+
+  it("keeps club fixtures assignable to their team side", () => {
+    const clubTeams = ["U14 Mavericks"];
+    const mine = page.fixtures.filter(
+      (f) => matchClubTeam(f.homeTeam, clubTeams) !== undefined || matchClubTeam(f.awayTeam, clubTeams) !== undefined,
+    );
+    expect(mine.length).toBeGreaterThan(15);
   });
 });
