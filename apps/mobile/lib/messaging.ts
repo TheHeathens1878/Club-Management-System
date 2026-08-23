@@ -252,3 +252,113 @@ export function mergeMessage(
 export function isUsableReportReason(reason: string): boolean {
   return reason.trim().length >= 3;
 }
+
+// ---------------------------------------------------------------------------
+// WhatsApp-style thread helpers (P5.4 parity with the web thread).
+// ---------------------------------------------------------------------------
+
+export interface ReactionRow {
+  id: string;
+  message_id: string;
+  person_id: string;
+  emoji: string;
+}
+
+export interface ReactionChip {
+  emoji: string;
+  count: number;
+  /** True when the signed-in person is among the reactors. */
+  mine: boolean;
+}
+
+/** The chips under one message, in first-seen order. */
+export function reactionChips(
+  reactions: ReactionRow[],
+  messageId: string,
+  myPersonId: string | null,
+): ReactionChip[] {
+  const chips: ReactionChip[] = [];
+  for (const row of reactions) {
+    if (row.message_id !== messageId) continue;
+    const existing = chips.find((chip) => chip.emoji === row.emoji);
+    if (existing) {
+      existing.count += 1;
+      existing.mine = existing.mine || row.person_id === myPersonId;
+    } else {
+      chips.push({ emoji: row.emoji, count: 1, mine: row.person_id === myPersonId });
+    }
+  }
+  return chips;
+}
+
+const LONDON = "Europe/London";
+
+/** London calendar day, `YYYY-MM-DD` — the day-separator key. */
+export function dayKeyLondon(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return at.toLocaleDateString("en-CA", { timeZone: LONDON });
+}
+
+/** `Today` / `Yesterday` / `Sunday 6 September 2026`, London. */
+export function dayLabelLondon(iso: string, now: Date = new Date()): string {
+  const key = dayKeyLondon(iso);
+  if (key === "") return "";
+  if (key === now.toLocaleDateString("en-CA", { timeZone: LONDON })) return "Today";
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  if (key === yesterday.toLocaleDateString("en-CA", { timeZone: LONDON })) return "Yesterday";
+  return new Date(iso)
+    .toLocaleDateString("en-GB", {
+      timeZone: LONDON,
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })
+    .replace(/,/g, "");
+}
+
+/** `14:05`, London — the in-bubble time once day chips carry the date. */
+export function clockLabelLondon(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return at.toLocaleTimeString("en-GB", {
+    timeZone: LONDON,
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+}
+
+/**
+ * When each other participant has read up to, as an instant, resolved through
+ * the visible message window. A pointer to a message older than the window
+ * counts as read-nothing-visible, which under-reports rather than over-reports
+ * — a tick must never claim a read that did not happen.
+ */
+export function lastReadAtByPerson(
+  participants: { person_id: string; left_at: string | null; last_read_message_id?: string | null }[],
+  messages: MessageRow[],
+  myPersonId: string | null,
+): { otherIds: string[]; readAt: Record<string, string> } {
+  const otherIds = participants
+    .filter((p) => p.left_at === null && p.person_id !== myPersonId)
+    .map((p) => p.person_id);
+  const byId = new Map(messages.map((m) => [m.id, m.created_at]));
+  const readAt: Record<string, string> = {};
+  for (const p of participants) {
+    if (p.left_at !== null || p.person_id === myPersonId) continue;
+    const at = p.last_read_message_id ? byId.get(p.last_read_message_id) : undefined;
+    if (at) readAt[p.person_id] = at;
+  }
+  return { otherIds, readAt };
+}
+
+/** ✓✓: every active other participant has read this message. */
+export function isReadByAllOthers(
+  message: MessageRow,
+  otherIds: string[],
+  readAt: Record<string, string>,
+): boolean {
+  return otherIds.length > 0 && otherIds.every((pid) => (readAt[pid] ?? "") >= message.created_at);
+}
