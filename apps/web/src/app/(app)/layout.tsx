@@ -1,10 +1,11 @@
 import { redirect } from "next/navigation";
 import { getSessionProfile, isStaff, isBarManager, isCommittee, isBooker } from "@/lib/auth";
-import { isSafeguardingLead } from "@/lib/person";
+import { hasWaitingListAccess, isClubAdmin, isSafeguardingLead } from "@/lib/person";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import {
   CalendarDays,
+  ClipboardList,
   Clock,
   LogOut,
   Settings,
@@ -34,8 +35,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const showTeams = isCommittee(role);
   // The safeguarding desk is the lead's, plus club administrators (SG-3, SG-9).
   // `person_roles` is the authority on the lead, not `profiles.role`.
-  const lead = await isSafeguardingLead();
+  // The waiting list desk (P3.4) is a club administrator's, plus any coach
+  // holding a `waiting_list_access` grant — RLS returns nothing to anyone
+  // else, so there is no point offering them the link.
+  const [lead, admin, waitingListAccess] = await Promise.all([
+    isSafeguardingLead(),
+    isClubAdmin(),
+    hasWaitingListAccess(),
+  ]);
   const showSafeguarding = lead || isCommittee(role);
+  const showWaitingList = admin || waitingListAccess;
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
@@ -89,6 +98,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
             >
               <LandPlot className="h-4 w-4" /> Pitches
+            </Link>
+          )}
+
+          {showWaitingList && (
+            <Link
+              href="/waiting-list/manage"
+              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+            >
+              <ClipboardList className="h-4 w-4" /> Waiting list
             </Link>
           )}
 
