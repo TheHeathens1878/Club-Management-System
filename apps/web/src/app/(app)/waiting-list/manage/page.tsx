@@ -1,6 +1,13 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ClipboardList, ExternalLink, HeartHandshake } from "lucide-react";
+import {
+  ClipboardList,
+  Download,
+  ExternalLink,
+  HeartHandshake,
+  KeyRound,
+  ListOrdered,
+} from "lucide-react";
 
 import type { Database } from "@club/db";
 
@@ -25,6 +32,7 @@ import {
 
 import { AgeGroupsPanel, type AgeGroupSetting } from "./age-groups-panel";
 import { NoteForm, StatusForm } from "./entry-actions";
+import { PrioritiesPanel, type PriorityGroup } from "./priorities-panel";
 
 /**
  * The waiting list desk (PLAN.md P3.4) — the pitch-booking app's admin waiting
@@ -86,6 +94,7 @@ export default async function WaitingListDeskPage({
     status?: string;
     coaching?: string;
     show_all?: string;
+    mode?: string;
   }>;
 }) {
   const session = await getSessionProfile();
@@ -97,6 +106,20 @@ export default async function WaitingListDeskPage({
   const ageGroupFilter = params.age_group?.trim() || undefined;
   const coachingOnly = params.coaching === "1";
   const showAll = params.show_all === "1";
+  const prioritiesMode = params.mode === "priorities";
+
+  // The filters, as a query string — so "export what I am looking at" and the
+  // link into priorities mode both carry exactly what is on screen.
+  const filterQuery = new URLSearchParams();
+  if (statusFilter) filterQuery.set("status", statusFilter);
+  if (ageGroupFilter) filterQuery.set("age_group", ageGroupFilter);
+  if (coachingOnly) filterQuery.set("coaching", "1");
+  if (showAll) filterQuery.set("show_all", "1");
+  const filterSuffix = filterQuery.toString() ? `?${filterQuery.toString()}` : "";
+  const exportHref = `/waiting-list/manage/export${filterSuffix}`;
+  const prioritiesQuery = new URLSearchParams(filterQuery);
+  prioritiesQuery.set("mode", "priorities");
+  const prioritiesHref = `/waiting-list/manage?${prioritiesQuery.toString()}`;
 
   const supabase = await createClient();
 
@@ -166,6 +189,38 @@ export default async function WaitingListDeskPage({
   const noAccess = !admin && myAgeGroups.length === 0 && entries.length === 0;
   const filtered = Boolean(statusFilter || ageGroupFilter || coachingOnly);
 
+  // Priorities are a club administrator's tool: a coach has no UPDATE policy
+  // on the entries, so the mode is not offered to one at all.
+  const showPriorities = prioritiesMode && admin;
+  const priorityGroups: PriorityGroup[] = (() => {
+    if (!showPriorities) return [];
+    const byGroup = new Map<string, Entry[]>();
+    for (const entry of entries) {
+      const list = byGroup.get(entry.age_group);
+      if (list) list.push(entry);
+      else byGroup.set(entry.age_group, [entry]);
+    }
+    return Array.from(byGroup.entries())
+      .map(([ageGroup, groupEntries]) => ({
+        ageGroup,
+        entries: groupEntries
+          .slice()
+          .sort((a, b) => {
+            const left = a.priority ?? Number.MAX_SAFE_INTEGER;
+            const right = b.priority ?? Number.MAX_SAFE_INTEGER;
+            if (left !== right) return left - right;
+            return a.created_at.localeCompare(b.created_at);
+          })
+          .map((entry) => ({
+            id: entry.id,
+            playerName: entry.player_name,
+            status: entry.status,
+            priority: entry.priority,
+          })),
+      }))
+      .sort((a, b) => ageGroupSortKey(a.ageGroup).localeCompare(ageGroupSortKey(b.ageGroup)));
+  })();
+
   return (
     <>
       <PageHeader
@@ -178,12 +233,28 @@ export default async function WaitingListDeskPage({
               : "Players waiting for a place"
         }
         action={
-          <Link
-            href="/waiting-list"
-            className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
-          >
-            <ExternalLink className="h-4 w-4" /> Public form
-          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={exportHref}
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+            >
+              <Download className="h-4 w-4" /> Export CSV
+            </a>
+            {admin && (
+              <Link
+                href="/waiting-list/manage/access"
+                className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+              >
+                <KeyRound className="h-4 w-4" /> Access
+              </Link>
+            )}
+            <Link
+              href="/waiting-list"
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+            >
+              <ExternalLink className="h-4 w-4" /> Public form
+            </Link>
+          </div>
         }
       />
 
@@ -284,6 +355,22 @@ export default async function WaitingListDeskPage({
                     Show all statuses
                   </Link>
                 ))}
+              {admin &&
+                (showPriorities ? (
+                  <Link
+                    href={`/waiting-list/manage${filterSuffix}`}
+                    className="text-primary hover:underline"
+                  >
+                    Back to the list
+                  </Link>
+                ) : (
+                  <Link
+                    href={prioritiesHref}
+                    className="inline-flex items-center gap-1 text-primary hover:underline"
+                  >
+                    <ListOrdered className="h-3.5 w-3.5" /> Priorities
+                  </Link>
+                ))}
             </div>
 
             {entriesError && (
@@ -299,13 +386,16 @@ export default async function WaitingListDeskPage({
               </p>
             )}
 
-            {!noAccess && entries.length === 0 && (
+            {!noAccess && !showPriorities && entries.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No entries match those filters.
               </p>
             )}
 
-            {entries.map((entry) => {
+            {showPriorities && <PrioritiesPanel groups={priorityGroups} />}
+
+            {!showPriorities &&
+              entries.map((entry) => {
               const entryNotes = notesByEntry.get(entry.id) ?? [];
               return (
                 <details key={entry.id} className="group rounded-lg border bg-card">

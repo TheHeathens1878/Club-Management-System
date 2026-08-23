@@ -89,6 +89,53 @@ export async function setWaitingListStatus(
   return { notice: "Status updated." };
 }
 
+/**
+ * Write the running order of one age group (gap 10).
+ *
+ * `priority` is a plain integer on the entry and the desk already sorts by it,
+ * so ordering is "renumber these ids 1..n in the order they were posted".
+ * There is no coach UPDATE policy on `waiting_list_entries`, so a coach's post
+ * matches no row and writes nothing — which is why the count of changed rows
+ * is checked rather than trusted.
+ */
+export async function setWaitingListPriorities(
+  _prev: WaitingListActionState,
+  formData: FormData,
+): Promise<WaitingListActionState> {
+  const ageGroup = String(formData.get("age_group") ?? "").trim();
+  const ids = formData
+    .getAll("entry_id")
+    .map((value) => String(value).trim())
+    .filter(Boolean);
+  if (ids.length === 0) return { error: "Nothing to order." };
+
+  const supabase = await createClient();
+  let changed = 0;
+  for (const [index, id] of ids.entries()) {
+    const { data, error } = await supabase
+      .from("waiting_list_entries")
+      .update({ priority: index + 1 })
+      .eq("id", id)
+      .select("id");
+    if (error) {
+      return {
+        error:
+          error.code === "42501"
+            ? "Only a club administrator can set waiting list priorities."
+            : error.message,
+      };
+    }
+    changed += (data ?? []).length;
+  }
+
+  if (changed === 0) {
+    return { error: "Only a club administrator can set waiting list priorities." };
+  }
+
+  revalidatePath(PATH);
+  return { notice: `${ageGroup || "Order"} saved — ${changed} numbered.` };
+}
+
 export async function setAgeGroupAvailability(
   _prev: WaitingListActionState,
   formData: FormData,

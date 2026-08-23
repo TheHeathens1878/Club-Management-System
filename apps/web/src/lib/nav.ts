@@ -23,6 +23,7 @@ import {
   CalendarDays,
   CalendarPlus,
   Inbox,
+  ClipboardCheck,
   ClipboardList,
   Clock,
   Contact,
@@ -158,9 +159,9 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
   {
-    // Placeholder until gap 9 gives guardians a screen of their own; comms
-    // preferences are the one child-related thing a guardian can set today.
-    href: "/settings/comms",
+    // Gap 9: the guardian's own screen — their children, the teams those
+    // children are in, and registering them for one.
+    href: "/family",
     label: "Children",
     icon: Baby,
     group: "Club",
@@ -179,6 +180,15 @@ export const NAV: readonly NavEntry[] = [
     href: "/approvals",
     label: "Approvals",
     icon: UserCheck,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+  },
+  {
+    // Gap 9: the other side of /family — the registrations parents send in.
+    href: "/registrations",
+    label: "Registrations",
+    icon: ClipboardCheck,
     group: "Club",
     allowed: (c) => c.isClubAdmin,
     views: ["admin"],
