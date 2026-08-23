@@ -52,6 +52,54 @@ export type Database = {
         }
         Relationships: []
       }
+      availability: {
+        Row: {
+          created_at: string
+          fixture_id: string
+          id: string
+          note: string | null
+          person_id: string
+          set_by: string | null
+          status: Database["public"]["Enums"]["availability_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fixture_id: string
+          id?: string
+          note?: string | null
+          person_id: string
+          set_by?: string | null
+          status: Database["public"]["Enums"]["availability_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fixture_id?: string
+          id?: string
+          note?: string | null
+          person_id?: string
+          set_by?: string | null
+          status?: Database["public"]["Enums"]["availability_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "availability_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "availability_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bank_holidays: {
         Row: {
           approved: boolean
@@ -807,6 +855,97 @@ export type Database = {
           sort_order?: number
         }
         Relationships: []
+      }
+      fixtures: {
+        Row: {
+          away_score: number | null
+          competition: string | null
+          created_at: string
+          created_by: string | null
+          external_ref: string | null
+          home_score: number | null
+          id: string
+          imported_at: string | null
+          is_home: boolean
+          kickoff_at: string
+          last_seen_at: string | null
+          notes: string | null
+          opponent: string
+          season_id: string
+          source: Database["public"]["Enums"]["fixture_source"]
+          status: Database["public"]["Enums"]["fixture_status"]
+          team_id: string
+          updated_at: string
+          venue_resource_id: string | null
+          venue_text: string | null
+        }
+        Insert: {
+          away_score?: number | null
+          competition?: string | null
+          created_at?: string
+          created_by?: string | null
+          external_ref?: string | null
+          home_score?: number | null
+          id?: string
+          imported_at?: string | null
+          is_home: boolean
+          kickoff_at: string
+          last_seen_at?: string | null
+          notes?: string | null
+          opponent: string
+          season_id: string
+          source?: Database["public"]["Enums"]["fixture_source"]
+          status?: Database["public"]["Enums"]["fixture_status"]
+          team_id: string
+          updated_at?: string
+          venue_resource_id?: string | null
+          venue_text?: string | null
+        }
+        Update: {
+          away_score?: number | null
+          competition?: string | null
+          created_at?: string
+          created_by?: string | null
+          external_ref?: string | null
+          home_score?: number | null
+          id?: string
+          imported_at?: string | null
+          is_home?: boolean
+          kickoff_at?: string
+          last_seen_at?: string | null
+          notes?: string | null
+          opponent?: string
+          season_id?: string
+          source?: Database["public"]["Enums"]["fixture_source"]
+          status?: Database["public"]["Enums"]["fixture_status"]
+          team_id?: string
+          updated_at?: string
+          venue_resource_id?: string | null
+          venue_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixtures_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixtures_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixtures_venue_resource_id_fkey"
+            columns: ["venue_resource_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       function_rooms: {
         Row: {
@@ -1650,6 +1789,54 @@ export type Database = {
         }
         Relationships: []
       }
+      selections: {
+        Row: {
+          created_at: string
+          fixture_id: string
+          id: string
+          person_id: string
+          role: Database["public"]["Enums"]["selection_role"]
+          selected_by: string | null
+          shirt_number: number | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          fixture_id: string
+          id?: string
+          person_id: string
+          role?: Database["public"]["Enums"]["selection_role"]
+          selected_by?: string | null
+          shirt_number?: number | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          fixture_id?: string
+          id?: string
+          person_id?: string
+          role?: Database["public"]["Enums"]["selection_role"]
+          selected_by?: string | null
+          shirt_number?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "selections_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "selections_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sickness_records: {
         Row: {
           created_at: string
@@ -1763,6 +1950,71 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_fulltime_links: {
+        Row: {
+          created_at: string
+          division_id: string | null
+          enabled: boolean
+          fixture_group_key: string | null
+          ft_season_id: string
+          ft_team_id: string | null
+          ft_team_name: string | null
+          last_error: string | null
+          last_import_at: string | null
+          last_import_count: number | null
+          last_import_status: string | null
+          league_id: string
+          source_url: string
+          team_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          division_id?: string | null
+          enabled?: boolean
+          fixture_group_key?: string | null
+          ft_season_id: string
+          ft_team_id?: string | null
+          ft_team_name?: string | null
+          last_error?: string | null
+          last_import_at?: string | null
+          last_import_count?: number | null
+          last_import_status?: string | null
+          league_id: string
+          source_url: string
+          team_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          division_id?: string | null
+          enabled?: boolean
+          fixture_group_key?: string | null
+          ft_season_id?: string
+          ft_team_id?: string | null
+          ft_team_name?: string | null
+          last_error?: string | null
+          last_import_at?: string | null
+          last_import_count?: number | null
+          last_import_status?: string | null
+          league_id?: string
+          source_url?: string
+          team_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_fulltime_links_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: true
+            referencedRelation: "teams"
             referencedColumns: ["id"]
           },
         ]
@@ -2081,7 +2333,9 @@ export type Database = {
         }
         Returns: boolean
       }
+      can_act_for: { Args: { p_person_id: string }; Returns: boolean }
       current_person_id: { Args: never; Returns: string }
+      fixture_team_id: { Args: { p_fixture_id: string }; Returns: string }
       has_active_consent: {
         Args: {
           p_child_person_id: string
@@ -2130,6 +2384,8 @@ export type Database = {
       is_safeguarding_lead: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
       is_supervision_exempt: { Args: { p_person_id: string }; Returns: boolean }
+      is_team_guardian: { Args: { p_team_id: string }; Returns: boolean }
+      is_team_member: { Args: { p_team_id: string }; Returns: boolean }
       is_team_staff: { Args: { p_team_id: string }; Returns: boolean }
       map_user_role_to_app_role: {
         Args: { p_role: Database["public"]["Enums"]["user_role"] }
@@ -2201,6 +2457,7 @@ export type Database = {
         | "member"
         | "parent"
         | "hirer"
+      availability_status: "available" | "unavailable" | "maybe"
       booking_kind: "hire" | "block" | "fixture" | "maintenance"
       booking_status:
         | "enquiry"
@@ -2220,6 +2477,13 @@ export type Database = {
         | "photo_club_website"
         | "photo_social_media"
         | "photo_press"
+      fixture_source: "fulltime" | "manual"
+      fixture_status:
+        | "scheduled"
+        | "postponed"
+        | "cancelled"
+        | "played"
+        | "abandoned"
       guardian_relationship:
         | "parent"
         | "step_parent"
@@ -2230,6 +2494,7 @@ export type Database = {
       payment_status: "unpaid" | "deposit_paid" | "paid"
       registration_status: "pending" | "approved" | "rejected" | "withdrawn"
       resource_type: "function_room" | "pitch"
+      selection_role: "starter" | "substitute"
       team_role: "player" | "coach" | "assistant_coach" | "manager"
       user_role:
         | "committee"
@@ -2374,6 +2639,7 @@ export const Constants = {
         "parent",
         "hirer",
       ],
+      availability_status: ["available", "unavailable", "maybe"],
       booking_kind: ["hire", "block", "fixture", "maintenance"],
       booking_status: [
         "enquiry",
@@ -2396,6 +2662,14 @@ export const Constants = {
         "photo_social_media",
         "photo_press",
       ],
+      fixture_source: ["fulltime", "manual"],
+      fixture_status: [
+        "scheduled",
+        "postponed",
+        "cancelled",
+        "played",
+        "abandoned",
+      ],
       guardian_relationship: [
         "parent",
         "step_parent",
@@ -2407,6 +2681,7 @@ export const Constants = {
       payment_status: ["unpaid", "deposit_paid", "paid"],
       registration_status: ["pending", "approved", "rejected", "withdrawn"],
       resource_type: ["function_room", "pitch"],
+      selection_role: ["starter", "substitute"],
       team_role: ["player", "coach", "assistant_coach", "manager"],
       user_role: [
         "committee",
