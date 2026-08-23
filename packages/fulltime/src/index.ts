@@ -7,13 +7,13 @@
  * unofficial integration, so when it breaks, it must break here and only here.
  */
 
-export * from "./csv";
-export * from "./errors";
-export * from "./fetch";
-export * from "./html";
-export * from "./parse";
-export * from "./ref";
-export * from "./team";
-export * from "./time";
-export * from "./types";
-export * from "./url";
+export * from "./csv.ts";
+export * from "./errors.ts";
+export * from "./fetch.ts";
+export * from "./html.ts";
+export * from "./parse.ts";
+export * from "./ref.ts";
+export * from "./team.ts";
+export * from "./time.ts";
+export * from "./types.ts";
+export * from "./url.ts";

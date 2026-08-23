@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { parseFixturesPage } from "../src/parse";
-import { fixturesForTeam, normaliseTeamName, sameTeam, teamNamesIn } from "../src/team";
-import { fixture } from "./helpers";
+import { parseFixturesPage } from "../src/parse.ts";
+import { fixturesForTeam, normaliseTeamName, sameTeam, teamNamesIn } from "../src/team.ts";
+import { fixture } from "./helpers.ts";
 
 const parsed = parseFixturesPage(fixture("synthetic-fixtures.html"));
 

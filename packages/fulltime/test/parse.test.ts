@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { parseFixturesPage } from "../src/parse";
-import { fixture } from "./helpers";
+import { parseFixturesPage } from "../src/parse.ts";
+import { fixture } from "./helpers.ts";
 
 const league = fixture("ft-league.html");
 const fixturesPage = fixture("ft-fixtures.html");

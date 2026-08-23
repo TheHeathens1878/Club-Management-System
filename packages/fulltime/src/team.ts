@@ -7,7 +7,7 @@
  * robust.
  */
 
-import type { ParsedFixture, ParsedPage, TeamFixture } from "./types";
+import type { ParsedFixture, ParsedPage, TeamFixture } from "./types.ts";
 
 /**
  * A team name reduced to what can be compared: case folded, Unicode

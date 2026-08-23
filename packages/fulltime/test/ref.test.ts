@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { fixtureIdFromHref, fnv1a64Hex, stableExternalRef } from "../src/ref";
+import { fixtureIdFromHref, fnv1a64Hex, stableExternalRef } from "../src/ref.ts";
 
 const base = {
   date: "2026-03-30",

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { FullTimeUrlError } from "../src/errors";
-import { buildFixturesUrl, buildResultsUrl, buildTeamUrl, parseFullTimeUrl } from "../src/url";
+import { FullTimeUrlError } from "../src/errors.ts";
+import { buildFixturesUrl, buildResultsUrl, buildTeamUrl, parseFullTimeUrl } from "../src/url.ts";
 
 const CANONICAL =
   "https://fulltime.thefa.com/fixtures.html?league=314585552&selectedSeason=249484346&selectedDivision=239850554&selectedCompetition=0&selectedFixtureGroupKey=1_652413140";

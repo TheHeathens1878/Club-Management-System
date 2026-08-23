@@ -9,7 +9,7 @@
  * admin can act on.
  */
 
-import { FullTimeUrlError } from "./errors";
+import { FullTimeUrlError } from "./errors.ts";
 
 /** Which Full-Time page a URL points at. */
 export type FullTimePageKind = "index" | "fixtures" | "results" | "table" | "team" | "unknown";
