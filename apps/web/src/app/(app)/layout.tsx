@@ -7,6 +7,7 @@ import {
   CalendarDays,
   ClipboardList,
   Clock,
+  Contact,
   LogOut,
   Settings,
   Beer,
@@ -87,6 +88,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
             >
               <Users className="h-4 w-4" /> Teams
+            </Link>
+          )}
+
+          {/* The member records the teams are built from. Same audience as
+              Teams: `people` RLS answers to club_admin / safeguarding_lead,
+              which is what a committee sign-in holds. */}
+          {showTeams && (
+            <Link
+              href="/people"
+              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+            >
+              <Contact className="h-4 w-4" /> People
             </Link>
           )}
 
