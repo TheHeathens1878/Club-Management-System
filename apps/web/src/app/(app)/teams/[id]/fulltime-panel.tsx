@@ -334,7 +334,7 @@ function PreviewBlock({
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             {preview.message}
-            {canSave ? " The season and division were read from the URL, so you can save the link now." : ""}
+            {preview.ids?.seasonId ? " The season and division were read from the URL, so you can save the link now." : ""}
           </span>
         </p>
       )}
