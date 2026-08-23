@@ -1,14 +1,13 @@
 #!/usr/bin/env node
 /**
- * FA Full-Time importer that runs from a club PC instead of the cloud.
+ * FA Full-Time importer that runs from a club PC — the fallback.
  *
- * fulltime.thefa.com sits behind Cloudflare, which serves datacenter IPs
- * (Vercel, Supabase Edge Functions) a bot challenge instead of the fixtures
- * page, while a normal home/office connection gets the real page. This script
- * is the same import as supabase/functions/fulltime-import — same targets,
- * same parser, same `import_fixtures()` RPC and the same failure recording —
- * just executed where Cloudflare lets it through. Run it by hand, or nightly
- * from Windows Task Scheduler.
+ * The nightly import normally runs in the cloud (supabase/functions/fulltime-import,
+ * fetching through pg_net — see 20260824190000_fulltime_pgnet_fetch.sql). This
+ * script is the same import — same targets, same parser, same `import_fixtures()`
+ * RPC and the same failure recording — executed from an ordinary home/office
+ * connection with a plain HTTP client, for the day Cloudflare changes its mind
+ * about pg_net. Widget links fetch the widget; page links fetch the page.
  *
  * Usage (from the repo root; Node 22.18+ or 24 — it imports the TypeScript
  * package directly):
@@ -34,7 +33,10 @@ import {
   fixturesForTeam,
   parseFixturesPage,
   parseFullTimeUrl,
+  parseWidgetHtml,
   RateLimiter,
+  widgetTeamName,
+  widgetUrl,
 } from "../../../packages/fulltime/src/index.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -62,7 +64,7 @@ const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
 const teamFlag = args.indexOf("--team");
 const onlyTeam = teamFlag >= 0 ? args[teamFlag + 1] : undefined;
-const trigger = onlyTeam ? "manual_url" : "scheduled";
+const triggerFor = (t) => (onlyTeam ? (t.widget_code ? "manual_widget" : "manual_url") : "scheduled");
 
 const admin = createClient(url, key, { auth: { persistSession: false } });
 
@@ -70,16 +72,17 @@ async function recordFailure(t, status, sourceUrl, error) {
   if (dryRun) return;
   await admin.rpc("record_fixture_import_failure", {
     p_team_id: t.team_id,
-    p_trigger: trigger,
+    p_trigger: triggerFor(t),
     p_status: status,
     p_source_url: sourceUrl,
     p_error: error,
   });
 }
 
-async function importTarget(t) {
+function sourceFor(t) {
+  if (t.widget_code) return { url: widgetUrl(t.widget_code), parse: parseWidgetHtml };
   const ids = parseFullTimeUrl(t.source_url);
-  const pageUrl = buildFixturesUrl(
+  const url = buildFixturesUrl(
     {
       leagueId: t.league_id || ids.leagueId,
       seasonId: t.ft_season_id || ids.seasonId,
@@ -88,6 +91,11 @@ async function importTarget(t) {
     },
     { teamId: t.ft_team_id ?? undefined },
   );
+  return { url, parse: (html) => parseFixturesPage(html) };
+}
+
+async function importTarget(t) {
+  const { url: pageUrl, parse } = sourceFor(t);
   const res = await fetchFullTimePage(pageUrl);
   const cls = classifyResponse(res.status, res.html);
   if (cls !== "ok") {
@@ -95,8 +103,9 @@ async function importTarget(t) {
     await recordFailure(t, cls === "challenge" ? "challenge" : "error", pageUrl, msg);
     return { team: t.team_name, status: cls, error: msg };
   }
-  const parsed = parseFixturesPage(res.html);
-  const mine = fixturesForTeam(parsed, t.ft_team_name);
+  const parsed = parse(res.html);
+  const teamName = (t.widget_code && widgetTeamName(parsed.fixtures)) || t.ft_team_name;
+  const mine = fixturesForTeam(parsed, teamName);
   const payload = mine.map((f) => ({
     externalRef: f.externalRef,
     kickoffAt: f.kickoffAt,
@@ -115,7 +124,7 @@ async function importTarget(t) {
     p_team_id: t.team_id,
     p_season_id: t.season_id,
     p_fixtures: payload,
-    p_trigger: trigger,
+    p_trigger: triggerFor(t),
     p_source_url: pageUrl,
     p_warnings: parsed.warnings,
   });

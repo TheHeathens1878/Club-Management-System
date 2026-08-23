@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { parseWidgetDate, parseWidgetHtml, widgetCodeFrom, widgetHtmlFrom, widgetUrl } from "../src/widget.ts";
+import {
+  parseWidgetDate,
+  parseWidgetHtml,
+  widgetCodeFrom,
+  widgetHtmlFrom,
+  widgetTeamName,
+  widgetUrl,
+} from "../src/widget.ts";
 import { fixturesForTeam } from "../src/team.ts";
 import { fixture } from "./helpers.ts";
 
@@ -59,5 +66,36 @@ describe("parseWidgetHtml on a recorded team widget", () => {
     expect(mine.length).toBe(page.fixtures.length);
     expect(mine.some((f) => f.isHome)).toBe(true);
     expect(mine.some((f) => !f.isHome)).toBe(true);
+  });
+});
+
+describe("widget additions", () => {
+  it("undoes JavaScript string escapes in the envelope", () => {
+    const body =
+      "document.getElementById('lrep1').innerHTML = '<a href=\"https:\\/\\/x\">St Mary\\'s\\tFC<\\/a>\\n';";
+    expect(widgetHtmlFrom(body)).toBe('<a href="https://x">St Mary\'s\tFC</a>\n');
+  });
+
+  it("names the team the widget was generated for", () => {
+    const page = parseWidgetHtml(fixture("widget-team-728576966.html"));
+    expect(widgetTeamName(page.fixtures)).toBe("Ashton On Mersey FC U14 Mavericks");
+    expect(widgetTeamName([])).toBeUndefined();
+    // A division widget: nobody is in every row.
+    const [a, b] = page.fixtures;
+    expect(widgetTeamName([{ ...a!, homeTeam: "X", awayTeam: "Y" }, b!])).toBeUndefined();
+  });
+
+  it("reads a played result with scores", () => {
+    const html = `<table><tr><td colspan="7">Sun 06 Sept 2026 10:00</td></tr>
+<tr><td><a href="https://fulltime.thefa.com/displayFixture.html?id=1">L</a></td><td>Home FC</td><td>3</td><td>-</td><td>1</td><td>Away FC</td><td>PARK</td></tr>
+<tr><td colspan="7">Sun 13 Sept 2026 10:00</td></tr>
+<tr><td><a href="https://fulltime.thefa.com/displayFixture.html?id=2">L</a></td><td>Home FC</td><td></td><td>P</td><td></td><td>Away FC</td><td>PARK</td></tr>
+</table>`;
+    const page = parseWidgetHtml(html);
+    expect(page.warnings).toEqual([]);
+    expect(page.fixtures.map((f) => [f.externalRef, f.status, f.homeScore, f.awayScore])).toEqual([
+      ["1", "played", 3, 1],
+      ["2", "postponed", undefined, undefined],
+    ]);
   });
 });

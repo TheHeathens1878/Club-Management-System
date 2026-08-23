@@ -1,47 +1,64 @@
-# FA Full-Time fixtures import — running it from a club PC
+# FA Full-Time fixtures import
 
-`fulltime.thefa.com` sits behind Cloudflare, which serves cloud/datacenter IPs
-(Vercel, Supabase Edge Functions) a bot challenge instead of the page. From a
-normal home or office broadband connection the same page loads fine (verified
-2026-08-23: 202 KB fixtures page with rows vs a 3 KB challenge from the cloud).
+Fixtures and results come from each team's Full-Time **widget** — the
+"add to your website" snippet Full-Time generates for a team. The import runs
+nightly in the cloud; nothing needs to run on a club PC.
 
-So the scheduled `fulltime-import` Edge Function will mostly report
-"Cloudflare challenge" on prod, and the teams screen's preview says the same.
-That is expected. Two routes work:
+## Linking a team (once per season)
 
-## A. Run the importer from a club PC (recommended)
-
-Same code path as the Edge Function — same team links, same parser, same
-`import_fixtures()` rule, same failure log on the team page — just executed
-where Cloudflare lets it through.
-
-1. One-off setup on the PC: clone the repo, install Node 24, run `pnpm install`
-   (PowerShell: `$env:PATH = "$env:APPDATA\npm;$env:PATH"`), and make sure the
-   repo-root `.env` holds `NEXT_PUBLIC_SUPABASE_URL` and
-   `SUPABASE_SERVICE_ROLE_KEY` (git-ignored; the service key is a secret — this
-   PC must be one an administrator controls).
-2. Save each team's Full-Time link on the team page (Teams → team → Full-Time).
-   The preview will show the Cloudflare notice; the link still saves because
-   the league, season and division are read from the URL.
-3. Import:
+1. On fulltime.thefa.com open the team's league, pick the team, and choose
+   **Add to your website** (the *team fixtures* widget). Copy the snippet — it
+   looks like
+   ```html
+   <div id="lrep728576966" style="width: 350px;">Data loading....<a href="…">click here for U14 Division 2</a>…</div>
+   <script …>var lrcode = '728576966'</script>
+   <script … src="https://fulltime.thefa.com/client/api/cs1.js"></script>
    ```
-   cd C:\Projects\Club-Management-System\apps\web
-   node scripts\fulltime-local-import.mjs            # every enabled team link
-   node scripts\fulltime-local-import.mjs --team <team uuid>
-   node scripts\fulltime-local-import.mjs --dry-run  # fetch + parse only
-   ```
-   The result per team appears in the import log on the team page exactly as a
-   scheduled run would.
-4. Nightly: Windows Task Scheduler → Create Basic Task → Daily 06:00 → Start a
-   program: `node`, arguments `scripts\fulltime-local-import.mjs`, start in
-   `C:\Projects\Club-Management-System\apps\web`.
+2. In the app: Teams → the team → **FA Full-Time link**. Paste the snippet
+   (the whole thing, or just the number from `var lrcode`), click
+   **Test & preview**, check the fixtures and the team name it found, then
+   **Save link**. **Import now** fetches straight away; otherwise the nightly
+   run (03:15 UTC) picks it up.
+3. New season: generate the new snippet and paste it over the old one. The link
+   updates in place; fixtures already imported are kept (they are keyed by
+   Full-Time's own fixture id).
 
-## B. Manual import
+The widget carries fixtures *and* results, so scores arrive after matches the
+same way. Reschedules and postponements become updates of the same fixture,
+never duplicates. A Full-Time page address (league/division fixtures page)
+still works as a link but carries no results; the panel says so and asks for
+the snippet.
 
-Teams → team → Import fixtures → paste the fixtures (CSV/table copied from
-Full-Time). Good for a one-off; tedious for a season.
+## How the fetch works (and why)
 
-## Why not a proxy / scraping service?
+`fulltime.thefa.com` sits behind Cloudflare's bot wall, which fingerprints the
+TLS client rather than the IP. Verified 2026-08-23 from the Supabase project:
+Deno `fetch()` in an Edge Function gets HTTP 403 for every Full-Time URL,
+while **pg_net** (libcurl, inside Postgres) gets HTTP 200 for both the widget
+and the ordinary page — as long as the request carries a desktop browser
+`User-Agent` *and* `Accept-Language: en-GB,en;q=0.9`. Without
+`Accept-Language` it is 403 too.
 
-It would work, but it adds a paid third party and a secret for a page the club
-secretary's own laptop can fetch for free. Revisit if nobody can run route A.
+So the fetch is made by the database: `fulltime_http_get(url)` issues the
+request with those headers and returns a pg_net id; `fulltime_http_result(id)`
+hands the body back. The Edge Function (`fulltime-import`) and the team page's
+preview both go through those two functions (`fetchViaPgNet` in
+`packages/fulltime`). Only a club admin or the service role may call them, only
+`https://fulltime.thefa.com/` URLs are accepted, and only bodies fetched this
+way can be read back.
+
+## When it goes wrong
+
+- Team page → the link card shows the last import status and error; the
+  **Import log** below lists every run. A `challenge` status means Cloudflare
+  refused pg_net too — try **Import now** later, or use the fallback below.
+- `fixtures.import_failed` rows in `audit_log` are the admin alert.
+- Fallback A — run the importer from a home/office connection:
+  ```
+  cd C:\Projects\Club-Management-System\apps\web
+  node scripts\fulltime-local-import.mjs [--team <team uuid>] [--dry-run]
+  ```
+  (needs `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in the
+  repo-root `.env`; Node 24). Same targets, parser and `import_fixtures()` as
+  the cloud run, with a plain HTTP client.
+- Fallback B — Teams → team → **Manual import** → paste the fixtures as CSV.

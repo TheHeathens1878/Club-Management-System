@@ -1,8 +1,9 @@
 "use client";
 
 /**
- * The admin's Full-Time link panel: paste a URL, test-fetch it, confirm the
- * fixtures the parser read, then save.
+ * The admin's Full-Time link panel: paste the team's Full-Time widget snippet
+ * (or a page address), test-fetch it, confirm the fixtures the parser read,
+ * then save.
  *
  * No Full-Time knowledge lives in here — the URL goes to a server action and
  * what comes back is already parsed, classified and formatted. That keeps the
@@ -20,6 +21,7 @@ import {
   CheckCircle2,
   Link2Off,
   Loader2,
+  RefreshCw,
   ShieldAlert,
 } from "lucide-react";
 import {
@@ -29,11 +31,13 @@ import {
   setFullTimeLinkEnabled,
   type PreviewResult,
 } from "./fulltime-actions";
+import { triggerScheduledImport, type EdgeFunctionResult } from "./import-actions";
 
 export type FullTimeLinkView = {
   source_url: string;
-  league_id: string;
-  ft_season_id: string;
+  widget_code: string | null;
+  league_id: string | null;
+  ft_season_id: string | null;
   division_id: string | null;
   fixture_group_key: string | null;
   ft_team_id: string | null;
@@ -81,32 +85,39 @@ export function FullTimePanel({
   clubSeasons: ClubSeasonView[];
 }) {
   const router = useRouter();
-  const [url, setUrl] = useState(link?.source_url ?? "");
+  const [input, setInput] = useState(link?.widget_code ?? link?.source_url ?? "");
   const [ftTeamName, setFtTeamName] = useState(link?.ft_team_name ?? teamName);
   const [enabled, setEnabled] = useState(link?.enabled ?? true);
   const [preview, setPreview] = useState<PreviewResult | null>(null);
-  const [busy, setBusy] = useState<null | "preview" | "save" | "remove" | "toggle">(null);
+  const [busy, setBusy] = useState<null | "preview" | "save" | "remove" | "toggle" | "import">(null);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [importResult, setImportResult] = useState<EdgeFunctionResult | null>(null);
 
-  const canSave = preview?.ids !== undefined && preview.outcome !== "invalid_url";
+  const canSave =
+    preview !== null &&
+    preview.outcome !== "invalid_url" &&
+    (preview.source === "widget" || preview.ids !== undefined);
 
   async function runPreview() {
     setError(null);
     setSaved(false);
+    setImportResult(null);
     setBusy("preview");
-    const result = await previewFullTimeLink(teamId, url, ftTeamName);
+    const result = await previewFullTimeLink(teamId, input, ftTeamName);
     setBusy(null);
     setPreview(result);
+    // The widget proves the team's name; take it rather than make the admin type it.
+    if (result.source === "widget" && result.ftTeamName) setFtTeamName(result.ftTeamName);
   }
 
   async function runSave() {
-    if (!preview?.ids) return;
+    if (!canSave) return;
     setError(null);
     setBusy("save");
     const result = await saveFullTimeLink(teamId, {
-      url,
-      ids: preview.ids,
+      input,
+      ...(preview?.ids ? { ids: preview.ids } : {}),
       ftTeamName,
       enabled,
     });
@@ -116,6 +127,16 @@ export function FullTimePanel({
       return;
     }
     setSaved(true);
+    router.refresh();
+  }
+
+  async function runImportNow() {
+    setError(null);
+    setImportResult(null);
+    setBusy("import");
+    const result = await triggerScheduledImport(teamId);
+    setBusy(null);
+    setImportResult(result);
     router.refresh();
   }
 
@@ -168,31 +189,55 @@ export function FullTimePanel({
           </div>
           <p className="break-all font-mono text-[11px] text-muted-foreground">{link.source_url}</p>
           <dl className="grid gap-x-4 gap-y-1 text-xs sm:grid-cols-2">
-            <div>
-              <dt className="inline text-muted-foreground">League: </dt>
-              <dd className="inline font-mono">{link.league_id}</dd>
-            </div>
-            <div>
-              <dt className="inline text-muted-foreground">Full-Time season: </dt>
-              <dd className="inline font-mono">{link.ft_season_id}</dd>
-            </div>
-            <div>
-              <dt className="inline text-muted-foreground">Division: </dt>
-              <dd className="inline font-mono">{link.division_id ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="inline text-muted-foreground">Fixture group: </dt>
-              <dd className="inline font-mono">{link.fixture_group_key ?? "—"}</dd>
-            </div>
-            <div>
-              <dt className="inline text-muted-foreground">Full-Time team id: </dt>
-              <dd className="inline font-mono">{link.ft_team_id ?? "—"}</dd>
-            </div>
+            {link.widget_code ? (
+              <>
+                <div>
+                  <dt className="inline text-muted-foreground">Widget code: </dt>
+                  <dd className="inline font-mono">{link.widget_code}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-muted-foreground">Division: </dt>
+                  <dd className="inline font-mono">{link.division_id ?? "—"}</dd>
+                </div>
+              </>
+            ) : (
+              <>
+                <div>
+                  <dt className="inline text-muted-foreground">League: </dt>
+                  <dd className="inline font-mono">{link.league_id ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-muted-foreground">Full-Time season: </dt>
+                  <dd className="inline font-mono">{link.ft_season_id ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-muted-foreground">Division: </dt>
+                  <dd className="inline font-mono">{link.division_id ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-muted-foreground">Fixture group: </dt>
+                  <dd className="inline font-mono">{link.fixture_group_key ?? "—"}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-muted-foreground">Full-Time team id: </dt>
+                  <dd className="inline font-mono">{link.ft_team_id ?? "—"}</dd>
+                </div>
+              </>
+            )}
             <div>
               <dt className="inline text-muted-foreground">Full-Time team name: </dt>
               <dd className="inline">{link.ft_team_name ?? teamName}</dd>
             </div>
           </dl>
+          {!link.widget_code && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-700">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <span>
+                This link uses a Full-Time page address. Paste the team&apos;s widget snippet below to switch
+                to the widget feed, which also carries results.
+              </span>
+            </p>
+          )}
           {link.last_error && (
             <p className="flex items-start gap-1.5 text-xs text-destructive">
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -200,6 +245,14 @@ export function FullTimePanel({
             </p>
           )}
           <div className="flex flex-wrap gap-2 pt-1">
+            <Button size="sm" onClick={runImportNow} disabled={busy !== null}>
+              {busy === "import" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Import now
+            </Button>
             <Button size="sm" variant="outline" onClick={runToggle} disabled={busy !== null}>
               {busy === "toggle" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               {enabled ? "Pause importing" : "Resume importing"}
@@ -219,10 +272,30 @@ export function FullTimePanel({
               Remove link
             </Button>
           </div>
+          {importResult && (
+            <div
+              className={
+                "rounded-md border px-3 py-2 text-xs " +
+                (importResult.ok
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                  : "border-destructive/40 bg-destructive/5 text-destructive")
+              }
+            >
+              <p className="font-medium">
+                {importResult.ok ? "Import ran." : importResult.message ?? "Import failed."}
+                {importResult.status ? ` HTTP ${importResult.status}` : ""}
+              </p>
+              {importResult.body && (
+                <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-[11px]">
+                  {importResult.body}
+                </pre>
+              )}
+            </div>
+          )}
         </div>
       ) : (
         <p className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
-          This team is not linked to Full-Time yet. Paste the league, division or team page address below and
+          This team is not linked to Full-Time yet. Paste the team&apos;s Full-Time widget snippet below and
           run a preview.
         </p>
       )}
@@ -232,19 +305,22 @@ export function FullTimePanel({
       {/* ------------------------------------------------------------------ */}
       <div className="space-y-3">
         <div className="space-y-1.5">
-          <Label htmlFor="ft-url">Full-Time URL</Label>
+          <Label htmlFor="ft-input">Full-Time widget snippet</Label>
           <textarea
-            id="ft-url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            rows={3}
+            id="ft-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            rows={4}
             spellCheck={false}
-            placeholder="https://fulltime.thefa.com/fixtures.html?league=…&selectedSeason=…&selectedDivision=…"
+            placeholder={'<div id="lrep728576966">…</div>\n<script>var lrcode = \'728576966\'</script>\n<script src="https://fulltime.thefa.com/client/api/cs1.js"></script>'}
             className="w-full break-all rounded-md border border-input bg-card px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
           <p className="text-xs text-muted-foreground">
-            Open the team&apos;s league, division or team page on fulltime.thefa.com and copy the address from
-            the browser. Any Full-Time address with a league in it will do.
+            On fulltime.thefa.com open the team&apos;s league, pick the team and choose{" "}
+            <span className="font-medium">Add to your website</span> (the &ldquo;team fixtures&rdquo; widget).
+            Paste the whole snippet, or just the number from <span className="font-mono">var lrcode</span>.
+            The widget carries the team&apos;s fixtures and results for the season. A Full-Time page address
+            still works as a fallback.
           </p>
         </div>
 
@@ -257,8 +333,8 @@ export function FullTimePanel({
             placeholder={teamName}
           />
           <p className="text-xs text-muted-foreground">
-            Must match Full-Time exactly — &ldquo;Angel FC&rdquo; and &ldquo;Angel F.C.&rdquo; are different
-            names. The preview lists every name it saw.
+            Read from the widget automatically when you preview. Only needed by hand for a page address,
+            where it must match Full-Time exactly — the preview lists every name it saw.
           </p>
         </div>
 
@@ -269,11 +345,11 @@ export function FullTimePanel({
             onChange={(e) => setEnabled(e.target.checked)}
             className="h-4 w-4 rounded border-input"
           />
-          Import fixtures for this team automatically
+          Import fixtures and results for this team automatically (nightly)
         </label>
 
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="outline" onClick={runPreview} disabled={busy !== null || !url.trim()}>
+          <Button size="sm" variant="outline" onClick={runPreview} disabled={busy !== null || !input.trim()}>
             {busy === "preview" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
             Test &amp; preview
           </Button>
@@ -293,7 +369,8 @@ export function FullTimePanel({
         )}
         {saved && (
           <p className="flex items-center gap-1.5 text-sm text-emerald-700">
-            <CheckCircle2 className="h-4 w-4" /> Full-Time link saved.
+            <CheckCircle2 className="h-4 w-4" /> Full-Time link saved. Use <span className="font-medium">Import now</span>{" "}
+            above to fetch the fixtures straight away, or leave it to the nightly import.
           </p>
         )}
       </div>
@@ -334,7 +411,7 @@ function PreviewBlock({
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             {preview.message}
-            {preview.ids?.seasonId ? " The season and division were read from the URL, so you can save the link now." : ""}
+            {preview.source === "widget" || preview.ids?.seasonId ? " The link can still be saved." : ""}
           </span>
         </p>
       )}
@@ -357,6 +434,17 @@ function PreviewBlock({
         <p className="break-all font-mono text-[11px] text-muted-foreground">
           Fetched {preview.fetchedUrl}
           {preview.httpStatus ? ` · HTTP ${preview.httpStatus}` : ""}
+        </p>
+      )}
+
+      {preview.source === "widget" && preview.widgetCode && (
+        <p className="text-xs text-muted-foreground">
+          Widget code <span className="font-mono">{preview.widgetCode}</span>
+          {preview.ftTeamName ? (
+            <>
+              {" "}· team on Full-Time: <span className="font-medium">{preview.ftTeamName}</span>
+            </>
+          ) : null}
         </p>
       )}
 
@@ -404,7 +492,8 @@ function PreviewBlock({
                   <th className="py-1.5 pr-3 font-medium">Time</th>
                   <th className="py-1.5 pr-3 font-medium">H/A</th>
                   <th className="py-1.5 pr-3 font-medium">Opponent</th>
-                  <th className="py-1.5 pr-3 font-medium">Competition</th>
+                  <th className="py-1.5 pr-3 font-medium">Venue</th>
+                  <th className="py-1.5 pr-3 font-medium">Score</th>
                   <th className="py-1.5 font-medium">Status</th>
                 </tr>
               </thead>
@@ -415,7 +504,8 @@ function PreviewBlock({
                     <td className="whitespace-nowrap py-1.5 pr-3">{row.timeLabel}</td>
                     <td className="py-1.5 pr-3">{row.isHome ? "Home" : "Away"}</td>
                     <td className="py-1.5 pr-3">{row.opponent}</td>
-                    <td className="py-1.5 pr-3">{row.competition}</td>
+                    <td className="py-1.5 pr-3">{row.venue || "—"}</td>
+                    <td className="whitespace-nowrap py-1.5 pr-3">{row.score || "—"}</td>
                     <td className="py-1.5 capitalize">{row.status}</td>
                   </tr>
                 ))}

@@ -1,34 +1,44 @@
 "use server";
 
 /**
- * The team ↔ FA Full-Time link (PLAN.md P2.3).
+ * The team ↔ FA Full-Time link (PLAN.md P2.3; widget import 2026-08-24).
  *
  * Everything Full-Time-shaped lives in `@club/fulltime` and everything in this
- * file runs on the server: the parser, the fetcher and the club's Full-Time
- * identifiers must never reach the browser bundle, both because the fetch is
- * cross-origin and because a Cloudflare challenge has to be recognised and
- * reported rather than parsed as an empty fixture list.
+ * file runs on the server: the parser and the club's Full-Time identifiers
+ * never reach the browser bundle.
  *
- * The flow the plan asks for is paste → parse → test-fetch → preview → save:
- * `previewFullTimeLink` does the first four and returns something a human can
- * confirm, `saveFullTimeLink` writes the row. Re-linking is an upsert on the
- * primary key, so a new season or a league change updates the link and leaves
- * the team's `fixtures` (keyed by `external_ref`) untouched.
+ * What the admin pastes is the team's Full-Time **widget snippet** (the
+ * "add to your website" code, whose `lrcode` names the team's fixtures-and-
+ * results feed), a bare code, or the widget URL. A league/division page URL
+ * is still accepted as the older, weaker form of link. Either way the fetch
+ * is made by Postgres through pg_net — Cloudflare refuses this server's own
+ * HTTP client — via `fetchViaPgNet`.
+ *
+ * The flow is paste → parse → test-fetch → preview → save: `previewFullTimeLink`
+ * does the first four and returns something a human can confirm,
+ * `saveFullTimeLink` writes the row. Re-linking is an upsert on the primary
+ * key, so a new season or a league change updates the link and leaves the
+ * team's `fixtures` (keyed by `external_ref`) untouched.
  */
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   buildFixturesUrl,
-  classifyResponse,
-  fetchFullTimePage,
+  fetchViaPgNet,
   fixturesForTeam,
   FullTimeUrlError,
   parseFixturesPage,
   parseFullTimeUrl,
+  parseWidgetHtml,
   RateLimiter,
   teamNamesIn,
+  widgetCodeFrom,
+  widgetTeamName,
+  widgetUrl,
   type FullTimeIds,
+  type FullTimeResponse,
+  type ParsedPage,
 } from "@club/fulltime";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
@@ -45,7 +55,7 @@ const PREVIEW_LIMIT = 30;
 const limiter = new RateLimiter();
 
 const CHALLENGE_MESSAGE =
-  "Full-Time blocks requests from cloud servers (Cloudflare), so the preview could not load here. The link itself is fine — save it, then import fixtures from a club PC with the Full-Time runner (docs/runbooks/fulltime-import.md) or paste the fixtures into the manual import.";
+  "Full-Time answered with a Cloudflare challenge instead of the fixtures. Save the link anyway and try again later (the nightly import keeps trying), or paste the fixtures into the manual import.";
 
 export type PreviewRow = {
   externalRef: string;
@@ -56,6 +66,9 @@ export type PreviewRow = {
   opponent: string;
   competition: string;
   status: string;
+  /** `3–1` once played, otherwise empty. */
+  score: string;
+  venue: string;
 };
 
 export type PreviewSeason = { id: string; name: string; selected: boolean };
@@ -66,9 +79,13 @@ export type PreviewResult = {
   outcome: PreviewOutcome;
   /** Always safe to show to the admin; empty when there is nothing to add. */
   message: string;
-  /** Present whenever the URL parsed, even if the fetch was blocked. */
+  /** `widget` when the paste carried an lrcode; `page` for a Full-Time page URL. */
+  source?: "widget" | "page";
+  /** The widget code, when `source` is `widget`. */
+  widgetCode?: string;
+  /** Present whenever a page URL parsed, even if the fetch was blocked. */
   ids?: FullTimeIds;
-  /** The canonical fixtures URL that was requested. */
+  /** The URL that was requested. */
   fetchedUrl?: string;
   httpStatus?: number;
   /** The name the fixtures were matched against. */
@@ -85,8 +102,10 @@ export type PreviewResult = {
 };
 
 export type SaveFullTimeLinkInput = {
-  url: string;
-  ids: FullTimeIds;
+  /** What the admin pasted: widget snippet, code, widget URL or page URL. */
+  input: string;
+  /** Page-URL links only: identifiers the preview resolved. */
+  ids?: FullTimeIds;
   ftTeamName: string;
   enabled: boolean;
 };
@@ -103,9 +122,9 @@ function revalidateTeam(teamId: string) {
 }
 
 /**
- * The identifiers a link row needs, taken from the pasted URL and topped up
- * from whatever the preview resolved (Full-Time omits `selectedSeason` from
- * plenty of perfectly good links, but the column is NOT NULL).
+ * The identifiers a page-URL link needs, taken from the pasted URL and topped
+ * up from whatever the preview resolved (Full-Time omits `selectedSeason` from
+ * plenty of perfectly good links).
  */
 function mergeIds(fromUrl: FullTimeIds, fromPreview: FullTimeIds | undefined): FullTimeIds {
   if (!fromPreview) return fromUrl;
@@ -121,79 +140,41 @@ function mergeIds(fromUrl: FullTimeIds, fromPreview: FullTimeIds | undefined): F
   return merged;
 }
 
-/**
- * Parse a pasted Full-Time URL, fetch the fixtures page it points at, and
- * return what one team's fixtures would look like.
- *
- * Never throws for anything the admin can fix: a bad URL, a Cloudflare
- * challenge and a 404 are all outcomes, not exceptions.
- */
-export async function previewFullTimeLink(
-  teamId: string,
-  url: string,
-  ftTeamNameOverride?: string,
-): Promise<PreviewResult> {
-  await requireCommittee();
-  const admin = createAdminClient();
+/** The `divisionseason` the snippet's "click here for …" link points at, if any. */
+function divisionFromSnippet(input: string): string | undefined {
+  return /divisionseason=(\d+)/i.exec(input)?.[1];
+}
 
-  const { data: team } = await admin.from("teams").select("id,name").eq("id", teamId).maybeSingle();
-  if (!team) return { outcome: "error", message: "That team no longer exists." };
-
-  let ids: FullTimeIds;
-  try {
-    ids = parseFullTimeUrl(url);
-  } catch (cause) {
-    return {
-      outcome: "invalid_url",
-      message:
-        cause instanceof FullTimeUrlError
-          ? cause.message
-          : "That does not look like a Full-Time URL.",
-    };
+/** A fetch outcome the admin can act on, or `undefined` when the body is usable. */
+function failedPreview(
+  response: FullTimeResponse,
+  extra: Partial<PreviewResult>,
+): PreviewResult | undefined {
+  const base = { ...extra, fetchedUrl: response.url, httpStatus: response.status };
+  switch (response.classification) {
+    case "ok":
+      return undefined;
+    case "challenge":
+      return { outcome: "challenge", message: CHALLENGE_MESSAGE, ...base };
+    case "not_found":
+      return {
+        outcome: "not_found",
+        message: `Full-Time returned HTTP ${response.status} for that address — check it and try again.`,
+        ...base,
+      };
+    default:
+      return {
+        outcome: "error",
+        message: response.error
+          ? `Could not reach Full-Time: ${response.error}`
+          : `Full-Time returned HTTP ${response.status}.`,
+        ...base,
+      };
   }
+}
 
-  if (!ids.leagueId) {
-    return {
-      outcome: "invalid_url",
-      message:
-        "That Full-Time link has a team but no league in it — open the league or division fixtures page and copy that address instead.",
-      ids,
-    };
-  }
-
-  const fetchedUrl = buildFixturesUrl(ids);
-  await limiter.wait();
-  const response = await fetchFullTimePage(fetchedUrl);
-  const outcome = classifyResponse(response.status, response.html);
-
-  if (outcome === "challenge") {
-    return { outcome, message: CHALLENGE_MESSAGE, ids, fetchedUrl, httpStatus: response.status };
-  }
-  if (outcome === "not_found") {
-    return {
-      outcome,
-      message: `Full-Time returned HTTP ${response.status} for that page — check the league, season and division in the URL.`,
-      ids,
-      fetchedUrl,
-      httpStatus: response.status,
-    };
-  }
-  if (outcome === "error") {
-    return {
-      outcome,
-      message: response.error
-        ? `Could not reach Full-Time: ${response.error}`
-        : `Full-Time returned HTTP ${response.status}.`,
-      ids,
-      fetchedUrl,
-      httpStatus: response.status,
-    };
-  }
-
-  const parsed = parseFixturesPage(response.html);
-  const ftTeamName = (ftTeamNameOverride ?? "").trim() || team.name;
+function previewRows(parsed: ParsedPage, ftTeamName: string): Pick<PreviewResult, "rows" | "matchedCount"> {
   const matched = fixturesForTeam(parsed, ftTeamName);
-
   const rows: PreviewRow[] = matched.slice(0, PREVIEW_LIMIT).map((fixture) => ({
     externalRef: fixture.externalRef,
     dateLabel: formatBookingDateShort(fixture.date),
@@ -202,7 +183,98 @@ export async function previewFullTimeLink(
     opponent: fixture.opponent,
     competition: fixture.competition ?? "—",
     status: fixture.status,
+    score:
+      fixture.homeScore !== undefined && fixture.awayScore !== undefined
+        ? `${fixture.homeScore}–${fixture.awayScore}`
+        : "",
+    venue: fixture.venue ?? "",
   }));
+  return { rows, matchedCount: matched.length };
+}
+
+/**
+ * Read what the admin pasted, fetch the feed it names, and return what one
+ * team's fixtures would look like.
+ *
+ * Never throws for anything the admin can fix: a bad paste, a Cloudflare
+ * challenge and a 404 are all outcomes, not exceptions.
+ */
+export async function previewFullTimeLink(
+  teamId: string,
+  input: string,
+  ftTeamNameOverride?: string,
+): Promise<PreviewResult> {
+  await requireCommittee();
+  const admin = createAdminClient();
+
+  const { data: team } = await admin.from("teams").select("id,name").eq("id", teamId).maybeSingle();
+  if (!team) return { outcome: "error", message: "That team no longer exists." };
+
+  // --- Widget: the import source --------------------------------------------
+  const widgetCode = widgetCodeFrom(input);
+  if (widgetCode) {
+    const fetchedUrl = widgetUrl(widgetCode);
+    await limiter.wait();
+    const response = await fetchViaPgNet(admin, fetchedUrl);
+    const failed = failedPreview(response, { source: "widget", widgetCode });
+    if (failed) return failed;
+
+    const parsed = parseWidgetHtml(response.html);
+    const detected = widgetTeamName(parsed.fixtures);
+    const ftTeamName = detected ?? ((ftTeamNameOverride ?? "").trim() || team.name);
+    const { rows, matchedCount } = previewRows(parsed, ftTeamName);
+    return {
+      outcome: "ok",
+      message:
+        parsed.fixtures.length === 0
+          ? "The widget returned no fixtures — Full-Time may not have published this season's yet. The link can still be saved; the nightly import will pick them up when they appear."
+          : matchedCount === 0
+            ? "No fixtures in the widget involve this team — check the team name matches Full-Time's."
+            : "",
+      source: "widget",
+      widgetCode,
+      fetchedUrl,
+      httpStatus: response.status,
+      ftTeamName,
+      rows,
+      matchedCount,
+      teamNames: detected ? [] : teamNamesIn(parsed.fixtures),
+      warnings: parsed.warnings.slice(0, 10),
+    };
+  }
+
+  // --- Page URL: the older form of link -------------------------------------
+  let ids: FullTimeIds;
+  try {
+    ids = parseFullTimeUrl(input);
+  } catch (cause) {
+    return {
+      outcome: "invalid_url",
+      message:
+        cause instanceof FullTimeUrlError
+          ? `${cause.message} Paste the team's Full-Time widget snippet (Full-Time → the team → "Add to your website") or a Full-Time page address.`
+          : "That does not look like a Full-Time widget snippet or address.",
+    };
+  }
+
+  if (!ids.leagueId) {
+    return {
+      outcome: "invalid_url",
+      message:
+        "That Full-Time link has a team but no league in it — paste the team's widget snippet instead, or the league/division fixtures page address.",
+      ids,
+    };
+  }
+
+  const fetchedUrl = buildFixturesUrl(ids);
+  await limiter.wait();
+  const response = await fetchViaPgNet(admin, fetchedUrl);
+  const failed = failedPreview(response, { source: "page", ids });
+  if (failed) return failed;
+
+  const parsed = parseFixturesPage(response.html);
+  const ftTeamName = (ftTeamNameOverride ?? "").trim() || team.name;
+  const { rows, matchedCount } = previewRows(parsed, ftTeamName);
 
   // The page's own season options, so the admin can see which `selectedSeason`
   // the link will store and whether it is the one they meant.
@@ -218,15 +290,16 @@ export async function previewFullTimeLink(
   return {
     outcome: "ok",
     message:
-      matched.length === 0
+      matchedCount === 0
         ? "No fixtures found for this team — check the team name matches Full-Time's."
         : "",
+    source: "page",
     ids: resolvedIds,
     fetchedUrl,
     httpStatus: response.status,
     ftTeamName,
     rows,
-    matchedCount: matched.length,
+    matchedCount,
     seasons,
     teamNames: teamNamesIn(parsed.fixtures),
     warnings: parsed.warnings.slice(0, 10),
@@ -245,46 +318,56 @@ export async function saveFullTimeLink(
   input: SaveFullTimeLinkInput,
 ): Promise<{ error?: string }> {
   const session = await requireCommittee();
-
-  // The URL is re-parsed server side; the identifiers the browser sent back
-  // are only allowed to fill in blanks the URL itself did not carry.
-  let fromUrl: FullTimeIds;
-  try {
-    fromUrl = parseFullTimeUrl(input.url);
-  } catch (cause) {
-    return {
-      error:
-        cause instanceof FullTimeUrlError
-          ? cause.message
-          : "That does not look like a Full-Time URL.",
-    };
-  }
-
-  const ids = mergeIds(fromUrl, input.ids);
-  if (!ids.leagueId) {
-    return {
-      error:
-        "That Full-Time link has no league in it — open the league or division fixtures page and copy that address instead.",
-    };
-  }
-  if (!ids.seasonId) {
-    return {
-      error:
-        "That Full-Time link has no season in it — open the division's fixtures page for the season you want and copy that address, or run a preview first so the season can be read off the page.",
-    };
-  }
-
-  // Store the canonical fixtures URL: the database requires an
-  // `https://fulltime.thefa.com/…` value, and a pasted link may be missing a
-  // scheme, carry `www.`, or point at a results/table page.
-  const sourceUrl = buildFixturesUrl(ids);
+  const admin = createAdminClient();
   const ftTeamName = input.ftTeamName.trim() || null;
 
-  const admin = createAdminClient();
-  const { error } = await admin.from("team_fulltime_links").upsert(
-    {
+  // The paste is re-read server side; nothing the browser sent back is trusted
+  // beyond filling in blanks a page URL did not carry.
+  const widgetCode = widgetCodeFrom(input.input);
+  let row;
+  if (widgetCode) {
+    row = {
       team_id: teamId,
-      source_url: sourceUrl,
+      source_url: widgetUrl(widgetCode),
+      widget_code: widgetCode,
+      league_id: null,
+      ft_season_id: null,
+      division_id: divisionFromSnippet(input.input) ?? null,
+      fixture_group_key: null,
+      ft_team_id: null,
+      ft_team_name: ftTeamName,
+      enabled: input.enabled,
+      updated_by: session.userId,
+    };
+  } else {
+    let fromUrl: FullTimeIds;
+    try {
+      fromUrl = parseFullTimeUrl(input.input);
+    } catch (cause) {
+      return {
+        error:
+          cause instanceof FullTimeUrlError
+            ? cause.message
+            : "That does not look like a Full-Time widget snippet or address.",
+      };
+    }
+    const ids = mergeIds(fromUrl, input.ids);
+    if (!ids.leagueId) {
+      return {
+        error:
+          "That Full-Time link has no league in it — paste the team's widget snippet, or the league/division fixtures page address.",
+      };
+    }
+    if (!ids.seasonId) {
+      return {
+        error:
+          "That Full-Time link has no season in it — open the division's fixtures page for the season you want and copy that address, or run a preview first so the season can be read off the page.",
+      };
+    }
+    row = {
+      team_id: teamId,
+      source_url: buildFixturesUrl(ids),
+      widget_code: null,
       league_id: ids.leagueId,
       ft_season_id: ids.seasonId,
       division_id: ids.divisionId ?? null,
@@ -293,9 +376,10 @@ export async function saveFullTimeLink(
       ft_team_name: ftTeamName,
       enabled: input.enabled,
       updated_by: session.userId,
-    },
-    { onConflict: "team_id" },
-  );
+    };
+  }
+
+  const { error } = await admin.from("team_fulltime_links").upsert(row, { onConflict: "team_id" });
   if (error) return { error: `Could not save the Full-Time link: ${error.message}` };
 
   await writeAudit({
@@ -305,10 +389,11 @@ export async function saveFullTimeLink(
     entity: "team_fulltime_link",
     entityId: teamId,
     detail: {
-      source_url: sourceUrl,
-      league_id: ids.leagueId,
-      ft_season_id: ids.seasonId,
-      division_id: ids.divisionId ?? null,
+      source_url: row.source_url,
+      widget_code: row.widget_code,
+      league_id: row.league_id,
+      ft_season_id: row.ft_season_id,
+      division_id: row.division_id,
       ft_team_name: ftTeamName,
       enabled: input.enabled,
     },
