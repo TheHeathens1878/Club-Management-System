@@ -399,6 +399,7 @@ export default async function TeamPage({
   let fixturesFailed = false;
   let clubSeasons: ClubSeasonView[] = [];
   let currentSeason: ClubSeasonView | null = null;
+  let defaultFtName = "";
   let runs: ImportRunView[] = [];
 
   if (tab === "fixtures") {
@@ -426,6 +427,7 @@ export default async function TeamPage({
       admin.from("site_settings").select("value").eq("key", "fulltime_club_name").maybeSingle(),
     ]);
 
+    defaultFtName = `${(clubNameResult.data?.value ?? "").trim() || "Ashton On Mersey FC"} ${team.name}`;
     fixturesFailed = !!fixturesResult.error;
     fixtures = (fixturesResult.data ?? []).map((row) => ({
       id: row.id,
@@ -690,7 +692,7 @@ export default async function TeamPage({
                     <FullTimePanel
                       teamId={team.id}
                       teamName={team.name}
-                      defaultFtName={}
+                      defaultFtName={defaultFtName}
                       link={link}
                       clubSeasons={clubSeasons}
                     />
