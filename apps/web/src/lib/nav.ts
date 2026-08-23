@@ -1,19 +1,24 @@
 /**
- * The nav, expressed as one table (gap 4).
+ * The nav, expressed as one table.
  *
  * Two independent gates decide whether a link is rendered:
  *
  *   1. `allowed(capabilities)` — what this person may actually reach. It
  *      mirrors the guard the destination page already applies, so the nav can
- *      never offer a page that would bounce them straight back out. This gate
- *      is absolute: no chosen view can turn it on.
- *   2. `views` — which of the four role views the item belongs to. This is
- *      presentation only. A club administrator looking at the Player view sees
- *      a player's nav; nothing has been taken away from them.
+ *      never offer a page that would bounce them straight back out.
+ *   2. `views` — which of the five role views the item belongs to. This is a
+ *      HARD scope, not a preference: `navFor` shows the chosen view's items and
+ *      nothing else. There is no unioning of two views, and a person wearing
+ *      three hats switches between three separate menus rather than seeing one
+ *      long one. Both gates must pass.
+ *
+ * "Notifications" is not in this table: the bell in `HeaderTools` is the
+ * notifications entry, and it is rendered in every view because it carries the
+ * unread count. Treat it as a row of this table that the layout happens to
+ * draw itself.
  *
  * Room and pitch are deliberately kept apart: "Room bookings" is the function
- * room diary and "Pitches" is the pitch allocation screen. They were adjacent
- * and unlabelled before, which is what the club owner was tripping over.
+ * room diary and "Pitches" is the pitch allocation screen.
  */
 
 import {
@@ -22,6 +27,7 @@ import {
   CalendarCheck,
   CalendarDays,
   CalendarPlus,
+  DoorOpen,
   Inbox,
   ClipboardCheck,
   ClipboardList,
@@ -36,6 +42,7 @@ import {
   Settings2,
   ShieldAlert,
   ShieldCheck,
+  Shirt,
   UserCheck,
   UserCircle,
   Users,
@@ -45,7 +52,16 @@ import {
 
 import type { Capabilities, RoleView } from "@/lib/role-view";
 
-const ALL_VIEWS = ["player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
+const ALL_VIEWS = [
+  "player",
+  "parent",
+  "coach",
+  "admin",
+  "function_room",
+] as const satisfies readonly RoleView[];
+
+/** The four views that belong to the football club rather than the room. */
+const CLUB_VIEWS = ["player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
 
 export type NavEntry = {
   href: string;
@@ -55,13 +71,73 @@ export type NavEntry = {
   group: string;
   /** Absolute capability gate — mirrors the destination page's own guard. */
   allowed: (c: Capabilities) => boolean;
-  /** Which role views show it. */
+  /** Which role views show it. Nothing leaks across this line. */
   views: readonly RoleView[];
   /** Rendered indented, as a shortcut belonging to the entry above. */
   child?: boolean;
 };
 
 export const NAV: readonly NavEntry[] = [
+  // --- The club ------------------------------------------------------------
+  {
+    // A player's own screen: their teams, and when those teams are next out.
+    href: "/my-teams",
+    label: "My teams",
+    icon: Shirt,
+    group: "Club",
+    allowed: (c) => c.hasPlayerMembership,
+    views: ["player"],
+  },
+  {
+    // The guardian's own screen — their children and those children's teams.
+    href: "/family",
+    label: "Children",
+    icon: Baby,
+    group: "Club",
+    allowed: (c) => c.isGuardian || c.hasParentRole,
+    views: ["parent"],
+  },
+  {
+    href: "/teams",
+    label: "Teams",
+    icon: Users,
+    group: "Club",
+    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/people",
+    label: "People",
+    icon: Contact,
+    group: "Club",
+    allowed: (c) => c.isCommittee,
+    views: ["admin"],
+  },
+  {
+    href: "/waiting-list/manage",
+    label: "Waiting list",
+    icon: ClipboardList,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin || c.hasWaitingListAccess,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/approvals",
+    label: "Approvals",
+    icon: UserCheck,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+  },
+  {
+    href: "/registrations",
+    label: "Registrations",
+    icon: ClipboardCheck,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+  },
+
   // --- Function room -------------------------------------------------------
   {
     href: "/room-bookings",
@@ -69,7 +145,7 @@ export const NAV: readonly NavEntry[] = [
     icon: CalendarDays,
     group: "Function room",
     allowed: (c) => c.isStaff,
-    views: ["admin"],
+    views: ["admin", "function_room"],
   },
   {
     href: "/room-bookings?status=pending&view=list",
@@ -77,8 +153,17 @@ export const NAV: readonly NavEntry[] = [
     icon: Clock,
     group: "Function room",
     allowed: (c) => c.isStaff,
-    views: ["admin"],
+    views: ["admin", "function_room"],
     child: true,
+  },
+  {
+    // The rooms themselves, not the diary. The page's own guard is committee.
+    href: "/room-bookings/rooms",
+    label: "Rooms",
+    icon: DoorOpen,
+    group: "Function room",
+    allowed: (c) => c.isCommittee,
+    views: ["admin", "function_room"],
   },
   {
     href: "/bar",
@@ -86,7 +171,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Beer,
     group: "Function room",
     allowed: (c) => c.isBarManager,
-    views: ["admin"],
+    views: ["admin", "function_room"],
   },
 
   // --- Pitches (a different diary entirely from the function room) ---------
@@ -95,8 +180,9 @@ export const NAV: readonly NavEntry[] = [
     label: "Pitch calendar",
     icon: CalendarDays,
     group: "Pitches",
-    allowed: (c) => c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
-    views: ["player", "parent", "coach", "admin"],
+    allowed: (c) =>
+      c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
+    views: CLUB_VIEWS,
   },
   {
     href: "/pitches/book",
@@ -128,69 +214,14 @@ export const NAV: readonly NavEntry[] = [
     icon: LandPlot,
     group: "Pitches",
     allowed: (c) => c.isCommittee,
-    views: ["coach", "admin"],
+    views: ["admin"],
   },
   {
-    // Gap 7: the pitches themselves, not the diary. `resources_admin_*` all
-    // ask `is_club_admin()`, and the page's guard mirrors /people's.
     href: "/pitches/manage",
     label: "Manage pitches",
     icon: Settings2,
     group: "Pitches",
     allowed: (c) => c.isClubAdmin || c.isCommittee,
-    views: ["admin"],
-  },
-
-  // --- The club ------------------------------------------------------------
-  {
-    href: "/teams",
-    label: "Teams",
-    icon: Users,
-    group: "Club",
-    allowed: (c) => c.isCommittee,
-    views: ALL_VIEWS,
-  },
-  {
-    href: "/people",
-    label: "People",
-    icon: Contact,
-    group: "Club",
-    allowed: (c) => c.isCommittee,
-    views: ["admin"],
-  },
-  {
-    // Gap 9: the guardian's own screen — their children, the teams those
-    // children are in, and registering them for one.
-    href: "/family",
-    label: "Children",
-    icon: Baby,
-    group: "Club",
-    allowed: (c) => c.isGuardian,
-    views: ["parent"],
-  },
-  {
-    href: "/waiting-list/manage",
-    label: "Waiting list",
-    icon: ClipboardList,
-    group: "Club",
-    allowed: (c) => c.isClubAdmin || c.hasWaitingListAccess,
-    views: ["coach", "admin"],
-  },
-  {
-    href: "/approvals",
-    label: "Approvals",
-    icon: UserCheck,
-    group: "Club",
-    allowed: (c) => c.isClubAdmin,
-    views: ["admin"],
-  },
-  {
-    // Gap 9: the other side of /family — the registrations parents send in.
-    href: "/registrations",
-    label: "Registrations",
-    icon: ClipboardCheck,
-    group: "Club",
-    allowed: (c) => c.isClubAdmin,
     views: ["admin"],
   },
 
@@ -219,7 +250,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Wallet,
     group: "Subs",
     allowed: () => true,
-    views: ALL_VIEWS,
+    views: CLUB_VIEWS,
   },
 
   // --- Safeguarding --------------------------------------------------------
@@ -229,10 +260,13 @@ export const NAV: readonly NavEntry[] = [
     icon: ShieldAlert,
     group: "Safeguarding",
     allowed: (c) => c.isSafeguardingLead || c.isCommittee,
-    views: ["coach", "admin"],
+    views: ["admin"],
   },
   {
-    // SG-3: reporting a concern is open to everyone, in every view.
+    // SG-3: reporting a concern is open to everyone, so it stays in every
+    // view. It is not another role's screen — it is the one route a player, a
+    // parent or a coach has to raise something, and a menu that hides it is a
+    // menu that loses the report.
     href: "/safeguarding/report",
     label: "Report a concern",
     icon: ShieldAlert,
@@ -248,7 +282,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Images,
     group: "Media",
     allowed: () => true,
-    views: ALL_VIEWS,
+    views: ["admin"],
   },
 
   // --- Settings ------------------------------------------------------------
@@ -258,7 +292,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Settings,
     group: "Settings",
     allowed: (c) => c.isSuperUser,
-    views: ["admin"],
+    views: ["admin", "function_room"],
   },
   {
     href: "/settings?tab=users",
@@ -274,7 +308,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Mail,
     group: "Settings",
     allowed: () => true,
-    views: ALL_VIEWS,
+    views: CLUB_VIEWS,
   },
 
   // --- You -----------------------------------------------------------------
@@ -290,15 +324,28 @@ export const NAV: readonly NavEntry[] = [
 
 export type NavGroup = { group: string; items: NavEntry[] };
 
-/** The items this person may reach, in this view, grouped in display order. */
-export function navFor(view: RoleView, capabilities: Capabilities): NavGroup[] {
+function group(items: readonly NavEntry[]): NavGroup[] {
   const groups: NavGroup[] = [];
-  for (const entry of NAV) {
-    if (!entry.views.includes(view)) continue;
-    if (!entry.allowed(capabilities)) continue;
+  for (const entry of items) {
     const last = groups[groups.length - 1];
     if (last && last.group === entry.group) last.items.push(entry);
     else groups.push({ group: entry.group, items: [entry] });
   }
   return groups;
+}
+
+/** The items this person may reach, in this view, grouped in display order. */
+export function navFor(view: RoleView, capabilities: Capabilities): NavGroup[] {
+  return group(NAV.filter((entry) => entry.views.includes(view) && entry.allowed(capabilities)));
+}
+
+/**
+ * The menu for a sign-in the club has not linked to anything yet: the two
+ * things that are true of any signed-in person and nothing else. No tiles, no
+ * teasers, nothing to ask for — attachment to a team happens on the
+ * registration forms, not in here.
+ */
+export function navForUnlinked(): NavGroup[] {
+  const wanted = new Set(["/safeguarding/report", "/welcome"]);
+  return group(NAV.filter((entry) => wanted.has(entry.href)));
 }

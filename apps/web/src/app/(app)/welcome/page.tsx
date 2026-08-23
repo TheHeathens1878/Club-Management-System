@@ -1,34 +1,37 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { ClipboardList, UserPlus } from "lucide-react";
 
 import type { Database } from "@club/db";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  STATUS_LABELS,
-  formatStamp,
-  roleLabel,
-  statusVariant,
-} from "@/lib/account-requests";
-import { getCurrentPersonId, resolveNames } from "@/lib/person";
+import { STATUS_LABELS, formatStamp, roleLabel, statusVariant } from "@/lib/account-requests";
+import { getCurrentPersonId } from "@/lib/person";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
-import { qualifiesForView, type RoleView } from "@/lib/role-view";
+import { ROLE_VIEW_HOME, qualifiedViews, resolveRoleView } from "@/lib/role-view";
+import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
 
-import { RoleTiles, type AdminContact, type TeamOption } from "./role-tiles";
+import { RoleTiles } from "./role-tiles";
 import { WithdrawForm } from "./withdraw-form";
 
 /**
- * "Which hat are you wearing?" — the first-login role tiles (gap 4), and the
- * page the nav's "My role" link comes back to.
+ * "Which hat are you wearing?" — the login tiles, and the page the nav's "My
+ * role" link comes back to.
  *
- * User-scoped client throughout. Choosing a tile changes the nav grouping and
- * nothing else; asking for a role writes an `account_requests` row, which a
- * club administrator then approves or rejects. The list of club administrators
- * is a plain `person_roles` read: RLS answers it for an administrator and
- * returns nothing to anyone else, and the empty case is a real answer, not a
- * failure — the tile says so in general terms instead of naming anyone.
+ * Only views the person actually HOLDS are drawn. There is nothing to ask for
+ * here any more: a player or a parent is attached to a team through the club's
+ * public registration forms, and an account the club has not linked to a
+ * member record yet is told so plainly rather than being offered a queue.
+ *
+ * Requests made before that changed are still listed, read-only, so somebody
+ * who already asked can see where it got to and take it back if they want.
+ * `/approvals` still decides them.
+ *
+ * User-scoped client throughout; `account_requests_self_read` is what returns
+ * the rows below, and it returns nobody else's.
  */
 
 export const dynamic = "force-dynamic";
@@ -45,15 +48,12 @@ type RequestRow = Pick<
   | "decided_at"
 >;
 
-function HoldBadge({ label, held }: { label: string; held: boolean }) {
-  return held ? (
-    <Badge variant="success">{label}</Badge>
-  ) : (
-    <Badge variant="muted">{label}</Badge>
-  );
-}
-
-export default async function WelcomePage() {
+export default async function WelcomePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ first?: string }>;
+}) {
+  const { first } = await searchParams;
   const supabase = await createClient();
   const [capabilities, storedView, personId] = await Promise.all([
     getCapabilities(),
@@ -61,10 +61,13 @@ export default async function WelcomePage() {
     getCurrentPersonId(),
   ]);
 
-  const [{ data: teamRows }, { data: adminRoleRows }] = await Promise.all([
-    supabase.from("teams").select("id,name,age_group").eq("active", true).order("sort_order").order("name"),
-    supabase.from("person_roles").select("person_id").eq("role", "club_admin").is("revoked_at", null),
-  ]);
+  const qualified = qualifiedViews(capabilities);
+  const only = qualified.length === 1 ? qualified[0] : undefined;
+
+  // First login with exactly one hat: there is no choice to make, so do not
+  // put a one-tile screen in the way. The layout resolves the same view from
+  // the capabilities every time, cookie or no cookie.
+  if (first && only && !storedView) redirect(ROLE_VIEW_HOME[only]);
 
   let requests: RequestRow[] = [];
   if (personId) {
@@ -76,66 +79,46 @@ export default async function WelcomePage() {
     requests = data ?? [];
   }
 
-  const teams: TeamOption[] = (teamRows ?? []).map((t) => ({
-    id: t.id,
-    name: t.name,
-    ageGroup: t.age_group,
-  }));
-  const teamNames = new Map(teams.map((t) => [t.id, t.name]));
+  const teamIds = Array.from(
+    new Set(requests.map((request) => request.team_id).filter((id): id is string => Boolean(id))),
+  );
+  const teamNames = new Map<string, string>();
+  if (teamIds.length > 0) {
+    const { data } = await supabase.from("teams").select("id,name").in("id", teamIds);
+    for (const row of data ?? []) teamNames.set(row.id, row.name);
+  }
 
-  const adminIds = Array.from(new Set((adminRoleRows ?? []).map((r) => r.person_id)));
-  const adminNames = await resolveNames(adminIds);
-  const { data: adminPeople } = adminIds.length
-    ? await supabase.from("people").select("id,email").in("id", adminIds)
-    : { data: [] as { id: string; email: string | null }[] };
-  const adminEmails = new Map((adminPeople ?? []).map((p) => [p.id, p.email]));
-  const admins: AdminContact[] = adminIds.map((id) => ({
-    id,
-    name: adminNames.get(id) ?? "Club administrator",
-    email: adminEmails.get(id) ?? null,
-  }));
-
-  const views: RoleView[] = ["player", "parent", "coach", "admin"];
-  const qualified = views.filter((v) => qualifiesForView(v, capabilities));
+  const settings = await getSettings();
+  const contactEmail = settings.contact_email;
 
   return (
     <div>
       <PageHeader
-        title="Your role at the club"
-        subtitle="Pick the one that fits best. It shapes the menu — it does not grant anything on its own."
+        title={qualified.length > 0 ? "Your role at the club" : "Welcome"}
+        subtitle={
+          qualified.length > 0
+            ? "Pick the one you want to look at. Each shows only that role's screens."
+            : "Getting your account joined up with the club's records"
+        }
       />
 
-      <div className="space-y-6 p-8">
-        <RoleTiles teams={teams} initialView={storedView} admins={admins} />
+      <div className="max-w-4xl space-y-6 p-8">
+        {qualified.length > 0 ? (
+          <RoleTiles views={qualified} current={resolveRoleView(storedView, capabilities)} />
+        ) : (
+          <UnlinkedPanel contactEmail={contactEmail} />
+        )}
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">What your account holds today</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
-              <HoldBadge label="Player" held={capabilities.hasPlayerMembership} />
-              <HoldBadge label="Parent or guardian" held={capabilities.isGuardian || capabilities.hasParentRole} />
-              <HoldBadge label="Team staff" held={capabilities.isTeamStaff || capabilities.hasCoachRole} />
-              <HoldBadge label="Club admin" held={capabilities.isClubAdmin || capabilities.isCommittee} />
-              {capabilities.isSafeguardingLead ? <Badge variant="success">Safeguarding lead</Badge> : null}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {qualified.length === 0
-                ? "Nothing yet — ask for what fits above and a club administrator will look at it."
-                : "A view you do not hold is still yours to look at; the menu will only ever show what your account can actually reach."}
-            </p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Your requests</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {requests.length === 0 ? (
-              <p className="text-sm text-muted-foreground">You have not asked for anything yet.</p>
-            ) : (
+        {requests.length > 0 ? (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Requests you have already sent</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-muted-foreground">
+                These were sent before the club moved joining to the registration forms. A club
+                administrator still decides them; you can take back one that is still waiting.
+              </p>
               <ul className="space-y-3">
                 {requests.map((request) => (
                   <li key={request.id} className="rounded-lg border p-4">
@@ -190,18 +173,84 @@ export default async function WelcomePage() {
                   </li>
                 ))}
               </ul>
-            )}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        ) : null}
 
         <p className="text-xs text-muted-foreground">
           Something not right?{" "}
           <Link href="/safeguarding/report" className="underline">
             Report a safeguarding concern
           </Link>
-          , or speak to a club administrator.
+          .
         </p>
       </div>
     </div>
+  );
+}
+
+/**
+ * The signed-in account the club has not linked to anything yet.
+ *
+ * No tiles, and nothing to ask for: joining a team is what the registration
+ * form is for, and the waiting list is what happens when a team is full. Both
+ * are public pages, so the links work whether or not this account is ever
+ * linked.
+ */
+function UnlinkedPanel({ contactEmail }: { contactEmail: string }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">
+          Your account isn&apos;t linked to a club record yet
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <p className="text-sm text-muted-foreground">
+          You are signed in, but the club has not yet connected this sign-in to a player, a parent,
+          a coach or a member of staff. Until it does there is nothing here to show you — the app
+          only ever shows what your own record says you are.
+        </p>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Link
+            href="/register"
+            className="flex items-start gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/40 hover:bg-secondary"
+          >
+            <UserPlus className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+            <span>
+              <span className="block text-sm font-semibold">Register with the club</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                The form the club uses to add a player, and to record a parent or guardian
+                alongside them.
+              </span>
+            </span>
+          </Link>
+          <Link
+            href="/waiting-list"
+            className="flex items-start gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/40 hover:bg-secondary"
+          >
+            <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
+            <span>
+              <span className="block text-sm font-semibold">Join the waiting list</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                For an age group whose squad is full. The club gets in touch when a place comes up.
+              </span>
+            </span>
+          </Link>
+        </div>
+        <p className="text-sm text-muted-foreground">
+          Already registered, or think this is wrong? Contact the club
+          {contactEmail ? (
+            <>
+              {" at "}
+              <a href={`mailto:${contactEmail}`} className="underline">
+                {contactEmail}
+              </a>
+            </>
+          ) : null}{" "}
+          and they will join your sign-in up to your record.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

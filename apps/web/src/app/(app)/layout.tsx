@@ -5,22 +5,26 @@ import { LogOut } from "lucide-react";
 import { HeaderTools } from "@/components/header-tools";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isBooker } from "@/lib/auth";
-import { navFor } from "@/lib/nav";
+import { navFor, navForUnlinked } from "@/lib/nav";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
-import { ROLE_VIEW_LABELS, defaultRoleView, qualifiesForView } from "@/lib/role-view";
+import { ROLE_VIEW_LABELS, qualifiedViews, resolveRoleView } from "@/lib/role-view";
 
 /**
  * The signed-in shell.
  *
- * The nav is built from two things and no others (gap 4):
+ * The nav is built from two things and no others:
  *
  *   · the person's CAPABILITIES, read from the database under their own RLS —
  *     an item whose capability is false is never rendered, in any view;
- *   · the chosen VIEW, a cookie preference that groups the nav for a player, a
- *     parent, a coach or an administrator. It is presentation only. Someone
- *     may choose a view they do not hold (they may be waiting on an approval),
- *     and then they get the banner below rather than a menu full of links that
- *     would bounce them back out.
+ *   · the chosen VIEW, one of the five kinds of user the club recognises. The
+ *     scope is hard: the menu is that view's items and nothing else's, and a
+ *     person with more than one hat switches between menus rather than seeing
+ *     them merged.
+ *
+ * A cookie naming a view the person does not hold is not honoured and does not
+ * produce a banner: `resolveRoleView` simply recomputes and falls back to the
+ * widest view they do hold. Somebody who holds none of them gets the two links
+ * that are true of any signed-in person, and /welcome explains why.
  *
  * Each page keeps its own guard. This is a menu, not an authorisation layer.
  */
@@ -34,9 +38,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const name = session.profile?.full_name || session.email || "User";
   const capabilities = await getCapabilities();
   const storedView = await getStoredRoleView();
-  const view = storedView ?? defaultRoleView(capabilities);
-  const groups = navFor(view, capabilities);
-  const qualifies = qualifiesForView(view, capabilities);
+  const view = resolveRoleView(storedView, capabilities);
+  const groups = view ? navFor(view, capabilities) : navForUnlinked();
+  // Only worth offering "change" when there is something to change to.
+  const canSwitch = qualifiedViews(capabilities).length > 1;
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
@@ -45,15 +50,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="hidden lg:mb-4 lg:block">
             <p className="text-sm font-semibold">AoM Sports Club</p>
             <p className="truncate text-xs text-muted-foreground">{name}</p>
-            <Link
-              href="/welcome"
-              className="mt-1 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
-            >
-              {ROLE_VIEW_LABELS[view]} view · change
-            </Link>
+            {view ? (
+              <Link
+                href="/welcome"
+                className="mt-1 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
+              >
+                {ROLE_VIEW_LABELS[view]}
+                {canSwitch ? " · change" : ""}
+              </Link>
+            ) : null}
           </div>
 
-          {/* Notifications bell (gap 5) + pitch calendar link (gap 6). */}
+          {/* Notifications bell — the notifications entry in every view. */}
           <HeaderTools />
 
           {groups.map((group) => (
@@ -98,19 +106,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="flex-1 overflow-x-clip bg-background">
-        {qualifies ? null : (
-          <div className="border-b bg-amber-50 px-8 py-3 text-sm text-amber-900">
-            You are looking at the {ROLE_VIEW_LABELS[view].toLowerCase()} view, but the club has not
-            recorded that role for you yet — so only what your account can actually reach is listed.{" "}
-            <Link href="/welcome" className="font-medium underline">
-              Ask to be approved
-            </Link>
-            .
-          </div>
-        )}
-        {children}
-      </main>
+      <main className="flex-1 overflow-x-clip bg-background">{children}</main>
     </div>
   );
 }
