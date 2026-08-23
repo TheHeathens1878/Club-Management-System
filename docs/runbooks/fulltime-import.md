@@ -18,7 +18,7 @@ nightly in the cloud; nothing needs to run on a club PC.
    (the whole thing, or just the number from `var lrcode`), click
    **Test & preview**, check the fixtures and the team name it found, then
    **Save link**. **Import now** fetches straight away; otherwise the nightly
-   run (03:15 UTC) picks it up.
+   run picks it up (03:12 UTC prefetch, 03:15 UTC import).
 3. New season: generate the new snippet and paste it over the old one. The link
    updates in place; fixtures already imported are kept (they are keyed by
    Full-Time's own fixture id).
