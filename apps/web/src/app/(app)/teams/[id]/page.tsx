@@ -25,9 +25,13 @@ import {
   type PendingRow,
   type TeamRoleValue,
 } from "./members-panel";
+import { TeamPitchBookings } from "./pitch-bookings-card";
+import { loadTeamPitchBookings } from "@/lib/pitch-booking-data";
 
 /** Next 20 fixtures, read-only — the importer (P2.4) is what writes them. */
 const UPCOMING_LIMIT = 20;
+/** Next pitch bookings shown on the team page (gap 3). */
+const PITCH_BOOKING_LIMIT = 10;
 /** Enough import history to see a pattern without becoming a log viewer. */
 const RUN_LIMIT = 10;
 
@@ -279,6 +283,11 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
     .is("applied_at", null)
     .order("created_at");
 
+  // This team's pitch diary (gap 3). Read as the caller: a coach gets the rows
+  // through `bookings_team_staff_read`, and anyone else this page admits falls
+  // back to `pitch_calendar()`, which carries no booker PII.
+  const pitchBookings = await loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT);
+
   const pending: PendingRow[] = (pendingRows ?? [])
     .map((row) => ({ row, parsed: pendingMembershipPayload(row.payload) }))
     .filter((entry) => entry.parsed.teamId === id)
@@ -473,6 +482,24 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
                 </table>
               </div>
             )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Pitch bookings</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              The next {PITCH_BOOKING_LIMIT} pitch slots for this team — its own training and block
+              bookings, plus any session another team is sharing with it. Coaches request a slot
+              and a club administrator confirms it; until then it reads as awaiting confirmation.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <TeamPitchBookings
+              teamId={team.id}
+              items={pitchBookings}
+              canManage={committee || teamStaff === true}
+            />
           </CardContent>
         </Card>
       </div>

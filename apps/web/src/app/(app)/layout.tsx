@@ -1,10 +1,12 @@
 import { redirect } from "next/navigation";
 import { getSessionProfile, isStaff, isBarManager, isCommittee, isBooker } from "@/lib/auth";
 import { hasWaitingListAccess, isClubAdmin, isSafeguardingLead } from "@/lib/person";
+import { isAnyTeamStaff } from "@/lib/pitch-booking-data";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 import {
   CalendarDays,
+  CalendarPlus,
   ClipboardList,
   Clock,
   Contact,
@@ -39,13 +41,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // The waiting list desk (P3.4) is a club administrator's, plus any coach
   // holding a `waiting_list_access` grant — RLS returns nothing to anyone
   // else, so there is no point offering them the link.
-  const [lead, admin, waitingListAccess] = await Promise.all([
+  // Booking a pitch (gap 3) is a coach's job as much as a committee member's:
+  // `bookings_team_staff_insert` accepts anyone `team_memberships` says runs a
+  // team, so the link follows the same question. Confirming is club_admin's.
+  const [lead, admin, waitingListAccess, teamStaff] = await Promise.all([
     isSafeguardingLead(),
     isClubAdmin(),
     hasWaitingListAccess(),
+    isAnyTeamStaff(),
   ]);
   const showSafeguarding = lead || isCommittee(role);
   const showWaitingList = admin || waitingListAccess;
+  const showPitchBooking = teamStaff || isCommittee(role);
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
@@ -105,13 +112,52 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
           {/* Pitch allocation (P2.5) sits with Teams — same audience, and the
               fixtures it allocates are the ones the Teams screens import. */}
-          {showTeams && (
-            <Link
-              href="/pitches"
-              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-            >
-              <LandPlot className="h-4 w-4" /> Pitches
-            </Link>
+          {(showTeams || showPitchBooking) && (
+            <div className="flex flex-col gap-0.5">
+              {showTeams && (
+                <Link
+                  href="/pitches"
+                  className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+                >
+                  <LandPlot className="h-4 w-4" /> Pitches
+                </Link>
+              )}
+              {showPitchBooking && (
+                <>
+                  <Link
+                    href="/pitches/book"
+                    className={
+                      buttonVariants({ variant: "ghost", size: "sm" }) +
+                      (showTeams
+                        ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
+                        : " justify-start gap-2")
+                    }
+                  >
+                    <CalendarPlus className={showTeams ? "h-3 w-3" : "h-4 w-4"} /> Book a pitch
+                  </Link>
+                  <Link
+                    href="/pitches/mine"
+                    className={
+                      buttonVariants({ variant: "ghost", size: "sm" }) +
+                      " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
+                    }
+                  >
+                    <CalendarDays className="h-3 w-3" /> My pitch bookings
+                  </Link>
+                </>
+              )}
+              {admin && (
+                <Link
+                  href="/pitches/requests"
+                  className={
+                    buttonVariants({ variant: "ghost", size: "sm" }) +
+                    " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
+                  }
+                >
+                  <Clock className="h-3 w-3" /> Pitch requests
+                </Link>
+              )}
+            </div>
           )}
 
           {showWaitingList && (
