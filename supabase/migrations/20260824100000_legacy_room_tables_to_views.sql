@@ -2,9 +2,9 @@
 -- P1.6 cutover — legacy function-room tables → *_legacy, read-only views in
 -- their place (docs/runbooks/P1.6-cutover.md step 3)
 -- =============================================================================
--- Run only inside the cutover window, after the old Vercel project is paused
--- and migrate_room_bookings() + reconcile_room_bookings() have been re-run
--- clean. From here the unified tables are the only writable copy:
+-- Run only inside the cutover window. Section 0 re-syncs from the legacy
+-- tables and refuses to commit unless reconcile_room_bookings() is all ok, so
+-- sync and rename are one transaction: no legacy write can slip between them. From here the unified tables are the only writable copy:
 --   * the four legacy tables are renamed *_legacy and revoked from anon and
 --     authenticated (service_role keeps SELECT for the 30-day check);
 --   * views under the old names, built over the unified tables, serve any
@@ -16,6 +16,21 @@
 -- Abort: drop the four views, rename the tables back, re-create the two
 -- functions from 20260823110000 — in one transaction.
 -- =============================================================================
+
+-- 0. Final sync + gate, in this same transaction -----------------------------
+-- Pulls any legacy row written since the last run, then refuses to commit the
+-- rename if the copy does not reconcile. Nothing can be written to the legacy
+-- tables between this and the rename below.
+do $$
+declare v_bad int;
+begin
+  perform public.migrate_room_bookings();
+  select count(*) into v_bad from public.reconcile_room_bookings() where not ok;
+  if v_bad > 0 then
+    raise exception 'P1.6 cutover: % reconciliation check(s) failed; rename aborted', v_bad;
+  end if;
+end
+$$;
 
 -- 1. Rename ------------------------------------------------------------------
 alter table public.room_bookings    rename to room_bookings_legacy;
