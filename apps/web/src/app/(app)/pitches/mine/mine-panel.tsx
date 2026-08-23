@@ -68,6 +68,13 @@ export function MyPitchBookings({ items }: { items: PitchBookingItem[] }) {
             {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
 
             <div className="flex flex-wrap items-center gap-2">
+              {/* Gap 8: availability and the attendance sheet for this session. */}
+              <Link
+                href={`/pitches/${item.id}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Details
+              </Link>
               {item.status === "pending" && (
                 <Link
                   href={`/pitches/${item.id}/edit`}

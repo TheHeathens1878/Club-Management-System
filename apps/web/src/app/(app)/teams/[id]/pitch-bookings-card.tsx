@@ -62,6 +62,16 @@ export function TeamPitchBookings({
                   {formatSlot(item)} · {item.resourceName}
                 </p>
               </div>
+              <div className="flex flex-wrap items-center gap-2">
+              {/* Gap 8: availability and the attendance sheet for this session.
+                  Offered to everyone the card is shown to — `/pitches/[id]`
+                  reads as the caller and 404s if they may not see it. */}
+              <Link
+                href={`/pitches/${item.id}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                Details
+              </Link>
               {/* A fixture's slot is `allocate_fixture()`'s to move, not this
                   card's — cancelling it here would orphan `fixtures.booking_id`. */}
               {canManage &&
@@ -76,6 +86,7 @@ export function TeamPitchBookings({
                   </Button>
                 </form>
               )}
+              </div>
             </li>
           ))}
         </ul>
