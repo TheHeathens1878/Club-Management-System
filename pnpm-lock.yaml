@@ -188,6 +188,18 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
+  packages/fulltime:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.20.1
+        version: 22.20.1
+      typescript:
+        specifier: ^5.6.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@22.20.1)(jiti@1.21.7)(lightningcss@1.27.0)(terser@5.50.0)
+
   packages/shared:
     dependencies:
       '@club/db':
