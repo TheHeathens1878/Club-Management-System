@@ -17,3 +17,4 @@ export * from "./team.ts";
 export * from "./time.ts";
 export * from "./types.ts";
 export * from "./url.ts";
+export * from "./widget.ts";
