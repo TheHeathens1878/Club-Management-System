@@ -4,25 +4,30 @@ import { ShieldCheck, Users, Clock, LogIn, Package } from "lucide-react";
 import { getSettings } from "@/lib/settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { BookClient } from "./book/book-client";
+import { addDays, instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
+import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 export const dynamic = "force-dynamic";
 
 export default async function Home() {
-  const threeMonthsOut = (() => { const d = new Date(); d.setMonth(d.getMonth() + 3); return d.toISOString().slice(0, 10); })();
+  // Availability is shown three London months ahead; the period is
+  // timestamptz, so the cut-off is midnight London the day after the last one.
+  const threeMonthsOut = (() => { const d = new Date(); d.setMonth(d.getMonth() + 3); return londonToday(d); })();
 
   const [s, rooms, rawBookings] = await Promise.all([
     getSettings(),
     createAdminClient()
-      .from("function_rooms")
-      .select("id,name,description,capacity,price_pence_per_hour,price_pence_half_day,price_pence_full_day,resources")
+      .from("resources")
+      .select("id,name,description,capacity,price_pence_per_hour,price_pence_half_day,price_pence_full_day,amenities")
+      .eq("type", FUNCTION_ROOM)
       .eq("active", true)
       .order("sort_order")
       .then((r) => r.data ?? []),
     createAdminClient()
-      .from("room_bookings")
-      .select("room_id,date,start_time,end_time")
+      .from("bookings")
+      .select("resource_id,starts_at,ends_at")
       .in("status", ["pending", "confirmed"])
-      .lte("date", threeMonthsOut)
+      .lt("starts_at", localToInstant(addDays(threeMonthsOut, 1), "00:00"))
       .then((r) => r.data ?? []),
   ]);
 
@@ -32,21 +37,24 @@ export default async function Home() {
 
   const roomList = rooms.map((r) => ({
     id: r.id,
-    name: r.name as string,
-    description: (r.description as string) ?? null,
-    capacity: (r.capacity as number) ?? null,
-    price_pence_per_hour: (r.price_pence_per_hour as number) ?? null,
-    price_pence_half_day: (r.price_pence_half_day as number) ?? null,
-    price_pence_full_day: (r.price_pence_full_day as number) ?? null,
-    resources: (r.resources as string[]) ?? [],
+    name: r.name,
+    description: r.description,
+    capacity: r.capacity,
+    price_pence_per_hour: r.price_pence_per_hour,
+    price_pence_half_day: r.price_pence_half_day,
+    price_pence_full_day: r.price_pence_full_day,
+    amenities: r.amenities,
   }));
 
-  const bookedSlots = rawBookings.map((b) => ({
-    room_id: b.room_id as string,
-    date: String(b.date),
-    start_time: String(b.start_time),
-    end_time: String(b.end_time),
-  }));
+  const bookedSlots = rawBookings.map((b) => {
+    const window = instantsToLocalWindow(b.starts_at, b.ends_at);
+    return {
+      resource_id: b.resource_id,
+      date: window.date,
+      start_time: window.startTime,
+      end_time: window.endTime,
+    };
+  });
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-primary/8 via-background to-background">
@@ -106,9 +114,9 @@ export default async function Home() {
                       <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> From £{(room.price_pence_per_hour / 100).toFixed(0)}/hr</span>
                     )}
                   </div>
-                  {room.resources.length > 0 && (
+                  {room.amenities.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {room.resources.map((r) => (
+                      {room.amenities.map((r) => (
                         <span key={r} className="inline-flex items-center gap-1 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium">
                           <Package className="h-3 w-3" />{r}
                         </span>

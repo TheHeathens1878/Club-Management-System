@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 
 export async function recordLogin(params: {
   userId: string;
@@ -6,7 +6,7 @@ export async function recordLogin(params: {
   ipAddress?: string | null;
   userAgent?: string | null;
 }) {
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   await admin.from("login_history").insert({
     user_id: params.userId,
     method: params.method,

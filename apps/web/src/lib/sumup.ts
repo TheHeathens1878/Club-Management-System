@@ -3,6 +3,8 @@ import { getEmailBrandColor } from "@/lib/settings";
 import { renderEmailTemplate } from "@/lib/template-engine";
 import { sendEmail } from "@/lib/email";
 import { formatCurrency } from "@/lib/utils";
+import { formatBookingDate, instantToLocal } from "@/lib/booking-time";
+import type { BookingPaymentStatus } from "@/lib/booking-types";
 
 // SumUp Online Payments — server-only. Never import from client components.
 // Sandbox is selected by using sandbox credentials; the API host is the same.
@@ -83,7 +85,7 @@ export async function getSumUpCheckout(id: string): Promise<SumUpCheckout | null
   return res.json();
 }
 
-// Idempotently record a paid SumUp checkout as a booking_payment, recompute the
+// Idempotently record a paid SumUp checkout as a payment, recompute the
 // booking's payment_status and email the booker. Safe to call from the widget
 // finalize action, the webhook, and the 3DS return route — only records once.
 export async function recordSumUpPaymentIfPaid(
@@ -110,7 +112,7 @@ export async function recordSumUpPaymentIfPaid(
 
   // Idempotency — skip if we already stored this checkout
   const { data: existing } = await admin
-    .from("booking_payments")
+    .from("payments")
     .select("id")
     .eq("sumup_checkout_id", checkoutId)
     .maybeSingle();
@@ -119,10 +121,11 @@ export async function recordSumUpPaymentIfPaid(
   const bookingId = String(checkout.checkout_reference || "").split(":")[0];
   if (!bookingId) return { recorded: false, present: false, status: checkout.status };
 
+
   const amountPence = Math.round(Number(checkout.amount || 0) * 100);
   const txnCode = checkout.transaction_code || checkout.transactions?.[0]?.transaction_code || null;
 
-  const { error: insertErr } = await admin.from("booking_payments").insert({
+  const { error: insertErr } = await admin.from("payments").insert({
     booking_id: bookingId,
     amount_pence: amountPence,
     paid_at: new Date().toISOString(),
@@ -133,42 +136,39 @@ export async function recordSumUpPaymentIfPaid(
     note: "Paid online (SumUp)",
   });
   if (insertErr) {
-    console.error("[sumup] failed to insert booking_payment", insertErr);
+    console.error("[sumup] failed to insert payment", insertErr);
     return { recorded: false, present: false, status: checkout.status };
   }
 
   // Recompute payment_status
   const [{ data: totalsRow }, { data: payments }] = await Promise.all([
-    admin.from("room_bookings").select("total_pence,deposit_pence,amount_pence,booker_name,booker_email,date,function_rooms(name)").eq("id", bookingId).maybeSingle(),
-    admin.from("booking_payments").select("amount_pence").eq("booking_id", bookingId),
+    admin.from("bookings").select("total_pence,deposit_pence,booker_name,booker_email,starts_at,resources(name)").eq("id", bookingId).maybeSingle(),
+    admin.from("payments").select("amount_pence").eq("booking_id", bookingId),
   ]);
-  const totalPence = Number(totalsRow?.total_pence ?? totalsRow?.amount_pence ?? 0);
-  const depositPence = Number(totalsRow?.deposit_pence ?? 0);
-  const paidPence = (payments ?? []).reduce((acc, p) => acc + Number(p.amount_pence ?? 0), 0);
-  let status = "unpaid";
+  const totalPence = totalsRow?.total_pence ?? 0;
+  const depositPence = totalsRow?.deposit_pence ?? 0;
+  const paidPence = (payments ?? []).reduce((acc, p) => acc + p.amount_pence, 0);
+  let status: BookingPaymentStatus = "unpaid";
   if (totalPence > 0 && paidPence >= totalPence) status = "paid";
   else if (paidPence > 0 && (depositPence === 0 || paidPence >= depositPence)) status = "deposit_paid";
   else if (paidPence > 0) status = "deposit_paid";
-  await admin.from("room_bookings").update({ payment_status: status }).eq("id", bookingId);
+  await admin.from("bookings").update({ payment_status: status }).eq("id", bookingId);
 
   // Confirmation email
   if (totalsRow?.booker_email) {
     try {
       const brandColor = await getEmailBrandColor().catch(() => "#1249bf");
-      const roomRow = totalsRow.function_rooms as { name?: string } | { name?: string }[] | null;
-      const roomName = Array.isArray(roomRow) ? (roomRow[0]?.name ?? "Function room") : (roomRow?.name ?? "Function room");
+      const roomName = totalsRow.resources?.name ?? "Function room";
       const tpl = await renderEmailTemplate("payment_received", {
-        name: totalsRow.booker_name as string,
+        name: totalsRow.booker_name,
         room_name: roomName,
-        booking_date: new Date(String(totalsRow.date) + "T12:00:00").toLocaleDateString("en-GB", {
-          weekday: "long", day: "numeric", month: "long", year: "numeric",
-        }),
+        booking_date: formatBookingDate(instantToLocal(totalsRow.starts_at).date),
         amount_paid: formatCurrency(amountPence),
         total_paid: formatCurrency(paidPence),
         outstanding: totalPence > 0 ? formatCurrency(Math.max(0, totalPence - paidPence)) : "—",
         payment_method: "Card (online)",
       }, brandColor);
-      await sendEmail({ to: totalsRow.booker_email as string, ...tpl });
+      await sendEmail({ to: totalsRow.booker_email, ...tpl });
     } catch (e) {
       console.error("[sumup] Payment email failed:", e);
     }

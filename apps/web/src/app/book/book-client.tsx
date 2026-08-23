@@ -20,7 +20,7 @@ type Room = {
 };
 
 type BookedSlot = {
-  room_id: string;
+  resource_id: string;
   date: string;
   start_time: string;
   end_time: string;
@@ -31,7 +31,7 @@ const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
 
 function toMin(t: string): number {
   const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
+  return (h ?? 0) * 60 + (m ?? 0);
 }
 
 function calcEstimate(room: Room, startTime: string, endTime: string): number | null {
@@ -47,7 +47,7 @@ function calcEstimate(room: Room, startTime: string, endTime: string): number | 
 }
 
 function getDayStatus(slots: BookedSlot[], roomId: string, dateStr: string): "free" | "partial" | "full" {
-  const daySlots = slots.filter((s) => s.room_id === roomId && s.date === dateStr);
+  const daySlots = slots.filter((s) => s.resource_id === roomId && s.date === dateStr);
   if (daySlots.length === 0) return "free";
   const totalBooked = daySlots.reduce((acc, s) => acc + (toMin(s.end_time) - toMin(s.start_time)), 0);
   return totalBooked >= 8 * 60 ? "full" : "partial";
@@ -183,7 +183,7 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
             const status = getDayStatus(bookedSlots, selectedRoomId, ds);
             const isSelected = ds === selectedDate;
             const daySlots = bookedSlots
-              .filter((s) => s.room_id === selectedRoomId && s.date === ds)
+              .filter((s) => s.resource_id === selectedRoomId && s.date === ds)
               .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
             let statusClass = "";

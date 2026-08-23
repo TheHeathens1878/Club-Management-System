@@ -9,6 +9,7 @@ import { Input, Label } from "@/components/ui/input";
 import { ChevronLeft, CheckCircle2, AlertCircle, Plus } from "lucide-react";
 import { updateRoom, createRoom } from "../actions";
 import { DeleteRoomButton } from "./delete-room-button";
+import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 export default async function RoomsSettingsPage({
   searchParams,
@@ -23,8 +24,9 @@ export default async function RoomsSettingsPage({
 
   const admin = createAdminClient();
   const { data: rooms, error } = await admin
-    .from("function_rooms")
+    .from("resources")
     .select("*")
+    .eq("type", FUNCTION_ROOM)
     .order("sort_order");
 
   function penceToPounds(pence: number | null | undefined) {
@@ -140,7 +142,7 @@ export default async function RoomsSettingsPage({
                     {room.name}
                     {isSaved && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
                   </span>
-                  <DeleteRoomButton roomId={room.id} roomName={String(room.name)} />
+                  <DeleteRoomButton roomId={room.id} roomName={room.name} />
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -148,7 +150,7 @@ export default async function RoomsSettingsPage({
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label htmlFor={`name-${room.id}`}>Room name</Label>
-                      <Input id={`name-${room.id}`} name="name" defaultValue={String(room.name)} required />
+                      <Input id={`name-${room.id}`} name="name" defaultValue={room.name} required />
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label htmlFor={`desc-${room.id}`}>Description</Label>
@@ -156,7 +158,7 @@ export default async function RoomsSettingsPage({
                         id={`desc-${room.id}`}
                         name="description"
                         rows={2}
-                        defaultValue={String(room.description ?? "")}
+                        defaultValue={room.description ?? ""}
                         className="flex w-full rounded-md border border-input bg-card px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       />
                     </div>
@@ -180,8 +182,8 @@ export default async function RoomsSettingsPage({
                       <Label htmlFor={`res-${room.id}`}>Resources <span className="text-muted-foreground text-xs font-normal">comma-separated, e.g. Projector, PA system</span></Label>
                       <Input
                         id={`res-${room.id}`}
-                        name="resources"
-                        defaultValue={(room.resources as string[] ?? []).join(", ")}
+                        name="amenities"
+                        defaultValue={room.amenities.join(", ")}
                         placeholder="e.g. Projector, PA system, Whiteboard"
                       />
                     </div>
@@ -211,7 +213,7 @@ export default async function RoomsSettingsPage({
                       <Label htmlFor={`fx-${room.id}`}>Fixed price (£) <span className="text-muted-foreground text-xs font-normal">flat rate, any duration</span></Label>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">£</span>
-                        <Input id={`fx-${room.id}`} name="price_pence_fixed" type="number" min="0" step="0.01" defaultValue={penceToPounds((room as Record<string, unknown>).price_pence_fixed as number | null)} placeholder="e.g. 200.00" className="pl-7" />
+                        <Input id={`fx-${room.id}`} name="price_pence_fixed" type="number" min="0" step="0.01" defaultValue={penceToPounds(room.price_pence_fixed)} placeholder="e.g. 200.00" className="pl-7" />
                       </div>
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
@@ -219,7 +221,7 @@ export default async function RoomsSettingsPage({
                       <Input
                         id={`pn-${room.id}`}
                         name="price_note"
-                        defaultValue={String((room as Record<string, unknown>).price_note ?? "")}
+                        defaultValue={room.price_note ?? ""}
                         placeholder="e.g. Standard hire: 4 hours (19:00–23:00). Additional fees apply for longer periods."
                       />
                     </div>

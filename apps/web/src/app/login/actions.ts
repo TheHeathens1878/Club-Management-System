@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { recordLogin } from "@/lib/login-history";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 import { sendEmail } from "@/lib/email";
 import { magicLinkEmail, passwordResetEmail } from "@/lib/email-templates";
 import { getEmailBrandColor } from "@/lib/settings";
@@ -49,7 +49,7 @@ export async function requestMagicLink(email: string): Promise<{ error: string |
     return { error: "Site URL is not configured. Please contact the administrator." };
   }
 
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   // Check the email is known before generating a link
   const normalised = email.toLowerCase().trim();
@@ -141,7 +141,7 @@ export async function sendPasswordReset(email: string): Promise<{ error: string 
     return { error: "Site URL is not configured. Please contact the administrator." };
   }
 
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const { data, error } = await admin.auth.admin.generateLink({
     type: "recovery",
     email,

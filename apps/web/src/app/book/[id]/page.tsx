@@ -3,17 +3,9 @@ import Link from "next/link";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
 import { CheckCircle2, Clock, CalendarDays, Building2 } from "lucide-react";
+import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: string) {
-  return new Date(d + "T12:00:00").toLocaleDateString("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  });
-}
 
 export default async function BookingConfirmationPage({
   params,
@@ -24,17 +16,19 @@ export default async function BookingConfirmationPage({
   const admin = createAdminClient();
 
   const { data: booking } = await admin
-    .from("room_bookings")
-    .select("id, room_id, date, start_time, end_time, booker_name, booker_email, occasion, status, amount_pence, payment_status")
+    .from("bookings")
+    .select("id, resource_id, starts_at, ends_at, booker_name, booker_email, occasion, status, total_pence, payment_status")
     .eq("id", id)
     .maybeSingle();
 
   if (!booking) notFound();
 
+  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
+
   const { data: room } = await admin
-    .from("function_rooms")
+    .from("resources")
     .select("name")
-    .eq("id", booking.room_id)
+    .eq("id", booking.resource_id)
     .maybeSingle();
 
   const shortRef = booking.id.slice(0, 8).toUpperCase();
@@ -66,7 +60,7 @@ export default async function BookingConfirmationPage({
               <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
               <div>
                 <p className="text-xs text-muted-foreground">Date</p>
-                <p className="text-sm font-medium">{formatDate(String(booking.date))}</p>
+                <p className="text-sm font-medium">{formatBookingDate(window.date)}</p>
               </div>
             </div>
             <div className="flex items-start gap-3">
@@ -74,7 +68,7 @@ export default async function BookingConfirmationPage({
               <div>
                 <p className="text-xs text-muted-foreground">Time</p>
                 <p className="text-sm font-medium">
-                  {String(booking.start_time).slice(0, 5)} – {String(booking.end_time).slice(0, 5)}
+                  {window.startTime} – {window.endTime}
                 </p>
               </div>
             </div>
@@ -87,11 +81,11 @@ export default async function BookingConfirmationPage({
                 </div>
               </div>
             )}
-            {booking.amount_pence && (
+            {booking.total_pence !== null && (
               <div className="border-t pt-3">
                 <div className="flex items-center justify-between text-sm">
                   <span className="text-muted-foreground">Estimated total</span>
-                  <span className="font-semibold">{formatCurrency(booking.amount_pence)}</span>
+                  <span className="font-semibold">{formatCurrency(booking.total_pence)}</span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground">Payment will be arranged upon confirmation.</p>
               </div>

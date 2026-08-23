@@ -9,6 +9,7 @@ import { Input, Label } from "@/components/ui/input";
 import { ChevronLeft } from "lucide-react";
 import { createInternalBooking } from "../actions";
 import { DateTimingFields } from "./recurrence-fields";
+import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 async function submitAction(formData: FormData): Promise<void> {
   "use server";
@@ -23,8 +24,9 @@ export default async function NewInternalBookingPage() {
 
   const admin = createAdminClient();
   const { data: rooms } = await admin
-    .from("function_rooms")
+    .from("resources")
     .select("id,name")
+    .eq("type", FUNCTION_ROOM)
     .eq("active", true)
     .order("sort_order");
 

@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ShieldCheck, Mail, KeyRound, Loader2, ArrowLeft } from "lucide-react";
 import { siteConfig } from "@/lib/site-config";
+import { isBookerRole } from "@/lib/types";
 
 type Mode = "magic" | "password";
 type View = "login" | "forgot";
@@ -69,7 +70,7 @@ export function LoginForm({
       .select("role")
       .eq("id", data.user?.id ?? "")
       .maybeSingle();
-    const home = profile?.role === "booker" ? "/portal" : "/room-bookings";
+    const home = isBookerRole(profile?.role) ? "/portal" : "/room-bookings";
 
     // Honour where they were originally headed, falling back to their home.
     const redirectedFrom = new URLSearchParams(window.location.search).get("redirectedFrom");

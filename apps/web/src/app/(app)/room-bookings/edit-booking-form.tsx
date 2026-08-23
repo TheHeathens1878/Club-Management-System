@@ -11,7 +11,7 @@ type Props = {
   bookingId: string;
   rooms: Room[];
   initial: {
-    room_id: string;
+    resource_id: string;
     date: string;
     start_time: string;
     end_time: string;
@@ -44,7 +44,7 @@ export function EditBookingForm({ bookingId, rooms, initial }: Props) {
       const first = fields.booker_first_name.trim();
       const last = fields.booker_last_name.trim();
       const result = await updateBooking(bookingId, {
-        room_id: fields.room_id,
+        resource_id: fields.resource_id,
         date: fields.date,
         start_time: fields.start_time,
         end_time: fields.end_time,
@@ -70,8 +70,8 @@ export function EditBookingForm({ bookingId, rooms, initial }: Props) {
       <div className="space-y-1.5">
         <Label>Room</Label>
         <select
-          value={fields.room_id}
-          onChange={(e) => set("room_id", e.target.value)}
+          value={fields.resource_id}
+          onChange={(e) => set("resource_id", e.target.value)}
           className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {rooms.map((r) => (

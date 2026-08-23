@@ -14,12 +14,8 @@ import { ChevronLeft } from "lucide-react";
 import { StatusForm } from "../status-form";
 import { PaymentsPanel } from "../payments-panel";
 import { addInternalNote } from "../actions";
-
-function formatDate(d: string) {
-  return new Date(d + "T12:00:00").toLocaleDateString("en-GB", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-}
+import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
+import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 function statusVariant(s: string): "success" | "muted" | "destructive" | "default" {
   if (s === "confirmed") return "success";
@@ -40,29 +36,32 @@ export default async function RoomBookingDetailPage({
   const admin = createAdminClient();
 
   const [{ data: booking }, { data: rooms }, { data: paymentRows }] = await Promise.all([
-    admin.from("room_bookings").select("*").eq("id", id).maybeSingle(),
-    admin.from("function_rooms").select("id,name").order("sort_order"),
-    admin.from("booking_payments").select("*").eq("booking_id", id).order("paid_at", { ascending: false }),
+    admin.from("bookings").select("*").eq("id", id).maybeSingle(),
+    admin.from("resources").select("id,name").eq("type", FUNCTION_ROOM).order("sort_order"),
+    admin.from("payments").select("*").eq("booking_id", id).order("paid_at", { ascending: false }),
   ]);
 
   if (!booking) notFound();
 
+  // The period is timestamptz; this page has always shown London wall clock.
+  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
+
   const payments = (paymentRows ?? []).map((p) => ({
-    id: p.id as string,
-    amount_pence: Number(p.amount_pence),
-    paid_at: String(p.paid_at),
-    method: (p.method as string | null) ?? null,
-    reference: (p.reference as string | null) ?? null,
-    source: String(p.source ?? "manual"),
-    authorised_by_name: (p.authorised_by_name as string | null) ?? null,
-    note: (p.note as string | null) ?? null,
+    id: p.id,
+    amount_pence: p.amount_pence,
+    paid_at: p.paid_at,
+    method: p.method,
+    reference: p.reference,
+    source: p.source,
+    authorised_by_name: p.authorised_by_name,
+    note: p.note,
   }));
-  const totalPence = Number((booking as Record<string, unknown>).total_pence ?? booking.amount_pence ?? 0);
-  const depositPence = Number((booking as Record<string, unknown>).deposit_pence ?? 0);
+  const totalPence = booking.total_pence ?? 0;
+  const depositPence = booking.deposit_pence ?? 0;
   const settings = await getSettings();
   const defaultDepositPence = Number(settings.deposit_default_pence) || 0;
 
-  const roomName = (rooms ?? []).find((r) => r.id === booking.room_id)?.name ?? "Unknown room";
+  const roomName = (rooms ?? []).find((r) => r.id === booking.resource_id)?.name ?? "Unknown room";
   const canEdit = isStaff(session.profile?.role);
   const canDelete = isCommittee(session.profile?.role);
   const canEditBooking = isSuperUser(session.profile?.role);
@@ -77,7 +76,7 @@ export default async function RoomBookingDetailPage({
     <>
       <PageHeader
         title={`Booking #${shortRef}`}
-        subtitle={`${roomName} · ${formatDate(String(booking.date))}`}
+        subtitle={`${roomName} · ${formatBookingDate(window.date)}`}
         action={
           <Link href="/room-bookings" className={buttonVariants({ variant: "outline", size: "sm" })}>
             <ChevronLeft className="h-4 w-4" /> All bookings
@@ -92,7 +91,7 @@ export default async function RoomBookingDetailPage({
             <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle>Booking details</CardTitle>
               <div className="flex gap-2">
-                <Badge variant={statusVariant(String(booking.status))} className="capitalize">
+                <Badge variant={statusVariant(booking.status)} className="capitalize">
                   {booking.status}
                 </Badge>
                 {booking.payment_status === "paid" && (
@@ -102,11 +101,11 @@ export default async function RoomBookingDetailPage({
             </CardHeader>
             <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
               <Detail label="Room" value={roomName} />
-              <Detail label="Date" value={formatDate(String(booking.date))} />
-              <Detail label="Time" value={`${String(booking.start_time).slice(0,5)} – ${String(booking.end_time).slice(0,5)}`} />
-              {booking.occasion && <Detail label="Occasion" value={String(booking.occasion)} />}
-              {booking.estimated_guests && <Detail label="Estimated guests" value={String(booking.estimated_guests)} />}
-              {booking.amount_pence && <Detail label="Quoted price" value={formatCurrency(Number(booking.amount_pence))} />}
+              <Detail label="Date" value={formatBookingDate(window.date)} />
+              <Detail label="Time" value={`${window.startTime} – ${window.endTime}`} />
+              {booking.occasion && <Detail label="Occasion" value={booking.occasion} />}
+              {booking.estimated_guests !== null && <Detail label="Estimated guests" value={String(booking.estimated_guests)} />}
+              {booking.total_pence !== null && <Detail label="Quoted price" value={formatCurrency(booking.total_pence)} />}
             </CardContent>
           </Card>
 
@@ -114,15 +113,15 @@ export default async function RoomBookingDetailPage({
           <Card>
             <CardHeader><CardTitle>Booker</CardTitle></CardHeader>
             <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
-              {(booking as Record<string, unknown>).booker_first_name
+              {booking.booker_first_name
                 ? <>
-                    <Detail label="First name" value={String((booking as Record<string, unknown>).booker_first_name)} />
-                    <Detail label="Last name" value={String((booking as Record<string, unknown>).booker_last_name ?? "—")} />
+                    <Detail label="First name" value={booking.booker_first_name} />
+                    <Detail label="Last name" value={booking.booker_last_name ?? "—"} />
                   </>
-                : <Detail label="Name" value={String(booking.booker_name)} />
+                : <Detail label="Name" value={booking.booker_name} />
               }
-              <Detail label="Email" value={String(booking.booker_email)} />
-              <Detail label="Mobile" value={booking.booker_phone ? String(booking.booker_phone) : "—"} />
+              <Detail label="Email" value={booking.booker_email} />
+              <Detail label="Mobile" value={booking.booker_phone ?? "—"} />
             </CardContent>
           </Card>
 
@@ -133,19 +132,19 @@ export default async function RoomBookingDetailPage({
               <CardContent>
                 <EditBookingForm
                   bookingId={id}
-                  rooms={(rooms ?? []).map((r) => ({ id: r.id, name: String(r.name) }))}
+                  rooms={rooms ?? []}
                   initial={{
-                    room_id: String(booking.room_id),
-                    date: String(booking.date),
-                    start_time: String(booking.start_time).slice(0, 5),
-                    end_time: String(booking.end_time).slice(0, 5),
-                    booker_first_name: String((booking as Record<string, unknown>).booker_first_name ?? booking.booker_name?.toString().split(" ")[0] ?? ""),
-                    booker_last_name: String((booking as Record<string, unknown>).booker_last_name ?? booking.booker_name?.toString().split(" ").slice(1).join(" ") ?? ""),
-                    booker_email: String(booking.booker_email ?? ""),
-                    booker_phone: String(booking.booker_phone ?? ""),
-                    occasion: String(booking.occasion ?? ""),
-                    estimated_guests: booking.estimated_guests ? String(booking.estimated_guests) : "",
-                    notes: String(booking.notes ?? ""),
+                    resource_id: booking.resource_id,
+                    date: window.date,
+                    start_time: window.startTime,
+                    end_time: window.endTime,
+                    booker_first_name: booking.booker_first_name ?? booking.booker_name.split(" ")[0] ?? "",
+                    booker_last_name: booking.booker_last_name ?? booking.booker_name.split(" ").slice(1).join(" "),
+                    booker_email: booking.booker_email,
+                    booker_phone: booking.booker_phone ?? "",
+                    occasion: booking.occasion ?? "",
+                    estimated_guests: booking.estimated_guests === null ? "" : String(booking.estimated_guests),
+                    notes: booking.notes ?? "",
                   }}
                 />
               </CardContent>
@@ -157,7 +156,7 @@ export default async function RoomBookingDetailPage({
             <Card>
               <CardHeader><CardTitle>Notes from booker</CardTitle></CardHeader>
               <CardContent>
-                <p className="text-sm whitespace-pre-wrap">{String(booking.notes)}</p>
+                <p className="text-sm whitespace-pre-wrap">{booking.notes}</p>
               </CardContent>
             </Card>
           )}
@@ -170,7 +169,7 @@ export default async function RoomBookingDetailPage({
                 <textarea
                   name="internal_notes"
                   rows={4}
-                  defaultValue={String(booking.internal_notes ?? "")}
+                  defaultValue={booking.internal_notes ?? ""}
                   placeholder="Add notes visible only to staff…"
                   className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
                 />
@@ -193,7 +192,7 @@ export default async function RoomBookingDetailPage({
               <CardContent>
                 <StatusForm
                   bookingId={id}
-                  currentStatus={String(booking.status)}
+                  currentStatus={booking.status}
                   isStaff={canEdit}
                   defaultDepositPence={defaultDepositPence}
                   currentTotalPence={totalPence || null}
@@ -208,7 +207,7 @@ export default async function RoomBookingDetailPage({
             <CardHeader className="flex-row items-center justify-between gap-2">
               <CardTitle>Payments</CardTitle>
               <Badge variant={booking.payment_status === "paid" ? "success" : "muted"} className="capitalize">
-                {String(booking.payment_status).replace("_", " ")}
+                {booking.payment_status.replace("_", " ")}
               </Badge>
             </CardHeader>
             <CardContent>
@@ -228,7 +227,7 @@ export default async function RoomBookingDetailPage({
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Received</span>
-                <span>{new Date(String(booking.created_at)).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
+                <span>{new Date(booking.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Reference</span>

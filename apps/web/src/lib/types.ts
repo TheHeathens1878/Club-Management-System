@@ -1,6 +1,24 @@
+import type { Enums } from "@club/db";
+
 export type MemberStatus = "current" | "lapsed" | "deceased" | "resigned";
-export type UserRole = "super_user" | "committee" | "bar_manager" | "bar" | "booker" | "member";
+
+/**
+ * Every role value this app has to cope with: the database's `user_role` enum
+ * plus `booker`, which the imported P0.4 app writes and reads but which the
+ * enum does not (yet) carry. Derived from the generated enum so a value added
+ * in a migration cannot go unhandled here.
+ */
+export type UserRole = Enums<"user_role"> | "booker";
 export type PaymentMethod = "cash" | "card" | "bar" | "stripe";
+
+/**
+ * `booker` belongs to the app's role vocabulary but is not a value of the
+ * database's `user_role` enum, so `row.role === "booker"` on a typed row is a
+ * comparison TypeScript rejects outright. Ask through here instead.
+ */
+export function isBookerRole(role: UserRole | null | undefined): boolean {
+  return role === "booker";
+}
 
 export interface MembershipCategory {
   id: string;
@@ -63,7 +81,12 @@ export interface Payment {
 
 export interface Profile {
   id: string;
-  member_id: string | null;
+  /**
+   * Not a column on `profiles` in the current schema — the imported P0.4 app
+   * carried it over from an older one, and nothing reads it. Optional so a row
+   * from the typed client satisfies this interface.
+   */
+  member_id?: string | null;
   role: UserRole;
   full_name: string | null;
   created_at: string;

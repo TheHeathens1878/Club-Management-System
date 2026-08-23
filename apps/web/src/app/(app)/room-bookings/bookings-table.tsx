@@ -9,9 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { deleteBooking, deleteBookings, deleteBookingsByGroup } from "./actions";
 import { BookingsExportButtons } from "./bookings-export";
-import type { ExportBooking } from "./bookings-export";
-
-type BookingRow = ExportBooking & { id: string };
+import { formatBookingDateShort } from "@/lib/booking-time";
+import type { BookingKind, BookingListItem } from "@/lib/booking-types";
 
 type ColKey = "room" | "time" | "booker" | "email" | "mobile" | "occasion" | "guests" | "amount";
 
@@ -29,17 +28,11 @@ const TOGGLE_COLS: { key: ColKey; label: string }[] = [
 const DEFAULT_VISIBLE: ColKey[] = ["room", "time", "booker", "mobile", "occasion", "guests", "amount"];
 const STORAGE_KEY = "rb-col-vis-v2";
 
-function statusVariant(status: string, bookingType?: unknown): "success" | "muted" | "destructive" | "warning" | "default" {
-  if (bookingType === "block") return "warning";
+function statusVariant(status: string, kind: BookingKind): "success" | "muted" | "destructive" | "warning" | "default" {
+  if (kind === "block") return "warning";
   if (status === "confirmed") return "success";
   if (status === "cancelled") return "destructive";
   return "default";
-}
-
-function formatDate(d: unknown) {
-  return new Date(String(d) + "T12:00:00").toLocaleDateString("en-GB", {
-    weekday: "short", day: "numeric", month: "short", year: "numeric",
-  });
 }
 
 export function BookingsTable({
@@ -47,7 +40,7 @@ export function BookingsTable({
   roomName,
   canDelete,
 }: {
-  bookings: BookingRow[];
+  bookings: BookingListItem[];
   roomName: Record<string, string>;
   canDelete: boolean;
 }) {
@@ -264,7 +257,7 @@ export function BookingsTable({
                   <td className="px-4 py-3 whitespace-nowrap font-medium" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       <Link href={`/room-bookings/${b.id}`} className="hover:underline text-primary">
-                        {formatDate(b.date)}
+                        {formatBookingDateShort(b.date)}
                       </Link>
                       {b.recurrence_group_id && (
                         <Repeat className="h-3 w-3 text-muted-foreground shrink-0" aria-label="Repeating booking" />
@@ -273,53 +266,53 @@ export function BookingsTable({
                   </td>
                   {show("room") && (
                     <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                      {roomName[b.room_id] ?? "—"}
+                      {roomName[b.resource_id] ?? "—"}
                     </td>
                   )}
                   {show("time") && (
                     <td className="px-4 py-3 whitespace-nowrap tabular-nums text-muted-foreground">
-                      {String(b.start_time).slice(0, 5)}–{String(b.end_time).slice(0, 5)}
+                      {b.start_time}–{b.end_time}
                     </td>
                   )}
                   {show("booker") && (
                     <td className="px-4 py-3">
-                      <p className="font-medium truncate max-w-[140px]">{String(b.booker_name)}</p>
+                      <p className="font-medium truncate max-w-[140px]">{b.booker_name}</p>
                     </td>
                   )}
                   {show("email") && (
                     <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs truncate max-w-[160px]">
-                      {String(b.booker_email)}
+                      {b.booker_email}
                     </td>
                   )}
                   {show("mobile") && (
                     <td className="px-4 py-3 hidden md:table-cell text-muted-foreground text-xs whitespace-nowrap">
-                      {b.booker_phone ? String(b.booker_phone) : "—"}
+                      {b.booker_phone ?? "—"}
                     </td>
                   )}
                   {show("occasion") && (
                     <td className="px-4 py-3 hidden md:table-cell text-muted-foreground truncate max-w-[140px]">
-                      {b.occasion ? String(b.occasion) : "—"}
+                      {b.occasion ?? "—"}
                     </td>
                   )}
                   {show("guests") && (
                     <td className="px-4 py-3 hidden lg:table-cell text-right tabular-nums text-muted-foreground">
-                      {b.estimated_guests ? String(b.estimated_guests) : "—"}
+                      {b.estimated_guests ?? "—"}
                     </td>
                   )}
                   {show("amount") && (
                     <td className="px-4 py-3 hidden lg:table-cell text-right tabular-nums">
-                      {b.amount_pence ? formatCurrency(Number(b.amount_pence)) : "—"}
+                      {b.total_pence ? formatCurrency(b.total_pence) : "—"}
                     </td>
                   )}
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-1">
                       <Badge
-                        variant={statusVariant(String(b.status), b.booking_type)}
+                        variant={statusVariant(b.status, b.kind)}
                         className="w-fit capitalize"
                       >
-                        {b.booking_type === "block" ? "Blocked" : String(b.status)}
+                        {b.kind === "block" ? "Blocked" : b.status}
                       </Badge>
-                      {b.booking_type !== "block" && b.payment_status === "paid" && (
+                      {b.kind !== "block" && b.payment_status === "paid" && (
                         <Badge variant="success" className="w-fit text-[10px]">Paid</Badge>
                       )}
                     </div>

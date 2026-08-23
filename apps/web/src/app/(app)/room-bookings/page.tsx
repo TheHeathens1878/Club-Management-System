@@ -10,6 +10,8 @@ import { BookingsTable } from "./bookings-table";
 import { BookingsCalendar } from "./bookings-calendar";
 import { StaffAwayPanel } from "./staff-away-panel";
 import type { StaffMember, AwayEntry } from "./staff-away-panel";
+import { BOOKING_LIST_SELECT, FUNCTION_ROOM, toBookingListItem } from "@/lib/booking-types";
+import { londonToday } from "@/lib/booking-time";
 
 type SearchParams = { status?: string; room?: string; period?: string; view?: string };
 
@@ -28,15 +30,19 @@ export default async function RoomBookingsPage({
 
   const admin = createAdminClient();
   // UK "today" date — server runs UTC, so use London timezone
-  const todayStr = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
+  const todayStr = londonToday();
 
-  const [{ data: allBookings }, { data: rooms }, { data: staffProfiles }, { data: awayRows }, { data: nonUserStaffRows }, authUsersResult] = await Promise.all([
+  const [{ data: bookingRows }, { data: rooms }, { data: staffProfiles }, { data: awayRows }, { data: nonUserStaffRows }, authUsersResult] = await Promise.all([
     admin
-      .from("room_bookings")
-      .select("id,room_id,date,start_time,end_time,booker_name,booker_email,booker_phone,occasion,estimated_guests,status,payment_status,amount_pence,booking_type,recurrence_group_id,created_at")
-      .order("date", { ascending: true })
-      .order("start_time", { ascending: true }),
-    admin.from("function_rooms").select("id,name").eq("active", true).order("sort_order"),
+      .from("bookings")
+      .select(BOOKING_LIST_SELECT)
+      .order("starts_at", { ascending: true }),
+    admin
+      .from("resources")
+      .select("id,name")
+      .eq("type", FUNCTION_ROOM)
+      .eq("active", true)
+      .order("sort_order"),
     admin.from("profiles").select("id,full_name,role").in("role", ["bar", "committee", "super_user"]),
     admin.from("staff_away").select("id,staff_id,non_user_staff_id,from_date,to_date,note").order("from_date"),
     admin.from("non_user_staff").select("id,name").eq("active", true).order("name"),
@@ -50,14 +56,14 @@ export default async function RoomBookingsPage({
 
   const staffList: StaffMember[] = [
     ...(staffProfiles ?? []).map((p) => ({
-      id: p.id as string,
-      name: (p.full_name as string | null) ?? authEmailById.get(p.id as string) ?? (p.id as string).slice(0, 8),
+      id: p.id,
+      name: p.full_name ?? authEmailById.get(p.id) ?? p.id.slice(0, 8),
       role: p.role as string,
       type: "profile" as const,
     })),
     ...(nonUserStaffRows ?? []).map((s) => ({
-      id: s.id as string,
-      name: s.name as string,
+      id: s.id,
+      name: s.name,
       role: "external",
       type: "external" as const,
     })),
@@ -66,41 +72,45 @@ export default async function RoomBookingsPage({
   const staffNameById = new Map(staffList.map((s) => [s.id, s.name]));
 
   const awayEntries: AwayEntry[] = (awayRows ?? []).map((r) => {
-    const staffId = (r.staff_id ?? (r as Record<string, unknown>).non_user_staff_id ?? "") as string;
+    const staffId = r.staff_id ?? r.non_user_staff_id ?? "";
     return {
-      id: r.id as string,
+      id: r.id,
       staffId,
       staffName: staffNameById.get(staffId) ?? "Unknown",
-      fromDate: String(r.from_date),
-      toDate: String(r.to_date),
-      note: r.note as string | null,
+      fromDate: r.from_date,
+      toDate: r.to_date,
+      note: r.note,
     };
   });
 
   const roomNameRecord: Record<string, string> = Object.fromEntries(
-    (rooms ?? []).map((r) => [r.id, r.name as string])
+    (rooms ?? []).map((r) => [r.id, r.name])
   );
+
+  // `bookings` stores a timestamptz period; every screen below still works in
+  // Europe/London wall clock, so flatten it once here.
+  const allBookings = (bookingRows ?? []).map(toBookingListItem);
 
   // --- List view filtering ---
   const effectivePeriod = periodFilter ?? "upcoming";
-  let filtered = allBookings ?? [];
+  let filtered = allBookings;
 
   if (!isCalendar) {
     if (effectivePeriod === "upcoming") {
-      filtered = filtered.filter((b) => String(b.date) >= todayStr);
+      filtered = filtered.filter((b) => b.date >= todayStr);
     } else if (effectivePeriod === "past") {
-      filtered = filtered.filter((b) => String(b.date) < todayStr).reverse();
+      filtered = filtered.filter((b) => b.date < todayStr).reverse();
     }
     if (statusFilter) filtered = filtered.filter((b) => b.status === statusFilter);
-    if (roomFilter) filtered = filtered.filter((b) => b.room_id === roomFilter);
+    if (roomFilter) filtered = filtered.filter((b) => b.resource_id === roomFilter);
   }
 
   // Status counts for tab badges
-  const base = (allBookings ?? []).filter((b) => {
-    if (effectivePeriod === "upcoming") return String(b.date) >= todayStr;
-    if (effectivePeriod === "past") return String(b.date) < todayStr;
+  const base = allBookings.filter((b) => {
+    if (effectivePeriod === "upcoming") return b.date >= todayStr;
+    if (effectivePeriod === "past") return b.date < todayStr;
     return true;
-  }).filter((b) => !roomFilter || b.room_id === roomFilter);
+  }).filter((b) => !roomFilter || b.resource_id === roomFilter);
   const counts = {
     all: base.length,
     pending: base.filter((b) => b.status === "pending").length,
@@ -253,7 +263,7 @@ export default async function RoomBookingsPage({
 
         {isCalendar ? (
           <BookingsCalendar
-            bookings={allBookings ?? []}
+            bookings={allBookings}
             roomName={roomNameRecord}
             awayEntries={awayEntries}
           />
