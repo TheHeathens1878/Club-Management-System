@@ -45,7 +45,7 @@ const PREVIEW_LIMIT = 30;
 const limiter = new RateLimiter();
 
 const CHALLENGE_MESSAGE =
-  "Full-Time is currently blocking automated access (Cloudflare) — try again in a few minutes, or use the manual import.";
+  "Full-Time blocks requests from cloud servers (Cloudflare), so the preview could not load here. The link itself is fine — save it, then import fixtures from a club PC with the Full-Time runner (docs/runbooks/fulltime-import.md) or paste the fixtures into the manual import.";
 
 export type PreviewRow = {
   externalRef: string;

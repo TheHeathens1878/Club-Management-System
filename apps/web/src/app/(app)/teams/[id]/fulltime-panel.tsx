@@ -332,7 +332,10 @@ function PreviewBlock({
       {preview.outcome === "challenge" && (
         <p className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <ShieldAlert className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{preview.message}</span>
+          <span>
+            {preview.message}
+            {preview.ids?.seasonId ? " The season and division were read from the URL, so you can save the link now." : ""}
+          </span>
         </p>
       )}
 
