@@ -6,13 +6,18 @@
     "orientation": "portrait",
     "scheme": "aomclub",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "platforms": ["ios", "android"],
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "uk.co.aomsportsclub.app"
+      "bundleIdentifier": "uk.co.aomsportsclub.club"
     },
     "android": {
-      "package": "uk.co.aomsportsclub.app"
+      "package": "uk.co.aomsportsclub.club",
+      "permissions": ["android.permission.INTERNET"]
+    },
+    "plugins": ["expo-router", "expo-secure-store"],
+    "experiments": {
+      "typedRoutes": false
     }
   }
 }
