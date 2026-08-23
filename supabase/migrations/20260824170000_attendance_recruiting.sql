@@ -162,7 +162,7 @@ comment on column public.teams.show_coach_contact is 'Whether contact_* are expo
 
 -- Backfill from the Neon import where the legacy schema holds rows.
 update public.teams t
-   set gender = case upper(coalesce(nt."teamGender", '')) when 'MIXED' then 'mixed' when 'BOYS' then 'boys' when 'MALE' then 'boys'
+   set gender = case upper(coalesce(nt."teamGender"::text, '')) when 'MIXED' then 'mixed' when 'BOYS' then 'boys' when 'MALE' then 'boys'
                      when 'GIRLS' then 'girls' when 'FEMALE' then 'girls' else t.gender end,
        recruiting      = coalesce(nt."isRecruiting", t.recruiting),
        session_details = coalesce(nullif(btrim(nt."sessionDetails"), ''), t.session_details),
