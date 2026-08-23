@@ -1,12 +1,12 @@
 -- =============================================================================
--- Full-Time widget link + pg_net fetch (20260824130000, 20260824190000)
+-- Full-Time widget link + pg_net fetch + club widgets (20260824130000 → 220000)
 -- =============================================================================
 -- Run with: npx supabase test db
 -- =============================================================================
 
 begin;
 
-select plan(32);
+select plan(36);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a7a7a7a7-1111-4111-8111-000000000001', 'w-admin@test.invalid', '{"full_name": "Ada Admin"}'::jsonb),
@@ -109,23 +109,24 @@ select is(public.fulltime_source_url('728576966', 'https://fulltime.thefa.com/fi
   'https://fulltime.thefa.com/js/cs1.html?cs=728576966', 'a widget link prefetches the widget');
 select is(public.fulltime_source_url(null, 'https://fulltime.thefa.com/fixtures.html?league=1'),
   'https://fulltime.thefa.com/fixtures.html?league=1', 'a page link prefetches the page');
--- Club codes come from site_settings; malformed values are ignored.
+-- Club codes come from site_settings; malformed values are ignored; a value
+-- may carry several codes (the girls' league has its own club widget).
 select is((select count(*) from public.fulltime_club_codes()), 0::bigint, 'no club codes configured yet');
 insert into public.site_settings (key, value) values
-  ('fulltime_club_fixtures_code', '885630049'),
+  ('fulltime_club_fixtures_code', '885630049 442066767'),
   ('fulltime_club_results_code', 'not-a-code');
 select results_eq(
-  $$select kind, code from public.fulltime_club_codes()$$,
-  $$values ('fixtures'::text, '885630049'::text)$$,
-  'club codes read from site_settings, malformed values filtered');
+  $$select kind, code from public.fulltime_club_codes() order by code$$,
+  $$values ('fixtures'::text, '442066767'::text), ('fixtures'::text, '885630049'::text)$$,
+  'several club codes per setting; malformed values filtered');
 update public.site_settings set value = '114930447' where key = 'fulltime_club_results_code';
 
 -- Two team links share one widget URL with the second team; prefetch queues
--- each distinct URL once: shared team URL + two club URLs = 3.
+-- each distinct URL once: shared team URL + three club URLs = 4.
 update public.team_fulltime_links
   set widget_code = '728576966', source_url = 'https://fulltime.thefa.com/js/cs1.html?cs=728576966'
   where team_id = '7d7d7d7d-1111-4111-8111-000000000002';
-select is(public.fulltime_prefetch(), 3, 'prefetch queues each distinct URL once (shared link + 2 club codes)');
+select is(public.fulltime_prefetch(), 4, 'prefetch queues each distinct URL once (shared link + 3 club codes)');
 select results_eq(
   $$select count(*) from public.fulltime_prefetched_url('https://fulltime.thefa.com/js/cs1.html?cs=728576966')$$,
   $$values (1::bigint)$$, 'the prefetch is found by URL');
@@ -136,6 +137,28 @@ select is((select count(*) from public.fulltime_prefetched_url('https://fulltime
   'a stale prefetch is not offered');
 select ok(not has_function_privilege('authenticated', 'public.fulltime_prefetch()', 'EXECUTE'), 'prefetch is service_role only');
 select ok(not has_function_privilege('authenticated', 'public.fulltime_club_codes()', 'EXECUTE'), 'club codes are service_role only');
+
+-- -----------------------------------------------------------------------------
+-- Import oversight: one notification per run to every live club_admin
+-- -----------------------------------------------------------------------------
+select is((select value from public.site_settings where key = 'fulltime_club_name'), 'Ashton On Mersey FC',
+  'the club name is seeded');
+insert into public.people (id, first_name, last_name, dob)
+  values ('9e9e9e9e-1111-4111-8111-000000000001', 'Ada', 'Admin', '1980-01-01');
+insert into public.person_roles (person_id, role)
+  values ('9e9e9e9e-1111-4111-8111-000000000001', 'club_admin');
+-- Seed data may hold live club admins of its own; count relative to them.
+select set_config('w.admins',
+  (select count(distinct person_id)::text from public.person_roles where role = 'club_admin' and revoked_at is null),
+  true);
+select is(public.notify_club_admins('Fixtures import: 3 new', 'U15 Falcons: 3 new', '/teams'),
+  current_setting('w.admins')::integer, 'every live club_admin is notified');
+select is((select count(*) from public.outbound_messages
+           where person_id = '9e9e9e9e-1111-4111-8111-000000000001' and subject = 'Fixtures import: 3 new'), 1::bigint,
+  'the notification landed as an in-app message');
+update public.person_roles set revoked_at = now() where person_id = '9e9e9e9e-1111-4111-8111-000000000001';
+select is(public.notify_club_admins('x', 'y'), current_setting('w.admins')::integer - 1,
+  'revoked admins are not notified');
 
 -- A coach can do neither.
 set local request.jwt.claims to '{"sub":"a7a7a7a7-1111-4111-8111-000000000002","role":"authenticated"}';

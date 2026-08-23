@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   matchClubTeam,
+  widgetCodesFrom,
   parseWidgetDate,
   parseWidgetHtml,
   widgetCodeFrom,
@@ -140,9 +141,57 @@ describe("club widgets", () => {
 
   it("keeps club fixtures assignable to their team side", () => {
     const clubTeams = ["U14 Mavericks"];
+    const prefix = "Ashton On Mersey FC";
     const mine = page.fixtures.filter(
-      (f) => matchClubTeam(f.homeTeam, clubTeams) !== undefined || matchClubTeam(f.awayTeam, clubTeams) !== undefined,
+      (f) =>
+        matchClubTeam(f.homeTeam, clubTeams, prefix) !== undefined ||
+        matchClubTeam(f.awayTeam, clubTeams, prefix) !== undefined,
     );
     expect(mine.length).toBeGreaterThan(15);
+  });
+
+  it("anchored on the club name, another club's identical suffix is refused", () => {
+    const clubTeams = ["U14 Mavericks", "U14 Pythons"];
+    const prefix = "Ashton On Mersey FC";
+    // The live bug of 2026-08-23: this is AFC Urmston Meadowside's team, not ours.
+    expect(matchClubTeam("AFC Urmston Meadowside U14 Mavericks", clubTeams, prefix)).toBeUndefined();
+    expect(matchClubTeam("Ashton On Mersey FC U14 Mavericks", clubTeams, prefix)).toBe("U14 Mavericks");
+  });
+
+  it("folds ages, squad qualifiers and a Girls section marker", () => {
+    const prefix = "Ashton On Mersey FC";
+    const girls = ["U08 Sparrows Girls", "U14 Ravens Girls", "U13 Tigers Girls", "U06 Tigers"];
+    expect(matchClubTeam("Ashton On Mersey FC U8 Sparrows Orange", girls, prefix)).toBe("U08 Sparrows Girls");
+    expect(matchClubTeam("Ashton On Mersey FC U8 Sparrows Black", girls, prefix)).toBe("U08 Sparrows Girls");
+    expect(matchClubTeam("Ashton On Mersey FC U14 Ravens", girls, prefix)).toBe("U14 Ravens Girls");
+    expect(matchClubTeam("Ashton On Mersey FC U13 Tigers", girls, prefix)).toBe("U13 Tigers Girls");
+    expect(matchClubTeam("Timperley FC U8 Hammarby", girls, prefix)).toBeUndefined();
+  });
+
+  it("reads the recorded girls-league club widget onto girls teams", () => {
+    const girlsPage = parseWidgetHtml(fixture("widget-club-girls-442066767.html"));
+    expect(girlsPage.fixtures.length).toBeGreaterThan(40);
+    const teams = ["U08 Sparrows Girls", "U14 Ravens Girls", "U11 Foxes Girls"];
+    const prefix = "Ashton On Mersey FC";
+    const claimed = new Map<string, number>();
+    for (const f of girlsPage.fixtures) {
+      for (const side of [f.homeTeam, f.awayTeam]) {
+        const team = matchClubTeam(side, teams, prefix);
+        if (team) claimed.set(team, (claimed.get(team) ?? 0) + 1);
+      }
+    }
+    expect(claimed.get("U08 Sparrows Girls")).toBeGreaterThanOrEqual(14); // both squads fold in
+    expect(claimed.get("U14 Ravens Girls")).toBe(2);
+    expect(claimed.get("U11 Foxes Girls")).toBeGreaterThanOrEqual(8);
+  });
+
+  it("finds every widget code in a multi-snippet paste", () => {
+    const paste = `<div id="lrep885630049">…</div>
+<script>var lrcode = '885630049'</script>
+<div id="lrep442066767">…</div>
+<script>var lrcode = '442066767'</script>`;
+    expect(widgetCodesFrom(paste)).toEqual(["885630049", "442066767"]);
+    expect(widgetCodesFrom("885630049 442066767")).toEqual(["885630049", "442066767"]);
+    expect(widgetCodesFrom("nothing here")).toEqual([]);
   });
 });

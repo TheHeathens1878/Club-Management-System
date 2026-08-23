@@ -76,7 +76,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   const admin = createAdminClient();
 
   const nowIso = new Date().toISOString();
-  const [teamResult, linkResult, seasonsResult, fixturesResult, runsResult] = await Promise.all([
+  const [teamResult, linkResult, seasonsResult, fixturesResult, clubNameResult, runsResult] = await Promise.all([
     admin.from("teams").select("*").eq("id", id).maybeSingle(),
     admin.from("team_fulltime_links").select("*").eq("team_id", id).maybeSingle(),
     admin.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
@@ -91,6 +91,7 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
       .gte("kickoff_at", nowIso)
       .order("kickoff_at")
       .limit(UPCOMING_LIMIT),
+    admin.from("site_settings").select("value").eq("key", "fulltime_club_name").maybeSingle(),
     admin
       .from("fixture_import_runs")
       .select("id,trigger,status,inserted,updated,unchanged,error,source_url,created_at")
@@ -374,7 +375,13 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
             </p>
           </CardHeader>
           <CardContent>
-            <FullTimePanel teamId={team.id} teamName={team.name} link={link} clubSeasons={clubSeasons} />
+            <FullTimePanel
+              teamId={team.id}
+              teamName={team.name}
+              defaultFtName={`${(clubNameResult.data?.value ?? "").trim() || "Ashton On Mersey FC"} ${team.name}`}
+              link={link}
+              clubSeasons={clubSeasons}
+            />
           </CardContent>
         </Card>
 

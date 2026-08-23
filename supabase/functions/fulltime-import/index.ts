@@ -105,13 +105,36 @@ async function importTarget(admin: Client, t: Target, trigger: string) {
     return { team: t.team_name, status: res.classification };
   }
   const parsed = parse(res.html);
-  // A widget is the team's own, so the team name it proves beats whatever was
-  // typed when the link was saved.
-  const teamName = (t.widget_code && widgetTeamName(parsed.fixtures)) || t.ft_team_name;
-  const mine = fixturesForTeam(parsed, teamName);
-  const warnings = [...parsed.warnings];
+  // The saved Full-Time team name decides which side is ours. The name the
+  // widget itself proves (the team in every row) only fills in when the saved
+  // name is the short club form — never the other way round: a wrongly pasted
+  // widget must not import another club's season (that happened: an AFC
+  // Urmston widget was saved as U14 Pythons' on 2026-08-23).
+  const detected = t.widget_code ? widgetTeamName(parsed.fixtures) : undefined;
+  let teamName = t.ft_team_name;
+  let mine = fixturesForTeam(parsed, teamName);
+  if (mine.length === 0 && detected && matchClubTeam(detected, [t.ft_team_name])) {
+    teamName = detected;
+    mine = fixturesForTeam(parsed, teamName);
+  }
   if (parsed.fixtures.length > 0 && mine.length === 0) {
-    warnings.push(`None of the ${parsed.fixtures.length} fixtures involve "${teamName}".`);
+    const message = detected
+      ? `This widget appears to belong to "${detected}", not "${t.ft_team_name}" — check the pasted snippet.`
+      : `None of the ${parsed.fixtures.length} fixtures involve "${t.ft_team_name}".`;
+    await admin.rpc("record_fixture_import_failure", {
+      p_team_id: t.team_id,
+      p_trigger: trigger,
+      p_status: "error",
+      p_source_url: url,
+      p_error: message,
+    });
+    return { team: t.team_name, status: "error", error: message };
+  }
+  const warnings = [...parsed.warnings];
+  if (detected && mine.length > 0 && !matchClubTeam(detected, [teamName]) && detected !== teamName) {
+    warnings.push(
+      `This widget looks like "${detected}"'s; only the ${mine.length} fixtures involving "${teamName}" were imported.`,
+    );
   }
   const payload = mine.map((f) => ({
     externalRef: f.externalRef,
@@ -191,10 +214,18 @@ async function importClub(admin: Client, linkedTeamIds: Set<string>, onlyTeam: s
   if (pages.length === 0) return results;
   const fixtures = mergeByRef(pages);
 
-  const [{ data: teamRows }, { data: season }] = await Promise.all([
+  const [{ data: teamRows }, { data: season }, { data: clubNameRow }] = await Promise.all([
     admin.from("teams").select("id,name").eq("active", true),
     admin.from("seasons").select("id").eq("is_current", true).limit(1).maybeSingle(),
+    admin.from("site_settings").select("value").eq("key", "fulltime_club_name").maybeSingle(),
   ]);
+  // The prefix anchors club-feed matching: "AFC Urmston Meadowside U14
+  // Mavericks" must never claim our "U14 Mavericks".
+  const clubPrefix = ((clubNameRow as { value?: string } | null)?.value ?? "").trim();
+  if (clubPrefix === "") {
+    results.push({ club: "all", status: "error", error: "site_settings fulltime_club_name is not set." });
+    return results;
+  }
   if (!season) {
     results.push({ club: "all", status: "error", error: "No current season is set." });
     return results;
@@ -206,8 +237,8 @@ async function importClub(admin: Client, linkedTeamIds: Set<string>, onlyTeam: s
 
   for (const team of teams) {
     const mine = fixtures.flatMap((f) => {
-      const isHome = matchClubTeam(f.homeTeam, names) === team.name;
-      const isAway = matchClubTeam(f.awayTeam, names) === team.name;
+      const isHome = matchClubTeam(f.homeTeam, names, clubPrefix) === team.name;
+      const isAway = matchClubTeam(f.awayTeam, names, clubPrefix) === team.name;
       if (!isHome && !isAway) return [];
       return [{ ...f, isHome, opponent: isHome ? f.awayTeam : f.homeTeam }];
     });
@@ -279,6 +310,49 @@ Deno.serve(async (req) => {
     );
   } catch (e) {
     results.push({ club: "all", status: "error", error: e instanceof Error ? e.message : String(e) });
+  }
+
+  // Oversight: one in-app notification to every club admin per full run that
+  // changed anything or failed anywhere. Quiet runs stay quiet.
+  if (!onlyTeam) {
+    type R = {
+      team?: string;
+      club?: string;
+      status?: string;
+      error?: string;
+      result?: Array<{ inserted: number; updated: number; unchanged: number }>;
+    };
+    let inserted = 0;
+    let updated = 0;
+    let failures = 0;
+    const lines: string[] = [];
+    for (const r of results as R[]) {
+      const agg = r.result?.[0];
+      if (agg && (agg.inserted > 0 || agg.updated > 0)) {
+        inserted += agg.inserted;
+        updated += agg.updated;
+        lines.push(`${r.team}: ${agg.inserted} new, ${agg.updated} updated`);
+      }
+      if (r.status && r.status !== "ok") {
+        failures += 1;
+        lines.push(`${r.team ?? `club ${r.club}`}: ${r.status}${r.error ? ` — ${r.error}` : ""}`);
+      }
+    }
+    if (lines.length > 0) {
+      const subject =
+        failures > 0
+          ? `Fixtures import: ${inserted} new, ${updated} updated, ${failures} failed`
+          : `Fixtures import: ${inserted} new, ${updated} updated`;
+      try {
+        await admin.rpc("notify_club_admins", {
+          p_subject: subject,
+          p_body: lines.join("\n").slice(0, 1500),
+          p_link: "/teams",
+        });
+      } catch {
+        // Never let the courtesy note fail the import response.
+      }
+    }
   }
   return json({ ran: results.length, results });
 });

@@ -5,20 +5,23 @@
  *
  * Full-Time's club widgets carry every team's fixtures (and, separately,
  * results) under one `lrcode` each. The two codes live in `site_settings`
- * (`fulltime_club_fixtures_code` / `fulltime_club_results_code`); the nightly
- * importer feeds every active team that has no per-team link from them,
- * matching widget names ("Ashton On Mersey FC U14 Mavericks") onto the club's
- * own team names ("U14 Mavericks") by suffix.
+ * (`fulltime_club_fixtures_code` / `fulltime_club_results_code`, each able to
+ * hold several codes — the girls' league has its own club widget); the
+ * nightly importer feeds every active team that has no per-team link from
+ * them. Matching is anchored on the club's Full-Time name (site_settings
+ * `fulltime_club_name`): "Ashton On Mersey FC U14 Mavericks" → "U14
+ * Mavericks", "Ashton On Mersey FC U8 Sparrows Orange" → "U08 Sparrows
+ * Girls" — never a name with another club's prefix.
  */
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import {
   fetchViaPgNet,
+  foldTeamName,
   matchClubTeam,
-  normaliseTeamName,
   parseWidgetHtml,
-  widgetCodeFrom,
+  widgetCodesFrom,
   widgetUrl,
 } from "@club/fulltime";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -49,80 +52,82 @@ async function requireCommittee() {
   return session;
 }
 
+/** The club's name as Full-Time prints it — anchors all club-feed matching. */
+async function clubName(admin: ReturnType<typeof createAdminClient>): Promise<string> {
+  const { data } = await admin
+    .from("site_settings")
+    .select("value")
+    .eq("key", "fulltime_club_name")
+    .maybeSingle();
+  return (data?.value ?? "").trim() || "Ashton On Mersey FC";
+}
+
 /**
- * Fetch a pasted club widget and show which configured teams it would feed.
+ * Fetch the widget(s) in a paste — several snippets are fine — and show which
+ * configured teams they would feed.
  */
 export async function previewClubWidget(input: string): Promise<ClubWidgetPreview> {
   await requireCommittee();
-  const code = widgetCodeFrom(input);
-  if (!code) {
+  const codes = widgetCodesFrom(input);
+  if (codes.length === 0) {
     return { ok: false, message: "No widget code found — paste the whole snippet or the number from var lrcode." };
   }
   const admin = createAdminClient();
-  const url = widgetUrl(code);
-  const res = await fetchViaPgNet(admin, url);
-  if (res.classification !== "ok") {
-    return {
-      ok: false,
-      code,
-      httpStatus: res.status,
-      message:
-        res.classification === "challenge"
-          ? "Full-Time answered with a Cloudflare challenge — try again in a few minutes. The code can still be saved."
-          : res.error
-            ? `Could not reach Full-Time: ${res.error}`
-            : `Full-Time returned HTTP ${res.status}.`,
-    };
-  }
-  const page = parseWidgetHtml(res.html);
+  const prefix = await clubName(admin);
 
   const { data: teamRows } = await admin.from("teams").select("name").eq("active", true);
   const names = ((teamRows ?? []) as Array<{ name: string }>).map((t) => t.name);
 
   const counts = new Map<string, number>();
-  const prefixes = new Map<string, number>();
-  const unmatchedNames = new Map<string, string>();
-  for (const f of page.fixtures) {
-    for (const side of [f.homeTeam, f.awayTeam]) {
-      const team = matchClubTeam(side, names);
-      if (team !== undefined) {
-        counts.set(team, (counts.get(team) ?? 0) + 1);
-        // What is left of the widget name once the team name is removed is the
-        // club prefix — used below to spot our own unmatched teams.
-        const full = normaliseTeamName(side);
-        const short = normaliseTeamName(team);
-        const prefix = full === short ? "" : full.slice(0, full.length - short.length - 1);
-        if (prefix !== "") prefixes.set(prefix, (prefixes.get(prefix) ?? 0) + 1);
-      } else {
-        unmatchedNames.set(normaliseTeamName(side), side);
+  const unmatchedOwnSet = new Map<string, string>();
+  const warnings: string[] = [];
+  let total = 0;
+  const foldedPrefix = foldTeamName(prefix);
+
+  for (const code of codes) {
+    const url = widgetUrl(code);
+    const res = await fetchViaPgNet(admin, url);
+    if (res.classification !== "ok") {
+      warnings.push(
+        res.classification === "challenge"
+          ? `Code ${code}: Cloudflare challenge — try again in a few minutes. It can still be saved.`
+          : `Code ${code}: ${res.error ?? `HTTP ${res.status}`}.`,
+      );
+      continue;
+    }
+    const page = parseWidgetHtml(res.html);
+    total += page.fixtures.length;
+    warnings.push(...page.warnings.slice(0, 5));
+    for (const f of page.fixtures) {
+      for (const side of [f.homeTeam, f.awayTeam]) {
+        const team = matchClubTeam(side, names, prefix);
+        if (team !== undefined) {
+          counts.set(team, (counts.get(team) ?? 0) + 1);
+        } else if (foldTeamName(side).startsWith(`${foldedPrefix} `)) {
+          // One of ours by name, but no configured team claims it.
+          unmatchedOwnSet.set(foldTeamName(side), side);
+        }
       }
     }
   }
-  const clubPrefix = [...prefixes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-  const unmatchedOwn = clubPrefix
-    ? [...unmatchedNames.entries()]
-        .filter(([key]) => key.startsWith(`${clubPrefix} `))
-        .map(([, name]) => name)
-        .sort()
-    : [];
 
   const matched = [...counts.entries()]
     .map(([team, count]) => ({ team, count }))
     .sort((a, b) => a.team.localeCompare(b.team));
+  const unmatchedOwn = [...unmatchedOwnSet.values()].sort();
 
   return {
     ok: true,
-    code,
-    httpStatus: res.status,
-    total: page.fixtures.length,
+    code: codes.join(", "),
+    total,
     matched,
     unmatchedOwn,
-    warnings: page.warnings.slice(0, 10),
+    warnings: warnings.slice(0, 10),
     message:
-      page.fixtures.length === 0
+      total === 0
         ? "The widget returned no fixtures — it may be the results widget before any matches have been played. It can still be saved."
         : matched.length === 0
-          ? "No fixtures matched any configured team — check the team names."
+          ? `No fixtures matched any configured team — matching expects names like "${prefix} U14 Mavericks".`
           : "",
   };
 }
@@ -148,13 +153,14 @@ export async function saveClubWidgetCodes(input: {
       detail[key] = null;
       continue;
     }
-    const code = widgetCodeFrom(trimmed);
-    if (!code) return { error: `No widget code found in the ${label} snippet.` };
+    const codes = widgetCodesFrom(trimmed);
+    if (codes.length === 0) return { error: `No widget code found in the ${label} snippet.` };
+    const value = codes.join(" ");
     const { error } = await admin
       .from("site_settings")
-      .upsert({ key, value: code, updated_at: new Date().toISOString() }, { onConflict: "key" });
+      .upsert({ key, value, updated_at: new Date().toISOString() }, { onConflict: "key" });
     if (error) return { error: `Could not save the ${label} code: ${error.message}` };
-    detail[key] = code;
+    detail[key] = value;
   }
 
   await writeAudit({
