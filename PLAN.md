@@ -19,7 +19,7 @@ The club currently runs four separate systems:
 
 **End state:** one Supabase project (`aomsc-function-room`, to be renamed) holding the entire club platform: unified bookings (pitches + rooms), full CRM (members, teams, seasons, payments, safeguarding, media), WhatsApp-style messaging, staff ops. One Next.js web app, one Expo mobile app (iOS + Android), one monorepo.
 
-**Stack (decided):** Supabase (Postgres 17, Auth, Realtime, Storage, Edge Functions), Next.js 14+ on Vercel, Expo/React Native with EAS, Stripe, Resend, Twilio (fallback SMS), Cloudinary or Supabase Storage for media (decide in Phase 4).
+**Stack (decided):** Supabase (Postgres 17, Auth, Realtime, Storage, Edge Functions), Next.js 14+ on Vercel, Expo/React Native with EAS, SumUp (Adam 2026-08-23: not Stripe — see DECISIONS D-SumUp; P4.1 currently Stripe-shaped, rework pending), Resend, Twilio (fallback SMS), Cloudinary or Supabase Storage for media (decide in Phase 4).
 
 ---
 
