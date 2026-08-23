@@ -2,28 +2,45 @@
   "name": "@club/mobile",
   "version": "0.1.0",
   "private": true,
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "scripts": {
+    "start": "expo start",
     "dev": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "vitest run",
     "clean": "rimraf .expo .turbo"
   },
   "dependencies": {
     "@club/db": "workspace:*",
     "@club/shared": "workspace:*",
-    "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@supabase/supabase-js": "^2.106.2",
-    "expo": "~53.0.0",
-    "expo-status-bar": "~2.2.3",
-    "react": "19.0.0",
-    "react-native": "0.79.5",
+    "expo": "~57.0.15",
+    "expo-constants": "~57.0.13",
+    "expo-linking": "~57.0.7",
+    "expo-router": "~57.0.15",
+    "expo-secure-store": "~57.0.1",
+    "expo-status-bar": "~57.0.1",
+    "expo-system-ui": "~57.0.2",
+    "react": "19.2.3",
+    "react-native": "0.86.2",
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.26.0",
     "react-native-url-polyfill": "^2.0.0"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "typescript": "^5.6.3"
+    "@types/react": "~19.2.0",
+    "typescript": "^5.6.3",
+    "vitest": "^3.2.4"
+  },
+  "expo": {
+    "install": {
+      "exclude": [
+        "typescript"
+      ]
+    }
   }
 }
