@@ -75,6 +75,9 @@ importers:
       '@club/db':
         specifier: workspace:*
         version: link:../../packages/db
+      '@club/fulltime':
+        specifier: workspace:*
+        version: link:../../packages/fulltime
       '@club/shared':
         specifier: workspace:*
         version: link:../../packages/shared

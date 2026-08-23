@@ -27,6 +27,7 @@ import {
   CalendarRange,
   DoorOpen,
   GlassWater,
+  Shirt,
 } from "lucide-react";
 import { NoticeBell } from "@/components/notice-bell";
 
@@ -40,6 +41,7 @@ const NAV = [
   { href: "/categories", label: "Categories", icon: Tags, roles: ["super_user", "committee"] },
   { href: "/events", label: "Club Events", icon: CalendarDays, roles: ["super_user", "committee", "bar", "member"] },
   { href: "/room-bookings", label: "Room Bookings", icon: DoorOpen, roles: ["super_user", "committee", "bar"] },
+  { href: "/teams", label: "Teams", icon: Shirt, roles: ["super_user", "committee"] },
   { href: "/bar-signin", label: "Bar Sign-in Log", icon: GlassWater, roles: ["super_user", "committee", "bar"] },
   { href: "/email-templates", label: "Email Templates", icon: FileText, roles: ["super_user", "committee"] },
   { href: "/noticeboard", label: "Noticeboard", icon: Bell, roles: ["super_user", "committee", "bar", "member"] },
