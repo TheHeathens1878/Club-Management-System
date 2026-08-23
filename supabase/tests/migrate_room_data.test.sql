@@ -102,10 +102,10 @@ values ('d6d6d6d6-1111-4111-8111-000000000009', 'c6c6c6c6-1111-4111-8111-0000000
 
 -- Legacy fixtures: one room, three bookings (summer-time, winter-time,
 -- overnight block), one payment, one email.
-insert into public.function_rooms (id, name, description, capacity, resources, price_pence_per_hour, active, sort_order)
+insert into public.function_rooms_legacy (id, name, description, capacity, resources, price_pence_per_hour, active, sort_order)
 values ('f6f6f6f6-1111-4111-8111-000000000001', 'Legacy Lounge', 'The lounge', 80, array['bar','stage'], 2500, true, 5);
 
-insert into public.room_bookings (id, room_id, date, start_time, end_time, booker_name, booker_email, booker_phone,
+insert into public.room_bookings_legacy (id, room_id, date, start_time, end_time, booker_name, booker_email, booker_phone,
                                   occasion, status, payment_status, booker_profile_id, total_pence, deposit_pence,
                                   booking_type, internal_notes)
 values
@@ -120,10 +120,10 @@ values
   ('a6a6a6a6-1111-4111-8111-000000000003', 'f6f6f6f6-1111-4111-8111-000000000001', '2030-12-31', '22:00', '02:00',
    'Club', '—', null, 'NYE', 'confirmed', 'unpaid', null, null, null, 'block', null);
 
-insert into public.booking_payments (id, booking_id, amount_pence, method, source, note)
+insert into public.booking_payments_legacy (id, booking_id, amount_pence, method, source, note)
 values ('e6e6e6e6-1111-4111-8111-000000000001', 'a6a6a6a6-1111-4111-8111-000000000001', 5000, 'sumup', 'sumup', 'deposit');
 
-insert into public.booking_emails (id, booking_id, kind, to_email, subject, body, sent_by_name)
+insert into public.booking_emails_legacy (id, booking_id, kind, to_email, subject, body, sent_by_name)
 values ('e6e6e6e6-1111-4111-8111-000000000002', 'a6a6a6a6-1111-4111-8111-000000000001', 'confirmation',
         'm-booker@test.invalid', 'Confirmed', 'See you there', 'Ada Admin');
 
@@ -131,11 +131,11 @@ values ('e6e6e6e6-1111-4111-8111-000000000002', 'a6a6a6a6-1111-4111-8111-0000000
 select results_eq(
   $$select resources_upserted, bookings_upserted, bookings_removed, payments_upserted, comms_upserted
       from public.migrate_room_bookings()$$,
-  $$select (select count(*)::int from public.function_rooms),
-           (select count(*)::int from public.room_bookings),
+  $$select (select count(*)::int from public.function_rooms_legacy),
+           (select count(*)::int from public.room_bookings_legacy),
            0,
-           (select count(*)::int from public.booking_payments),
-           (select count(*)::int from public.booking_emails)$$,
+           (select count(*)::int from public.booking_payments_legacy),
+           (select count(*)::int from public.booking_emails_legacy)$$,
   'run 1 upserts every legacy row (seeded + any pre-existing), removes none');
 
 select is((select count(*) from public.resources), current_setting('test.res0')::bigint + 2,
@@ -220,9 +220,9 @@ select is(
   current_setting('test.audit0')::bigint + 2, 'run 2 wrote its own audit row');
 
 -- Legacy edit propagates
-update public.room_bookings set status = 'cancelled', end_time = '22:00'
+update public.room_bookings_legacy set status = 'cancelled', end_time = '22:00'
  where id = 'a6a6a6a6-1111-4111-8111-000000000001';
-update public.function_rooms set name = 'Renamed Lounge' where id = 'f6f6f6f6-1111-4111-8111-000000000001';
+update public.function_rooms_legacy set name = 'Renamed Lounge' where id = 'f6f6f6f6-1111-4111-8111-000000000001';
 select lives_ok($$select public.migrate_room_bookings()$$, 'run 3 succeeds');
 select is(
   (select (status::text, ends_at) from public.bookings where legacy_room_booking_id = 'a6a6a6a6-1111-4111-8111-000000000001'),
@@ -231,7 +231,7 @@ select is((select name from public.resources where legacy_function_room_id = 'f6
   'Renamed Lounge', 'a legacy room rename is carried');
 
 -- Legacy hard-delete propagates, with cascade
-delete from public.room_bookings where id = 'a6a6a6a6-1111-4111-8111-000000000001';
+delete from public.room_bookings_legacy where id = 'a6a6a6a6-1111-4111-8111-000000000001';
 select results_eq(
   $$select bookings_removed from public.migrate_room_bookings()$$,
   $$values (1)$$, 'run 4 reports the removed booking');
@@ -252,20 +252,20 @@ select ok(exists (select 1 from public.bookings where id = 'd6d6d6d6-1111-4111-8
   'native booking untouched');
 
 -- Unmapped status refused, nothing written
-insert into public.room_bookings (id, room_id, date, start_time, end_time, booker_name, booker_email, status)
+insert into public.room_bookings_legacy (id, room_id, date, start_time, end_time, booker_name, booker_email, status)
 values ('a6a6a6a6-1111-4111-8111-000000000099', 'f6f6f6f6-1111-4111-8111-000000000001', '2030-01-01', '10:00', '11:00',
         'Bad', 'bad@test.invalid', 'archived');
 select throws_ok($$select public.migrate_room_bookings()$$, 'P0001', null,
   'an unmapped legacy status aborts the sync');
 select is((select count(*) from public.bookings where legacy_room_booking_id = 'a6a6a6a6-1111-4111-8111-000000000099'),
   0::bigint, 'nothing was written for the bad row');
-delete from public.room_bookings where id = 'a6a6a6a6-1111-4111-8111-000000000099';
+delete from public.room_bookings_legacy where id = 'a6a6a6a6-1111-4111-8111-000000000099';
 
--- Legacy tables are untouched by the migration itself (still ordinary tables)
-select is((select relkind from pg_class where oid = 'public.room_bookings'::regclass), 'r',
-  'room_bookings is still a table (cutover renames it later)');
-select is((select relkind from pg_class where oid = 'public.function_rooms'::regclass), 'r',
-  'function_rooms is still a table');
+-- After 20260824100000 the old names are read-only views (see legacy_views.test.sql)
+select is((select relkind from pg_class where oid = 'public.room_bookings_legacy'::regclass), 'r',
+  'room_bookings_legacy is a table after the cutover rename');
+select is((select relkind from pg_class where oid = 'public.function_rooms_legacy'::regclass), 'r',
+  'function_rooms_legacy is a table after the cutover rename');
 
 -- ---------------------------------------------------------------------------
 -- E. Privileges on the two functions
