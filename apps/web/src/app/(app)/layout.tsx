@@ -1,27 +1,28 @@
-import { redirect } from "next/navigation";
-import { getSessionProfile, isStaff, isBarManager, isCommittee, isBooker } from "@/lib/auth";
-import { hasWaitingListAccess, isClubAdmin, isSafeguardingLead } from "@/lib/person";
-import { isAnyTeamStaff } from "@/lib/pitch-booking-data";
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
-import {
-  CalendarDays,
-  CalendarPlus,
-  ClipboardList,
-  Clock,
-  Contact,
-  LogOut,
-  Settings,
-  Beer,
-  Users,
-  LandPlot,
-  MessageSquare,
-  Receipt,
-  ShieldAlert,
-  Images,
-  Wallet,
-} from "lucide-react";
+import { redirect } from "next/navigation";
+import { LogOut } from "lucide-react";
 
+import { buttonVariants } from "@/components/ui/button";
+import { getSessionProfile, isBooker } from "@/lib/auth";
+import { navFor } from "@/lib/nav";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { ROLE_VIEW_LABELS, defaultRoleView, qualifiesForView } from "@/lib/role-view";
+
+/**
+ * The signed-in shell.
+ *
+ * The nav is built from two things and no others (gap 4):
+ *
+ *   · the person's CAPABILITIES, read from the database under their own RLS —
+ *     an item whose capability is false is never rendered, in any view;
+ *   · the chosen VIEW, a cookie preference that groups the nav for a player, a
+ *     parent, a coach or an administrator. It is presentation only. Someone
+ *     may choose a view they do not hold (they may be waiting on an approval),
+ *     and then they get the banner below rather than a menu full of links that
+ *     would bounce them back out.
+ *
+ * Each page keeps its own guard. This is a menu, not an authorisation layer.
+ */
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
@@ -29,233 +30,62 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Bookers have no access to the staff area — send them to their portal
   if (isBooker(session.profile?.role)) redirect("/portal");
 
-  const role = session.profile?.role ?? "member";
   const name = session.profile?.full_name || session.email || "User";
-  const showBookings = isStaff(role);
-  const showBar = isBarManager(role);
-  const showSettings = isCommittee(role);
-  // Teams, seasons and the Full-Time links are committee-and-above (P2.3).
-  const showTeams = isCommittee(role);
-  // The safeguarding desk is the lead's, plus club administrators (SG-3, SG-9).
-  // `person_roles` is the authority on the lead, not `profiles.role`.
-  // The waiting list desk (P3.4) is a club administrator's, plus any coach
-  // holding a `waiting_list_access` grant — RLS returns nothing to anyone
-  // else, so there is no point offering them the link.
-  // Booking a pitch (gap 3) is a coach's job as much as a committee member's:
-  // `bookings_team_staff_insert` accepts anyone `team_memberships` says runs a
-  // team, so the link follows the same question. Confirming is club_admin's.
-  const [lead, admin, waitingListAccess, teamStaff] = await Promise.all([
-    isSafeguardingLead(),
-    isClubAdmin(),
-    hasWaitingListAccess(),
-    isAnyTeamStaff(),
-  ]);
-  const showSafeguarding = lead || isCommittee(role);
-  const showWaitingList = admin || waitingListAccess;
-  const showPitchBooking = teamStaff || isCommittee(role);
+  const capabilities = await getCapabilities();
+  const storedView = await getStoredRoleView();
+  const view = storedView ?? defaultRoleView(capabilities);
+  const groups = navFor(view, capabilities);
+  const qualifies = qualifiesForView(view, capabilities);
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
-      <aside className="w-full lg:w-56 border-b lg:border-b-0 lg:border-r bg-card shrink-0">
-        <div className="flex lg:flex-col gap-2 p-3 lg:p-4 lg:h-full">
-          <div className="hidden lg:block mb-4">
+      <aside className="w-full shrink-0 border-b bg-card lg:w-56 lg:border-b-0 lg:border-r">
+        <div className="flex gap-2 p-3 lg:h-full lg:flex-col lg:p-4">
+          <div className="hidden lg:mb-4 lg:block">
             <p className="text-sm font-semibold">AoM Sports Club</p>
-            <p className="text-xs text-muted-foreground truncate">{name}</p>
+            <p className="truncate text-xs text-muted-foreground">{name}</p>
+            <Link
+              href="/welcome"
+              className="mt-1 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
+            >
+              {ROLE_VIEW_LABELS[view]} view · change
+            </Link>
           </div>
 
-          {showBookings && (
-            <div className="flex flex-col gap-0.5">
-              <Link
-                href="/room-bookings"
-                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-              >
-                <CalendarDays className="h-4 w-4" /> Bookings
-              </Link>
-              <Link
-                href="/room-bookings?status=pending&view=list"
-                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"}
-              >
-                <Clock className="h-3 w-3" /> Pending
-              </Link>
-            </div>
-          )}
-
-          {showBar && (
-            <Link
-              href="/bar"
-              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-            >
-              <Beer className="h-4 w-4" /> Bar
-            </Link>
-          )}
-
-          {showTeams && (
-            <Link
-              href="/teams"
-              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-            >
-              <Users className="h-4 w-4" /> Teams
-            </Link>
-          )}
-
-          {/* The member records the teams are built from. Same audience as
-              Teams: `people` RLS answers to club_admin / safeguarding_lead,
-              which is what a committee sign-in holds. */}
-          {showTeams && (
-            <Link
-              href="/people"
-              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-            >
-              <Contact className="h-4 w-4" /> People
-            </Link>
-          )}
-
-          {/* Pitch allocation (P2.5) sits with Teams — same audience, and the
-              fixtures it allocates are the ones the Teams screens import. */}
-          {(showTeams || showPitchBooking) && (
-            <div className="flex flex-col gap-0.5">
-              {showTeams && (
-                <Link
-                  href="/pitches"
-                  className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-                >
-                  <LandPlot className="h-4 w-4" /> Pitches
-                </Link>
-              )}
-              {showPitchBooking && (
-                <>
+          {groups.map((group) => (
+            <div key={group.group} className="flex flex-col gap-0.5">
+              {group.items.length > 1 ? (
+                <p className="hidden px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground lg:block">
+                  {group.group}
+                </p>
+              ) : null}
+              {group.items.map((item) => {
+                const Icon = item.icon;
+                return (
                   <Link
-                    href="/pitches/book"
+                    key={item.href}
+                    href={item.href}
                     className={
                       buttonVariants({ variant: "ghost", size: "sm" }) +
-                      (showTeams
-                        ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
+                      (item.child
+                        ? " h-7 justify-start gap-2 pl-7 text-xs text-muted-foreground"
                         : " justify-start gap-2")
                     }
                   >
-                    <CalendarPlus className={showTeams ? "h-3 w-3" : "h-4 w-4"} /> Book a pitch
+                    <Icon className={item.child ? "h-3 w-3" : "h-4 w-4"} /> {item.label}
                   </Link>
-                  <Link
-                    href="/pitches/mine"
-                    className={
-                      buttonVariants({ variant: "ghost", size: "sm" }) +
-                      " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
-                    }
-                  >
-                    <CalendarDays className="h-3 w-3" /> My pitch bookings
-                  </Link>
-                </>
-              )}
-              {admin && (
-                <Link
-                  href="/pitches/requests"
-                  className={
-                    buttonVariants({ variant: "ghost", size: "sm" }) +
-                    " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
-                  }
-                >
-                  <Clock className="h-3 w-3" /> Pitch requests
-                </Link>
-              )}
+                );
+              })}
             </div>
-          )}
-
-          {showWaitingList && (
-            <Link
-              href="/waiting-list/manage"
-              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-            >
-              <ClipboardList className="h-4 w-4" /> Waiting list
-            </Link>
-          )}
-
-          {/* Messages are for everyone with a member record (P5.4). */}
-          <Link
-            href="/messages"
-            className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-          >
-            <MessageSquare className="h-4 w-4" /> Messages
-          </Link>
-
-          <div className="flex flex-col gap-0.5">
-            {showSettings && (
-              <Link
-                href="/subs"
-                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-              >
-                <Receipt className="h-4 w-4" /> Subs
-              </Link>
-            )}
-            <Link
-              href="/my-subs"
-              className={
-                buttonVariants({ variant: "ghost", size: "sm" }) +
-                (showSettings
-                  ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
-                  : " justify-start gap-2")
-              }
-            >
-              <Wallet className={showSettings ? "h-3 w-3" : "h-4 w-4"} /> My subs
-            </Link>
-          </div>
-
-          <div className="flex flex-col gap-0.5">
-            {showSafeguarding && (
-              <Link
-                href="/safeguarding"
-                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-              >
-                <ShieldAlert className="h-4 w-4" /> Safeguarding
-              </Link>
-            )}
-            {/* Reporting a concern is open to everyone (SG-3). */}
-            <Link
-              href="/safeguarding/report"
-              className={
-                buttonVariants({ variant: "ghost", size: "sm" }) +
-                (showSafeguarding
-                  ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
-                  : " justify-start gap-2")
-              }
-            >
-              <ShieldAlert className={showSafeguarding ? "h-3 w-3" : "h-4 w-4"} /> Report a concern
-            </Link>
-          </div>
-
-          <Link
-            href="/media"
-            className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-          >
-            <Images className="h-4 w-4" /> Media
-          </Link>
-
-          <div className="flex flex-col gap-0.5">
-            {showSettings && (
-              <Link
-                href="/settings"
-                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
-              >
-                <Settings className="h-4 w-4" /> Settings
-              </Link>
-            )}
-            <Link
-              href="/settings/comms"
-              className={
-                buttonVariants({ variant: "ghost", size: "sm" }) +
-                (showSettings
-                  ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
-                  : " justify-start gap-2")
-              }
-            >
-              <MessageSquare className={showSettings ? "h-3 w-3" : "h-4 w-4"} /> Comms
-            </Link>
-          </div>
+          ))}
 
           <div className="lg:mt-auto">
             <form action="/auth/signout" method="post">
               <button
                 type="submit"
-                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2 w-full"}
+                className={
+                  buttonVariants({ variant: "ghost", size: "sm" }) + " w-full justify-start gap-2"
+                }
               >
                 <LogOut className="h-4 w-4" /> Sign out
               </button>
@@ -265,6 +95,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       <main className="flex-1 overflow-x-clip bg-background">
+        {qualifies ? null : (
+          <div className="border-b bg-amber-50 px-8 py-3 text-sm text-amber-900">
+            You are looking at the {ROLE_VIEW_LABELS[view].toLowerCase()} view, but the club has not
+            recorded that role for you yet — so only what your account can actually reach is listed.{" "}
+            <Link href="/welcome" className="font-medium underline">
+              Ask to be approved
+            </Link>
+            .
+          </div>
+        )}
         {children}
       </main>
     </div>

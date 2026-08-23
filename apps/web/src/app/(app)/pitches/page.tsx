@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { Database, Json } from "@club/db";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { isClubAdmin } from "@/lib/person";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,7 +62,7 @@ export default async function PitchesPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
 
   const { weekend: weekendParam } = await searchParams;
   const weekend =

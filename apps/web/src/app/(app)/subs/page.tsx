@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
 import {
@@ -24,7 +25,7 @@ import {
 export default async function SubsPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/my-subs");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/my-subs");
 
   const supabase = await createClient();
   const [{ data: planRows }, { data: arrearsRows, error: arrearsError }, { data: seasons }, { data: teams }] =

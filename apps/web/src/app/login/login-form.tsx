@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { recordPasswordLogin, requestMagicLink, sendPasswordReset } from "./actions";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ShieldCheck, Mail, KeyRound, Loader2, ArrowLeft } from "lucide-react";
+import { ShieldCheck, Mail, KeyRound, Loader2, ArrowLeft, UserPlus } from "lucide-react";
 import { siteConfig } from "@/lib/site-config";
 import { isBookerRole } from "@/lib/types";
 
@@ -181,7 +181,19 @@ export function LoginForm({
               </p>
             )}
 
-            <p className="mt-6 text-center text-xs text-muted-foreground">No account? Contact the club committee to get access.</p>
+            <div className="mt-6 border-t pt-4 text-center">
+              <p className="text-sm text-muted-foreground">New to the club app?</p>
+              <a
+                href="/register"
+                className={buttonVariants({ variant: "outline", size: "sm" }) + " mt-2 w-full"}
+              >
+                <UserPlus className="h-4 w-4" /> Create an account
+              </a>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Players, parents and coaches can sign up here. A club administrator approves what
+                you are asking to be.
+              </p>
+            </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
               <a href="/contact" className="hover:underline">Contact the committee</a>
               {" · "}
