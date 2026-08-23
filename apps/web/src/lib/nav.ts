@@ -46,6 +46,7 @@ import {
   UserCheck,
   UserCircle,
   Users,
+  UsersRound,
   Wallet,
   type LucideIcon,
 } from "lucide-react";
@@ -233,6 +234,15 @@ export const NAV: readonly NavEntry[] = [
     group: "Messages",
     allowed: () => true,
     views: ALL_VIEWS,
+  },
+  {
+    href: "/groups",
+    label: "Groups",
+    icon: UsersRound,
+    group: "Messages",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+    child: true,
   },
 
   // --- Subs ----------------------------------------------------------------

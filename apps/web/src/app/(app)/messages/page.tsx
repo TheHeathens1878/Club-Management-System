@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { groupAttachment } from "@/lib/group-scope";
 import { getCurrentPersonId, nameOf, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
@@ -71,7 +72,7 @@ export default async function MessagesPage() {
     // One string literal, not a concatenation: supabase-js infers the row type
     // from the select text, and only a literal carries that type.
     .select(
-      "conversation_id,last_read_message_id,left_at,muted_until,basis,conversations(id,type,title,team_id,supervised_by_lead,closed_at,created_at)",
+      "conversation_id,last_read_message_id,left_at,muted_until,basis,conversations(id,type,title,team_id,resource_id,scope_label,supervised_by_lead,closed_at,created_at,resources(name),teams(name))",
     )
     .eq("person_id", personId)
     .limit(CONVERSATION_LIMIT);
@@ -162,6 +163,16 @@ export default async function MessagesPage() {
             if (!conversation) return null;
             const otherNames = otherIds.map((id) => nameOf(names, id));
             const label = conversationLabel(conversation.type, conversation.title, otherNames);
+            // What a group is about (venue, team or free-text scope). Read-only
+            // here; it is set on /groups.
+            const attachment =
+              conversation.type === "group"
+                ? groupAttachment({
+                    teamName: conversation.teams?.name,
+                    resourceName: conversation.resources?.name,
+                    scopeLabel: conversation.scope_label,
+                  })
+                : null;
             const preview = last?.deleted_at
               ? "Message deleted"
               : last?.body?.replace(/\s+/g, " ").slice(0, 120) ?? "No messages yet";
@@ -182,6 +193,11 @@ export default async function MessagesPage() {
                         </Badge>
                       )}
                       {conversation.type === "announcement" && <Badge variant="muted">Announcements</Badge>}
+                      {attachment && attachment.kind !== "none" && (
+                        <Badge variant={attachment.kind === "scope" ? "outline" : "muted"}>
+                          {attachment.label}
+                        </Badge>
+                      )}
                       {conversation.supervised_by_lead && (
                         <Badge variant="warning" className="gap-1">
                           <Eye className="h-3 w-3" /> Lead can read

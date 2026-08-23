@@ -1,11 +1,11 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Eye } from "lucide-react";
+import { ChevronLeft, Eye, Settings } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { getSessionProfile } from "@/lib/auth";
-import { getCurrentPersonId, nameOf, resolveNames, UNNAMED } from "@/lib/person";
+import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames, UNNAMED } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
 import { LeaveButton } from "./leave-button";
@@ -35,7 +35,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
 
   const { data: conversation } = await supabase
     .from("conversations")
-    .select("id,type,title,team_id,supervised_by_lead,closed_at")
+    .select("id,type,title,team_id,supervised_by_lead,closed_at,created_by_person_id")
     .eq("id", id)
     .maybeSingle();
   if (!conversation) notFound();
@@ -80,6 +80,13 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
         ? "Announcements are one-way. Only team staff can post here."
         : null;
 
+  // A group's name and what it is attached to are edited on /groups/[id] —
+  // offered here to the people RLS already lets change it. Team rooms never get
+  // this link: they are named by `ensure_team_conversation()`.
+  const canManageGroup =
+    conversation.type === "group" &&
+    (conversation.created_by_person_id === personId || (await isClubAdmin()));
+
   const title =
     conversation.title ||
     (activeOthers.length > 0
@@ -102,9 +109,19 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                 : "Direct message"
         }
         action={
-          <Link href="/messages" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
-            <ChevronLeft className="h-4 w-4" /> All messages
-          </Link>
+          <div className="flex items-center gap-4">
+            {canManageGroup && (
+              <Link
+                href={`/groups/${conversation.id}`}
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              >
+                <Settings className="h-4 w-4" /> Group settings
+              </Link>
+            )}
+            <Link href="/messages" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+              <ChevronLeft className="h-4 w-4" /> All messages
+            </Link>
+          </div>
         }
       />
 
