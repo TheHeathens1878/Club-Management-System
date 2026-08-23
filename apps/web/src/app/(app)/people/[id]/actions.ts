@@ -1,0 +1,294 @@
+"use server";
+
+/**
+ * Everything a person's record can be changed to, other than their own fields
+ * (those are `../actions.ts`).
+ *
+ * User-scoped client throughout, following `safeguarding/lead-actions.ts`:
+ *
+ *   * `person_roles` — club_admin only (`person_roles_admin_insert` /
+ *     `_admin_update`), and the table's audit trigger records every grant and
+ *     revocation. Roles are soft-revoked; the gap between two grants is the
+ *     history SG-7 needs to answer "who could read this on the day?".
+ *   * `guardianships` — club_admin or safeguarding_lead, and
+ *     `guardianships_guard()` raises P0001 with a readable sentence for every
+ *     SG-4 rule it enforces (guardian must be a known adult, child must be a
+ *     minor, no self-guardianship, no duplicate live link). Those sentences are
+ *     passed through untouched.
+ *   * `certifications` — club_admin or safeguarding_lead, soft-revoke only:
+ *     the table has no DELETE grant and a `deny_hard_delete` trigger.
+ */
+
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+
+import type { Database } from "@club/db";
+
+import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { friendlyDbError } from "@/lib/people-display";
+import { createClient } from "@/lib/supabase/server";
+
+export type PersonDetailState = { error?: string; notice?: string };
+
+type AppRole = Database["public"]["Enums"]["app_role"];
+type GuardianRelationship = Database["public"]["Enums"]["guardian_relationship"];
+type CertificationType = Database["public"]["Enums"]["certification_type"];
+
+const APP_ROLES: AppRole[] = [
+  "club_admin",
+  "safeguarding_lead",
+  "coach",
+  "staff",
+  "member",
+  "parent",
+  "hirer",
+];
+const RELATIONSHIPS: GuardianRelationship[] = [
+  "parent",
+  "step_parent",
+  "grandparent",
+  "foster_carer",
+  "legal_guardian",
+  "other",
+];
+const CERTIFICATION_TYPES: CertificationType[] = [
+  "fa_dbs",
+  "safeguarding_children",
+  "first_aid",
+  "coaching_badge",
+];
+
+const NOT_ADMIN = "Only a club administrator can grant or revoke a role.";
+const NOT_SAFEGUARDING =
+  "Only a club administrator or the safeguarding lead can change this. Ask one of them.";
+
+async function requireCommittee() {
+  const session = await getSessionProfile();
+  if (!session || !isCommittee(session.profile?.role)) redirect("/room-bookings");
+  return session;
+}
+
+function text(formData: FormData, key: string): string {
+  return String(formData.get(key) ?? "").trim();
+}
+
+function personPath(personId: string): string {
+  return `/people/${personId}`;
+}
+
+// ---------------------------------------------------------------------------
+// Roles
+// ---------------------------------------------------------------------------
+
+export async function grantRole(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  const role = text(formData, "role");
+  const notes = text(formData, "notes") || null;
+  if (!personId) return { error: "No person given." };
+  if (!APP_ROLES.includes(role as AppRole)) return { error: "Choose a role." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("person_roles")
+    .insert({ person_id: personId, role: role as AppRole, notes });
+  if (error) {
+    return {
+      error: friendlyDbError(error, NOT_ADMIN, "They already hold that role."),
+    };
+  }
+
+  revalidatePath(personPath(personId));
+  return { notice: "Role granted, and the grant is in the audit log." };
+}
+
+export async function revokeRole(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  const roleId = text(formData, "role_id");
+  if (!roleId) return { error: "No role given." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("person_roles")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", roleId)
+    .is("revoked_at", null);
+  if (error) return { error: friendlyDbError(error, NOT_ADMIN) };
+
+  revalidatePath(personPath(personId));
+  return { notice: "Role revoked. The grant stays on the record as history." };
+}
+
+// ---------------------------------------------------------------------------
+// Guardianships (SG-4)
+// ---------------------------------------------------------------------------
+
+/**
+ * `direction` says which side of the link the person on screen is: `guardian_of`
+ * makes them the guardian of the person picked, `child_of` makes the person
+ * picked their guardian. The guard checks the ages either way.
+ */
+export async function addGuardianship(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  const otherId = text(formData, "other_person_id");
+  const direction = text(formData, "direction");
+  const relationship = text(formData, "relationship");
+  const notes = text(formData, "notes") || null;
+
+  if (!personId) return { error: "No person given." };
+  if (!otherId) return { error: "Search for and choose the other person first." };
+  if (otherId === personId) return { error: "Nobody can be their own guardian." };
+  if (direction !== "guardian_of" && direction !== "child_of") {
+    return { error: "Choose whether this person is the guardian or the child." };
+  }
+  if (!RELATIONSHIPS.includes(relationship as GuardianRelationship)) {
+    return { error: "Choose the relationship." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("guardianships").insert({
+    guardian_person_id: direction === "guardian_of" ? personId : otherId,
+    child_person_id: direction === "guardian_of" ? otherId : personId,
+    relationship: relationship as GuardianRelationship,
+    notes,
+  });
+  if (error) {
+    return {
+      error: friendlyDbError(
+        error,
+        NOT_SAFEGUARDING,
+        "That guardianship already exists and has not ended.",
+      ),
+    };
+  }
+
+  revalidatePath(personPath(personId));
+  revalidatePath(personPath(otherId));
+  return { notice: "Guardianship recorded." };
+}
+
+/**
+ * SG-4: `ended_at` is for an arrangement that has actually ended — a placement
+ * concluded, an order discharged, a mis-entered link superseded. It is NOT the
+ * child's 18th birthday; the reading policies lapse on their own.
+ */
+export async function endGuardianship(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  const guardianshipId = text(formData, "guardianship_id");
+  if (!guardianshipId) return { error: "No guardianship given." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("guardianships")
+    .update({ ended_at: new Date().toISOString() })
+    .eq("id", guardianshipId)
+    .is("ended_at", null);
+  if (error) return { error: friendlyDbError(error, NOT_SAFEGUARDING) };
+
+  revalidatePath(personPath(personId));
+  return { notice: "Guardianship ended. The link stays on the record." };
+}
+
+// ---------------------------------------------------------------------------
+// Certifications
+// ---------------------------------------------------------------------------
+
+export async function addPersonCertification(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  const type = text(formData, "type");
+  const reference = text(formData, "reference") || null;
+  const issuedOn = text(formData, "issued_on") || null;
+  const expiresOn = text(formData, "expires_on") || null;
+
+  if (!personId) return { error: "No person given." };
+  if (!CERTIFICATION_TYPES.includes(type as CertificationType)) {
+    return { error: "Choose a certification type." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("certifications").insert({
+    person_id: personId,
+    type: type as CertificationType,
+    reference,
+    issued_on: issuedOn,
+    expires_on: expiresOn,
+  });
+  if (error) return { error: friendlyDbError(error, NOT_SAFEGUARDING) };
+
+  revalidatePath(personPath(personId));
+  return { notice: "Certification recorded. It counts towards SG-6 once it has been verified." };
+}
+
+export async function verifyPersonCertification(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  const certificationId = text(formData, "certification_id");
+  if (!certificationId) return { error: "No certification given." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("certifications")
+    .update({ verified_at: new Date().toISOString(), verified_by: user?.id ?? null })
+    .eq("id", certificationId);
+  if (error) return { error: friendlyDbError(error, NOT_SAFEGUARDING) };
+
+  revalidatePath(personPath(personId));
+  return { notice: "Verified." };
+}
+
+/** Soft revoke: `certifications` has no DELETE grant and refuses a hard delete. */
+export async function revokePersonCertification(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  const certificationId = text(formData, "certification_id");
+  if (!certificationId) return { error: "No certification given." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("certifications")
+    .update({ revoked_at: new Date().toISOString(), revoked_by: user?.id ?? null })
+    .eq("id", certificationId)
+    .is("revoked_at", null);
+  if (error) return { error: friendlyDbError(error, NOT_SAFEGUARDING) };
+
+  revalidatePath(personPath(personId));
+  return { notice: "Revoked." };
+}

@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { isSafeguardingLead } from "@/lib/person";
+import { isClubAdmin, isSafeguardingLead, nameOf, resolveNames } from "@/lib/person";
+import { personLabel } from "@/lib/people-display";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -18,6 +19,12 @@ import {
 } from "./certifications-panel";
 import { FullTimePanel, type ClubSeasonView, type FullTimeLinkView } from "./fulltime-panel";
 import { ManualImportPanel, type ImportRunView } from "./import-panel";
+import {
+  MembersPanel,
+  type MemberRow,
+  type PendingRow,
+  type TeamRoleValue,
+} from "./members-panel";
 
 /** Next 20 fixtures, read-only — the importer (P2.4) is what writes them. */
 const UPCOMING_LIMIT = 20;
@@ -31,12 +38,35 @@ function statusVariant(status: string): "success" | "muted" | "destructive" | "w
   return "default";
 }
 
+/** The payload `migrate_neon()` queues for a held-back membership. */
+function pendingMembershipPayload(payload: unknown): { teamId: string | null; role: string | null; displayName: string | null } {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return { teamId: null, role: null, displayName: null };
+  }
+  const record = payload as Record<string, unknown>;
+  const read = (key: string): string | null =>
+    typeof record[key] === "string" ? (record[key] as string) : null;
+  return { teamId: read("team_id"), role: read("role"), displayName: read("display_name") };
+}
+
 export default async function TeamPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
 
   const { id } = await params;
+
+  // --------------------------------------------------------------------
+  // Who may be here. Committee sign-ins run the teams (and hold club_admin
+  // through the profiles → person_roles sync). A team's own child-facing
+  // staff may read their roster and nothing else: `is_team_staff()` is the
+  // same predicate `team_memberships_staff_read` uses, asked through the
+  // caller's own client so the database gives the answer.
+  // --------------------------------------------------------------------
+  const userClient = await createClient();
+  const committee = isCommittee(session.profile?.role);
+  const { data: teamStaff } = await userClient.rpc("is_team_staff", { p_team_id: id });
+  if (!committee && teamStaff !== true) redirect("/room-bookings");
+
   const admin = createAdminClient();
 
   const nowIso = new Date().toISOString();
@@ -101,7 +131,6 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
   // client so that RLS and the lead-only policies are what decide, not the
   // service key.
   // --------------------------------------------------------------------
-  const userClient = await createClient();
   const lead = await isSafeguardingLead();
 
   const { data: staffRows } = await admin
@@ -165,6 +194,105 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
     created_at: run.created_at,
   }));
 
+  // --------------------------------------------------------------------
+  // The season's roster — players included, not just staff.
+  //
+  // Read through the caller's own client, so `team_memberships` RLS is what
+  // decides: `_admin_read` for a club_admin or the safeguarding lead,
+  // `_staff_read` for this team's own child-facing staff. Editing is offered
+  // only to a club_admin, which is who `_admin_insert` / `_admin_update`
+  // accept — and if the app ever got that wrong, the policy would still
+  // refuse and the refusal is what the panel shows.
+  //
+  // NO DATE OF BIRTH IS READ HERE. `is_minor()` is SECURITY DEFINER and
+  // returns a boolean, which is all a roster needs; the date itself lives on
+  // the person's record behind /people.
+  // --------------------------------------------------------------------
+  const clubAdmin = await isClubAdmin();
+
+  const { data: childFacingRows } = await userClient
+    .from("child_facing_roles")
+    .select("role,child_facing");
+  const childFacingByRole = new Map((childFacingRows ?? []).map((r) => [r.role, r.child_facing]));
+  // Fail closed, exactly as `is_child_facing_role()` does with its coalesce.
+  const isChildFacing = (role: TeamRoleValue): boolean => childFacingByRole.get(role) ?? true;
+
+  let members: MemberRow[] = [];
+  if (currentSeason) {
+    const { data: membershipRows } = await userClient
+      .from("team_memberships")
+      .select("id,person_id,role,shirt_number,joined_at")
+      .eq("team_id", id)
+      .eq("season_id", currentSeason.id)
+      .is("left_at", null)
+      .order("role")
+      .order("joined_at");
+
+    // `resolveNames` reads `people` first and falls back to `display_name()`,
+    // the SECURITY DEFINER helper that names a member to their team's staff.
+    // A coach reading this roster holds no `people` grant, so without the
+    // fallback every row would read "Club member".
+    const memberNames = await resolveNames((membershipRows ?? []).map((row) => row.person_id));
+
+    members = await Promise.all(
+      (membershipRows ?? []).map(async (row) => {
+        const childFacing = isChildFacing(row.role);
+        const [minor, dbs, safeguarding] = await Promise.all([
+          userClient.rpc("is_minor", { person_id: row.person_id }),
+          childFacing
+            ? userClient.rpc("person_compliance_status", {
+                p_person_id: row.person_id,
+                p_type: "fa_dbs",
+              })
+            : Promise.resolve({ data: null }),
+          childFacing
+            ? userClient.rpc("person_compliance_status", {
+                p_person_id: row.person_id,
+                p_type: "safeguarding_children",
+              })
+            : Promise.resolve({ data: null }),
+        ]);
+        return {
+          id: row.id,
+          personId: row.person_id,
+          name: nameOf(memberNames, row.person_id),
+          role: row.role,
+          shirtNumber: row.shirt_number,
+          joinedAt: row.joined_at,
+          isMinor: minor.data === true,
+          childFacing,
+          dbs: dbs.data ?? (childFacing ? "missing" : null),
+          safeguarding: safeguarding.data ?? (childFacing ? "missing" : null),
+        } satisfies MemberRow;
+      }),
+    );
+  }
+
+  // Imported memberships the SG-0 gate is holding back. `neon_import_pending`
+  // RLS is club_admin (or the subject), so a non-admin simply gets no rows —
+  // which is the right answer, not a failure to handle. The team lives inside
+  // the payload `migrate_neon()` wrote, so the filter is applied here.
+  const { data: pendingRows } = await userClient
+    .from("neon_import_pending")
+    .select("id,person_id,payload,created_at,attempts,last_error,people(first_name,last_name,preferred_name)")
+    .eq("kind", "membership")
+    .is("applied_at", null)
+    .order("created_at");
+
+  const pending: PendingRow[] = (pendingRows ?? [])
+    .map((row) => ({ row, parsed: pendingMembershipPayload(row.payload) }))
+    .filter((entry) => entry.parsed.teamId === id)
+    .map(({ row, parsed }) => ({
+      id: row.id,
+      personId: row.person_id,
+      personName: row.people ? personLabel(row.people) : "Club member",
+      role: parsed.role,
+      displayName: parsed.displayName,
+      createdAt: row.created_at,
+      attempts: row.attempts,
+      lastError: row.last_error,
+    }));
+
   return (
     <>
       <PageHeader
@@ -186,6 +314,33 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
           )}
         </div>
 
+        <Card>
+          <CardHeader>
+            <CardTitle>Members</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Everyone in this team for the current season, players included. Adding someone, changing
+              their role or ending their membership goes straight to <code>team_memberships</code> as
+              you — so the SG-6 guard runs, and if it refuses it tells you exactly which certification
+              is missing. Memberships end; they are never deleted.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <MembersPanel
+              teamId={team.id}
+              seasonId={currentSeason?.id ?? null}
+              seasonName={currentSeason?.name ?? null}
+              members={members}
+              pending={pending}
+              canEdit={clubAdmin}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Running the team — the Full-Time link, the manual importer and the
+            SG-6 paperwork — is committee work. A coach reading their own roster
+            above sees none of it. */}
+        {committee && (
+          <>
         <Card>
           <CardHeader>
             <CardTitle>FA Full-Time link</CardTitle>
@@ -241,6 +396,8 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
             />
           </CardContent>
         </Card>
+          </>
+        )}
 
         <Card>
           <CardHeader>
