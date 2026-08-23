@@ -160,12 +160,16 @@ export async function startConversation(_prev: ActionState, formData: FormData):
   if (others.includes(personId)) return { error: "You are already in this conversation." };
 
   const supabase = await createClient();
-  const { data: conversation, error: convError } = await supabase
+  // No RETURNING here: with RLS, INSERT … RETURNING must also satisfy the
+  // SELECT policy, and conversations are readable by participants only — a
+  // row nobody has joined yet is invisible, so the insert would be refused
+  // ("new row violates row-level security policy"). Generate the id instead.
+  const conversationId = crypto.randomUUID();
+  const { error: convError } = await supabase
     .from("conversations")
-    .insert({ type, title, created_by_person_id: personId })
-    .select("id")
-    .maybeSingle();
-  if (convError || !conversation) return { error: convError?.message ?? "Could not start the conversation." };
+    .insert({ id: conversationId, type, title, created_by_person_id: personId });
+  if (convError) return { error: convError.message };
+  const conversation = { id: conversationId };
 
   const abandon = async (message: string): Promise<ActionState> => {
     await supabase.from("conversations").update({ closed_at: new Date().toISOString() }).eq("id", conversation.id);
