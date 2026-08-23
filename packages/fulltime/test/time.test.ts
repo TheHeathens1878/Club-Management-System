@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { londonToInstant, parseAnyDate, parseClockTime, parseUkDate } from "../src/time";
+import { londonToInstant, parseAnyDate, parseClockTime, parseUkDate } from "../src/time.ts";
 
 describe("parseUkDate", () => {
   it("reads Full-Time's two-digit years as this century", () => {

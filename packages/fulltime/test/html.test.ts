@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { attributeOf, decodeEntities, extractTables, hrefsIn, selectOptions, textOf } from "../src/html";
+import { attributeOf, decodeEntities, extractTables, hrefsIn, selectOptions, textOf } from "../src/html.ts";
 
 describe("decodeEntities / textOf", () => {
   it("decodes the entities Full-Time actually emits", () => {

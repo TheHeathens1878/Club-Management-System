@@ -14,7 +14,7 @@
  * simpler tables an admin might save out of a spreadsheet.
  */
 
-import { isChallengeHtml } from "./fetch";
+import { isChallengeHtml } from "./fetch.ts";
 import {
   extractTables,
   hrefsIn,
@@ -22,9 +22,9 @@ import {
   type HtmlCell,
   type HtmlRow,
   type HtmlTable,
-} from "./html";
-import { fixtureIdFromHref, stableExternalRef } from "./ref";
-import { londonToInstant, parseClockTime, parseUkDate } from "./time";
+} from "./html.ts";
+import { fixtureIdFromHref, stableExternalRef } from "./ref.ts";
+import { londonToInstant, parseClockTime, parseUkDate } from "./time.ts";
 import type {
   FixtureStatus,
   ParseOptions,
@@ -32,7 +32,7 @@ import type {
   ParsedPage,
   ParsedSeason,
   ParsedTeam,
-} from "./types";
+} from "./types.ts";
 
 const DATE_TOKEN = /(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})/;
 const TIME_TOKEN = /\b(\d{1,2}:\d{2})\b/;

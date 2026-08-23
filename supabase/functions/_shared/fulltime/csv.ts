@@ -10,9 +10,9 @@
  * you which rows it could not read instead of refusing the file.
  */
 
-import { stableExternalRef } from "./ref";
-import { londonToInstant, parseAnyDate, parseClockTime } from "./time";
-import type { FixtureStatus, ParsedFixture, ParsedPage } from "./types";
+import { stableExternalRef } from "./ref.ts";
+import { londonToInstant, parseAnyDate, parseClockTime } from "./time.ts";
+import type { FixtureStatus, ParsedFixture, ParsedPage } from "./types.ts";
 
 /** Header names we accept for each field, after lower-casing and de-punctuating. */
 const HEADER_ALIASES: Record<string, readonly string[]> = {

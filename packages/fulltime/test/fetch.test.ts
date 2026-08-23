@@ -8,8 +8,8 @@ import {
   isChallengeHtml,
   type FetchInitLike,
   type FetchLike,
-} from "../src/fetch";
-import { fixture } from "./helpers";
+} from "../src/fetch.ts";
+import { fixture } from "./helpers.ts";
 
 const challenge = fixture("ft-results.html");
 const league = fixture("ft-league.html");

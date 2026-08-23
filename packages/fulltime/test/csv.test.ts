@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCsvFixtures, parseCsvRows } from "../src/csv";
-import { stableExternalRef } from "../src/ref";
+import { parseCsvFixtures, parseCsvRows } from "../src/csv.ts";
+import { stableExternalRef } from "../src/ref.ts";
 
 describe("parseCsvRows", () => {
   it("handles quotes, embedded commas and CRLF", () => {
