@@ -1,18 +1,26 @@
 import "react-native-url-polyfill/auto";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { createSupabaseClient } from "@club/shared";
 
-export const supabase = createSupabaseClient(
-  {
-    url: process.env.EXPO_PUBLIC_SUPABASE_URL ?? "",
-    anonKey: process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? "",
-  },
-  {
-    auth: {
-      storage: AsyncStorage,
-      autoRefreshToken: true,
-      persistSession: true,
-      detectSessionInUrl: false,
-    },
-  },
-);
+import { createReactNativeSupabaseClient, type TypedSupabaseClient } from "@club/shared";
+
+import { authStorage } from "./auth-storage";
+import { isSupabaseConfigured, missingSupabaseEnvVars, supabaseEnv } from "./env";
+
+let client: TypedSupabaseClient | null = null;
+
+/**
+ * The one Supabase client the app uses. It is always the *user* client (anon
+ * key + the signed-in session), so every read and write is subject to RLS —
+ * there is no service-role path on a device.
+ *
+ * Created lazily so a missing .env renders the configuration screen in
+ * app/_layout.tsx instead of throwing during module evaluation.
+ */
+export function getSupabase(): TypedSupabaseClient {
+  if (!isSupabaseConfigured) {
+    throw new Error(
+      `Missing Supabase configuration: ${missingSupabaseEnvVars.join(", ")}`,
+    );
+  }
+  client ??= createReactNativeSupabaseClient(supabaseEnv, authStorage);
+  return client;
+}
