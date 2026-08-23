@@ -9,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { isSafeguardingLead } from "@/lib/person";
+import { isClubAdmin, isSafeguardingLead } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
+import { LeadPanel, type LeadPerson } from "./lead-panel";
 import { OversightForm } from "./oversight-form";
 
 /**
@@ -72,10 +73,40 @@ export default async function SafeguardingPage({
   const filter = STATUSES.includes(status as ConcernStatus) ? (status as ConcernStatus) : undefined;
 
   const supabase = await createClient();
-  const [{ data: concerns, error: concernsError }, { data: compliance }] = await Promise.all([
-    supabase.rpc("read_concerns", { p_status: filter }),
-    supabase.rpc("compliance_report"),
-  ]);
+  const [{ data: concerns, error: concernsError }, { data: compliance }, admin, { data: leadRoles }] =
+    await Promise.all([
+      supabase.rpc("read_concerns", { p_status: filter }),
+      supabase.rpc("compliance_report"),
+      isClubAdmin(),
+      supabase
+        .from("person_roles")
+        .select("person_id, people:person_id(id, first_name, last_name, email)")
+        .eq("role", "safeguarding_lead")
+        .is("revoked_at", null),
+    ]);
+
+  const toLeadPerson = (p: { id: string; first_name: string; last_name: string; email: string | null }): LeadPerson => ({
+    id: p.id,
+    name: `${p.first_name} ${p.last_name}`,
+    email: p.email,
+  });
+  const currentLeads: LeadPerson[] = (leadRoles ?? [])
+    .map((r) => r.people)
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+    .map(toLeadPerson);
+
+  // The appoint list only exists for a club_admin (people RLS gives them
+  // everyone; a lead who is not an admin would see only a subset anyway).
+  let people: LeadPerson[] = [];
+  if (admin) {
+    const { data } = await supabase
+      .from("people")
+      .select("id, first_name, last_name, email")
+      .is("deleted_at", null)
+      .order("last_name")
+      .order("first_name");
+    people = (data ?? []).map(toLeadPerson);
+  }
 
   return (
     <>
@@ -90,6 +121,20 @@ export default async function SafeguardingPage({
       />
 
       <div className="p-6 space-y-6 max-w-5xl">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">Safeguarding lead</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              The named person who reviews concerns, may open a young person&apos;s conversation
+              with a reason, and is the only one who can grant a certification exemption. Changing
+              the lead is recorded in the audit log.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <LeadPanel current={currentLeads} people={people} canEdit={admin} />
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
