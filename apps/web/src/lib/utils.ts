@@ -5,7 +5,7 @@ export function getSiteUrl(): string {
   const url = process.env.NEXT_PUBLIC_SITE_URL;
   if (!url) {
     throw new Error(
-      "NEXT_PUBLIC_SITE_URL is not configured. Add it to your Vercel environment variables (e.g. https://roombooking.aomsportsclub.co.uk)."
+      "NEXT_PUBLIC_SITE_URL is not configured. Add it to your Vercel environment variables (e.g. https://portal.aomsportsclub.co.uk)."
     );
   }
   return url;
