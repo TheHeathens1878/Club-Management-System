@@ -22,15 +22,21 @@ import {
   type PickedImage,
 } from "../../../lib/attachments";
 import { useAuth } from "../../../lib/auth-context";
-import { clubDateTimeLong } from "../../../lib/format";
 import { useHouseholdContext } from "../../../lib/household-context";
 import {
+  clockLabelLondon,
   conversationTitle,
+  dayKeyLondon,
+  dayLabelLondon,
+  isReadByAllOthers,
   isUsableReportReason,
   isWithdrawn,
+  lastReadAtByPerson,
   messageBody,
+  reactionChips,
   SUPERVISED_BANNER,
   type MessageRow,
+  type ReactionChip,
 } from "../../../lib/messaging";
 import { theme } from "../../../lib/theme";
 import { useThread, type ThreadAttachment } from "../../../lib/use-thread";
@@ -62,7 +68,21 @@ export default function ThreadScreen() {
   /** Message id being reported, and the reason typed for it. */
   const [reporting, setReporting] = useState<string | null>(null);
   const [reason, setReason] = useState("");
+  /** Message the composer is replying to (WhatsApp-style quote). */
+  const [replyTo, setReplyTo] = useState<MessageRow | null>(null);
+  /** Message whose long-press action sheet is open. */
+  const [actionsFor, setActionsFor] = useState<MessageRow | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+
+  // ✓✓ ticks: what every other active participant has read, live.
+  const readState = useMemo(
+    () => lastReadAtByPerson(thread.readers, thread.messages, myPersonId),
+    [thread.readers, thread.messages, myPersonId],
+  );
+  const messageById = useMemo(
+    () => new Map(thread.messages.map((message) => [message.id, message])),
+    [thread.messages],
+  );
 
   const title = useMemo(() => {
     if (!thread.conversation) return "Conversation";
@@ -106,6 +126,9 @@ export default function ThreadScreen() {
     setDraft("");
     setPending(null);
 
+    const reply = replyTo;
+    setReplyTo(null);
+
     const sent = await thread.send(
       body,
       image
@@ -116,12 +139,14 @@ export default function ThreadScreen() {
               : { ok: false, error: upload.error };
           }
         : undefined,
+      reply?.id ?? null,
     );
 
     if (!sent) {
       // Put the draft back rather than losing what someone typed.
       setDraft(body);
       setPending(image);
+      setReplyTo(reply);
       return;
     }
     scrollRef.current?.scrollToEnd({ animated: true });
@@ -193,24 +218,46 @@ export default function ThreadScreen() {
           <Notice>No messages yet. Say hello.</Notice>
         ) : null}
 
-        {thread.messages.map((message) => (
-          <MessageBubble
-            key={message.id}
-            message={message}
-            mine={message.sender_person_id === myPersonId}
-            senderName={
-              thread.names[message.sender_person_id] ?? "A club member"
-            }
-            attachments={thread.attachments.filter(
-              (attachment) => attachment.messageId === message.id,
-            )}
-            onDelete={() => confirmDelete(message.id)}
-            onReport={() => {
-              setReason("");
-              setReporting(message.id);
-            }}
-          />
-        ))}
+        {thread.messages.map((message, index) => {
+          const prev = index > 0 ? thread.messages[index - 1] : null;
+          const newDay =
+            !prev || dayKeyLondon(prev.created_at) !== dayKeyLondon(message.created_at);
+          const quoted = message.reply_to_id
+            ? (messageById.get(message.reply_to_id) ?? null)
+            : null;
+          return (
+            <View key={message.id}>
+              {newDay ? (
+                <View style={styles.dayChipWrap}>
+                  <Text style={styles.dayChip}>{dayLabelLondon(message.created_at)}</Text>
+                </View>
+              ) : null}
+              <MessageBubble
+                message={message}
+                mine={message.sender_person_id === myPersonId}
+                senderName={thread.names[message.sender_person_id] ?? "A club member"}
+                quoted={quoted}
+                quotedName={
+                  quoted
+                    ? quoted.sender_person_id === myPersonId
+                      ? "You"
+                      : (thread.names[quoted.sender_person_id] ?? "A club member")
+                    : null
+                }
+                hasUnrenderedQuote={Boolean(message.reply_to_id) && !quoted}
+                chips={reactionChips(thread.reactions, message.id, myPersonId)}
+                readByAll={isReadByAllOthers(message, readState.otherIds, readState.readAt)}
+                attachments={thread.attachments.filter(
+                  (attachment) => attachment.messageId === message.id,
+                )}
+                onToggleReaction={(emoji) => {
+                  void thread.toggleReaction(message.id, emoji);
+                }}
+                onLongPress={() => setActionsFor(message)}
+              />
+            </View>
+          );
+        })}
 
         {thread.attachmentsUnreadable ? (
           <Notice>
@@ -227,6 +274,29 @@ export default function ThreadScreen() {
         </View>
       ) : (
         <View style={styles.composer}>
+          {replyTo ? (
+            <View style={styles.replyBar}>
+              <View style={styles.replyBarText}>
+                <Text style={styles.replyBarName}>
+                  Replying to{" "}
+                  {replyTo.sender_person_id === myPersonId
+                    ? "yourself"
+                    : (thread.names[replyTo.sender_person_id] ?? "A club member")}
+                </Text>
+                <Text style={styles.replyBarBody} numberOfLines={1}>
+                  {messageBody(replyTo)}
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Cancel reply"
+                onPress={() => setReplyTo(null)}
+              >
+                <Text style={styles.pendingRemove}>Cancel</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
           {pending ? (
             <View style={styles.pending}>
               <Text style={styles.pendingText} numberOfLines={1}>
@@ -276,6 +346,76 @@ export default function ThreadScreen() {
         </View>
       )}
 
+      {/* Long-press action sheet: react / reply / delete / report. */}
+      <Modal
+        visible={actionsFor !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setActionsFor(null)}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={() => setActionsFor(null)}>
+          <View style={styles.modalCard}>
+            {actionsFor && !isWithdrawn(actionsFor) && !closed ? (
+              <View style={styles.emojiRow}>
+                {QUICK_EMOJI.map((emoji) => (
+                  <Pressable
+                    key={emoji}
+                    accessibilityRole="button"
+                    accessibilityLabel={`React ${emoji}`}
+                    onPress={() => {
+                      const target = actionsFor;
+                      setActionsFor(null);
+                      if (target) void thread.toggleReaction(target.id, emoji);
+                    }}
+                    style={styles.emojiButton}
+                  >
+                    <Text style={styles.emojiGlyph}>{emoji}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
+            {actionsFor && !isWithdrawn(actionsFor) && !closed ? (
+              <Button
+                title="Reply"
+                variant="secondary"
+                onPress={() => {
+                  setReplyTo(actionsFor);
+                  setActionsFor(null);
+                }}
+              />
+            ) : null}
+            {actionsFor &&
+            !isWithdrawn(actionsFor) &&
+            actionsFor.sender_person_id === myPersonId ? (
+              <Button
+                title="Delete for everyone"
+                variant="secondary"
+                onPress={() => {
+                  const target = actionsFor;
+                  setActionsFor(null);
+                  if (target) confirmDelete(target.id);
+                }}
+              />
+            ) : null}
+            {actionsFor && !isWithdrawn(actionsFor) ? (
+              <Button
+                title="Report to the safeguarding lead"
+                variant="secondary"
+                onPress={() => {
+                  const target = actionsFor;
+                  setActionsFor(null);
+                  if (target) {
+                    setReason("");
+                    setReporting(target.id);
+                  }
+                }}
+              />
+            ) : null}
+            <Button title="Close" variant="secondary" onPress={() => setActionsFor(null)} />
+          </View>
+        </Pressable>
+      </Modal>
+
       <Modal
         visible={reporting !== null}
         transparent
@@ -316,68 +456,122 @@ export default function ThreadScreen() {
   );
 }
 
+const QUICK_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+
 function MessageBubble({
   message,
   mine,
   senderName,
+  quoted,
+  quotedName,
+  hasUnrenderedQuote,
+  chips,
+  readByAll,
   attachments,
-  onDelete,
-  onReport,
+  onToggleReaction,
+  onLongPress,
 }: {
   message: MessageRow;
   mine: boolean;
   senderName: string;
+  /** The message this one replies to, when it is in the loaded window. */
+  quoted: MessageRow | null;
+  quotedName: string | null;
+  hasUnrenderedQuote: boolean;
+  chips: ReactionChip[];
+  readByAll: boolean;
   attachments: ThreadAttachment[];
-  onDelete: () => void;
-  onReport: () => void;
+  onToggleReaction: (emoji: string) => void;
+  onLongPress: () => void;
 }) {
   const withdrawn = isWithdrawn(message);
 
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${senderName}: ${messageBody(message)}`}
-      disabled={withdrawn}
-      onLongPress={mine ? onDelete : onReport}
-      style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
-    >
-      {mine ? null : <Text style={styles.sender}>{senderName}</Text>}
+    <View style={mine ? styles.bubbleColMine : styles.bubbleColTheirs}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${senderName}: ${messageBody(message)}`}
+        accessibilityHint={withdrawn ? undefined : "Hold for reply, reactions and more"}
+        disabled={withdrawn}
+        onLongPress={onLongPress}
+        style={[styles.bubble, mine ? styles.bubbleMine : styles.bubbleTheirs]}
+      >
+        {mine ? null : <Text style={styles.sender}>{senderName}</Text>}
 
-      <Text style={[styles.body, withdrawn && styles.bodyWithdrawn]}>
-        {messageBody(message)}
-      </Text>
+        {quoted ? (
+          // The quote goes through messageBody() too: a deleted or redacted
+          // body must never leak back through a reply preview (SG-8).
+          <View style={styles.quote}>
+            <Text style={styles.quoteName}>{quotedName}</Text>
+            <Text style={styles.quoteBody} numberOfLines={2}>
+              {messageBody(quoted)}
+            </Text>
+          </View>
+        ) : hasUnrenderedQuote ? (
+          <View style={styles.quote}>
+            <Text style={styles.quoteBody}>Replying to an earlier message</Text>
+          </View>
+        ) : null}
 
-      {withdrawn
-        ? null
-        : attachments.map((attachment) =>
-            attachment.url ? (
-              <Image
-                key={attachment.id}
-                source={{ uri: attachment.url }}
-                style={styles.image}
-                resizeMode="cover"
-                accessibilityLabel="Attached photo"
-              />
-            ) : (
-              <View key={attachment.id} style={styles.imagePlaceholder}>
-                <Text style={styles.imagePlaceholderText}>
-                  📎 Photo attached — cannot be shown on this device
-                </Text>
-              </View>
-            ),
-          )}
-
-      <View style={styles.meta}>
-        <Text style={styles.time}>{clubDateTimeLong(message.created_at)}</Text>
-        {withdrawn ? <Pill label="Withdrawn" /> : null}
-      </View>
-
-      {withdrawn ? null : (
-        <Text style={styles.hint}>
-          {mine ? "Hold to delete" : "Hold to report"}
+        <Text style={[styles.body, withdrawn && styles.bodyWithdrawn]}>
+          {messageBody(message)}
         </Text>
-      )}
-    </Pressable>
+
+        {withdrawn
+          ? null
+          : attachments.map((attachment) =>
+              attachment.url ? (
+                <Image
+                  key={attachment.id}
+                  source={{ uri: attachment.url }}
+                  style={styles.image}
+                  resizeMode="cover"
+                  accessibilityLabel="Attached photo"
+                />
+              ) : (
+                <View key={attachment.id} style={styles.imagePlaceholder}>
+                  <Text style={styles.imagePlaceholderText}>
+                    📎 Photo attached — cannot be shown on this device
+                  </Text>
+                </View>
+              ),
+            )}
+
+        <View style={styles.meta}>
+          <Text style={styles.time}>{clockLabelLondon(message.created_at)}</Text>
+          {mine && !withdrawn ? (
+            <Text
+              style={[styles.ticks, readByAll && styles.ticksRead]}
+              accessibilityLabel={readByAll ? "Read by everyone" : "Sent"}
+            >
+              {readByAll ? "✓✓" : "✓"}
+            </Text>
+          ) : null}
+          {withdrawn ? <Pill label="Withdrawn" /> : null}
+        </View>
+      </Pressable>
+
+      {chips.length > 0 ? (
+        <View style={[styles.chipsRow, mine ? styles.chipsRowMine : null]}>
+          {chips.map((chip) => (
+            <Pressable
+              key={chip.emoji}
+              accessibilityRole="button"
+              accessibilityLabel={
+                chip.mine ? `Remove your ${chip.emoji} reaction` : `React ${chip.emoji}`
+              }
+              onPress={() => onToggleReaction(chip.emoji)}
+              style={[styles.chip, chip.mine && styles.chipMine]}
+            >
+              <Text style={styles.chipText}>
+                {chip.emoji}
+                {chip.count > 1 ? ` ${chip.count}` : ""}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -402,6 +596,67 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   sender: { color: theme.colour.accent, fontSize: 12, fontWeight: "700" },
+  bubbleColMine: { alignSelf: "flex-end", maxWidth: "88%", gap: 2 },
+  bubbleColTheirs: { alignSelf: "flex-start", maxWidth: "88%", gap: 2 },
+  dayChipWrap: { alignItems: "center", paddingVertical: theme.space.sm },
+  dayChip: {
+    backgroundColor: theme.colour.surface,
+    borderColor: theme.colour.border,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: theme.space.md,
+    paddingVertical: 3,
+    color: theme.colour.muted,
+    fontSize: 11,
+    fontWeight: "600",
+    overflow: "hidden",
+  },
+  quote: {
+    borderLeftColor: theme.colour.accent,
+    borderLeftWidth: 3,
+    backgroundColor: "rgba(127,127,127,0.12)",
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.space.sm,
+    paddingVertical: 4,
+    gap: 1,
+  },
+  quoteName: { color: theme.colour.accent, fontSize: 11, fontWeight: "700" },
+  quoteBody: { color: theme.colour.muted, fontSize: 12 },
+  ticks: { color: theme.colour.muted, fontSize: 11, fontWeight: "700" },
+  ticksRead: { color: "#3aa0ff" },
+  chipsRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: -2 },
+  chipsRowMine: { justifyContent: "flex-end" },
+  chip: {
+    backgroundColor: theme.colour.surface,
+    borderColor: theme.colour.border,
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  chipMine: { borderColor: theme.colour.accent },
+  chipText: { fontSize: 12, color: theme.colour.text },
+  emojiRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: theme.space.xs,
+  },
+  emojiButton: { padding: theme.space.xs },
+  emojiGlyph: { fontSize: 26 },
+  replyBar: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.space.sm,
+    borderLeftColor: theme.colour.accent,
+    borderLeftWidth: 3,
+    backgroundColor: theme.colour.surface,
+    borderRadius: theme.radius.md,
+    paddingHorizontal: theme.space.md,
+    paddingVertical: theme.space.sm,
+  },
+  replyBarText: { flex: 1, gap: 1 },
+  replyBarName: { color: theme.colour.accent, fontSize: 12, fontWeight: "700" },
+  replyBarBody: { color: theme.colour.muted, fontSize: 12 },
   body: { color: theme.colour.text, fontSize: 16, lineHeight: 22 },
   bodyWithdrawn: { color: theme.colour.muted, fontStyle: "italic" },
   image: {

@@ -8,6 +8,7 @@ import {
   type ConversationRow,
   type MessageRow,
   type ParticipantRow,
+  type ReactionRow,
 } from "./messaging";
 import { displayNames } from "./use-household";
 import { getSupabase } from "./supabase";
@@ -50,12 +51,17 @@ export interface ThreadState {
   /** person_id → display name, for message authorship. */
   names: Record<string, string>;
   attachments: ThreadAttachment[];
+  /** Every reaction on the visible messages. */
+  reactions: ReactionRow[];
+  /** Active other participants with their read pointers (for ✓✓ ticks). */
+  readers: { person_id: string; left_at: string | null; last_read_message_id: string | null }[];
   loading: boolean;
   error: string | null;
   sending: boolean;
   /** True when at least one attachment could not be signed for reading. */
   attachmentsUnreadable: boolean;
-  send: (body: string, attach?: AttachHandler) => Promise<boolean>;
+  send: (body: string, attach?: AttachHandler, replyToId?: string | null) => Promise<boolean>;
+  toggleReaction: (messageId: string, emoji: string) => Promise<boolean>;
   softDelete: (messageId: string) => Promise<boolean>;
   report: (messageId: string, reason: string) => Promise<boolean>;
   reload: () => void;
@@ -75,6 +81,10 @@ export function useThread(
   const [messages, setMessages] = useState<MessageRow[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [attachments, setAttachments] = useState<ThreadAttachment[]>([]);
+  const [reactions, setReactions] = useState<ReactionRow[]>([]);
+  const [readers, setReaders] = useState<
+    { person_id: string; left_at: string | null; last_read_message_id: string | null }[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
@@ -113,7 +123,7 @@ export function useThread(
             .limit(PAGE_SIZE),
           supabase
             .from("conversation_participants")
-            .select("conversation_id, person_id, left_at")
+            .select("conversation_id, person_id, left_at, last_read_message_id")
             .eq("conversation_id", conversationId),
         ]);
         if (conversationError) throw conversationError;
@@ -129,6 +139,14 @@ export function useThread(
           (conversationRow ?? null) as unknown as ConversationRow | null,
         );
         setMessages(page);
+
+        setReaders(
+          ((participantRows ?? []) as {
+            person_id: string;
+            left_at: string | null;
+            last_read_message_id: string | null;
+          }[]).filter((row) => row.person_id !== myPersonId),
+        );
 
         const personIds = ((participantRows ?? []) as ParticipantRow[]).map(
           (row) => row.person_id,
@@ -200,6 +218,25 @@ export function useThread(
     };
   }, [messageIds]);
 
+  // ------------------------------------------------------------ reactions ---
+  useEffect(() => {
+    if (messageIds.length === 0) {
+      setReactions([]);
+      return;
+    }
+    let active = true;
+    void (async () => {
+      const { data } = await getSupabase()
+        .from("message_reactions")
+        .select("id, message_id, person_id, emoji")
+        .in("message_id", messageIds.split(","));
+      if (active && data) setReactions(data as ReactionRow[]);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [messageIds, nonce]);
+
   // ------------------------------------------------------------- realtime ---
   useEffect(() => {
     if (!conversationId) return;
@@ -223,12 +260,56 @@ export function useThread(
           setMessages((current) => mergeMessage(current, row));
         },
       )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversation_participants",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const row = payload.new as
+            | { person_id?: string; left_at?: string | null; last_read_message_id?: string | null }
+            | undefined;
+          if (!row?.person_id || row.person_id === myPersonId) return;
+          const pid = row.person_id;
+          setReaders((current) => [
+            ...current.filter((r) => r.person_id !== pid),
+            {
+              person_id: pid,
+              left_at: row.left_at ?? null,
+              last_read_message_id: row.last_read_message_id ?? null,
+            },
+          ]);
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "message_reactions" },
+        (payload) => {
+          const row = payload.new as ReactionRow | undefined;
+          if (!row?.id) return;
+          setReactions((current) =>
+            current.some((r) => r.id === row.id) ? current : [...current, row],
+          );
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "message_reactions" },
+        (payload) => {
+          const old = payload.old as { id?: string } | undefined;
+          if (!old?.id) return;
+          setReactions((current) => current.filter((r) => r.id !== old.id));
+        },
+      )
       .subscribe();
 
     return () => {
       if (channel) void supabase.removeChannel(channel);
     };
-  }, [conversationId]);
+  }, [conversationId, myPersonId]);
 
   // --------------------------------------------------------------- poll ----
   useEffect(() => {
@@ -253,7 +334,7 @@ export function useThread(
 
   // ------------------------------------------------------------- actions ---
   const send = useCallback(
-    async (body: string, attach?: AttachHandler): Promise<boolean> => {
+    async (body: string, attach?: AttachHandler, replyToId?: string | null): Promise<boolean> => {
       if (!conversationId || !myPersonId) return false;
       const trimmed = body.trim();
       if (!trimmed && !attach) return false;
@@ -268,6 +349,7 @@ export function useThread(
             // An image on its own still needs a body: `messages.body` is NOT
             // NULL and the export has to read as a transcript.
             body: trimmed || "📎 Photo",
+            reply_to_id: replyToId ?? null,
           })
           .select(MESSAGE_SELECT)
           .single();
@@ -299,6 +381,47 @@ export function useThread(
       }
     },
     [conversationId, myPersonId, reload],
+  );
+
+  const toggleReaction = useCallback(
+    async (messageId: string, emoji: string): Promise<boolean> => {
+      if (!myPersonId) return false;
+      const supabase = getSupabase();
+      const mine = reactions.find(
+        (r) => r.message_id === messageId && r.person_id === myPersonId && r.emoji === emoji,
+      );
+      // Optimistic; the realtime event (or the refetch on reload) settles it.
+      if (mine) {
+        setReactions((current) => current.filter((r) => r.id !== mine.id));
+        const { error: deleteError } = await supabase
+          .from("message_reactions")
+          .delete()
+          .eq("id", mine.id);
+        if (deleteError) {
+          setReactions((current) => [...current, mine]);
+          setError(deleteError.message);
+          return false;
+        }
+        return true;
+      }
+      const optimistic = {
+        id: `optimistic-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        message_id: messageId,
+        person_id: myPersonId,
+        emoji,
+      };
+      setReactions((current) => [...current, optimistic]);
+      const { error: insertError } = await supabase
+        .from("message_reactions")
+        .insert({ message_id: messageId, person_id: myPersonId, emoji });
+      if (insertError) {
+        setReactions((current) => current.filter((r) => r.id !== optimistic.id));
+        setError(insertError.message);
+        return false;
+      }
+      return true;
+    },
+    [myPersonId, reactions],
   );
 
   const softDelete = useCallback(
@@ -358,6 +481,8 @@ export function useThread(
     messages,
     names,
     attachments,
+    reactions,
+    readers,
     loading,
     error,
     sending,
@@ -365,6 +490,7 @@ export function useThread(
       (attachment) => attachment.url === null,
     ),
     send,
+    toggleReaction,
     softDelete,
     report,
     reload,

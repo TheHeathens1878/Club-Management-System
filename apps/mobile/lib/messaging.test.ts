@@ -16,6 +16,12 @@ import {
   SUPERVISED_BANNER,
   toConversationSummaries,
   unreadCount,
+  clockLabelLondon,
+  dayKeyLondon,
+  dayLabelLondon,
+  isReadByAllOthers,
+  lastReadAtByPerson,
+  reactionChips,
   type ConversationRow,
   type MessageRow,
   type MyParticipantRow,
@@ -319,5 +325,77 @@ describe("isUsableReportReason", () => {
 
   it("accepts a real reason", () => {
     expect(isUsableReportReason("This is abusive towards my son.")).toBe(true);
+  });
+});
+
+describe("WhatsApp-style thread helpers", () => {
+  const msg = (id: string, at: string, sender = "p1"): MessageRow => ({
+    id,
+    conversation_id: "c1",
+    sender_person_id: sender,
+    body: `m-${id}`,
+    created_at: at,
+    deleted_at: null,
+    redacted_at: null,
+    reply_to_id: null,
+  });
+
+  it("reactionChips groups by emoji, counts, and marks mine", () => {
+    const reactions = [
+      { id: "r1", message_id: "m1", person_id: "p1", emoji: "👍" },
+      { id: "r2", message_id: "m1", person_id: "p2", emoji: "👍" },
+      { id: "r3", message_id: "m1", person_id: "p2", emoji: "❤️" },
+      { id: "r4", message_id: "m2", person_id: "p2", emoji: "😂" },
+    ];
+    expect(reactionChips(reactions, "m1", "p1")).toEqual([
+      { emoji: "👍", count: 2, mine: true },
+      { emoji: "❤️", count: 1, mine: false },
+    ]);
+    expect(reactionChips(reactions, "m2", "p1")).toEqual([{ emoji: "😂", count: 1, mine: false }]);
+    expect(reactionChips(reactions, "m3", "p1")).toEqual([]);
+  });
+
+  it("day keys and labels are London days", () => {
+    // 23:30 UTC on 5 July is 00:30 on 6 July in London (BST).
+    expect(dayKeyLondon("2026-07-05T23:30:00Z")).toBe("2026-07-06");
+    expect(dayKeyLondon("2026-01-05T23:30:00Z")).toBe("2026-01-05");
+    const now = new Date("2026-09-06T12:00:00Z");
+    expect(dayLabelLondon("2026-09-06T08:00:00Z", now)).toBe("Today");
+    expect(dayLabelLondon("2026-09-05T08:00:00Z", now)).toBe("Yesterday");
+    expect(dayLabelLondon("2026-08-30T08:00:00Z", now)).toBe("Sunday 30 August 2026");
+  });
+
+  it("clockLabelLondon is the London wall clock", () => {
+    expect(clockLabelLondon("2026-07-05T13:05:00Z")).toBe("14:05");
+    expect(clockLabelLondon("2026-01-05T13:05:00Z")).toBe("13:05");
+    expect(clockLabelLondon("nonsense")).toBe("");
+  });
+
+  it("read-by-all requires every active other participant to have caught up", () => {
+    const a = msg("a", "2026-09-06T10:00:00Z", "me");
+    const b = msg("b", "2026-09-06T10:05:00Z", "me");
+    const messages = [a, b];
+    const participants = [
+      { person_id: "me", left_at: null, last_read_message_id: "b" },
+      { person_id: "p2", left_at: null, last_read_message_id: "b" },
+      { person_id: "p3", left_at: null, last_read_message_id: "a" },
+      { person_id: "gone", left_at: "2026-09-01T00:00:00Z", last_read_message_id: null },
+    ];
+    const { otherIds, readAt } = lastReadAtByPerson(participants, messages, "me");
+    expect(otherIds.sort()).toEqual(["p2", "p3"]);
+    expect(isReadByAllOthers(a, otherIds, readAt)).toBe(true);
+    expect(isReadByAllOthers(b, otherIds, readAt)).toBe(false);
+  });
+
+  it("a pointer outside the window under-reports, never over-reports", () => {
+    const b = msg("b", "2026-09-06T10:05:00Z", "me");
+    const participants = [{ person_id: "p2", left_at: null, last_read_message_id: "ancient" }];
+    const { otherIds, readAt } = lastReadAtByPerson(participants, [b], "me");
+    expect(isReadByAllOthers(b, otherIds, readAt)).toBe(false);
+  });
+
+  it("with nobody else active there is no read tick", () => {
+    const b = msg("b", "2026-09-06T10:05:00Z", "me");
+    expect(isReadByAllOthers(b, [], {})).toBe(false);
   });
 });
