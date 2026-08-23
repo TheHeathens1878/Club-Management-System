@@ -5,7 +5,7 @@ provider, then marks it `sent` or `failed`.
 
 | Channel | Provider | Marked with |
 |---|---|---|
-| `email` | Resend REST (`POST https://api.resend.com/emails`) | provider `resend`, ref = Resend message id |
+| `email` | Microsoft Graph (`POST /users/{MAIL_FROM}/sendMail`, client-credentials with the same Azure app registration the web app uses) | provider `microsoft-graph`, ref = Graph `request-id` |
 | `sms` | Twilio REST (`Accounts/<sid>/Messages.json`) | provider `twilio`, ref = message SID |
 | `push` | Expo (`https://exp.host/--/api/v2/push/send`), tokens from `push_tokens` | provider `expo`, ref = first ticket id |
 | `in_app` | none — the row *is* the message | provider `in_app` |

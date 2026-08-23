@@ -81,7 +81,7 @@ Platform-provided (do not set): `SUPABASE_URL`, `SUPABASE_ANON_KEY`,
 supabase secrets set STRIPE_SECRET_KEY=sk_test_...          # stripe-checkout, stripe-webhook
 supabase secrets set STRIPE_WEBHOOK_SECRET=whsec_...        # stripe-webhook
 supabase secrets set PUBLIC_SITE_URL=https://...            # stripe-checkout return URLs
-supabase secrets set RESEND_API_KEY=re_...                  # comms-dispatch (email)
+supabase secrets set AZURE_TENANT_ID=... AZURE_CLIENT_ID=... AZURE_CLIENT_SECRET=... MAIL_FROM=...   # comms-dispatch (email via Microsoft Graph; same values as the web app)
 supabase secrets set COMMS_FROM_EMAIL="AoM Sports Club <noreply@example.org>"
 supabase secrets set TWILIO_ACCOUNT_SID=AC...               # comms-dispatch (sms)
 supabase secrets set TWILIO_AUTH_TOKEN=...
