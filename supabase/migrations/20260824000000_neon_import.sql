@@ -21,7 +21,7 @@
 --   * Coaches without certifications get a 30-day `certification_exemptions`
 --     row at activation (D-P3-2). The exemption guard requires a
 --     safeguarding_lead granter, so activation waits for one to exist.
---   * `auth.users` rows are created OUTSIDE SQL by scripts/neon-auth-import.ts
+--   * `auth.users` rows are created OUTSIDE SQL by apps/web/scripts/neon-auth-import.mjs
 --     (admin API with the bcrypt hash); `handle_new_user()` learns here to
 --     adopt an existing adult person when the invite metadata AND the email
 --     match.
@@ -630,6 +630,7 @@ declare
   v_season   uuid;
   v_club_email text;
   v_bad      text;
+  v_cand     record;
 begin
   if to_regclass('neon_legacy."User"') is null then
     raise exception 'migrate_neon: neon_legacy."User" does not exist — run scripts/neon-restore.sh first' using errcode = 'P0001';
@@ -745,95 +746,117 @@ begin
   get diagnostics v_pitches = row_count;
 
   -- 7.6 bookings (matches → fixture, training/other → block), training sessions
-  -- (block) and venue closures (maintenance, one per pitch of the venue)
+  -- (block) and venue closures (maintenance, one per pitch of the venue).
+  -- The legacy app never enforced "one thing per pitch at a time"; the
+  -- unified bookings table does (GiST). Candidates are inserted one at a
+  -- time, bookings first, then training, then closures: a row that collides
+  -- with one already imported lands as 'cancelled' with a review note instead
+  -- of aborting the run, and reconcile_neon() reports every such downgrade
+  -- of a booking or training session (closures overlapping a live booking
+  -- are tolerated).
   select coalesce(
            (select nullif(btrim("adminEmail"), '') from neon_legacy."ClubSettings" limit 1),
            (select lower(email) from neon_legacy."User" where role::text = 'OWNER' order by "createdAt" limit 1),
            'club@aomsportsclub.co.uk')
     into v_club_email;
 
-  insert into public.bookings as b (
-    resource_id, kind, status, starts_at, ends_at, booker_person_id, booker_name, booker_email, booker_phone,
-    occasion, notes, internal_notes, team_name, legacy_neon_ref, created_at, updated_at
-  )
-  select r.id,
-         case when nb."bookingType"::text = 'MATCH' then 'fixture' else 'block' end::public.booking_kind,
-         case nb.status::text when 'PENDING' then 'pending' when 'CONFIRMED' then 'confirmed' else 'cancelled' end::public.booking_status,
-         nb."startTime" at time zone 'UTC', nb."endTime" at time zone 'UTC',
-         cp.id,
-         coalesce(nullif(btrim(nb."bookedBy"), ''), cu.name, 'Club'),
-         coalesce(case when cu.email like '%@placeholder.invalid' then null else lower(cu.email) end, v_club_email),
-         nullif(btrim(cu."contactPhone"), ''),
-         concat_ws(' v ', nb.title, coalesce(ot."ageGroup" || ' ' || ot.name, nullif(btrim(nb."opponentName"), ''))),
-         nullif(btrim(nb.notes), ''),
-         nullif(concat_ws(' · ',
-           'Neon ' || nb."bookingType"::text || ' booking',
-           case when nb.status::text = 'REJECTED' then 'rejected in Neon' end,
-           case when nb."blockId" is not null then 'block ' || nb."blockId" end,
-           nullif(btrim(nb."proposalNotes"), '')
-         ), ''),
-         t."ageGroup" || ' ' || t.name,
-         'booking:' || nb.id,
-         nb."createdAt" at time zone 'UTC', nb."updatedAt" at time zone 'UTC'
-    from neon_legacy."Booking" nb
-    join public.resources r on r.legacy_neon_pitch_id = nb."pitchId"
-    left join neon_legacy."User" cu on cu.id = coalesce(nb."createdByUserId", nb."userId")
-    left join public.people cp on cp.legacy_neon_user_id = cu.id
-    left join neon_legacy."Team" t on t.id = nb."teamId"
-    left join neon_legacy."Team" ot on ot.id = nb."opponentTeamId"
-  on conflict (legacy_neon_ref) where legacy_neon_ref is not null do update set
-    status = excluded.status, starts_at = excluded.starts_at, ends_at = excluded.ends_at,
-    occasion = excluded.occasion, notes = excluded.notes, internal_notes = excluded.internal_notes,
-    team_name = excluded.team_name, updated_at = excluded.updated_at;
-  get diagnostics v_bookings = row_count;
-
-  insert into public.bookings as b (
-    resource_id, kind, status, starts_at, ends_at, booker_person_id, booker_name, booker_email,
-    occasion, notes, internal_notes, team_name, recurrence_group_id, legacy_neon_ref, created_at, updated_at
-  )
-  select r.id, 'block',
-         case ts.status::text when 'PENDING' then 'pending' when 'CONFIRMED' then 'confirmed' else 'cancelled' end::public.booking_status,
-         ts."startTime" at time zone 'UTC', ts."endTime" at time zone 'UTC',
-         cp.id, coalesce(cu.name, 'Club'),
-         coalesce(case when cu.email like '%@placeholder.invalid' then null else lower(cu.email) end, v_club_email),
-         ts.title, nullif(btrim(ts.notes), ''), 'Neon training session',
-         (select string_agg(t."ageGroup" || ' ' || t.name, ', ' order by t."ageGroup", t.name)
-            from neon_legacy."TrainingSessionTeam" tst join neon_legacy."Team" t on t.id = tst."teamId"
-           where tst."trainingSessionId" = ts.id),
-         case when ts."recurringGroupId" is not null then extensions.uuid_generate_v5(extensions.uuid_ns_url(), 'neon:training-group:' || ts."recurringGroupId") end,
-         'training:' || ts.id,
-         ts."createdAt" at time zone 'UTC', ts."updatedAt" at time zone 'UTC'
-    from neon_legacy."TrainingSession" ts
-    join public.resources r on r.legacy_neon_pitch_id = ts."pitchId"
-    left join neon_legacy."User" cu on cu.id = ts."createdByUserId"
-    left join public.people cp on cp.legacy_neon_user_id = cu.id
-  on conflict (legacy_neon_ref) where legacy_neon_ref is not null do update set
-    status = excluded.status, starts_at = excluded.starts_at, ends_at = excluded.ends_at,
-    occasion = excluded.occasion, notes = excluded.notes, team_name = excluded.team_name, updated_at = excluded.updated_at;
-  get diagnostics v_n = row_count;
-  v_bookings := v_bookings + v_n;
-
-  insert into public.bookings as b (
-    resource_id, kind, status, starts_at, ends_at, booker_name, booker_email, occasion, notes, internal_notes,
-    legacy_neon_ref, created_at, updated_at
-  )
-  select r.id, 'maintenance',
-         case when c."isActive" then 'confirmed' else 'cancelled' end::public.booking_status,
-         c."startTime" at time zone 'UTC', c."endTime" at time zone 'UTC',
-         'Club', v_club_email,
-         coalesce(nullif(btrim(c.reason), ''), 'Closure'), null,
-         'Neon ' || c.scope::text || ' closure',
-         'closure:' || c.id || ':' || np.id,
-         c."createdAt" at time zone 'UTC', c."updatedAt" at time zone 'UTC'
-    from neon_legacy."Closure" c
-    join neon_legacy."Pitch" np on (c.scope::text = 'PITCH' and np.id = c."pitchId")
-                                or (c.scope::text = 'VENUE' and np."venueId" = c."venueId")
-    join public.resources r on r.legacy_neon_pitch_id = np.id
-  on conflict (legacy_neon_ref) where legacy_neon_ref is not null do update set
-    status = excluded.status, starts_at = excluded.starts_at, ends_at = excluded.ends_at,
-    occasion = excluded.occasion, updated_at = excluded.updated_at;
-  get diagnostics v_n = row_count;
-  v_bookings := v_bookings + v_n;
+  for v_cand in
+    select * from (
+      select 1 as src, nb."createdAt" as ord,
+             r.id as resource_id,
+             case when nb."bookingType"::text = 'MATCH' then 'fixture' else 'block' end::public.booking_kind as kind,
+             case nb.status::text when 'PENDING' then 'pending' when 'CONFIRMED' then 'confirmed' else 'cancelled' end::public.booking_status as status,
+             nb."startTime" at time zone 'UTC' as starts_at, nb."endTime" at time zone 'UTC' as ends_at,
+             cp.id as booker_person_id,
+             coalesce(nullif(btrim(nb."bookedBy"), ''), cu.name, 'Club') as booker_name,
+             coalesce(case when cu.email like '%@placeholder.invalid' then null else lower(cu.email) end, v_club_email) as booker_email,
+             nullif(btrim(cu."contactPhone"), '') as booker_phone,
+             concat_ws(' v ', nb.title, coalesce(ot."ageGroup" || ' ' || ot.name, nullif(btrim(nb."opponentName"), ''))) as occasion,
+             nullif(btrim(nb.notes), '') as notes,
+             nullif(concat_ws(' · ',
+               'Neon ' || nb."bookingType"::text || ' booking',
+               case when nb.status::text = 'REJECTED' then 'rejected in Neon' end,
+               case when nb."blockId" is not null then 'block ' || nb."blockId" end,
+               nullif(btrim(nb."proposalNotes"), '')
+             ), '') as internal_notes,
+             t."ageGroup" || ' ' || t.name as team_name,
+             null::uuid as recurrence_group_id,
+             'booking:' || nb.id as legacy_neon_ref,
+             nb."createdAt" at time zone 'UTC' as created_at, nb."updatedAt" at time zone 'UTC' as updated_at
+        from neon_legacy."Booking" nb
+        join public.resources r on r.legacy_neon_pitch_id = nb."pitchId"
+        left join neon_legacy."User" cu on cu.id = coalesce(nb."createdByUserId", nb."userId")
+        left join public.people cp on cp.legacy_neon_user_id = cu.id
+        left join neon_legacy."Team" t on t.id = nb."teamId"
+        left join neon_legacy."Team" ot on ot.id = nb."opponentTeamId"
+      union all
+      select 2, ts."createdAt",
+             r.id, 'block'::public.booking_kind,
+             case ts.status::text when 'PENDING' then 'pending' when 'CONFIRMED' then 'confirmed' else 'cancelled' end::public.booking_status,
+             ts."startTime" at time zone 'UTC', ts."endTime" at time zone 'UTC',
+             cp.id, coalesce(cu.name, 'Club'),
+             coalesce(case when cu.email like '%@placeholder.invalid' then null else lower(cu.email) end, v_club_email),
+             null,
+             ts.title, nullif(btrim(ts.notes), ''), 'Neon training session',
+             (select string_agg(t."ageGroup" || ' ' || t.name, ', ' order by t."ageGroup", t.name)
+                from neon_legacy."TrainingSessionTeam" tst join neon_legacy."Team" t on t.id = tst."teamId"
+               where tst."trainingSessionId" = ts.id),
+             case when ts."recurringGroupId" is not null then extensions.uuid_generate_v5(extensions.uuid_ns_url(), 'neon:training-group:' || ts."recurringGroupId") end,
+             'training:' || ts.id,
+             ts."createdAt" at time zone 'UTC', ts."updatedAt" at time zone 'UTC'
+        from neon_legacy."TrainingSession" ts
+        join public.resources r on r.legacy_neon_pitch_id = ts."pitchId"
+        left join neon_legacy."User" cu on cu.id = ts."createdByUserId"
+        left join public.people cp on cp.legacy_neon_user_id = cu.id
+      union all
+      select 3, c."createdAt",
+             r.id, 'maintenance'::public.booking_kind,
+             case when c."isActive" then 'confirmed' else 'cancelled' end::public.booking_status,
+             c."startTime" at time zone 'UTC', c."endTime" at time zone 'UTC',
+             null, 'Club', v_club_email, null,
+             coalesce(nullif(btrim(c.reason), ''), 'Closure'), null,
+             'Neon ' || c.scope::text || ' closure',
+             null, null,
+             'closure:' || c.id || ':' || np.id,
+             c."createdAt" at time zone 'UTC', c."updatedAt" at time zone 'UTC'
+        from neon_legacy."Closure" c
+        join neon_legacy."Pitch" np on (c.scope::text = 'PITCH' and np.id = c."pitchId")
+                                    or (c.scope::text = 'VENUE' and np."venueId" = c."venueId")
+        join public.resources r on r.legacy_neon_pitch_id = np.id
+    ) cands
+    order by src, ord, legacy_neon_ref
+  loop
+    begin
+      insert into public.bookings as b (
+        resource_id, kind, status, starts_at, ends_at, booker_person_id, booker_name, booker_email, booker_phone,
+        occasion, notes, internal_notes, team_name, recurrence_group_id, legacy_neon_ref, created_at, updated_at
+      ) values (
+        v_cand.resource_id, v_cand.kind, v_cand.status, v_cand.starts_at, v_cand.ends_at, v_cand.booker_person_id,
+        v_cand.booker_name, v_cand.booker_email, v_cand.booker_phone, v_cand.occasion, v_cand.notes,
+        v_cand.internal_notes, v_cand.team_name, v_cand.recurrence_group_id, v_cand.legacy_neon_ref,
+        v_cand.created_at, v_cand.updated_at
+      )
+      on conflict (legacy_neon_ref) where legacy_neon_ref is not null do update set
+        status = excluded.status, starts_at = excluded.starts_at, ends_at = excluded.ends_at,
+        occasion = excluded.occasion, notes = excluded.notes, internal_notes = excluded.internal_notes,
+        team_name = excluded.team_name, updated_at = excluded.updated_at
+      where b.internal_notes is null or b.internal_notes not like '%OVERLAP AT IMPORT%';
+      v_bookings := v_bookings + 1;
+    exception when exclusion_violation then
+      insert into public.bookings as b (
+        resource_id, kind, status, starts_at, ends_at, booker_person_id, booker_name, booker_email, booker_phone,
+        occasion, notes, internal_notes, team_name, recurrence_group_id, legacy_neon_ref, created_at, updated_at
+      ) values (
+        v_cand.resource_id, v_cand.kind, 'cancelled', v_cand.starts_at, v_cand.ends_at, v_cand.booker_person_id,
+        v_cand.booker_name, v_cand.booker_email, v_cand.booker_phone, v_cand.occasion, v_cand.notes,
+        concat_ws(' · ', v_cand.internal_notes,
+                  'OVERLAP AT IMPORT: was ' || v_cand.status::text || ' in Neon but clashes with another booking on this pitch — review'),
+        v_cand.team_name, v_cand.recurrence_group_id, v_cand.legacy_neon_ref, v_cand.created_at, v_cand.updated_at
+      )
+      on conflict (legacy_neon_ref) where legacy_neon_ref is not null do nothing;
+      v_bookings := v_bookings + 1;
+    end;
+  end loop;
 
   -- 7.7 waiting list
   insert into public.waiting_list_age_groups as g (age_group, is_open, is_publicly_advertised, show_coach_contact)
@@ -1000,6 +1023,10 @@ begin
     select 'Booking times round-trip (UTC)', (select count(*) from neon_legacy."Booking"),
            (select count(*) from public.bookings b join neon_legacy."Booking" nb on 'booking:' || nb.id = b.legacy_neon_ref
              where b.starts_at = nb."startTime" at time zone 'UTC' and b.ends_at = nb."endTime" at time zone 'UTC')
+    union all
+    select 'Booking/TrainingSession downgraded for overlap at import (must be 0)', 0::bigint,
+           (select count(*) from public.bookings where (legacy_neon_ref like 'booking:%' or legacy_neon_ref like 'training:%')
+              and internal_notes like '%OVERLAP AT IMPORT%')
     union all
     select 'TrainingSession → bookings(block)', (select count(*) from neon_legacy."TrainingSession"),
            (select count(*) from public.bookings where legacy_neon_ref like 'training:%' and kind = 'block')

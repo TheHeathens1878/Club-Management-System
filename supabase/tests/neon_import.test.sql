@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(113);
+select plan(115);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: an admin, a lead-to-be, and Eve — an existing account whose email
@@ -71,7 +71,8 @@ insert into neon_legacy."TrainingSession" (id, "pitchId", "startTime", "endTime"
 insert into neon_legacy."TrainingSessionTeam" (id, "trainingSessionId", "teamId") values ('tst1', 'ts1', 't1'), ('tst2', 'ts1', 't2');
 insert into neon_legacy."Closure" (id, scope, "venueId", "pitchId", reason, "startTime", "endTime") values
   ('c1', 'VENUE', 'v1', null, 'Waterlogged', '2026-06-20 00:00', '2026-06-21 00:00'),
-  ('c2', 'PITCH', null, 'p1', 'Reseeding',   '2026-07-01 00:00', '2026-07-03 00:00');
+  ('c2', 'PITCH', null, 'p1', 'Reseeding',   '2026-07-01 00:00', '2026-07-03 00:00'),
+  ('c3', 'PITCH', null, 'p1', 'Late closure', '2026-06-06 08:00', '2026-06-06 12:00');  -- overlaps b1 (legacy app allowed it)
 insert into neon_legacy."ClubSettings" (id, "clubName", "adminEmail") values ('cs', 'AoM', 'club@neon.test');
 insert into neon_legacy."WaitingListAgeGroupConfig" ("ageGroup", "isOpen", "isPubliclyAdvertised") values ('U07', true, true), ('U09', false, false);
 insert into neon_legacy."WaitingListEntry" (id, "playerName", dob, "ageGroup", "schoolYear", "biologicalSex", "parentName", "parentEmail", "parentPhone", "dataConsent", status, priority, "healthConditions") values
@@ -158,7 +159,9 @@ select ok((select status = 'cancelled' and internal_notes like '%rejected in Neo
 select is((select team_name from public.bookings where legacy_neon_ref = 'training:ts1'), 'U05 Lions, U18 Lions', 'training session teams');
 select ok((select recurrence_group_id is not null from public.bookings where legacy_neon_ref = 'training:ts1'), 'recurring group id derived');
 select is((select booker_email from public.bookings where legacy_neon_ref = 'training:ts1'), 'owner@neon.test', 'training booker = creator');
-select is((select count(*) from public.bookings where legacy_neon_ref like 'closure:%' and kind = 'maintenance'), 3::bigint, 'venue closure × 2 pitches + pitch closure = 3 maintenance bookings');
+select is((select count(*) from public.bookings where legacy_neon_ref like 'closure:%' and kind = 'maintenance'), 4::bigint, 'venue closure × 2 pitches + 2 pitch closures = 4 maintenance bookings');
+select ok((select status = 'cancelled' and internal_notes like '%OVERLAP AT IMPORT%' from public.bookings where legacy_neon_ref = 'closure:c3:p1'), 'a closure clashing with a live booking is imported cancelled with a review note');
+select is((select status::text from public.bookings where legacy_neon_ref = 'booking:b1'), 'confirmed', '… and the booking it clashed with is untouched');
 select is((select booker_email from public.bookings where legacy_neon_ref = 'closure:c2:p1'), 'club@neon.test', 'closures booked by the club admin email');
 
 select is((select count(*) from public.waiting_list_entries where source = 'import'), 2::bigint, '2 waiting-list entries');
@@ -171,7 +174,7 @@ select is((select count(*) from public.waiting_list_access), 1::bigint, 'access 
 -- idempotent
 select lives_ok($$select * from public.migrate_neon()$$, 'migrate_neon re-runs');
 select is((select count(*) from public.people where legacy_neon_user_id is not null), 7::bigint, 're-run creates no people');
-select is((select count(*) from public.bookings where legacy_neon_ref is not null), 8::bigint, 're-run creates no bookings (4 + 1 + 3)');
+select is((select count(*) from public.bookings where legacy_neon_ref is not null), 9::bigint, 're-run creates no bookings (4 + 1 + 4)');
 select is((select count(*) from public.audit_log where action = 'import.neon'), 2::bigint, 'each run audited');
 
 -- ---------------------------------------------------------------------------
