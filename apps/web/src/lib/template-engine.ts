@@ -64,7 +64,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "total_cost", label: "Total cost", example: "£350.00" },
       { key: "deposit_amount", label: "Deposit required", example: "£100.00" },
       { key: "deposit_due_date", label: "Deposit due date", example: "14 June 2026" },
-      { key: "portal_url", label: "Booker portal link", example: "https://roombooking.aomsportsclub.co.uk/portal" },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — your room booking is confirmed`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
@@ -140,7 +140,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
       { key: "deposit_amount", label: "Deposit required", example: "£100.00" },
       { key: "deposit_due_date", label: "Deposit due date", example: "7 June 2026" },
-      { key: "portal_url", label: "Booker portal link", example: "https://roombooking.aomsportsclub.co.uk/portal" },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — deposit reminder`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
@@ -164,7 +164,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
       { key: "outstanding", label: "Balance outstanding", example: "£250.00" },
       { key: "balance_due_date", label: "Balance due date", example: "31 May 2026" },
-      { key: "portal_url", label: "Booker portal link", example: "https://roombooking.aomsportsclub.co.uk/portal" },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — balance due for your upcoming booking`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
@@ -185,7 +185,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
     description: "Sent when a user account is created by an administrator.",
     variables: [
       { key: "name", label: "User name", example: "Jane Smith" },
-      { key: "login_url", label: "Login URL", example: "https://roombooking.aomsportsclub.co.uk/login" },
+      { key: "login_url", label: "Login URL", example: "https://portal.aomsportsclub.co.uk/login" },
     ],
     defaultSubject: (c) => `${c} — your account is ready`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
