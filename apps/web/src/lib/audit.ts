@@ -1,3 +1,5 @@
+import type { Json } from "@club/db";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function writeAudit(params: {
@@ -6,7 +8,7 @@ export async function writeAudit(params: {
   action: string;
   entity: string;
   entityId?: string | null;
-  detail?: unknown;
+  detail?: Json;
 }) {
   const admin = createAdminClient();
   await admin.from("audit_log").insert({

@@ -1,5 +1,5 @@
 import webpush from "web-push";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 
 const VAPID_PUBLIC_KEY = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY ?? "";
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY ?? "";
@@ -19,7 +19,7 @@ type PushPayload = {
 export async function sendPushToUser(userId: string, payload: PushPayload) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
 
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const { data: subs } = await admin
     .from("push_subscriptions")
     .select("id, endpoint, p256dh, auth")
@@ -51,7 +51,7 @@ export async function sendPushToUser(userId: string, payload: PushPayload) {
 export async function sendPushToAll(payload: PushPayload) {
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) return;
 
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const { data: subs } = await admin
     .from("push_subscriptions")
     .select("id, endpoint, p256dh, auth");

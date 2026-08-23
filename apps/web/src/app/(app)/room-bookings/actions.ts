@@ -10,6 +10,29 @@ import { renderEmailTemplate } from "@/lib/template-engine";
 import { getEmailBrandColor, getSettings, getRecipientEmails } from "@/lib/settings";
 import { createCalendarEvent, deleteCalendarEvent } from "@/lib/calendar";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
+import {
+  addDays,
+  formatBookingDate,
+  instantToLocal,
+  instantsToLocalWindow,
+  isValidDateString,
+  isValidTimeString,
+  legacyWindowToInstants,
+} from "@/lib/booking-time";
+import {
+  bookingPeriod,
+  FUNCTION_ROOM,
+  type BookingInsert,
+  type BookingPaymentStatus,
+  type BookingStatus,
+} from "@/lib/booking-types";
+import {
+  conflictOrMessage,
+  slotHasConflict,
+  SLOT_TAKEN_MESSAGE,
+} from "@/lib/booking-conflict";
+
+type AdminClient = ReturnType<typeof createAdminClient>;
 
 async function requireStaff() {
   const session = await getSessionProfile();
@@ -31,12 +54,16 @@ export async function confirmBooking(
   const admin = createAdminClient();
 
   const { data: booking, error: fetchErr } = await admin
-    .from("room_bookings")
-    .select("booker_name,booker_email,date,start_time,end_time,occasion,estimated_guests,amount_pence,payment_status,function_rooms(name)")
+    .from("bookings")
+    .select(
+      "booker_name,booker_email,starts_at,ends_at,occasion,estimated_guests,total_pence,payment_status,resources(name)",
+    )
     .eq("id", bookingId)
     .maybeSingle();
 
   if (fetchErr || !booking) return { error: "Booking not found." };
+
+  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
 
   const settings = await getSettings();
   const depositWindow = Number(settings.deposit_window_days) || 7;
@@ -51,26 +78,22 @@ export async function confirmBooking(
   depositDue.setDate(depositDue.getDate() + depositWindow);
   const depositDueStr = depositDue.toISOString().slice(0, 10);
 
-  const bookingDate = new Date(String(booking.date) + "T12:00:00");
-  const balanceDue = new Date(bookingDate);
-  balanceDue.setDate(balanceDue.getDate() - balanceDays);
-  const balanceDueStr = balanceDue.toISOString().slice(0, 10);
+  const balanceDueStr = addDays(window.date, -balanceDays);
 
   // Create calendar event before status update so we can store the event ID
-  const roomRow = booking.function_rooms as { name: string } | { name: string }[] | null;
-  const roomName = Array.isArray(roomRow) ? (roomRow[0]?.name ?? "Function Room") : (roomRow?.name ?? "Function Room");
+  const roomName = booking.resources?.name ?? "Function Room";
   const calEventId = await createCalendarEvent({
-    date: String(booking.date),
-    start_time: String(booking.start_time),
-    end_time: String(booking.end_time),
+    date: window.date,
+    start_time: window.startTime,
+    end_time: window.endTime,
     room_name: roomName,
-    booker_name: booking.booker_name as string,
-    occasion: booking.occasion as string | null,
-    estimated_guests: booking.estimated_guests as number | null,
+    booker_name: booking.booker_name,
+    occasion: booking.occasion,
+    estimated_guests: booking.estimated_guests,
   }).catch(() => null);
 
   const { error } = await admin
-    .from("room_bookings")
+    .from("bookings")
     .update({
       status: "confirmed",
       total_pence: totalPence,
@@ -81,7 +104,9 @@ export async function confirmBooking(
     })
     .eq("id", bookingId);
 
-  if (error) return { error: "Failed to confirm booking." };
+  // Promoting an enquiry/quote to `confirmed` brings it under
+  // `bookings_no_overlap` for the first time, so this update can collide.
+  if (error) return { error: conflictOrMessage(error, "Failed to confirm booking.") };
 
   await writeAudit({
     actorId: session.userId,
@@ -97,9 +122,7 @@ export async function confirmBooking(
     (async () => {
       try {
         const brandColor = await getEmailBrandColor().catch(() => "#1249bf");
-        const dateFormatted = new Date(String(booking.date) + "T12:00:00").toLocaleDateString("en-GB", {
-          weekday: "long", day: "numeric", month: "long", year: "numeric",
-        });
+        const dateFormatted = formatBookingDate(window.date);
         const depositDueFormatted = depositDue.toLocaleDateString("en-GB", {
           day: "numeric", month: "long", year: "numeric",
         });
@@ -115,12 +138,12 @@ export async function confirmBooking(
         }
 
         const tpl = await renderEmailTemplate("room_booking_confirmed", {
-          name: booking.booker_name as string,
+          name: booking.booker_name,
           room_name: roomName,
           booking_date: dateFormatted,
-          start_time: String(booking.start_time).slice(0, 5),
-          end_time: String(booking.end_time).slice(0, 5),
-          occasion: (booking.occasion as string | null) ?? "Private hire",
+          start_time: window.startTime,
+          end_time: window.endTime,
+          occasion: booking.occasion ?? "Private hire",
           payment_status: paymentStatusText,
           total_cost: totalPence ? formatCurrency(totalPence) : "—",
           deposit_amount: depositPence > 0 ? formatCurrency(depositPence) : "—",
@@ -128,7 +151,7 @@ export async function confirmBooking(
           portal_url: `${getSiteUrl()}/portal`,
         }, brandColor);
 
-        await sendEmail({ to: booking.booker_email as string, ...tpl });
+        await sendEmail({ to: booking.booker_email, ...tpl });
       } catch (e) {
         console.error("[room-booking] Confirmation email failed:", e);
       }
@@ -148,22 +171,24 @@ export async function cancelBooking(
   const admin = createAdminClient();
 
   const { data: booking, error: fetchErr } = await admin
-    .from("room_bookings")
-    .select("booker_name,booker_email,date,start_time,end_time,calendar_event_id,function_rooms(name)")
+    .from("bookings")
+    .select("booker_name,booker_email,starts_at,ends_at,calendar_event_id,resources(name)")
     .eq("id", bookingId)
     .maybeSingle();
 
   if (fetchErr || !booking) return { error: "Booking not found." };
 
+  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
+
   const { error } = await admin
-    .from("room_bookings")
+    .from("bookings")
     .update({ status: "cancelled", internal_notes: `Cancellation reason: ${reason.trim()}` })
     .eq("id", bookingId);
 
   if (error) return { error: "Failed to cancel booking." };
 
   // Remove the calendar event if one was created
-  const calEventId = (booking as Record<string, unknown>).calendar_event_id as string | null;
+  const calEventId = booking.calendar_event_id;
   if (calEventId) deleteCalendarEvent(calEventId).catch(() => {});
 
   await writeAudit({
@@ -179,21 +204,17 @@ export async function cancelBooking(
     (async () => {
       try {
         const brandColor = await getEmailBrandColor().catch(() => "#1249bf");
-        const cancelRoomRow = booking.function_rooms as { name: string } | { name: string }[] | null;
-        const cancelRoomName = Array.isArray(cancelRoomRow) ? (cancelRoomRow[0]?.name ?? "Function Room") : (cancelRoomRow?.name ?? "Function Room");
-        const dateFormatted = new Date(String(booking.date) + "T12:00:00").toLocaleDateString("en-GB", {
-          weekday: "long", day: "numeric", month: "long", year: "numeric",
-        });
+        const cancelRoomName = booking.resources?.name ?? "Function Room";
         const tpl = await renderEmailTemplate("room_booking_cancelled", {
-          name: booking.booker_name as string,
+          name: booking.booker_name,
           room_name: cancelRoomName,
-          booking_date: dateFormatted,
-          start_time: String(booking.start_time).slice(0, 5),
-          end_time: String(booking.end_time).slice(0, 5),
+          booking_date: formatBookingDate(window.date),
+          start_time: window.startTime,
+          end_time: window.endTime,
           cancellation_reason: reason.trim(),
         }, brandColor);
         const cc = await getRecipientEmails("notify_cancellation").catch(() => []);
-        await sendEmail({ to: booking.booker_email as string, cc, ...tpl });
+        await sendEmail({ to: booking.booker_email, cc, ...tpl });
       } catch (e) {
         console.error("[room-booking] Cancellation email failed:", e);
       }
@@ -210,16 +231,20 @@ export async function updateBookingStatus(
   const session = await requireStaff();
   const admin = createAdminClient();
 
-  if (!["pending", "confirmed", "cancelled"].includes(status)) {
+  const allowed: BookingStatus[] = ["pending", "confirmed", "cancelled"];
+  if (!allowed.includes(status as BookingStatus)) {
     return { error: "Invalid status." };
   }
+  const nextStatus = status as BookingStatus;
 
   const { error } = await admin
-    .from("room_bookings")
-    .update({ status })
+    .from("bookings")
+    .update({ status: nextStatus })
     .eq("id", bookingId);
 
-  if (error) return { error: "Failed to update status." };
+  // Moving into `pending`/`confirmed` brings the row under
+  // `bookings_no_overlap`, so this update can collide with a live booking.
+  if (error) return { error: conflictOrMessage(error, "Failed to update status.") };
 
   await writeAudit({
     actorId: session.userId,
@@ -240,7 +265,7 @@ export async function addInternalNote(
   const admin = createAdminClient();
 
   const { error } = await admin
-    .from("room_bookings")
+    .from("bookings")
     .update({ internal_notes: note.trim() || null })
     .eq("id", bookingId);
 
@@ -261,7 +286,7 @@ export async function addInternalNote(
 export async function updateBooking(
   bookingId: string,
   fields: {
-    room_id: string;
+    resource_id: string;
     date: string;
     start_time: string;
     end_time: string;
@@ -278,13 +303,46 @@ export async function updateBooking(
   const session = await getSessionProfile();
   if (!session || !isSuperUser(session.profile?.role)) return { error: "Not authorised." };
 
+  if (!isValidDateString(fields.date)) return { error: "Please enter a valid date." };
+  if (!isValidTimeString(fields.start_time) || !isValidTimeString(fields.end_time)) {
+    return { error: "Please enter valid start and end times." };
+  }
+
   const admin = createAdminClient();
+  const { startsAt, endsAt } = legacyWindowToInstants(
+    fields.date,
+    fields.start_time,
+    fields.end_time,
+  );
+
+  if (
+    await slotHasConflict(admin, {
+      resourceId: fields.resource_id,
+      startsAt,
+      endsAt,
+      excludeBookingId: bookingId,
+    })
+  ) {
+    return { error: SLOT_TAKEN_MESSAGE };
+  }
+
   const { error } = await admin
-    .from("room_bookings")
-    .update(fields)
+    .from("bookings")
+    .update({
+      resource_id: fields.resource_id,
+      ...bookingPeriod(startsAt, endsAt),
+      booker_first_name: fields.booker_first_name,
+      booker_last_name: fields.booker_last_name,
+      booker_name: fields.booker_name,
+      booker_email: fields.booker_email,
+      booker_phone: fields.booker_phone,
+      occasion: fields.occasion,
+      estimated_guests: fields.estimated_guests,
+      notes: fields.notes,
+    })
     .eq("id", bookingId);
 
-  if (error) return { error: "Failed to update booking." };
+  if (error) return { error: conflictOrMessage(error, "Failed to update booking.") };
 
   await writeAudit({
     actorId: session.userId,
@@ -300,28 +358,28 @@ export async function updateBooking(
   return {};
 }
 
-// Recompute payment_status from the sum of booking_payments vs total/deposit.
+// Recompute payment_status from the sum of payments vs total/deposit.
 // Returns the new totals so callers can use them (e.g. for emails).
 async function recomputePaymentStatus(
-  admin: ReturnType<typeof createAdminClient>,
+  admin: AdminClient,
   bookingId: string,
 ): Promise<{ totalPence: number; depositPence: number; paidPence: number }> {
   const [{ data: booking }, { data: payments }] = await Promise.all([
-    admin.from("room_bookings").select("total_pence,deposit_pence,amount_pence").eq("id", bookingId).maybeSingle(),
-    admin.from("booking_payments").select("amount_pence").eq("booking_id", bookingId),
+    admin.from("bookings").select("total_pence,deposit_pence").eq("id", bookingId).maybeSingle(),
+    admin.from("payments").select("amount_pence").eq("booking_id", bookingId),
   ]);
 
-  const totalPence = Number(booking?.total_pence ?? booking?.amount_pence ?? 0);
+  const totalPence = Number(booking?.total_pence ?? 0);
   const depositPence = Number(booking?.deposit_pence ?? 0);
   const paidPence = (payments ?? []).reduce((acc, p) => acc + Number(p.amount_pence ?? 0), 0);
 
-  let status: string;
+  let status: BookingPaymentStatus;
   if (totalPence > 0 && paidPence >= totalPence) status = "paid";
   else if (depositPence > 0 && paidPence >= depositPence) status = "deposit_paid";
   else if (paidPence > 0) status = "deposit_paid";
   else status = "unpaid";
 
-  await admin.from("room_bookings").update({ payment_status: status }).eq("id", bookingId);
+  await admin.from("bookings").update({ payment_status: status }).eq("id", bookingId);
   return { totalPence, depositPence, paidPence };
 }
 
@@ -343,7 +401,7 @@ export async function addPayment(
 
   const authorisedName = session.profile?.full_name || session.email || "Staff";
 
-  const { error: insertErr } = await admin.from("booking_payments").insert({
+  const { error: insertErr } = await admin.from("payments").insert({
     booking_id: bookingId,
     amount_pence: input.amount_pence,
     paid_at: input.paid_at ? new Date(input.paid_at).toISOString() : new Date().toISOString(),
@@ -373,28 +431,24 @@ export async function addPayment(
     (async () => {
       try {
         const { data: booking } = await admin
-          .from("room_bookings")
-          .select("booker_name,booker_email,date,function_rooms(name)")
+          .from("bookings")
+          .select("booker_name,booker_email,starts_at,resources(name)")
           .eq("id", bookingId)
           .maybeSingle();
         if (booking?.booker_email && booking.booker_email !== "—") {
           const brandColor = await getEmailBrandColor().catch(() => "#1249bf");
-          const roomName = (booking as Record<string, unknown>).function_rooms
-            ? ((booking as Record<string, unknown>).function_rooms as { name?: string }).name ?? "Function room"
-            : "Function room";
+          const roomName = booking.resources?.name ?? "Function room";
           const outstanding = Math.max(0, totalPence - paidPence);
           const tpl = await renderEmailTemplate("payment_received", {
-            name: booking.booker_name as string,
+            name: booking.booker_name,
             room_name: roomName,
-            booking_date: new Date(String(booking.date) + "T12:00:00").toLocaleDateString("en-GB", {
-              weekday: "long", day: "numeric", month: "long", year: "numeric",
-            }),
+            booking_date: formatBookingDate(instantToLocal(booking.starts_at).date),
             amount_paid: formatCurrency(input.amount_pence),
             total_paid: formatCurrency(paidPence),
             outstanding: totalPence > 0 ? formatCurrency(outstanding) : "—",
             payment_method: (input.method || "—").replace("_", " "),
           }, brandColor);
-          await sendEmail({ to: booking.booker_email as string, ...tpl });
+          await sendEmail({ to: booking.booker_email, ...tpl });
         }
       } catch (e) {
         console.error("[room-booking] Payment email failed:", e);
@@ -414,13 +468,13 @@ export async function deletePayment(paymentId: string, bookingId: string): Promi
   const admin = createAdminClient();
   // Only manual payments can be deleted; SumUp records are locked.
   const { data: payment } = await admin
-    .from("booking_payments")
+    .from("payments")
     .select("source")
     .eq("id", paymentId)
     .maybeSingle();
   if (payment?.source === "sumup") return { error: "SumUp payments cannot be deleted." };
 
-  const { error } = await admin.from("booking_payments").delete().eq("id", paymentId);
+  const { error } = await admin.from("payments").delete().eq("id", paymentId);
   if (error) return { error: "Failed to delete payment." };
 
   await recomputePaymentStatus(admin, bookingId);
@@ -454,7 +508,9 @@ export async function updateRoom(formData: FormData): Promise<void> {
   const priceFixed = toP("price_pence_fixed");
   const priceNote = String(formData.get("price_note") ?? "").trim() || null;
   const active = formData.get("active") === "true";
-  const resources = String(formData.get("resources") ?? "")
+  // Was function_rooms.resources; `resources` is the table name now, so the
+  // column is `amenities`.
+  const amenities = String(formData.get("amenities") ?? "")
     .split(",")
     .map((r) => r.trim())
     .filter(Boolean);
@@ -463,16 +519,17 @@ export async function updateRoom(formData: FormData): Promise<void> {
   if (!name) redirect(`/room-bookings/rooms?error=${encodeURIComponent("Room name is required.")}`);
 
   const { error } = await admin
-    .from("function_rooms")
+    .from("resources")
     .update({
-      name, description, capacity, active, resources,
+      name, description, capacity, active, amenities,
       price_pence_per_hour: pricePerHour,
       price_pence_half_day: priceHalfDay,
       price_pence_full_day: priceFullDay,
       price_pence_fixed: priceFixed,
       price_note: priceNote,
     })
-    .eq("id", id);
+    .eq("id", id)
+    .eq("type", FUNCTION_ROOM);
 
   if (error) redirect(`/room-bookings/rooms?error=${encodeURIComponent("Failed to save: " + error.message)}`);
 
@@ -491,14 +548,15 @@ export async function createRoom(formData: FormData): Promise<void> {
   if (!name) redirect(`/room-bookings/rooms?error=${encodeURIComponent("Room name is required.")}`);
 
   const { data: last } = await admin
-    .from("function_rooms")
+    .from("resources")
     .select("sort_order")
+    .eq("type", FUNCTION_ROOM)
     .order("sort_order", { ascending: false })
     .limit(1);
-  const nextSort = ((last?.[0]?.sort_order as number) ?? 0) + 10;
+  const nextSort = (last?.[0]?.sort_order ?? 0) + 10;
 
-  const { error } = await admin.from("function_rooms").insert({
-    name, description, capacity, active: true, sort_order: nextSort,
+  const { error } = await admin.from("resources").insert({
+    type: FUNCTION_ROOM, name, description, capacity, active: true, sort_order: nextSort,
   });
   if (error) redirect(`/room-bookings/rooms?error=${encodeURIComponent("Failed to create room: " + error.message)}`);
 
@@ -509,7 +567,11 @@ export async function createRoom(formData: FormData): Promise<void> {
 export async function deleteRoom(roomId: string): Promise<void> {
   await requireCommittee();
   const admin = createAdminClient();
-  const { error } = await admin.from("function_rooms").delete().eq("id", roomId);
+  const { error } = await admin
+    .from("resources")
+    .delete()
+    .eq("id", roomId)
+    .eq("type", FUNCTION_ROOM);
   if (error) redirect(`/room-bookings/rooms?error=${encodeURIComponent("Failed to delete room: " + error.message)}`);
   revalidatePath("/room-bookings/rooms");
   redirect("/room-bookings/rooms");
@@ -520,7 +582,7 @@ export async function deleteBooking(bookingId: string): Promise<{ error?: string
   if (!session || !isCommittee(session.profile?.role)) return { error: "Not authorised." };
 
   const admin = createAdminClient();
-  const { error } = await admin.from("room_bookings").delete().eq("id", bookingId);
+  const { error } = await admin.from("bookings").delete().eq("id", bookingId);
   if (error) return { error: "Failed to delete booking." };
 
   await writeAudit({
@@ -541,7 +603,7 @@ export async function deleteBookings(ids: string[]): Promise<{ error?: string }>
   if (!ids.length) return {};
 
   const admin = createAdminClient();
-  const { error } = await admin.from("room_bookings").delete().in("id", ids);
+  const { error } = await admin.from("bookings").delete().in("id", ids);
   if (error) return { error: "Failed to delete bookings." };
 
   await writeAudit({
@@ -577,7 +639,7 @@ export async function deleteBookingsByGroup(groupId: string): Promise<{ error?: 
   if (!session || session.profile?.role !== "super_user") return { error: "Not authorised." };
 
   const admin = createAdminClient();
-  const { error } = await admin.from("room_bookings").delete().eq("recurrence_group_id", groupId);
+  const { error } = await admin.from("bookings").delete().eq("recurrence_group_id", groupId);
   if (error) return { error: "Failed to delete series." };
 
   await writeAudit({
@@ -610,6 +672,7 @@ function generateRecurringDates(
 
   for (let i = 0; i < maxCount; i++) {
     const [y, m, d] = current.split("-").map(Number);
+    if (y === undefined || m === undefined || d === undefined) break;
     let next: Date;
     if (freq === "weekly") {
       next = new Date(Date.UTC(y, m - 1, d + 7));
@@ -632,6 +695,39 @@ function generateRecurringDates(
   return dates;
 }
 
+/**
+ * Every date of a (possibly recurring) booking, checked against
+ * `booking_has_conflict()` before anything is written.
+ *
+ * The whole series is checked up front rather than row by row: a single
+ * multi-row insert is one statement, so one clashing occurrence would abort
+ * the lot, and creating a partial series and then reporting a failure would be
+ * worse than creating nothing.
+ */
+async function findConflictingDates(
+  admin: AdminClient,
+  resourceId: string,
+  dates: string[],
+  startTime: string,
+  endTime: string,
+): Promise<string[]> {
+  const checked = await Promise.all(
+    dates.map(async (date) => {
+      const { startsAt, endsAt } = legacyWindowToInstants(date, startTime, endTime);
+      return (await slotHasConflict(admin, { resourceId, startsAt, endsAt })) ? date : null;
+    }),
+  );
+  return checked.filter((date): date is string => date !== null);
+}
+
+function conflictListMessage(dates: string[]): string {
+  const shown = dates.slice(0, 3).map(formatBookingDate).join(", ");
+  const rest = dates.length - Math.min(dates.length, 3);
+  return dates.length === 1
+    ? `${SLOT_TAKEN_MESSAGE} (${shown})`
+    : `${SLOT_TAKEN_MESSAGE} Clashes on ${shown}${rest > 0 ? ` and ${rest} more` : ""}.`;
+}
+
 export async function createBlockBooking(
   formData: FormData
 ): Promise<{ error?: string }> {
@@ -650,36 +746,53 @@ export async function createBlockBooking(
 
   if (!roomId || !date || !startTime || !endTime)
     return { error: "Room, date, start time and end time are required." };
+  if (!isValidDateString(date)) return { error: "Please enter a valid date." };
+  if (!isValidTimeString(startTime) || !isValidTimeString(endTime))
+    return { error: "Please enter valid start and end times." };
 
   const recurrenceGroupId = recurring ? crypto.randomUUID() : null;
+  const extraDates = recurring
+    ? generateRecurringDates(date, recurrenceFreq, recurrenceUntil, recurrenceCount)
+    : [];
 
-  const baseRow = {
-    room_id: roomId,
-    date,
-    start_time: startTime,
-    end_time: endTime,
-    booker_name: "Club",
-    booker_email: "—",
-    occasion: reason,
-    status: "confirmed",
-    booking_type: "block",
-    recurrence_group_id: recurrenceGroupId,
-  };
+  const clashes = await findConflictingDates(admin, roomId, [date, ...extraDates], startTime, endTime);
+  if (clashes.length > 0) return { error: conflictListMessage(clashes) };
+
+  function rowFor(d: string): BookingInsert {
+    const { startsAt, endsAt } = legacyWindowToInstants(d, startTime, endTime);
+    return {
+      resource_id: roomId,
+      ...bookingPeriod(startsAt, endsAt),
+      booker_name: "Club",
+      booker_email: "—",
+      occasion: reason,
+      status: "confirmed",
+      kind: "block",
+      recurrence_group_id: recurrenceGroupId,
+    };
+  }
 
   const { data: booking, error } = await admin
-    .from("room_bookings")
-    .insert(baseRow)
+    .from("bookings")
+    .insert(rowFor(date))
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error || !booking) {
+    return { error: conflictOrMessage(error, error?.message ?? "Failed to create block.") };
+  }
 
-  if (recurring) {
-    const extraDates = generateRecurringDates(date, recurrenceFreq, recurrenceUntil, recurrenceCount);
-    if (extraDates.length > 0) {
-      await admin.from("room_bookings").insert(
-        extraDates.map((d) => ({ ...baseRow, date: d }))
-      );
+  if (extraDates.length > 0) {
+    const { error: extrasErr } = await admin
+      .from("bookings")
+      .insert(extraDates.map(rowFor));
+    if (extrasErr) {
+      return {
+        error: conflictOrMessage(
+          extrasErr,
+          "The first block was created but the repeats could not be saved.",
+        ),
+      };
     }
   }
 
@@ -689,7 +802,7 @@ export async function createBlockBooking(
     action: "create_block",
     entity: "room_booking",
     entityId: booking.id,
-    detail: { date, room_id: roomId, reason, recurring, recurrenceFreq, recurrenceGroupId },
+    detail: { date, resource_id: roomId, reason, recurring, recurrenceFreq, recurrenceGroupId },
   });
 
   revalidatePath("/room-bookings");
@@ -712,7 +825,7 @@ export async function createInternalBooking(
   const occasion = String(formData.get("occasion") || "").trim() || null;
   const estimatedGuests = formData.get("estimated_guests") ? Number(formData.get("estimated_guests")) : null;
   const notes = String(formData.get("notes") || "").trim() || null;
-  const status = String(formData.get("status") || "confirmed");
+  const statusInput = String(formData.get("status") || "confirmed");
   const amountPounds = formData.get("amount_pounds") ? Number(formData.get("amount_pounds")) : null;
   const recurring = formData.get("recurring") === "on";
   const recurrenceFreq = String(formData.get("recurrence_freq") || "weekly");
@@ -721,40 +834,62 @@ export async function createInternalBooking(
 
   if (!roomId || !date || !startTime || !endTime || !bookerName)
     return { error: "Room, date, times and booker name are required." };
+  if (!isValidDateString(date)) return { error: "Please enter a valid date." };
+  if (!isValidTimeString(startTime) || !isValidTimeString(endTime))
+    return { error: "Please enter valid start and end times." };
+
+  // The form only offers confirmed/pending; anything else is a tampered post.
+  const status: BookingStatus = statusInput === "pending" ? "pending" : "confirmed";
 
   const recurrenceGroupId = recurring ? crypto.randomUUID() : null;
+  const extraDates = recurring
+    ? generateRecurringDates(date, recurrenceFreq, recurrenceUntil, recurrenceCount)
+    : [];
 
-  const baseRow = {
-    room_id: roomId,
-    date,
-    start_time: startTime,
-    end_time: endTime,
-    booker_name: bookerName,
-    booker_email: bookerEmail || "—",
-    booker_phone: bookerPhone,
-    occasion,
-    estimated_guests: estimatedGuests,
-    notes,
-    status,
-    amount_pence: amountPounds ? Math.round(amountPounds * 100) : null,
-    payment_status: formData.get("mark_paid") === "on" ? "paid" : "unpaid",
-    recurrence_group_id: recurrenceGroupId,
-  };
+  const clashes = await findConflictingDates(admin, roomId, [date, ...extraDates], startTime, endTime);
+  if (clashes.length > 0) return { error: conflictListMessage(clashes) };
+
+  function rowFor(d: string): BookingInsert {
+    const { startsAt, endsAt } = legacyWindowToInstants(d, startTime, endTime);
+    return {
+      resource_id: roomId,
+      ...bookingPeriod(startsAt, endsAt),
+      booker_name: bookerName,
+      booker_email: bookerEmail || "—",
+      booker_phone: bookerPhone,
+      occasion,
+      estimated_guests: estimatedGuests,
+      notes,
+      status,
+      // Legacy `amount_pence` has no counterpart in `bookings`; the agreed
+      // price is `total_pence`, which is what the portal and reminders read.
+      total_pence: amountPounds ? Math.round(amountPounds * 100) : null,
+      payment_status: formData.get("mark_paid") === "on" ? "paid" : "unpaid",
+      recurrence_group_id: recurrenceGroupId,
+    };
+  }
 
   const { data: booking, error } = await admin
-    .from("room_bookings")
-    .insert(baseRow)
+    .from("bookings")
+    .insert(rowFor(date))
     .select("id")
     .single();
 
-  if (error) return { error: error.message };
+  if (error || !booking) {
+    return { error: conflictOrMessage(error, error?.message ?? "Failed to create booking.") };
+  }
 
-  if (recurring) {
-    const extraDates = generateRecurringDates(date, recurrenceFreq, recurrenceUntil, recurrenceCount);
-    if (extraDates.length > 0) {
-      await admin.from("room_bookings").insert(
-        extraDates.map((d) => ({ ...baseRow, date: d }))
-      );
+  if (extraDates.length > 0) {
+    const { error: extrasErr } = await admin
+      .from("bookings")
+      .insert(extraDates.map(rowFor));
+    if (extrasErr) {
+      return {
+        error: conflictOrMessage(
+          extrasErr,
+          "The first booking was created but the repeats could not be saved.",
+        ),
+      };
     }
   }
 
@@ -764,7 +899,7 @@ export async function createInternalBooking(
     action: "create_internal",
     entity: "room_booking",
     entityId: booking.id,
-    detail: { booker: bookerName, date, room_id: roomId, recurring, recurrenceGroupId },
+    detail: { booker: bookerName, date, resource_id: roomId, recurring, recurrenceGroupId },
   });
 
   revalidatePath("/room-bookings");

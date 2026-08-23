@@ -5,19 +5,9 @@ import { formatCurrency } from "@/lib/utils";
 import { isSumUpConfigured, recordSumUpPaymentIfPaid } from "@/lib/sumup";
 import { PayButton } from "./pay-button";
 import { PaymentPendingBanner } from "./payment-pending-banner";
+import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
 
 export const dynamic = "force-dynamic";
-
-function formatDate(d: string) {
-  return new Date(d + "T12:00:00").toLocaleDateString("en-GB", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-}
-
-function roomNameOf(row: unknown): string {
-  const r = row as { name?: string } | { name?: string }[] | null;
-  return Array.isArray(r) ? (r[0]?.name ?? "Function room") : (r?.name ?? "Function room");
-}
 
 export default async function PortalPage({
   searchParams,
@@ -46,25 +36,25 @@ export default async function PortalPage({
   const sumupEnabled = isSumUpConfigured();
   const admin = createAdminClient();
   const { data: bookings } = await admin
-    .from("room_bookings")
-    .select("id,date,start_time,end_time,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,function_rooms(name)")
+    .from("bookings")
+    .select("id,starts_at,ends_at,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources(name)")
     .eq("booker_profile_id", session.userId)
-    .order("date", { ascending: true });
+    .order("starts_at", { ascending: true });
 
   const list = bookings ?? [];
 
   // Payments for all of this booker's bookings
-  const ids = list.map((b) => b.id as string);
+  const ids = list.map((b) => b.id);
   const paidByBooking = new Map<string, number>();
   if (ids.length > 0) {
     const { data: payments } = await admin
-      .from("booking_payments")
+      .from("payments")
       .select("booking_id,amount_pence")
       .in("booking_id", ids);
     for (const p of payments ?? []) {
       paidByBooking.set(
-        p.booking_id as string,
-        (paidByBooking.get(p.booking_id as string) ?? 0) + Number(p.amount_pence ?? 0),
+        p.booking_id,
+        (paidByBooking.get(p.booking_id) ?? 0) + p.amount_pence,
       );
     }
   }
@@ -95,23 +85,24 @@ export default async function PortalPage({
       ) : (
         <div className="space-y-4">
           {list.map((b) => {
-            const total = Number(b.total_pence ?? 0);
-            const deposit = Number(b.deposit_pence ?? 0);
-            const paid = paidByBooking.get(b.id as string) ?? 0;
+            const total = b.total_pence ?? 0;
+            const deposit = b.deposit_pence ?? 0;
+            const paid = paidByBooking.get(b.id) ?? 0;
             const outstanding = Math.max(0, total - paid);
             const depositRemaining = Math.max(0, deposit - paid);
-            const status = String(b.status);
+            const status = b.status;
             const confirmed = status === "confirmed";
             const cancelled = status === "cancelled";
+            const window = instantsToLocalWindow(b.starts_at, b.ends_at);
 
             return (
-              <div key={b.id as string} className="rounded-lg border bg-card p-5 shadow-sm">
+              <div key={b.id} className="rounded-lg border bg-card p-5 shadow-sm">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
-                    <h2 className="font-semibold">{roomNameOf(b.function_rooms)}</h2>
-                    <p className="text-sm text-muted-foreground">{formatDate(String(b.date))}</p>
+                    <h2 className="font-semibold">{b.resources?.name ?? "Function room"}</h2>
+                    <p className="text-sm text-muted-foreground">{formatBookingDate(window.date)}</p>
                     <p className="text-sm text-muted-foreground">
-                      {String(b.start_time).slice(0, 5)}–{String(b.end_time).slice(0, 5)}
+                      {window.startTime}–{window.endTime}
                       {b.occasion ? ` · ${b.occasion}` : ""}
                     </p>
                   </div>
@@ -143,12 +134,12 @@ export default async function PortalPage({
 
                     {b.deposit_due_date && depositRemaining > 0 && (
                       <p className="mt-2 text-xs text-amber-700">
-                        Deposit of {formatCurrency(deposit)} due by {formatDate(String(b.deposit_due_date))}.
+                        Deposit of {formatCurrency(deposit)} due by {formatBookingDate(b.deposit_due_date)}.
                       </p>
                     )}
                     {b.balance_due_date && outstanding > 0 && depositRemaining === 0 && (
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Balance due by {formatDate(String(b.balance_due_date))}.
+                        Balance due by {formatBookingDate(b.balance_due_date)}.
                       </p>
                     )}
 
@@ -156,7 +147,7 @@ export default async function PortalPage({
                       <div className="mt-4 flex flex-wrap gap-2">
                         {depositRemaining > 0 && depositRemaining < outstanding && (
                           <PayButton
-                            bookingId={b.id as string}
+                            bookingId={b.id}
                             amountPence={depositRemaining}
                             label="Pay deposit"
                             purpose="deposit"
@@ -164,7 +155,7 @@ export default async function PortalPage({
                           />
                         )}
                         <PayButton
-                          bookingId={b.id as string}
+                          bookingId={b.id}
                           amountPence={outstanding}
                           label={depositRemaining > 0 ? "Pay in full" : "Pay balance"}
                           variant={depositRemaining > 0 ? "outline" : "default"}

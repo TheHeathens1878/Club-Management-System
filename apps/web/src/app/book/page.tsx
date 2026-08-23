@@ -3,6 +3,8 @@ import { getSettings } from "@/lib/settings";
 import { BookClient } from "./book-client";
 import { formatCurrency } from "@/lib/utils";
 import { Users, Clock, Info } from "lucide-react";
+import { addDays, instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
+import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 export const dynamic = "force-dynamic";
 
@@ -11,8 +13,9 @@ export default async function BookPage() {
   const settings = await getSettings();
 
   const { data: rooms } = await admin
-    .from("function_rooms")
+    .from("resources")
     .select("id, name, description, capacity, price_pence_per_hour, price_pence_half_day, price_pence_full_day, price_pence_fixed, price_note")
+    .eq("type", FUNCTION_ROOM)
     .eq("active", true)
     .order("sort_order");
 
@@ -23,14 +26,18 @@ export default async function BookPage() {
     .order("sort_order")
     .order("created_at");
 
+  // Availability is shown three London months ahead. The period is
+  // timestamptz, so the cut-off is midnight London at the start of the day
+  // after the last date we want.
   const threeMonthsOut = new Date();
   threeMonthsOut.setMonth(threeMonthsOut.getMonth() + 3);
+  const lastDate = londonToday(threeMonthsOut);
 
   const { data: rawBookings } = await admin
-    .from("room_bookings")
-    .select("room_id, date, start_time, end_time")
+    .from("bookings")
+    .select("resource_id, starts_at, ends_at")
     .in("status", ["pending", "confirmed"])
-    .lte("date", new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(threeMonthsOut));
+    .lt("starts_at", localToInstant(addDays(lastDate, 1), "00:00"));
 
   const roomList = (rooms ?? []).map((r) => ({
     id: r.id,
@@ -40,22 +47,25 @@ export default async function BookPage() {
     price_pence_per_hour: r.price_pence_per_hour ?? null,
     price_pence_half_day: r.price_pence_half_day ?? null,
     price_pence_full_day: r.price_pence_full_day ?? null,
-    price_pence_fixed: (r as Record<string, unknown>).price_pence_fixed as number | null ?? null,
-    price_note: (r as Record<string, unknown>).price_note as string | null ?? null,
+    price_pence_fixed: r.price_pence_fixed,
+    price_note: r.price_note,
   }));
 
   const faqs = (faqRows ?? []).map((f) => ({
-    id: f.id as string,
-    question: f.question as string,
-    answer: f.answer as string,
+    id: f.id,
+    question: f.question,
+    answer: f.answer,
   }));
 
-  const bookedSlots = (rawBookings ?? []).map((b) => ({
-    room_id: b.room_id,
-    date: String(b.date),
-    start_time: String(b.start_time),
-    end_time: String(b.end_time),
-  }));
+  const bookedSlots = (rawBookings ?? []).map((b) => {
+    const window = instantsToLocalWindow(b.starts_at, b.ends_at);
+    return {
+      resource_id: b.resource_id,
+      date: window.date,
+      start_time: window.startTime,
+      end_time: window.endTime,
+    };
+  });
 
   const contactEmail = settings.contact_email || "bookings@aomsportsclub.co.uk";
 

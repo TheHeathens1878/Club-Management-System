@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { isBookerRole } from "@/lib/types";
 
 export function SetPasswordForm() {
   const [password, setPassword] = useState("");
@@ -50,7 +51,7 @@ export function SetPasswordForm() {
       .select("role")
       .eq("id", user?.id ?? "")
       .maybeSingle();
-    const dest = profile?.role === "booker" ? "/portal" : "/room-bookings";
+    const dest = isBookerRole(profile?.role) ? "/portal" : "/room-bookings";
     router.push(dest);
   }
 

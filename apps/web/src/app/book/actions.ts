@@ -1,10 +1,19 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 import { getSiteUrl } from "@/lib/utils";
 import { sendEmail } from "@/lib/email";
 import { roomBookingNotificationEmail } from "@/lib/email-templates";
 import { getEmailBrandColor, getRecipientEmails, getSettings } from "@/lib/settings";
+import {
+  formatBookingDate,
+  isValidDateString,
+  isValidTimeString,
+  legacyWindowToInstants,
+} from "@/lib/booking-time";
+import { bookingPeriod, FUNCTION_ROOM } from "@/lib/booking-types";
+import { conflictOrMessage, slotHasConflict, SLOT_TAKEN_MESSAGE } from "@/lib/booking-conflict";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -22,7 +31,9 @@ async function ensureBookerAccount(
     user_metadata: { needs_password: true, full_name: fullName },
   });
   if (created?.user) {
-    await admin.from("profiles").upsert(
+    // `booker` is not a value of the `user_role` enum in the current schema —
+    // P0.4 lift-and-shift debt, untouched here. See lib/supabase/legacy.ts.
+    await createLegacyAdminClient().from("profiles").upsert(
       { id: created.user.id, role: "booker", full_name: fullName },
       { onConflict: "id" },
     );
@@ -55,7 +66,7 @@ function bookerEmailHtml(intro: string, brandColor: string, clubName: string): s
 
 function parseTime(t: string): number {
   const [h, m] = t.split(":").map(Number);
-  return h * 60 + m;
+  return (h ?? 0) * 60 + (m ?? 0);
 }
 
 function calcAmount(
@@ -113,62 +124,41 @@ export async function submitBooking(
   if (!bookerEmail) return { error: "Please enter your email address." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(bookerEmail)) return { error: "Please enter a valid email address." };
   if (!bookerPhone) return { error: "Please enter your phone number." };
+  if (!isValidDateString(date)) return { error: "Please select a valid date." };
+  if (!isValidTimeString(startTime) || !isValidTimeString(endTime)) {
+    return { error: "Please enter valid start and end times." };
+  }
 
   const startMin = parseTime(startTime);
   const endMin = parseTime(endTime);
   if (endMin <= startMin) return { error: "End time must be after start time." };
 
   const { data: room, error: roomErr } = await admin
-    .from("function_rooms")
+    .from("resources")
     .select("id, name, price_pence_per_hour, price_pence_half_day, price_pence_full_day")
     .eq("id", roomId)
+    .eq("type", FUNCTION_ROOM)
     .eq("active", true)
     .maybeSingle();
 
   if (roomErr || !room) return { error: "Room not found." };
 
-  // Check for overlapping bookings on the same room/date
-  const { data: overlapping } = await admin
-    .from("room_bookings")
-    .select("id")
-    .eq("room_id", roomId)
-    .eq("date", date)
-    .in("status", ["pending", "confirmed"])
-    .lt("start_time", endTime)
-    .gt("end_time", startTime);
+  const { startsAt, endsAt } = legacyWindowToInstants(date, startTime, endTime);
 
-  if (overlapping && overlapping.length > 0) {
-    return { error: "That room is already booked for part of your requested time. Please choose a different time or date." };
-  }
-
-  // Check for club events that block this room on this date
-  const { data: blockingEvents } = await admin
-    .from("events")
-    .select("id,title,start_at,end_at,all_day")
-    .eq("function_room_id", roomId)
-    .eq("status", "published")
-    .gte("start_at", `${date}T00:00:00Z`)
-    .lte("start_at", `${date}T23:59:59Z`);
-
-  if (blockingEvents && blockingEvents.length > 0) {
-    for (const ev of blockingEvents) {
-      const evStart = ev.all_day ? 0 : parseTime(new Date(ev.start_at).toISOString().slice(11, 16));
-      const evEnd = ev.all_day ? 1439 : (ev.end_at ? parseTime(new Date(ev.end_at).toISOString().slice(11, 16)) : 1439);
-      if (parseTime(startTime) < evEnd && parseTime(endTime) > evStart) {
-        return { error: `That room is reserved for a club event on this date. Please choose a different date.` };
-      }
-    }
+  // `booking_has_conflict()` applies exactly the rule `bookings_no_overlap`
+  // enforces, so the answer here and the constraint below cannot disagree
+  // about an edge; the constraint still guards against a race.
+  if (await slotHasConflict(admin, { resourceId: roomId, startsAt, endsAt })) {
+    return { error: SLOT_TAKEN_MESSAGE };
   }
 
   const amountPence = calcAmount(room, startTime, endTime);
 
   const { data: booking, error: insertErr } = await admin
-    .from("room_bookings")
+    .from("bookings")
     .insert({
-      room_id: roomId,
-      date,
-      start_time: startTime,
-      end_time: endTime,
+      resource_id: roomId,
+      ...bookingPeriod(startsAt, endsAt),
       booker_first_name: bookerFirstName,
       booker_last_name: bookerLastName,
       booker_name: bookerName,
@@ -178,19 +168,23 @@ export async function submitBooking(
       estimated_guests: estimatedGuests,
       notes,
       status: "pending",
-      amount_pence: amountPence > 0 ? amountPence : null,
+      total_pence: amountPence > 0 ? amountPence : null,
       payment_status: "unpaid",
     })
     .select("id")
     .single();
 
-  if (insertErr || !booking) return { error: "Failed to save booking. Please try again." };
+  if (insertErr || !booking) {
+    return {
+      error: conflictOrMessage(insertErr, "Failed to save booking. Please try again."),
+    };
+  }
 
   // Create / link a booker account so they can access the portal
   const { userId: bookerId, isNew } = await ensureBookerAccount(admin, bookerEmail, bookerName)
     .catch(() => ({ userId: null as string | null, isNew: false }));
   if (bookerId) {
-    await admin.from("room_bookings").update({ booker_profile_id: bookerId }).eq("id", booking.id);
+    await admin.from("bookings").update({ booker_profile_id: bookerId }).eq("id", booking.id);
   }
 
   // Send the booker their acknowledgement + portal access (async)
@@ -201,9 +195,7 @@ export async function submitBooking(
         getSettings(),
       ]);
       const siteUrl = getSiteUrl();
-      const dateFormatted = new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
-        weekday: "long", day: "numeric", month: "long", year: "numeric",
-      });
+      const dateFormatted = formatBookingDate(date);
 
       let accessLine = `<p>You can track your booking and pay online any time in your portal.</p>
 <p><a href="${siteUrl}/portal" style="color:${brandColor};font-weight:600;">Open your booking portal →</a></p>`;
@@ -247,12 +239,10 @@ ${accessLine}
 
       if (staffEmails.length > 0) {
         const bookingUrl = `${getSiteUrl()}/room-bookings/${booking.id}`;
-        const dateFormatted = new Date(date + "T12:00:00").toLocaleDateString("en-GB", {
-          weekday: "long", day: "numeric", month: "long", year: "numeric",
-        });
+        const dateFormatted = formatBookingDate(date);
         const tpl = await roomBookingNotificationEmail({
           bookerName,
-          roomName: room.name as string,
+          roomName: room.name,
           date: dateFormatted,
           startTime,
           endTime,

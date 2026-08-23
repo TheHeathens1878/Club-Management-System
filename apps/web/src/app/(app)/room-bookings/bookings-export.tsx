@@ -4,30 +4,8 @@ import { Download, FileSpreadsheet, Printer } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { siteConfig } from "@/lib/site-config";
 import { formatCurrency } from "@/lib/utils";
-
-export type ExportBooking = {
-  id: string;
-  room_id: string;
-  date: unknown;
-  start_time: unknown;
-  end_time: unknown;
-  booker_name: unknown;
-  booker_email: unknown;
-  booker_phone?: unknown;
-  occasion?: unknown;
-  estimated_guests?: unknown;
-  status: unknown;
-  payment_status: unknown;
-  amount_pence?: unknown;
-  booking_type?: unknown;
-  recurrence_group_id?: string | null;
-};
-
-function fmtDate(d: unknown) {
-  return new Date(String(d) + "T12:00:00").toLocaleDateString("en-GB", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
-}
+import { formatBookingDateNumeric } from "@/lib/booking-time";
+import type { BookingListItem } from "@/lib/booking-types";
 
 const ALL_COLS = ["Date", "Room", "Start", "End", "Booker", "Email", "Mobile", "Occasion", "Guests", "Type", "Status", "Amount"] as const;
 type ColLabel = typeof ALL_COLS[number];
@@ -44,20 +22,20 @@ const COL_KEY_MAP: Record<string, ColLabel[]> = {
   amount: ["Amount"],
 };
 
-function toRow(b: ExportBooking, roomName: Record<string, string>): Record<ColLabel, string> {
+function toRow(b: BookingListItem, roomName: Record<string, string>): Record<ColLabel, string> {
   return {
-    Date: fmtDate(b.date),
-    Room: roomName[b.room_id] ?? "—",
-    Start: String(b.start_time).slice(0, 5),
-    End: String(b.end_time).slice(0, 5),
-    Booker: String(b.booker_name),
-    Email: String(b.booker_email),
-    Mobile: String(b.booker_phone ?? "—"),
-    Occasion: String(b.occasion ?? "—"),
-    Guests: String(b.estimated_guests ?? "—"),
-    Type: b.booking_type === "block" ? "Block" : "Hire",
-    Status: String(b.status),
-    Amount: b.amount_pence ? formatCurrency(Number(b.amount_pence)) : "—",
+    Date: formatBookingDateNumeric(b.date),
+    Room: roomName[b.resource_id] ?? "—",
+    Start: b.start_time,
+    End: b.end_time,
+    Booker: b.booker_name,
+    Email: b.booker_email,
+    Mobile: b.booker_phone ?? "—",
+    Occasion: b.occasion ?? "—",
+    Guests: b.estimated_guests === null ? "—" : String(b.estimated_guests),
+    Type: b.kind === "block" ? "Block" : "Hire",
+    Status: b.status,
+    Amount: b.total_pence ? formatCurrency(b.total_pence) : "—",
   };
 }
 
@@ -75,7 +53,7 @@ export function BookingsExportButtons({
   roomName,
   visibleCols,
 }: {
-  bookings: ExportBooking[];
+  bookings: BookingListItem[];
   roomName: Record<string, string>;
   visibleCols: string[];
 }) {

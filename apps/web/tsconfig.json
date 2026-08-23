@@ -6,10 +6,7 @@
     "noEmit": true,
     "jsx": "preserve",
     "incremental": true,
-    // Imported function-room app (P0.4) was written without this flag; enabling
-    // it would mean touching ~30 call sites in a lift-and-shift. Revisit when
-    // the app is refactored onto the unified schema (Phase 1).
-    "noUncheckedIndexedAccess": false,
+    "noUncheckedIndexedAccess": true,
     "plugins": [{ "name": "next" }],
     "paths": {
       "@/*": ["./src/*"]

@@ -6,50 +6,50 @@ import { sendEmail } from "@/lib/email";
 import { deleteCalendarEvent } from "@/lib/calendar";
 import { writeAudit } from "@/lib/audit";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
+import { addDays, formatBookingDate, instantsToLocalWindow, londonToday } from "@/lib/booking-time";
 
 export const dynamic = "force-dynamic";
 
 // London "today" (YYYY-MM-DD) and a date N days from now, for comparing against
-// the date-typed deposit_due_date / balance_due_date columns.
-const ukDate = new Intl.DateTimeFormat("en-CA", {
-  timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit",
-});
+// the date-typed deposit_due_date / balance_due_date columns. Those two stayed
+// `date` in the unified schema, so this logic is unchanged by P1.6.
 function dayOffset(days: number): string {
-  return ukDate.format(new Date(Date.now() + days * 86_400_000));
-}
-function prettyDate(d: string): string {
-  return new Date(d + "T12:00:00").toLocaleDateString("en-GB", {
-    weekday: "long", day: "numeric", month: "long", year: "numeric",
-  });
-}
-function roomNameOf(row: unknown): string {
-  const r = row as { name?: string } | { name?: string }[] | null;
-  return Array.isArray(r) ? (r[0]?.name ?? "Function room") : (r?.name ?? "Function room");
+  return addDays(londonToday(), days);
 }
 
 type Booking = {
   id: string;
-  booker_name: string | null;
-  booker_email: string | null;
-  date: string;
+  booker_name: string;
+  booker_email: string;
+  starts_at: string;
+  ends_at: string;
   total_pence: number | null;
   deposit_pence: number | null;
   deposit_due_date: string | null;
   balance_due_date: string | null;
-  function_rooms: unknown;
+  resources: { name: string } | null;
 };
+
+function roomNameOf(booking: Booking): string {
+  return booking.resources?.name ?? "Function room";
+}
 
 async function paidMap(admin: ReturnType<typeof createAdminClient>, ids: string[]) {
   const map = new Map<string, number>();
   if (ids.length === 0) return map;
-  const { data } = await admin.from("booking_payments").select("booking_id,amount_pence").in("booking_id", ids);
+  const { data } = await admin.from("payments").select("booking_id,amount_pence").in("booking_id", ids);
   for (const p of data ?? []) {
-    map.set(p.booking_id as string, (map.get(p.booking_id as string) ?? 0) + Number(p.amount_pence ?? 0));
+    map.set(p.booking_id, (map.get(p.booking_id) ?? 0) + p.amount_pence);
   }
   return map;
 }
 
-const SELECT = "id,booker_name,booker_email,date,total_pence,deposit_pence,deposit_due_date,balance_due_date,function_rooms(name)";
+// One string literal each: supabase-js derives the row type from the select
+// text, and a concatenation would collapse it to `string`.
+const SELECT =
+  "id,booker_name,booker_email,starts_at,ends_at,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources(name)";
+const SELECT_WITH_CALENDAR =
+  "id,booker_name,booker_email,starts_at,ends_at,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources(name),calendar_event_id";
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -67,7 +67,7 @@ export async function GET(request: Request) {
 
   // --- Deposit reminders: due within 2 days (or overdue), deposit still short ---
   const { data: depositCandidates } = await admin
-    .from("room_bookings")
+    .from("bookings")
     .select(SELECT)
     .eq("status", "confirmed")
     .is("deposit_reminder_sent_at", null)
@@ -75,7 +75,7 @@ export async function GET(request: Request) {
     .not("deposit_due_date", "is", null)
     .lte("deposit_due_date", dayOffset(2));
 
-  const depBookings = (depositCandidates ?? []) as unknown as Booking[];
+  const depBookings: Booking[] = depositCandidates ?? [];
   const depPaid = await paidMap(admin, depBookings.map((b) => b.id));
 
   for (const b of depBookings) {
@@ -85,15 +85,15 @@ export async function GET(request: Request) {
     if (!b.booker_email) continue;
     try {
       const tpl = await renderEmailTemplate("deposit_reminder", {
-        name: b.booker_name ?? "there",
-        room_name: roomNameOf(b.function_rooms),
-        booking_date: prettyDate(b.date),
+        name: b.booker_name || "there",
+        room_name: roomNameOf(b),
+        booking_date: formatBookingDate(instantsToLocalWindow(b.starts_at, b.ends_at).date),
         deposit_amount: formatCurrency(deposit),
-        deposit_due_date: b.deposit_due_date ? prettyDate(b.deposit_due_date) : "—",
+        deposit_due_date: b.deposit_due_date ? formatBookingDate(b.deposit_due_date) : "—",
         portal_url: portalUrl,
       }, brandColor);
       await sendEmail({ to: b.booker_email, ...tpl });
-      await admin.from("room_bookings").update({ deposit_reminder_sent_at: new Date().toISOString() }).eq("id", b.id);
+      await admin.from("bookings").update({ deposit_reminder_sent_at: new Date().toISOString() }).eq("id", b.id);
       depositSent++;
     } catch (e) {
       console.error("[cron] deposit reminder failed for", b.id, e);
@@ -102,7 +102,7 @@ export async function GET(request: Request) {
 
   // --- Balance reminders: within the reminder window (balance_due_date reached), not paid in full ---
   const { data: balanceCandidates } = await admin
-    .from("room_bookings")
+    .from("bookings")
     .select(SELECT)
     .eq("status", "confirmed")
     .is("balance_reminder_sent_at", null)
@@ -110,7 +110,7 @@ export async function GET(request: Request) {
     .not("balance_due_date", "is", null)
     .lte("balance_due_date", today);
 
-  const balBookings = (balanceCandidates ?? []) as unknown as Booking[];
+  const balBookings: Booking[] = balanceCandidates ?? [];
   const balPaid = await paidMap(admin, balBookings.map((b) => b.id));
 
   for (const b of balBookings) {
@@ -121,15 +121,15 @@ export async function GET(request: Request) {
     if (!b.booker_email) continue;
     try {
       const tpl = await renderEmailTemplate("balance_reminder", {
-        name: b.booker_name ?? "there",
-        room_name: roomNameOf(b.function_rooms),
-        booking_date: prettyDate(b.date),
+        name: b.booker_name || "there",
+        room_name: roomNameOf(b),
+        booking_date: formatBookingDate(instantsToLocalWindow(b.starts_at, b.ends_at).date),
         outstanding: formatCurrency(outstanding),
-        balance_due_date: b.balance_due_date ? prettyDate(b.balance_due_date) : "—",
+        balance_due_date: b.balance_due_date ? formatBookingDate(b.balance_due_date) : "—",
         portal_url: portalUrl,
       }, brandColor);
       await sendEmail({ to: b.booker_email, ...tpl });
-      await admin.from("room_bookings").update({ balance_reminder_sent_at: new Date().toISOString() }).eq("id", b.id);
+      await admin.from("bookings").update({ balance_reminder_sent_at: new Date().toISOString() }).eq("id", b.id);
       balanceSent++;
     } catch (e) {
       console.error("[cron] balance reminder failed for", b.id, e);
@@ -141,16 +141,15 @@ export async function GET(request: Request) {
   const settings = await getSettings();
   if (settings.auto_cancel_unpaid !== "false") {
     const { data: cancelCandidates } = await admin
-      .from("room_bookings")
-      .select(SELECT + ",start_time,end_time,calendar_event_id")
+      .from("bookings")
+      .select(SELECT_WITH_CALENDAR)
       .eq("status", "confirmed")
       .gt("deposit_pence", 0)
       .not("deposit_due_date", "is", null)
       .lt("deposit_due_date", today); // deadline is strictly in the past
 
-    const cancelBookings = (cancelCandidates ?? []) as unknown as (Booking & {
-      start_time: string; end_time: string; calendar_event_id: string | null;
-    })[];
+    const cancelBookings: (Booking & { calendar_event_id: string | null })[] =
+      cancelCandidates ?? [];
     const cancelPaid = await paidMap(admin, cancelBookings.map((b) => b.id));
     const ccAuto = await getRecipientEmails("notify_auto_cancellation").catch(() => []);
 
@@ -159,11 +158,11 @@ export async function GET(request: Request) {
       const paid = cancelPaid.get(b.id) ?? 0;
       if (paid >= deposit) continue; // deposit satisfied — leave it alone
 
-      const dueStr = b.deposit_due_date ? prettyDate(b.deposit_due_date) : "the deadline";
+      const dueStr = b.deposit_due_date ? formatBookingDate(b.deposit_due_date) : "the deadline";
       const reason = `The required deposit of ${formatCurrency(deposit)} was not received by ${dueStr}, so this booking has been cancelled.`;
 
       await admin
-        .from("room_bookings")
+        .from("bookings")
         .update({ status: "cancelled", internal_notes: `Auto-cancelled: deposit not paid by ${b.deposit_due_date}` })
         .eq("id", b.id);
 
@@ -171,12 +170,13 @@ export async function GET(request: Request) {
 
       if (b.booker_email) {
         try {
+          const window = instantsToLocalWindow(b.starts_at, b.ends_at);
           const tpl = await renderEmailTemplate("room_booking_cancelled", {
-            name: b.booker_name ?? "there",
-            room_name: roomNameOf(b.function_rooms),
-            booking_date: prettyDate(b.date),
-            start_time: String(b.start_time).slice(0, 5),
-            end_time: String(b.end_time).slice(0, 5),
+            name: b.booker_name || "there",
+            room_name: roomNameOf(b),
+            booking_date: formatBookingDate(window.date),
+            start_time: window.startTime,
+            end_time: window.endTime,
             cancellation_reason: reason,
           }, brandColor);
           await sendEmail({ to: b.booker_email, cc: ccAuto, ...tpl });

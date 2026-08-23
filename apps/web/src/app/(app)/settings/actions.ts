@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionProfile, isSuperUser } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 import { writeAudit } from "@/lib/audit";
 import { sendEmail } from "@/lib/email";
 import { getSiteUrl } from "@/lib/utils";
@@ -15,7 +15,7 @@ async function requireSuperUser() {
 
 export async function saveGeneralSettings(formData: FormData) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const keys = [
     "club_name", "club_tagline", "club_description", "login_subtitle", "login_no_email",
@@ -36,7 +36,7 @@ export async function saveGeneralSettings(formData: FormData) {
 
 export async function saveBrandingSettings(formData: FormData) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const keys = ["logo_url", "logo_alt", "color_theme", "logo_height", "logo_max_width", "logo_object_fit"] as const;
   for (const key of keys) {
@@ -51,7 +51,7 @@ export async function saveBrandingSettings(formData: FormData) {
 
 export async function savePaymentSettings(formData: FormData) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   // Deposit entered in pounds; store as pence
   const depositPounds = Number(formData.get("deposit_default_pounds") ?? 0);
@@ -75,7 +75,7 @@ export async function savePaymentSettings(formData: FormData) {
 
 export async function saveNotificationRecipients(formData: FormData) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const keys = ["notify_booking_request", "notify_cancellation", "notify_auto_cancellation"] as const;
   for (const key of keys) {
@@ -103,7 +103,7 @@ export async function setMemberAccess(
   opts: { member: boolean; barStaff: boolean; committee: boolean }
 ): Promise<{ error?: string }> {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   // Derive the target role from the highest privilege ticked
   let newRole: string | null = null;
@@ -153,7 +153,7 @@ export async function assignRoleToMember(memberId: string, role: string) {
   const validRoles = ["super_user", "committee", "bar", "member"];
   if (!validRoles.includes(role)) throw new Error("Invalid role");
 
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   // Check if they have a profile (i.e. have logged in)
   const { data: profile } = await admin
@@ -187,7 +187,7 @@ export async function assignRoleToMember(memberId: string, role: string) {
 
 export async function clearPendingRole(memberId: string) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   await admin.from("members").update({ pending_role: null }).eq("id", memberId);
   await writeAudit({ actorId: session.userId, actorEmail: session.email, action: "update", entity: "member_role", entityId: memberId, detail: { cleared: true } });
   revalidatePath("/settings");
@@ -197,7 +197,7 @@ export async function createStaffAccount(
   formData: FormData
 ): Promise<{ error?: string; success?: boolean }> {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const name = String(formData.get("name") || "").trim();
   const email = String(formData.get("email") || "").trim().toLowerCase();
@@ -263,7 +263,7 @@ export async function createStaffAccount(
 
 export async function resendStaffInvite(userId: string): Promise<{ error?: string; success?: boolean }> {
   await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const { data: { user } } = await admin.auth.admin.getUserById(userId);
   if (!user?.email) return { error: "Could not retrieve email." };
@@ -294,7 +294,7 @@ export async function updateStaffAccount(
   formData: FormData
 ): Promise<{ error?: string }> {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const name = String(formData.get("name") || "").trim();
   const role = String(formData.get("role") || "").trim();
@@ -333,7 +333,7 @@ export async function removeStaffAccount(userId: string): Promise<{ error?: stri
   const session = await requireSuperUser();
   if (userId === session.userId) return { error: "You cannot remove your own account." };
 
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const { error } = await admin.auth.admin.deleteUser(userId);
   if (error) return { error: error.message };
 

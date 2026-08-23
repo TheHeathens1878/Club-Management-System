@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import type { Profile, UserRole } from "@/lib/types";
+import { isBookerRole, type Profile, type UserRole } from "@/lib/types";
 
 export async function getSessionProfile(): Promise<{
   userId: string;
@@ -39,7 +39,7 @@ export function isStaff(role: UserRole | undefined | null): boolean {
 }
 
 export function isBooker(role: UserRole | undefined | null): boolean {
-  return role === "booker";
+  return isBookerRole(role);
 }
 
 export function canEditMembers(role: UserRole | undefined | null): boolean {

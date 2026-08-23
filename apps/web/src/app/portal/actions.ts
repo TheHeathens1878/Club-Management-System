@@ -8,6 +8,8 @@ import { renderEmailTemplate } from "@/lib/template-engine";
 import { sendEmail } from "@/lib/email";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
 import { createSumUpCheckout, recordSumUpPaymentIfPaid } from "@/lib/sumup";
+import { formatBookingDate, instantToLocal } from "@/lib/booking-time";
+import type { BookingPaymentStatus } from "@/lib/booking-types";
 
 // Verify the booking belongs to the signed-in booker; returns the booking row.
 async function ownedBooking(bookingId: string) {
@@ -15,8 +17,8 @@ async function ownedBooking(bookingId: string) {
   if (!session) return { error: "Not signed in." as const };
   const admin = createAdminClient();
   const { data: booking } = await admin
-    .from("room_bookings")
-    .select("id,booker_profile_id,date,function_rooms(name)")
+    .from("bookings")
+    .select("id,booker_profile_id,starts_at,resources(name)")
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking || booking.booker_profile_id !== session.userId) return { error: "Booking not found." as const };
@@ -36,14 +38,13 @@ export async function createCheckoutForBooking(
   const owned = await ownedBooking(bookingId);
   if ("error" in owned) return { error: owned.error };
 
-  const roomRow = owned.booking.function_rooms as { name?: string } | { name?: string }[] | null;
-  const roomName = Array.isArray(roomRow) ? (roomRow[0]?.name ?? "Function room") : (roomRow?.name ?? "Function room");
+  const roomName = owned.booking.resources?.name ?? "Function room";
 
   try {
     const checkout = await createSumUpCheckout({
       amountPence,
       reference: `${bookingId}:${purpose}:${Date.now()}`,
-      description: `${purpose === "deposit" ? "Deposit" : "Balance"} — ${roomName} ${String(owned.booking.date)}`,
+      description: `${purpose === "deposit" ? "Deposit" : "Balance"} — ${roomName} ${instantToLocal(owned.booking.starts_at).date}`,
       returnUrl: `${getSiteUrl()}/portal/pay/return`,
     });
     return { checkoutId: checkout.id };
@@ -82,8 +83,8 @@ export async function payBookingMock(
   const admin = createAdminClient();
 
   const { data: booking } = await admin
-    .from("room_bookings")
-    .select("id,booker_profile_id,booker_name,booker_email,date,total_pence,function_rooms(name)")
+    .from("bookings")
+    .select("id,booker_profile_id,booker_name,booker_email,starts_at,total_pence,resources(name)")
     .eq("id", bookingId)
     .maybeSingle();
 
@@ -91,7 +92,7 @@ export async function payBookingMock(
     return { error: "Booking not found." };
   }
 
-  const { error: insertErr } = await admin.from("booking_payments").insert({
+  const { error: insertErr } = await admin.from("payments").insert({
     booking_id: bookingId,
     amount_pence: amountPence,
     paid_at: new Date().toISOString(),
@@ -105,37 +106,34 @@ export async function payBookingMock(
 
   // Recompute payment_status from the full payment history
   const [{ data: totalsRow }, { data: payments }] = await Promise.all([
-    admin.from("room_bookings").select("total_pence,deposit_pence,amount_pence").eq("id", bookingId).maybeSingle(),
-    admin.from("booking_payments").select("amount_pence").eq("booking_id", bookingId),
+    admin.from("bookings").select("total_pence,deposit_pence").eq("id", bookingId).maybeSingle(),
+    admin.from("payments").select("amount_pence").eq("booking_id", bookingId),
   ]);
-  const totalPence = Number(totalsRow?.total_pence ?? totalsRow?.amount_pence ?? 0);
-  const depositPence = Number(totalsRow?.deposit_pence ?? 0);
-  const paidPence = (payments ?? []).reduce((acc, p) => acc + Number(p.amount_pence ?? 0), 0);
-  let status = "unpaid";
+  const totalPence = totalsRow?.total_pence ?? 0;
+  const depositPence = totalsRow?.deposit_pence ?? 0;
+  const paidPence = (payments ?? []).reduce((acc, p) => acc + p.amount_pence, 0);
+  let status: BookingPaymentStatus = "unpaid";
   if (totalPence > 0 && paidPence >= totalPence) status = "paid";
   else if (paidPence > 0 && (depositPence === 0 || paidPence >= depositPence)) status = "deposit_paid";
   else if (paidPence > 0) status = "deposit_paid";
-  await admin.from("room_bookings").update({ payment_status: status }).eq("id", bookingId);
+  await admin.from("bookings").update({ payment_status: status }).eq("id", bookingId);
 
   // Confirmation email to the booker
   if (booking.booker_email) {
     (async () => {
       try {
         const brandColor = await getEmailBrandColor().catch(() => "#1249bf");
-        const roomRow = booking.function_rooms as { name?: string } | { name?: string }[] | null;
-        const roomName = Array.isArray(roomRow) ? (roomRow[0]?.name ?? "Function room") : (roomRow?.name ?? "Function room");
+        const roomName = booking.resources?.name ?? "Function room";
         const tpl = await renderEmailTemplate("payment_received", {
-          name: booking.booker_name as string,
+          name: booking.booker_name,
           room_name: roomName,
-          booking_date: new Date(String(booking.date) + "T12:00:00").toLocaleDateString("en-GB", {
-            weekday: "long", day: "numeric", month: "long", year: "numeric",
-          }),
+          booking_date: formatBookingDate(instantToLocal(booking.starts_at).date),
           amount_paid: formatCurrency(amountPence),
           total_paid: formatCurrency(paidPence),
           outstanding: totalPence > 0 ? formatCurrency(Math.max(0, totalPence - paidPence)) : "—",
           payment_method: "Card (online)",
         }, brandColor);
-        await sendEmail({ to: booking.booker_email as string, ...tpl });
+        await sendEmail({ to: booking.booker_email, ...tpl });
       } catch (e) {
         console.error("[portal] Payment email failed:", e);
       }

@@ -4,17 +4,8 @@ import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { ChevronLeft, ChevronRight, Printer, CalendarRange, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-
-type BookingRow = {
-  id: string;
-  room_id: string;
-  date: unknown;
-  start_time: unknown;
-  end_time: unknown;
-  booker_name: unknown;
-  status: unknown;
-  booking_type?: unknown;
-};
+import { londonToday } from "@/lib/booking-time";
+import type { BookingKind, BookingListItem, BookingStatus } from "@/lib/booking-types";
 
 type AwayEntry = {
   id: string;
@@ -27,11 +18,18 @@ type AwayEntry = {
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
-function todayLondon(): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/London" }).format(new Date());
-}
-
 function pad(n: number) { return String(n).padStart(2, "0"); }
+
+/** `YYYY-MM` split into definite numbers; falls back to the current month. */
+function parseYm(ym: string): { year: number; month: number } {
+  const match = /^(d{4})-(d{2})$/.exec(ym);
+  if (!match) {
+    const now = new Date();
+    return { year: now.getFullYear(), month: now.getMonth() + 1 };
+  }
+  const [, year = "", month = ""] = match;
+  return { year: Number(year), month: Number(month) };
+}
 
 function getCalendarGrid(year: number, month: number): (number | null)[] {
   const firstDay = new Date(year, month - 1, 1);
@@ -43,8 +41,8 @@ function getCalendarGrid(year: number, month: number): (number | null)[] {
 }
 
 // Status-based colour: green=confirmed, yellow=pending, red=cancelled, amber=blocked
-function bookingColor(status: unknown, bookingType: unknown): string {
-  if (bookingType === "block") return "bg-amber-100 text-amber-800 border-amber-200";
+function bookingColor(status: BookingStatus, kind: BookingKind): string {
+  if (kind === "block") return "bg-amber-100 text-amber-800 border-amber-200";
   if (status === "cancelled") return "bg-red-100 text-red-800 border-red-200";
   if (status === "pending") return "bg-amber-50 text-yellow-800 border-yellow-300";
   return "bg-green-100 text-green-800 border-green-200"; // confirmed
@@ -52,8 +50,8 @@ function bookingColor(status: unknown, bookingType: unknown): string {
 
 function buildMonthRange(from: string, to: string): string[] {
   const months: string[] = [];
-  const [fy, fm] = from.split("-").map(Number);
-  const [ty, tm] = to.split("-").map(Number);
+  const { year: fy, month: fm } = parseYm(from);
+  const { year: ty, month: tm } = parseYm(to);
   let y = fy, m = fm;
   while (y < ty || (y === ty && m <= tm)) {
     months.push(`${y}-${pad(m)}`);
@@ -77,13 +75,13 @@ function MonthGrid({
   awayEntries = [],
 }: {
   ym: string;
-  byDate: Map<string, BookingRow[]>;
+  byDate: Map<string, BookingListItem[]>;
   today: string;
   forPrint?: boolean;
   roomName: Record<string, string>;
   awayEntries?: AwayEntry[];
 }) {
-  const [year, month] = ym.split("-").map(Number);
+  const { year, month } = parseYm(ym);
   const label = new Date(year, month - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
   const grid = getCalendarGrid(year, month);
 
@@ -137,15 +135,15 @@ function MonthGrid({
                   )}
                   <div className="space-y-0.5">
                     {dayBookings.map((b, bi) => {
-                      const rName = roomName[b.room_id] ?? "";
+                      const rName = roomName[b.resource_id] ?? "";
                       const isPending = b.status === "pending";
                       const label =
-                        b.booking_type === "block"
+                        b.kind === "block"
                           ? "Blocked"
-                          : `${String(b.start_time).slice(0, 5)} ${String(b.booker_name)}${isPending ? " (PENDING)" : ""} (${rName})`;
+                          : `${b.start_time} ${b.booker_name}${isPending ? " (PENDING)" : ""} (${rName})`;
 
                       const chip = (
-                        <span className={`cal-chip block rounded border px-1 py-0.5 text-[9px] leading-tight font-medium truncate ${bookingColor(b.status, b.booking_type)} ${bi >= 3 && !forPrint ? "hidden" : ""}`}>
+                        <span className={`cal-chip block rounded border px-1 py-0.5 text-[9px] leading-tight font-medium truncate ${bookingColor(b.status, b.kind)} ${bi >= 3 && !forPrint ? "hidden" : ""}`}>
                           {label}
                         </span>
                       );
@@ -177,12 +175,12 @@ export function BookingsCalendar({
   initialMonth,
   awayEntries = [],
 }: {
-  bookings: BookingRow[];
+  bookings: BookingListItem[];
   roomName: Record<string, string>;
   initialMonth?: string;
   awayEntries?: AwayEntry[];
 }) {
-  const today = todayLondon();
+  const today = londonToday();
   const [ym, setYm] = useState<string>(() => {
     if (initialMonth && /^\d{4}-\d{2}$/.test(initialMonth)) return initialMonth;
     return today.slice(0, 7);
@@ -193,7 +191,7 @@ export function BookingsCalendar({
   const [printMonths, setPrintMonths] = useState<string[] | null>(null);
   const [roomFilter, setRoomFilter] = useState<string>("all");
 
-  const [year, month] = ym.split("-").map(Number);
+  const { year, month } = parseYm(ym);
   const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
   const roomIds = useMemo(() => Object.keys(roomName), [roomName]);
@@ -207,13 +205,13 @@ export function BookingsCalendar({
     setYm(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
   }
 
-  const filteredBookings = roomFilter === "all" ? bookings : bookings.filter((b) => b.room_id === roomFilter);
+  const filteredBookings = roomFilter === "all" ? bookings : bookings.filter((b) => b.resource_id === roomFilter);
 
-  const byDate = new Map<string, BookingRow[]>();
+  const byDate = new Map<string, BookingListItem[]>();
   for (const b of filteredBookings) {
-    const ds = String(b.date);
-    if (!byDate.has(ds)) byDate.set(ds, []);
-    byDate.get(ds)!.push(b);
+    const existing = byDate.get(b.date);
+    if (existing) existing.push(b);
+    else byDate.set(b.date, [b]);
   }
 
   useEffect(() => {

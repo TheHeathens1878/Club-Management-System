@@ -9,7 +9,7 @@ async function requireCommittee() {
   if (!session || !isCommittee(session.profile?.role)) throw new Error("Not authorised");
   return session;
 }
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 import { writeAudit } from "@/lib/audit";
 import {
   TEMPLATE_DEFINITIONS,
@@ -57,7 +57,7 @@ async function emailLayout(body: string, brandColor: string, clubName?: string):
 
 export async function saveTemplate(key: TemplateKey, subject: string, bodyHtml: string) {
   const session = await requireCommittee();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   if (!TEMPLATE_DEFINITIONS[key]) throw new Error("Invalid template key");
 
@@ -86,7 +86,7 @@ export async function saveTemplate(key: TemplateKey, subject: string, bodyHtml: 
 
 export async function resetTemplate(key: TemplateKey) {
   const session = await requireCommittee();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   if (!TEMPLATE_DEFINITIONS[key]) throw new Error("Invalid template key");
 

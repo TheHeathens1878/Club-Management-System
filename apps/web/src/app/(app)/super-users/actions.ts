@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSessionProfile, isSuperUser, isBarManager } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 import { writeAudit } from "@/lib/audit";
 import { getSiteUrl } from "@/lib/utils";
 import { sendEmail } from "@/lib/email";
@@ -19,7 +19,7 @@ export async function updateUserRole(
   role: "super_user" | "committee" | "bar_manager" | "bar" | "member",
 ) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const { error } = await admin.from("profiles").update({ role }).eq("id", profileId);
   if (error) throw new Error(error.message);
@@ -38,7 +38,7 @@ export async function updateUserRole(
 
 export async function updateUserName(profileId: string, name: string) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const fullName = name.trim() || null;
 
   const { error } = await admin.from("profiles").update({ full_name: fullName }).eq("id", profileId);
@@ -102,7 +102,7 @@ export async function inviteUser(
   name?: string,
 ) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const siteUrl = getSiteUrl();
   const fullName = name?.trim() || null;
 
@@ -150,7 +150,7 @@ export async function inviteUser(
 
 export async function resendInvite(userId: string) {
   const session = await requireSuperUser();
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const siteUrl = getSiteUrl();
 
   const { data: { user } } = await admin.auth.admin.getUserById(userId);
@@ -173,7 +173,7 @@ export async function removeUser(profileId: string) {
   const session = await requireSuperUser();
   if (profileId === session.userId) throw new Error("You cannot remove your own account.");
 
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
 
   const { error } = await admin.auth.admin.deleteUser(profileId);
   if (error) throw new Error(error.message);
@@ -193,7 +193,7 @@ export async function removeUser(profileId: string) {
 export async function addNonUserStaff(name: string) {
   const session = await getSessionProfile();
   if (!session || !isBarManager(session.profile?.role)) throw new Error("Not authorised");
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const { error } = await admin.from("non_user_staff").insert({ name: name.trim() });
   if (error) throw new Error(error.message);
   revalidatePath("/settings");
@@ -203,7 +203,7 @@ export async function addNonUserStaff(name: string) {
 export async function removeNonUserStaff(id: string) {
   const session = await getSessionProfile();
   if (!session || !isBarManager(session.profile?.role)) throw new Error("Not authorised");
-  const admin = createAdminClient();
+  const admin = createLegacyAdminClient();
   const { error } = await admin.from("non_user_staff").delete().eq("id", id);
   if (error) throw new Error(error.message);
   revalidatePath("/settings");
