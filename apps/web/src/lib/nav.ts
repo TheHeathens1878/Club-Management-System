@@ -32,6 +32,7 @@ import {
   MessageSquare,
   Receipt,
   Settings,
+  Settings2,
   ShieldAlert,
   ShieldCheck,
   UserCheck,
@@ -127,6 +128,16 @@ export const NAV: readonly NavEntry[] = [
     group: "Pitches",
     allowed: (c) => c.isCommittee,
     views: ["coach", "admin"],
+  },
+  {
+    // Gap 7: the pitches themselves, not the diary. `resources_admin_*` all
+    // ask `is_club_admin()`, and the page's guard mirrors /people's.
+    href: "/pitches/manage",
+    label: "Manage pitches",
+    icon: Settings2,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
   },
 
   // --- The club ------------------------------------------------------------

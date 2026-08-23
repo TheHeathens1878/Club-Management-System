@@ -151,6 +151,14 @@ function EntryPopover({
         {state.notice && <p className="text-xs text-emerald-700">{state.notice}</p>}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
+          {entry.group !== "closed" && (
+            <Link
+              href={`/pitches/${entry.bookingId}`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              Details
+            </Link>
+          )}
           {manage && (
             <Link
               href={manage.href}
