@@ -13,7 +13,7 @@
 // The HTTP request itself is made by Postgres (pg_net) through
 // `fulltime_http_get` / `fulltime_http_result`: Cloudflare fingerprints the
 // TLS client and refuses Deno's fetch() where it lets libcurl through
-// (verified 2026-08-23; see 20260824170000_fulltime_pgnet_fetch.sql).
+// (verified 2026-08-23; see 20260824180000_fulltime_pgnet_fetch.sql).
 //
 // Auth: the function accepts the service-role key (cron) or a club_admin's JWT
 // (manual trigger from the teams screen). Everything else is 401.
