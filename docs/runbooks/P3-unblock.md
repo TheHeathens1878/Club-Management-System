@@ -1,7 +1,9 @@
 # Phase 3 — what Claude needs from Adam to start
 
-Phase 3 (Neon pitch-booking migration) is blocked on two inputs as of
-2026-08-23. Nothing in Phases 4–6 depends on it, so work continued there.
+Phase 3 (Neon pitch-booking migration) was blocked on two inputs as of
+2026-08-23. **Input 1 is done** (repo cloned to `C:/Projects/aom-fc-pitch-booking`
+later that day; git's stored credential could reach it). **Input 2 is still
+outstanding.** Nothing in Phases 4–6 depends on it, so work continued there.
 
 1. **The Neon app's source code.** `CLAUDE.md` expects it at
    `C:/Projects/aom-fc-pitch-booking` (and `.claude/settings.json` already
