@@ -1,31 +1,55 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { isClubAdmin } from "@/lib/person";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input, Label } from "@/components/ui/input";
-import { formatBookingDateShort } from "@/lib/booking-time";
 import {
   AlertCircle,
   CheckCircle2,
   ChevronRight,
-  Link2,
-  Link2Off,
   Plus,
+  Search,
 } from "lucide-react";
+
+import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { isClubAdmin } from "@/lib/person";
+import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { PageHeader } from "@/components/page-header";
+import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input, Label } from "@/components/ui/input";
+import { Select } from "@/components/ui/field";
+import { STAFF_TEAM_ROLES } from "@/lib/pitch-booking";
+import { formatBookingDateShort } from "@/lib/booking-time";
+
 import { createSeason, createTeam, setCurrentSeason, setTeamActive } from "./actions";
 import { ClubWidgetsPanel } from "./club-widgets-panel";
 
-/** How the last import went, as a badge the admin can read at a glance. */
-function importBadge(status: string | null): { label: string; variant: "success" | "warning" | "destructive" | "muted" } {
-  if (status === "ok") return { label: "Last import OK", variant: "success" };
-  if (status === "challenge") return { label: "Blocked by Cloudflare", variant: "warning" };
-  if (status === "error") return { label: "Last import failed", variant: "destructive" };
-  return { label: "Not imported yet", variant: "muted" };
-}
+/** The Full-Time link columns this list condenses into one dot and one label. */
+type FullTimeLinkSummary = {
+  team_id: string;
+  enabled: boolean;
+  last_import_status: string | null;
+  last_import_at: string | null;
+  last_import_count: number | null;
+  last_error: string | null;
+};
+
+type TeamCard = {
+  id: string;
+  name: string;
+  ageGroup: string | null;
+  gender: string | null;
+  active: boolean;
+  homePitch: string | null;
+  members: number;
+  staff: number;
+};
+
+const GENDER_LABELS: Record<string, string> = {
+  mixed: "Mixed",
+  boys: "Boys",
+  girls: "Girls",
+};
 
 function formatStamp(iso: string | null): string {
   if (!iso) return "never";
@@ -42,43 +66,219 @@ function formatStamp(iso: string | null): string {
   });
 }
 
+/**
+ * The whole Full-Time story for one team as a dot, a label and a tooltip —
+ * the same four columns the old list spread across three badges and two
+ * paragraphs. Nothing is dropped: the timing, the count and the error text
+ * all live in `detail`, and the team page still shows them in full.
+ */
+function fullTimeState(link: FullTimeLinkSummary | undefined): {
+  dot: string;
+  label: string;
+  detail: string;
+} {
+  if (!link) {
+    return {
+      dot: "bg-muted-foreground/40",
+      label: "No Full-Time link",
+      detail: "No Full-Time widget saved for this team yet.",
+    };
+  }
+
+  const when = `Last import ${formatStamp(link.last_import_at)}${
+    typeof link.last_import_count === "number" ? ` · ${link.last_import_count} fixtures` : ""
+  }`;
+
+  if (!link.enabled) {
+    return { dot: "bg-muted-foreground/60", label: "Import paused", detail: when };
+  }
+  if (link.last_import_status === "ok") {
+    return { dot: "bg-emerald-500", label: "Full-Time linked", detail: when };
+  }
+  if (link.last_import_status === "error") {
+    return {
+      dot: "bg-destructive",
+      label: "Last import failed",
+      detail: link.last_error ? `${when}\n${link.last_error}` : when,
+    };
+  }
+  if (link.last_import_status === "challenge") {
+    return { dot: "bg-amber-500", label: "Blocked by Cloudflare", detail: when };
+  }
+  return { dot: "bg-amber-500", label: "Not imported yet", detail: when };
+}
+
+/**
+ * "Under 12s" before "Under 14s" before "Open age" — the order a club reads
+ * its teams in, which plain alphabetical sorting gets wrong.
+ */
+function ageGroupKey(ageGroup: string | null): [number, string] {
+  if (!ageGroup) return [3, ""];
+  const digits = ageGroup.match(/\d+/);
+  if (digits) return [1, digits[0].padStart(4, "0")];
+  return [2, ageGroup.toLocaleLowerCase("en-GB")];
+}
+
+function compareTeams(a: TeamCard, b: TeamCard): number {
+  const [aRank, aKey] = ageGroupKey(a.ageGroup);
+  const [bRank, bKey] = ageGroupKey(b.ageGroup);
+  if (aRank !== bRank) return aRank - bRank;
+  if (aKey !== bKey) return aKey < bKey ? -1 : 1;
+  return a.name.localeCompare(b.name, "en-GB");
+}
+
 export default async function TeamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string }>;
+  searchParams: Promise<{ saved?: string; error?: string; q?: string; status?: string }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
 
-  const { saved, error: errorParam } = await searchParams;
-  const admin = createAdminClient();
+  const { saved, error: errorParam, q, status } = await searchParams;
+  const query = (q ?? "").trim();
+  const showAll = status === "all";
 
-  const [teamsResult, linksResult, seasonsResult, clubCodesResult] = await Promise.all([
-    admin.from("teams").select("*").order("sort_order").order("name"),
-    admin
-      .from("team_fulltime_links")
-      .select("team_id,enabled,last_import_status,last_import_at,last_import_count,last_error"),
-    admin.from("seasons").select("*").order("starts_on", { ascending: false }),
-    admin
-      .from("site_settings")
-      .select("key,value")
-      .in("key", ["fulltime_club_fixtures_code", "fulltime_club_results_code"]),
+  // ------------------------------------------------------------------
+  // Who may be here, and which teams they get.
+  //
+  // Committee sign-ins and club administrators run the club, so they see
+  // every team. A coach, assistant coach or manager sees the teams they
+  // actually staff and nothing else — the list comes from their own
+  // `team_memberships` rows through `team_memberships_self_read`, so the
+  // database is what decides, not this page.
+  // ------------------------------------------------------------------
+  const supabase = await createClient();
+  const committee = isCommittee(session.profile?.role);
+  const [clubAdmin, personResult] = await Promise.all([
+    isClubAdmin(),
+    supabase.rpc("current_person_id"),
+  ]);
+  const canAdmin = committee || clubAdmin;
+
+  let staffTeamIds: string[] = [];
+  if (!canAdmin && personResult.data) {
+    const { data } = await supabase
+      .from("team_memberships")
+      .select("team_id")
+      .eq("person_id", personResult.data)
+      .is("left_at", null)
+      .in("role", STAFF_TEAM_ROLES);
+    staffTeamIds = Array.from(new Set((data ?? []).map((row) => row.team_id)));
+  }
+  if (!canAdmin && staffTeamIds.length === 0) redirect("/room-bookings");
+
+  // `teams_read` is open to any signed-in user, so the caller's own client is
+  // enough — the admin client is kept for the two admin-only reads below.
+  let teamsQuery = supabase
+    .from("teams")
+    .select("id,name,age_group,gender,active,home_resource_id");
+  if (!canAdmin) teamsQuery = teamsQuery.in("id", staffTeamIds);
+
+  const [teamsResult, seasonsResult] = await Promise.all([
+    teamsQuery,
+    supabase.from("seasons").select("id,name,starts_on,ends_on,is_current").order("starts_on", {
+      ascending: false,
+    }),
   ]);
 
-  const teams = teamsResult.data ?? [];
+  const teamRows = teamsResult.data ?? [];
   const seasons = seasonsResult.data ?? [];
-  const linkByTeam = new Map((linksResult.data ?? []).map((l) => [l.team_id, l]));
-  const clubCodes = new Map((clubCodesResult.data ?? []).map((s) => [s.key, s.value]));
-  const loadError = teamsResult.error ?? linksResult.error ?? seasonsResult.error;
+  const teamIds = teamRows.map((team) => team.id);
+
+  // Counts and pitch names for the teams already on screen. Memberships are
+  // read as the caller too: `_admin_read` answers for an administrator,
+  // `_staff_read` for a coach reading their own team.
+  const pitchIds = Array.from(
+    new Set(teamRows.map((team) => team.home_resource_id).filter((id): id is string => !!id)),
+  );
+
+  // `team_fulltime_links` and `site_settings` are club-admin-only, and the
+  // link state is an administrator's concern — a coach never pays for either.
+  const adminClient = canAdmin ? createAdminClient() : null;
+  const [memberships, pitches, links, clubCodeRows] = await Promise.all([
+    teamIds.length > 0
+      ? supabase
+          .from("team_memberships")
+          .select("team_id,person_id,role")
+          .in("team_id", teamIds)
+          .is("left_at", null)
+          .then((result) => result.data ?? [])
+      : Promise.resolve([]),
+    pitchIds.length > 0
+      ? supabase
+          .from("resources")
+          .select("id,name")
+          .in("id", pitchIds)
+          .then((result) => result.data ?? [])
+      : Promise.resolve([]),
+    adminClient
+      ? adminClient
+          .from("team_fulltime_links")
+          .select("team_id,enabled,last_import_status,last_import_at,last_import_count,last_error")
+          .then((result) => (result.data ?? []) as FullTimeLinkSummary[])
+      : Promise.resolve([] as FullTimeLinkSummary[]),
+    adminClient
+      ? adminClient
+          .from("site_settings")
+          .select("key,value")
+          .in("key", ["fulltime_club_fixtures_code", "fulltime_club_results_code"])
+          .then((result) => result.data ?? [])
+      : Promise.resolve([] as { key: string; value: string | null }[]),
+  ]);
+
+  const pitchNames = new Map(pitches.map((row) => [row.id, row.name]));
+  const linkByTeam = new Map(links.map((link) => [link.team_id, link]));
+  const clubCodes = new Map(clubCodeRows.map((row) => [row.key, row.value]));
+
+  const memberIds = new Map<string, Set<string>>();
+  const staffIds = new Map<string, Set<string>>();
+  for (const row of memberships) {
+    if (!memberIds.has(row.team_id)) memberIds.set(row.team_id, new Set());
+    memberIds.get(row.team_id)?.add(row.person_id);
+    if (STAFF_TEAM_ROLES.includes(row.role)) {
+      if (!staffIds.has(row.team_id)) staffIds.set(row.team_id, new Set());
+      staffIds.get(row.team_id)?.add(row.person_id);
+    }
+  }
+
+  const allTeams: TeamCard[] = teamRows
+    .map((team) => ({
+      id: team.id,
+      name: team.name,
+      ageGroup: team.age_group,
+      gender: team.gender,
+      active: team.active,
+      homePitch: team.home_resource_id ? pitchNames.get(team.home_resource_id) ?? null : null,
+      members: memberIds.get(team.id)?.size ?? 0,
+      staff: staffIds.get(team.id)?.size ?? 0,
+    }))
+    .sort(compareTeams);
+
+  const needle = query.toLocaleLowerCase("en-GB");
+  const teams = allTeams.filter((team) => {
+    if (!showAll && !team.active) return false;
+    if (!needle) return true;
+    return (
+      team.name.toLocaleLowerCase("en-GB").includes(needle) ||
+      (team.ageGroup ?? "").toLocaleLowerCase("en-GB").includes(needle)
+    );
+  });
+
+  const currentSeason = seasons.find((season) => season.is_current) ?? null;
+  const loadError = teamsResult.error ?? seasonsResult.error;
 
   return (
     <>
       <PageHeader
         title="Teams"
-        subtitle="Club teams, their seasons, and each team's FA Full-Time link"
+        subtitle={
+          canAdmin
+            ? "Every team in the club — open one to run it"
+            : "The teams you help run — open one to see its members, fixtures and pitches"
+        }
       />
-      <div className="p-6 space-y-6 max-w-4xl">
+      <div className="max-w-5xl space-y-6 p-6">
         {saved && (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -98,213 +298,259 @@ export default async function TeamsPage({
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Teams                                                            */}
+        {/* Find a team                                                      */}
         {/* ---------------------------------------------------------------- */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Teams</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Open a team to paste its Full-Time URL, preview the fixtures the parser reads, and save the link.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {teams.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No teams yet. Add the first one below.
-              </p>
-            )}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <form method="get" action="/teams" className="flex flex-wrap items-end gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="team-search" className="sr-only">
+                Search teams
+              </Label>
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="team-search"
+                  name="q"
+                  defaultValue={query}
+                  placeholder="Search name or age group"
+                  className="w-full pl-9 sm:w-64"
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="team-status" className="sr-only">
+                Show
+              </Label>
+              <Select
+                id="team-status"
+                name="status"
+                defaultValue={showAll ? "all" : "active"}
+                className="w-auto"
+              >
+                <option value="active">Active only</option>
+                <option value="all">All teams</option>
+              </Select>
+            </div>
+            <Button type="submit" variant="outline">
+              Search
+            </Button>
+          </form>
 
+          {canAdmin && (
+            <details className="group">
+              <summary className="inline-flex cursor-pointer list-none [&::-webkit-details-marker]:hidden items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+                <Plus className="h-4 w-4" /> New team
+              </summary>
+              <Card className="mt-3 w-full sm:w-96">
+                <CardContent className="pt-6">
+                  <form action={createTeam} className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="team-name">Team name *</Label>
+                      <Input
+                        id="team-name"
+                        name="name"
+                        placeholder="e.g. AoM FC First Team"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="team-age">Age group</Label>
+                      <Input
+                        id="team-age"
+                        name="age_group"
+                        placeholder="e.g. Under 12s, Open age"
+                      />
+                    </div>
+                    <Button type="submit">
+                      <Plus className="h-3.5 w-3.5" /> Create team
+                    </Button>
+                  </form>
+                </CardContent>
+              </Card>
+            </details>
+          )}
+        </div>
+
+        {/* ---------------------------------------------------------------- */}
+        {/* The teams themselves                                             */}
+        {/* ---------------------------------------------------------------- */}
+        {teams.length === 0 ? (
+          <Card>
+            <CardContent className="py-10 text-center text-sm text-muted-foreground">
+              {allTeams.length === 0
+                ? canAdmin
+                  ? "No teams yet. Use “New team” to add the first one."
+                  : "You are not listed as staff on any team yet."
+                : "No team matches that search."}
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {teams.map((team) => {
-              const link = linkByTeam.get(team.id);
-              const badge = importBadge(link?.last_import_status ?? null);
+              const ft = canAdmin ? fullTimeState(linkByTeam.get(team.id)) : null;
               return (
-                <div key={team.id} className="rounded-lg border bg-card p-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <Link
-                        href={`/teams/${team.id}`}
-                        className="flex items-center gap-1 text-sm font-medium hover:underline"
-                      >
-                        {team.name}
-                        <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Link>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {team.age_group ? team.age_group : "No age group"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant={team.active ? "success" : "muted"}>
-                        {team.active ? "Active" : "Inactive"}
-                      </Badge>
-                      {link ? (
-                        <>
-                          <Badge variant={link.enabled ? "default" : "muted"} className="gap-1">
-                            <Link2 className="h-3 w-3" />
-                            {link.enabled ? "Full-Time linked" : "Link paused"}
-                          </Badge>
-                          <Badge variant={badge.variant}>{badge.label}</Badge>
-                        </>
-                      ) : (
-                        <Badge variant="muted" className="gap-1">
-                          <Link2Off className="h-3 w-3" /> No Full-Time link
-                        </Badge>
-                      )}
-                    </div>
+                <div
+                  key={team.id}
+                  className="relative flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 focus-within:border-primary/40"
+                >
+                  <div className="min-w-0">
+                    {/* The stretched link makes the whole card the target;
+                        the active toggle below sits above it on the z-axis so
+                        it stays a button, not part of the link. */}
+                    <Link
+                      href={`/teams/${team.id}`}
+                      className="flex items-center gap-1 font-semibold leading-tight after:absolute after:inset-0 after:content-[''] hover:underline"
+                    >
+                      <span className="truncate">{team.name}</span>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    </Link>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {team.ageGroup ?? "No age group"}
+                    </p>
                   </div>
 
-                  {link && (
-                    <p className="mt-2 text-xs text-muted-foreground">
-                      Last import {formatStamp(link.last_import_at)}
-                      {typeof link.last_import_count === "number" && ` · ${link.last_import_count} fixtures`}
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {team.gender && (
+                      <Badge variant="muted">
+                        {GENDER_LABELS[team.gender] ?? team.gender}
+                      </Badge>
+                    )}
+                    <Badge variant={team.active ? "success" : "muted"}>
+                      {team.active ? "Active" : "Inactive"}
+                    </Badge>
+                    {team.homePitch && (
+                      <Badge variant="outline" className="max-w-[11rem] truncate">
+                        {team.homePitch}
+                      </Badge>
+                    )}
+                  </div>
+
+                  <p className="text-xs text-muted-foreground">
+                    {team.members} {team.members === 1 ? "member" : "members"} · {team.staff}{" "}
+                    {team.staff === 1 ? "coach" : "coaches"}
+                  </p>
+
+                  {ft && (
+                    <p
+                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                      title={ft.detail}
+                    >
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${ft.dot}`} aria-hidden />
+                      {ft.label}
                     </p>
                   )}
-                  {link?.last_error && (
-                    <p className="mt-1 text-xs text-destructive break-words">{link.last_error}</p>
-                  )}
 
-                  <form action={setTeamActive} className="mt-3">
-                    <input type="hidden" name="team_id" value={team.id} />
-                    <input type="hidden" name="active" value={team.active ? "false" : "true"} />
-                    <button
-                      type="submit"
-                      className="rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary"
-                    >
-                      {team.active ? "Mark inactive" : "Mark active"}
-                    </button>
-                  </form>
+                  {canAdmin && (
+                    <form action={setTeamActive} className="relative z-10 mt-auto pt-1">
+                      <input type="hidden" name="team_id" value={team.id} />
+                      <input type="hidden" name="active" value={team.active ? "false" : "true"} />
+                      <Button type="submit" variant="outline" size="sm">
+                        {team.active ? "Mark inactive" : "Mark active"}
+                      </Button>
+                    </form>
+                  )}
                 </div>
               );
             })}
-          </CardContent>
-        </Card>
-
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Plus className="h-4 w-4" /> Add a team
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createTeam} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="team-name">Team name *</Label>
-                  <Input id="team-name" name="name" placeholder="e.g. AoM FC First Team" required />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="team-age">Age group</Label>
-                  <Input id="team-age" name="age_group" placeholder="e.g. Under 12s, Open age" />
-                </div>
-              </div>
-              <button
-                type="submit"
-                className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                <Plus className="h-3.5 w-3.5" /> Create team
-              </button>
-            </form>
-          </CardContent>
-        </Card>
+          </div>
+        )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Club-wide Full-Time widgets                                      */}
+        {/* Season toolbar — administrators only                             */}
         {/* ---------------------------------------------------------------- */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Club Full-Time widgets</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              One pair of codes for the whole club: Full-Time&apos;s club <em>fixtures</em> and club{" "}
-              <em>results</em> widgets. Every active team is matched by name and imported nightly — no
-              per-team setup. A team with its own Full-Time link below keeps that instead.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <ClubWidgetsPanel
-              fixturesCode={clubCodes.get("fulltime_club_fixtures_code") ?? null}
-              resultsCode={clubCodes.get("fulltime_club_results_code") ?? null}
-            />
-          </CardContent>
-        </Card>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* Seasons                                                          */}
-        {/* ---------------------------------------------------------------- */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Seasons</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Fixtures belong to a season. Exactly one season can be current at a time.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {seasons.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                No seasons yet. Add one before importing fixtures.
-              </p>
-            )}
-
-            {seasons.map((season) => (
-              <div
-                key={season.id}
-                className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4"
-              >
+        {canAdmin && (
+          <Card>
+            <CardContent className="space-y-4 pt-6">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">{season.name}</span>
-                    {season.is_current && <Badge variant="success">Current</Badge>}
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {formatBookingDateShort(season.starts_on)} – {formatBookingDateShort(season.ends_on)}
+                  <p className="text-sm font-semibold">Season</p>
+                  <p className="text-xs text-muted-foreground">
+                    {currentSeason
+                      ? `${currentSeason.name} · ${formatBookingDateShort(
+                          currentSeason.starts_on,
+                        )} – ${formatBookingDateShort(currentSeason.ends_on)}`
+                      : "No current season. Fixtures and rosters need one."}
                   </p>
-                  <p className="mt-0.5 font-mono text-[11px] text-muted-foreground break-all">{season.id}</p>
                 </div>
-                {!season.is_current && (
-                  <form action={setCurrentSeason}>
-                    <input type="hidden" name="season_id" value={season.id} />
-                    <button
-                      type="submit"
-                      className="rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary"
+                {seasons.length > 0 && (
+                  <form action={setCurrentSeason} className="flex flex-wrap items-center gap-2">
+                    <Label htmlFor="current-season" className="sr-only">
+                      Current season
+                    </Label>
+                    <Select
+                      id="current-season"
+                      name="season_id"
+                      defaultValue={currentSeason?.id ?? seasons[0]?.id}
+                      className="w-auto min-w-[10rem]"
                     >
+                      {seasons.map((season) => (
+                        <option key={season.id} value={season.id}>
+                          {season.name} · {formatBookingDateShort(season.starts_on)} –{" "}
+                          {formatBookingDateShort(season.ends_on)}
+                          {season.is_current ? " (current)" : ""}
+                        </option>
+                      ))}
+                    </Select>
+                    <Button type="submit" variant="outline" size="sm">
                       Make current
-                    </button>
+                    </Button>
                   </form>
                 )}
+                <details className="ml-auto">
+                  <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-sm font-medium text-primary underline-offset-4 hover:underline">
+                    Add a season
+                  </summary>
+                  <form action={createSeason} className="mt-4 space-y-4">
+                    <div className="grid gap-4 sm:grid-cols-3">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="season-name">Name *</Label>
+                        <Input id="season-name" name="name" placeholder="e.g. 2026/27" required />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="season-start">Starts on *</Label>
+                        <Input id="season-start" name="starts_on" type="date" required />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="season-end">Ends on *</Label>
+                        <Input id="season-end" name="ends_on" type="date" required />
+                      </div>
+                    </div>
+                    <Button type="submit">
+                      <Plus className="h-3.5 w-3.5" /> Create season
+                    </Button>
+                  </form>
+                </details>
               </div>
-            ))}
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
-        <Card className="border-dashed">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Plus className="h-4 w-4" /> Add a season
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form action={createSeason} className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="season-name">Name *</Label>
-                  <Input id="season-name" name="name" placeholder="e.g. 2026/27" required />
+        {/* ---------------------------------------------------------------- */}
+        {/* Club-wide Full-Time widgets — administrators only                */}
+        {/* ---------------------------------------------------------------- */}
+        {canAdmin && (
+          <Card>
+            <CardContent className="pt-6">
+              <details>
+                <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+                  <CardTitle className="text-base">Club Full-Time widgets</CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    One pair of codes for the whole club: Full-Time&apos;s club <em>fixtures</em>{" "}
+                    and club <em>results</em> widgets. Every active team is matched by name and
+                    imported nightly — no per-team setup. A team with its own Full-Time link keeps
+                    that instead.
+                  </p>
+                </summary>
+                <div className="pt-4">
+                  <ClubWidgetsPanel
+                    fixturesCode={clubCodes.get("fulltime_club_fixtures_code") ?? null}
+                    resultsCode={clubCodes.get("fulltime_club_results_code") ?? null}
+                  />
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="season-start">Starts on *</Label>
-                  <Input id="season-start" name="starts_on" type="date" required />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="season-end">Ends on *</Label>
-                  <Input id="season-end" name="ends_on" type="date" required />
-                </div>
-              </div>
-              <button
-                type="submit"
-                className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-              >
-                <Plus className="h-3.5 w-3.5" /> Create season
-              </button>
-            </form>
-          </CardContent>
-        </Card>
+              </details>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </>
   );
