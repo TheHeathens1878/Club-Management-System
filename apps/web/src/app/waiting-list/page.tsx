@@ -21,9 +21,14 @@ export const metadata = {
   description: "Register your child's interest in joining the club.",
 };
 
-export default async function PublicWaitingListPage() {
+export default async function PublicWaitingListPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ age_group?: string }>;
+}) {
   const supabase = await createClient();
-  const [{ data: groups }, settings] = await Promise.all([
+  const [params, { data: groups }, settings] = await Promise.all([
+    searchParams,
     supabase.rpc("waiting_list_open_age_groups"),
     getSettings(),
   ]);
@@ -31,6 +36,12 @@ export default async function PublicWaitingListPage() {
   const openAgeGroups = (groups ?? [])
     .map((group) => group.age_group)
     .sort((a, b) => ageGroupSortKey(a).localeCompare(ageGroupSortKey(b)));
+
+  // /recruitment links here with the team's age group. Honour it only if the
+  // group is actually open — the database refuses a closed one anyway, and a
+  // prefilled field that cannot be submitted is worse than an empty one.
+  const requested = params.age_group?.trim() ?? "";
+  const initialAgeGroup = openAgeGroups.includes(requested) ? requested : "";
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10">
@@ -77,7 +88,10 @@ export default async function PublicWaitingListPage() {
                   We are currently taking names for{" "}
                   <span className="font-medium text-foreground">{openAgeGroups.join(", ")}</span>.
                 </p>
-                <WaitingListForm openAgeGroups={openAgeGroups} />
+                <WaitingListForm
+                  openAgeGroups={openAgeGroups}
+                  initialAgeGroup={initialAgeGroup}
+                />
               </>
             )}
           </div>

@@ -22,11 +22,20 @@ import { submitWaitingListEntry, type SubmitState } from "./actions";
  * the club has actually opened are offered — and the database refuses a closed
  * one regardless of what is posted.
  */
-export function WaitingListForm({ openAgeGroups }: { openAgeGroups: string[] }) {
+export function WaitingListForm({
+  openAgeGroups,
+  initialAgeGroup = "",
+}: {
+  openAgeGroups: string[];
+  /** Prefilled from `/recruitment`; already checked to be an open group. */
+  initialAgeGroup?: string;
+}) {
   const open = new Set(openAgeGroups);
 
-  const [ageGroup, setAgeGroup] = useState("");
-  const [schoolYear, setSchoolYear] = useState("");
+  const [ageGroup, setAgeGroup] = useState(initialAgeGroup);
+  const [schoolYear, setSchoolYear] = useState(
+    initialAgeGroup ? (AGE_GROUP_TO_SCHOOL_YEAR[initialAgeGroup] ?? "") : "",
+  );
   const [biologicalSex, setBiologicalSex] = useState("");
   const [school, setSchool] = useState("");
   const [coachingInterest, setCoachingInterest] = useState(false);

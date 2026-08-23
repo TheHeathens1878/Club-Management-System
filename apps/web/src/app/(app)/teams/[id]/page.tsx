@@ -26,6 +26,7 @@ import {
   type TeamRoleValue,
 } from "./members-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
+import { RecruitingPanel } from "./recruiting-panel";
 import { loadTeamPitchBookings } from "@/lib/pitch-booking-data";
 
 /** Next 20 fixtures, read-only — the importer (P2.4) is what writes them. */
@@ -501,6 +502,37 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
               teamId={team.id}
               items={pitchBookings}
               canManage={committee || teamStaff === true}
+            />
+          </CardContent>
+        </Card>
+
+        {/* Gap 10: what the public /recruitment page says about this team.
+            Written through the caller's own client, so `teams_staff_update`
+            lets a coach maintain it and the guard refuses anything else. */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recruiting</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              What a parent looking for a team sees on the club&apos;s public recruitment page. The
+              team&apos;s name and age group are a club administrator&apos;s to change; everything
+              here belongs to the people who run the team.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <RecruitingPanel
+              teamId={team.id}
+              canEdit={committee || teamStaff === true}
+              values={{
+                recruiting: team.recruiting,
+                gender: team.gender,
+                join_type: team.join_type,
+                join_instructions: team.join_instructions,
+                session_details: team.session_details,
+                contact_name: team.contact_name,
+                contact_email: team.contact_email,
+                contact_phone: team.contact_phone,
+                show_coach_contact: team.show_coach_contact,
+              }}
             />
           </CardContent>
         </Card>
