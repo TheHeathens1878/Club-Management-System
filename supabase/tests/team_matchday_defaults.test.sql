@@ -12,7 +12,7 @@
 
 begin;
 
-select plan(12);
+select plan(16);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a2a2a2a2-1111-4111-8111-000000000001', 'md-admin@test.invalid', '{"full_name": "Ada Admin"}'::jsonb);
@@ -76,6 +76,23 @@ select is((select (pre_buffer_minutes, post_buffer_minutes) from public.bookings
 select set_config('md.b2', public.allocate_fixture('c2c2c2c2-1111-4111-8111-000000000002', 'b2b2b2b2-1111-4111-8111-000000000041', 0, 0)::text, true);
 select is((select (pre_buffer_minutes, post_buffer_minutes) from public.bookings where id = current_setting('md.b2')::uuid),
   (0, 0), 'an explicit argument beats both');
+
+-- D. settings changes re-default untouched future fixtures (20260824210000)
+insert into public.fixtures (id, team_id, season_id, opponent, is_home, kickoff_at, source, external_ref)
+values ('c2c2c2c2-1111-4111-8111-000000000004', '8a8a8a8a-1111-4111-8111-000000000001', '6a6a6a6a-1111-4111-8111-000000000001',
+        'United', true, '2034-10-07 10:30+01', 'fulltime', 'md-4');
+-- md-4 inherited 80 (2×35+10). Change to 2×30+10 = 70:
+update public.teams set half_length_minutes = 30 where id = '8a8a8a8a-1111-4111-8111-000000000001';
+select is((select duration_minutes from public.fixtures where id = 'c2c2c2c2-1111-4111-8111-000000000004'), 70,
+  'an untouched future fixture follows the new settings');
+select is((select duration_minutes from public.fixtures where id = 'c2c2c2c2-1111-4111-8111-000000000002'), 120,
+  'a hand-sized fixture is left alone');
+select is((select duration_minutes from public.fixtures where id = 'c2c2c2c2-1111-4111-8111-000000000001'), 80,
+  'an allocated fixture is left alone');
+-- clearing the settings returns untouched fixtures to 90
+update public.teams set half_length_minutes = null where id = '8a8a8a8a-1111-4111-8111-000000000001';
+select is((select duration_minutes from public.fixtures where id = 'c2c2c2c2-1111-4111-8111-000000000004'), 90,
+  'clearing the settings restores the 90 default');
 
 select * from finish();
 rollback;
