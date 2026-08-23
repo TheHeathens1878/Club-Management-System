@@ -1,0 +1,95 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+
+import { PageHeader } from "@/components/page-header";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { buttonVariants } from "@/components/ui/button";
+import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { todayLondon } from "@/lib/pitch-booking";
+import { loadPitchBookingAccess, loadPitches } from "@/lib/pitch-booking-data";
+import { ChevronLeft } from "lucide-react";
+
+import { BookForm } from "./book-form";
+
+/**
+ * `/pitches/book` — the screen the cutover was missing (gap 3, deliverable 1).
+ *
+ * Who may be here is asked of the database, not of `profiles.role`: a coach
+ * qualifies because `team_memberships` says they run a team, an administrator
+ * because `is_club_admin()` says so. Committee sign-ins hold club_admin through
+ * the profiles → person_roles sync, so `isCommittee` is only a fallback for
+ * getting in — every write still meets the same RLS policies as a coach's.
+ */
+export default async function BookPitchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ team?: string }>;
+}) {
+  const session = await getSessionProfile();
+  if (!session) redirect("/login");
+
+  const { team: requestedTeam } = await searchParams;
+  const [access, pitches] = await Promise.all([loadPitchBookingAccess(), loadPitches()]);
+  const committee = isCommittee(session.profile?.role);
+
+  if (!access.isAdmin && !committee && access.staffTeamIds.length === 0) {
+    redirect("/room-bookings");
+  }
+
+  const defaultTeamId =
+    requestedTeam && access.teams.some((t) => t.id === requestedTeam) ? requestedTeam : null;
+
+  return (
+    <>
+      <PageHeader
+        title="Book a pitch"
+        subtitle="Ask for a training slot or another use of a pitch"
+        action={
+          <Link
+            href="/pitches/mine"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <ChevronLeft className="h-4 w-4" /> My pitch bookings
+          </Link>
+        }
+      />
+      <div className="max-w-3xl space-y-6 p-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>New pitch booking</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              The slot is checked against everything already on that pitch — fixtures, other
+              training, maintenance — before anything is written, and the database refuses an
+              overlap even if two people ask at the same moment. Coaches&apos; requests arrive as
+              pending; a club administrator confirms them on{" "}
+              <Link href="/pitches/requests" className="underline underline-offset-2">
+                Pitch requests
+              </Link>
+              .
+            </p>
+          </CardHeader>
+          <CardContent>
+            {access.teams.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                You are not listed as coach, assistant coach or manager of any team, so there is
+                nothing to book for. Ask a club administrator to add you to the team.
+              </p>
+            ) : pitches.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                No pitches are set up yet. A club administrator adds them under Settings.
+              </p>
+            ) : (
+              <BookForm
+                teams={access.teams}
+                pitches={pitches}
+                isAdmin={access.isAdmin}
+                defaultTeamId={defaultTeamId}
+                today={todayLondon()}
+              />
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </>
+  );
+}
