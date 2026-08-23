@@ -37,7 +37,27 @@ export function adminClient(): Client {
 /** True when the request presents the service-role key (i.e. it is the scheduler). */
 export function requireServiceRole(req: Request): boolean {
   const token = bearer(req);
-  return token.length > 0 && timingSafeEqual(token, SERVICE_KEY);
+  if (token.length === 0) return false;
+  if (timingSafeEqual(token, SERVICE_KEY)) return true;
+  // The platform now injects SUPABASE_SERVICE_ROLE_KEY in the sb_secret_…
+  // format, while pg_cron / invoke_edge_function present the legacy
+  // service-role JWT, which is the only form the gateway accepts with
+  // verify_jwt = true. The gateway has already verified that JWT's signature
+  // by the time we run, so trusting its role claim is sound here. Functions
+  // with verify_jwt = false must not rely on this branch.
+  return jwtRole(token) === "service_role";
+}
+
+function jwtRole(token: string): string | null {
+  const parts = token.split(".");
+  if (parts.length !== 3) return null;
+  try {
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const payload = JSON.parse(atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), "=")));
+    return typeof payload.role === "string" ? payload.role : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
