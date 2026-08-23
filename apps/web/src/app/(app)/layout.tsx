@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionProfile, isStaff, isBarManager, isCommittee, isBooker } from "@/lib/auth";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { CalendarDays, Clock, LogOut, Settings, Beer, Users } from "lucide-react";
+import { CalendarDays, Clock, LogOut, Settings, Beer, Users, LandPlot } from "lucide-react";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionProfile();
@@ -60,6 +60,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
             >
               <Users className="h-4 w-4" /> Teams
+            </Link>
+          )}
+
+          {/* Pitch allocation (P2.5) sits with Teams — same audience, and the
+              fixtures it allocates are the ones the Teams screens import. */}
+          {showTeams && (
+            <Link
+              href="/pitches"
+              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+            >
+              <LandPlot className="h-4 w-4" /> Pitches
             </Link>
           )}
 

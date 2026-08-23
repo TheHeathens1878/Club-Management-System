@@ -49,3 +49,42 @@ enable_confirmations = false
 [edge_runtime]
 enabled = true
 policy = "oneshot"
+
+# ---------------------------------------------------------------------------
+# Edge Functions. See supabase/functions/README.md for triggers and secrets.
+#
+# `verify_jwt = false` is only for the two callers that cannot present a
+# Supabase JWT and authenticate another way:
+#   * stripe-webhook — Stripe's `stripe-signature` header over the raw body;
+#   * push-fanout    — a Database Webhook's `x-webhook-secret` header.
+# Everything else is `verify_jwt = true`; the scheduled jobs additionally
+# require the service-role key, and the two user-facing functions do their real
+# authorisation with a user-scoped client.
+# ---------------------------------------------------------------------------
+
+[functions.fulltime-import]
+verify_jwt = true
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.stripe-checkout]
+verify_jwt = true
+
+[functions.arrears-reminders]
+verify_jwt = true
+
+[functions.safeguarding-nudges]
+verify_jwt = true
+
+[functions.comms-dispatch]
+verify_jwt = true
+
+[functions.media-quarantine]
+verify_jwt = true
+
+[functions.media-signed-url]
+verify_jwt = true
+
+[functions.push-fanout]
+verify_jwt = false
