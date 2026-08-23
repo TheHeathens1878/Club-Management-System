@@ -459,6 +459,141 @@ export type Database = {
           },
         ]
       }
+      certification_exemptions: {
+        Row: {
+          created_at: string
+          expires_on: string
+          granted_at: string
+          granted_by_person_id: string
+          id: string
+          person_id: string
+          reason: string
+          revoked_at: string | null
+          revoked_by: string | null
+          team_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_on: string
+          granted_at?: string
+          granted_by_person_id: string
+          id?: string
+          person_id: string
+          reason: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          team_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_on?: string
+          granted_at?: string
+          granted_by_person_id?: string
+          id?: string
+          person_id?: string
+          reason?: string
+          revoked_at?: string | null
+          revoked_by?: string | null
+          team_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certification_exemptions_granted_by_person_id_fkey"
+            columns: ["granted_by_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certification_exemptions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "certification_exemptions_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      certifications: {
+        Row: {
+          created_at: string
+          expires_on: string | null
+          id: string
+          issued_on: string | null
+          notes: string | null
+          person_id: string
+          reference: string | null
+          revoked_at: string | null
+          revoked_by: string | null
+          type: Database["public"]["Enums"]["certification_type"]
+          updated_at: string
+          verified_at: string | null
+          verified_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          expires_on?: string | null
+          id?: string
+          issued_on?: string | null
+          notes?: string | null
+          person_id: string
+          reference?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          type: Database["public"]["Enums"]["certification_type"]
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          expires_on?: string | null
+          id?: string
+          issued_on?: string | null
+          notes?: string | null
+          person_id?: string
+          reference?: string | null
+          revoked_at?: string | null
+          revoked_by?: string | null
+          type?: Database["public"]["Enums"]["certification_type"]
+          updated_at?: string
+          verified_at?: string | null
+          verified_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certifications_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      child_facing_roles: {
+        Row: {
+          child_facing: boolean
+          role: Database["public"]["Enums"]["team_role"]
+          updated_at: string
+        }
+        Insert: {
+          child_facing: boolean
+          role: Database["public"]["Enums"]["team_role"]
+          updated_at?: string
+        }
+        Update: {
+          child_facing?: boolean
+          role?: Database["public"]["Enums"]["team_role"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
       clubhouse_checklist_runs: {
         Row: {
           checklist_id: string
@@ -1412,6 +1547,36 @@ export type Database = {
           },
         ]
       }
+      seasons: {
+        Row: {
+          created_at: string
+          ends_on: string
+          id: string
+          is_current: boolean
+          name: string
+          starts_on: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          ends_on: string
+          id?: string
+          is_current?: boolean
+          name: string
+          starts_on: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          ends_on?: string
+          id?: string
+          is_current?: boolean
+          name?: string
+          starts_on?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       sickness_records: {
         Row: {
           created_at: string
@@ -1528,6 +1693,106 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      team_memberships: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          joined_at: string
+          left_at: string | null
+          notes: string | null
+          person_id: string
+          role: Database["public"]["Enums"]["team_role"]
+          season_id: string
+          shirt_number: number | null
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          notes?: string | null
+          person_id: string
+          role?: Database["public"]["Enums"]["team_role"]
+          season_id: string
+          shirt_number?: number | null
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          joined_at?: string
+          left_at?: string | null
+          notes?: string | null
+          person_id?: string
+          role?: Database["public"]["Enums"]["team_role"]
+          season_id?: string
+          shirt_number?: number | null
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_memberships_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_memberships_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_memberships_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      teams: {
+        Row: {
+          active: boolean
+          age_group: string | null
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          age_group?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          age_group?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       timesheet_shifts: {
         Row: {
@@ -1751,8 +2016,19 @@ export type Database = {
         }
         Returns: boolean
       }
+      has_active_exemption: {
+        Args: { p_person_id: string; p_team_id: string }
+        Returns: boolean
+      }
       has_any_role: {
         Args: { p_roles: Database["public"]["Enums"]["app_role"][] }
+        Returns: boolean
+      }
+      has_current_certification: {
+        Args: {
+          p_person_id: string
+          p_type: Database["public"]["Enums"]["certification_type"]
+        }
         Returns: boolean
       }
       has_role: {
@@ -1765,6 +2041,14 @@ export type Database = {
         Returns: boolean
       }
       is_bar_manager: { Args: never; Returns: boolean }
+      is_child_facing_compliant: {
+        Args: { p_person_id: string; p_team_id: string }
+        Returns: boolean
+      }
+      is_child_facing_role: {
+        Args: { p_role: Database["public"]["Enums"]["team_role"] }
+        Returns: boolean
+      }
       is_club_admin: { Args: never; Returns: boolean }
       is_committee: { Args: never; Returns: boolean }
       is_minor: { Args: { person_id: string }; Returns: boolean }
@@ -1772,6 +2056,7 @@ export type Database = {
       is_safeguarding_lead: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
       is_supervision_exempt: { Args: { p_person_id: string }; Returns: boolean }
+      is_team_staff: { Args: { p_team_id: string }; Returns: boolean }
       map_user_role_to_app_role: {
         Args: { p_role: Database["public"]["Enums"]["user_role"] }
         Returns: Database["public"]["Enums"]["app_role"]
@@ -1814,6 +2099,15 @@ export type Database = {
           last_name: string
         }[]
       }
+      team_has_minors: { Args: { p_team_id: string }; Returns: boolean }
+      team_noncompliant_child_facing: {
+        Args: { p_team_id: string }
+        Returns: {
+          full_name: string
+          person_id: string
+          role: Database["public"]["Enums"]["team_role"]
+        }[]
+      }
       write_audit: {
         Args: {
           p_action: string
@@ -1840,6 +2134,11 @@ export type Database = {
         | "pending"
         | "confirmed"
         | "cancelled"
+      certification_type:
+        | "fa_dbs"
+        | "safeguarding_children"
+        | "first_aid"
+        | "coaching_badge"
       consent_type: "app_account" | "unsupervised_messaging"
       guardian_relationship:
         | "parent"
@@ -1850,6 +2149,7 @@ export type Database = {
         | "other"
       payment_status: "unpaid" | "deposit_paid" | "paid"
       resource_type: "function_room" | "pitch"
+      team_role: "player" | "coach" | "assistant_coach" | "manager"
       user_role:
         | "committee"
         | "bar"
@@ -2001,6 +2301,12 @@ export const Constants = {
         "confirmed",
         "cancelled",
       ],
+      certification_type: [
+        "fa_dbs",
+        "safeguarding_children",
+        "first_aid",
+        "coaching_badge",
+      ],
       consent_type: ["app_account", "unsupervised_messaging"],
       guardian_relationship: [
         "parent",
@@ -2012,6 +2318,7 @@ export const Constants = {
       ],
       payment_status: ["unpaid", "deposit_paid", "paid"],
       resource_type: ["function_room", "pitch"],
+      team_role: ["player", "coach", "assistant_coach", "manager"],
       user_role: [
         "committee",
         "bar",
