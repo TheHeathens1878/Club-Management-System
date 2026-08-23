@@ -592,6 +592,35 @@ export type Database = {
           },
         ]
       }
+      certification_nudges: {
+        Row: {
+          certification_id: string
+          days_before: number
+          id: string
+          sent_at: string
+        }
+        Insert: {
+          certification_id: string
+          days_before: number
+          id?: string
+          sent_at?: string
+        }
+        Update: {
+          certification_id?: string
+          days_before?: number
+          id?: string
+          sent_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "certification_nudges_certification_id_fkey"
+            columns: ["certification_id"]
+            isOneToOne: false
+            referencedRelation: "certifications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       certifications: {
         Row: {
           created_at: string
@@ -817,6 +846,65 @@ export type Database = {
           sort_order?: number
           title?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      comms_preferences: {
+        Row: {
+          channel: Database["public"]["Enums"]["comms_channel"]
+          enabled: boolean
+          person_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          channel: Database["public"]["Enums"]["comms_channel"]
+          enabled: boolean
+          person_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["comms_channel"]
+          enabled?: boolean
+          person_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "comms_preferences_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      comms_suppressions: {
+        Row: {
+          address: string
+          channel: Database["public"]["Enums"]["comms_channel"]
+          created_at: string
+          created_by: string | null
+          id: string
+          reason: string
+        }
+        Insert: {
+          address: string
+          channel: Database["public"]["Enums"]["comms_channel"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason: string
+        }
+        Update: {
+          address?: string
+          channel?: Database["public"]["Enums"]["comms_channel"]
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          reason?: string
         }
         Relationships: []
       }
@@ -1262,6 +1350,184 @@ export type Database = {
         }
         Relationships: []
       }
+      media_albums: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          fixture_id: string | null
+          id: string
+          season_id: string | null
+          team_id: string | null
+          title: string
+          updated_at: string
+          visibility: Database["public"]["Enums"]["album_visibility"]
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fixture_id?: string | null
+          id?: string
+          season_id?: string | null
+          team_id?: string | null
+          title: string
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["album_visibility"]
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fixture_id?: string | null
+          id?: string
+          season_id?: string | null
+          team_id?: string | null
+          title?: string
+          updated_at?: string
+          visibility?: Database["public"]["Enums"]["album_visibility"]
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_albums_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_albums_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "unallocated_home_fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_albums_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_albums_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_items: {
+        Row: {
+          album_id: string
+          byte_size: number | null
+          caption: string | null
+          confirmed_at: string | null
+          confirmed_by: string | null
+          content_type: string | null
+          created_at: string
+          height: number | null
+          id: string
+          legal_hold: boolean
+          needs_quarantine: boolean
+          redacted_at: string | null
+          storage_bucket: string
+          storage_path: string
+          subjects_confirmed: boolean
+          taken_at: string | null
+          updated_at: string
+          uploaded_by: string | null
+          width: number | null
+        }
+        Insert: {
+          album_id: string
+          byte_size?: number | null
+          caption?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          content_type?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          legal_hold?: boolean
+          needs_quarantine?: boolean
+          redacted_at?: string | null
+          storage_bucket?: string
+          storage_path: string
+          subjects_confirmed?: boolean
+          taken_at?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+          width?: number | null
+        }
+        Update: {
+          album_id?: string
+          byte_size?: number | null
+          caption?: string | null
+          confirmed_at?: string | null
+          confirmed_by?: string | null
+          content_type?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          legal_hold?: boolean
+          needs_quarantine?: boolean
+          redacted_at?: string | null
+          storage_bucket?: string
+          storage_path?: string
+          subjects_confirmed?: boolean
+          taken_at?: string | null
+          updated_at?: string
+          uploaded_by?: string | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_items_album_id_fkey"
+            columns: ["album_id"]
+            isOneToOne: false
+            referencedRelation: "media_albums"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      media_subjects: {
+        Row: {
+          created_at: string
+          media_item_id: string
+          person_id: string
+          tagged_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          media_item_id: string
+          person_id: string
+          tagged_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          media_item_id?: string
+          person_id?: string
+          tagged_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "media_subjects_media_item_id_fkey"
+            columns: ["media_item_id"]
+            isOneToOne: false
+            referencedRelation: "media_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "media_subjects_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       non_user_staff: {
         Row: {
           active: boolean
@@ -1295,22 +1561,99 @@ export type Database = {
         }
         Relationships: []
       }
+      outbound_messages: {
+        Row: {
+          body: string | null
+          category: Database["public"]["Enums"]["comms_category"]
+          channel: Database["public"]["Enums"]["comms_channel"]
+          created_at: string
+          created_by: string | null
+          decision: string | null
+          entity: string | null
+          entity_id: string | null
+          error: string | null
+          id: string
+          person_id: string | null
+          provider: string | null
+          provider_ref: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["outbound_status"]
+          subject: string | null
+          template: string | null
+          to_address: string | null
+        }
+        Insert: {
+          body?: string | null
+          category: Database["public"]["Enums"]["comms_category"]
+          channel: Database["public"]["Enums"]["comms_channel"]
+          created_at?: string
+          created_by?: string | null
+          decision?: string | null
+          entity?: string | null
+          entity_id?: string | null
+          error?: string | null
+          id?: string
+          person_id?: string | null
+          provider?: string | null
+          provider_ref?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["outbound_status"]
+          subject?: string | null
+          template?: string | null
+          to_address?: string | null
+        }
+        Update: {
+          body?: string | null
+          category?: Database["public"]["Enums"]["comms_category"]
+          channel?: Database["public"]["Enums"]["comms_channel"]
+          created_at?: string
+          created_by?: string | null
+          decision?: string | null
+          entity?: string | null
+          entity_id?: string | null
+          error?: string | null
+          id?: string
+          person_id?: string | null
+          provider?: string | null
+          provider_ref?: string | null
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["outbound_status"]
+          subject?: string | null
+          template?: string | null
+          to_address?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "outbound_messages_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_pence: number
           authorised_by_email: string | null
           authorised_by_name: string | null
           authorised_by_profile: string | null
-          booking_id: string
+          booking_id: string | null
           created_at: string
           id: string
+          kind: Database["public"]["Enums"]["payment_kind"]
           legacy_booking_payment_id: string | null
           method: string | null
           note: string | null
           paid_at: string
           reference: string | null
+          refunded_at: string | null
+          refunded_pence: number
           source: string
+          stripe_charge_id: string | null
+          stripe_invoice_id: string | null
           stripe_payment_intent_id: string | null
+          subscription_id: string | null
           sumup_checkout_id: string | null
           sumup_txn_code: string | null
         }
@@ -1319,16 +1662,22 @@ export type Database = {
           authorised_by_email?: string | null
           authorised_by_name?: string | null
           authorised_by_profile?: string | null
-          booking_id: string
+          booking_id?: string | null
           created_at?: string
           id?: string
+          kind?: Database["public"]["Enums"]["payment_kind"]
           legacy_booking_payment_id?: string | null
           method?: string | null
           note?: string | null
           paid_at?: string
           reference?: string | null
+          refunded_at?: string | null
+          refunded_pence?: number
           source?: string
+          stripe_charge_id?: string | null
+          stripe_invoice_id?: string | null
           stripe_payment_intent_id?: string | null
+          subscription_id?: string | null
           sumup_checkout_id?: string | null
           sumup_txn_code?: string | null
         }
@@ -1337,16 +1686,22 @@ export type Database = {
           authorised_by_email?: string | null
           authorised_by_name?: string | null
           authorised_by_profile?: string | null
-          booking_id?: string
+          booking_id?: string | null
           created_at?: string
           id?: string
+          kind?: Database["public"]["Enums"]["payment_kind"]
           legacy_booking_payment_id?: string | null
           method?: string | null
           note?: string | null
           paid_at?: string
           reference?: string | null
+          refunded_at?: string | null
+          refunded_pence?: number
           source?: string
+          stripe_charge_id?: string | null
+          stripe_invoice_id?: string | null
           stripe_payment_intent_id?: string | null
+          subscription_id?: string | null
           sumup_checkout_id?: string | null
           sumup_txn_code?: string | null
         }
@@ -1363,6 +1718,20 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_arrears"
+            referencedColumns: ["subscription_id"]
+          },
+          {
+            foreignKeyName: "payments_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "subscriptions"
             referencedColumns: ["id"]
           },
         ]
@@ -1855,6 +2224,124 @@ export type Database = {
           },
         ]
       }
+      safeguarding_concern_notes: {
+        Row: {
+          author_person_id: string | null
+          body: string
+          concern_id: string
+          created_at: string
+          deleted_at: string | null
+          id: string
+        }
+        Insert: {
+          author_person_id?: string | null
+          body: string
+          concern_id: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+        }
+        Update: {
+          author_person_id?: string | null
+          body?: string
+          concern_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safeguarding_concern_notes_author_person_id_fkey"
+            columns: ["author_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safeguarding_concern_notes_concern_id_fkey"
+            columns: ["concern_id"]
+            isOneToOne: false
+            referencedRelation: "safeguarding_concerns"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      safeguarding_concerns: {
+        Row: {
+          channel: string
+          closed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          legal_hold: boolean
+          narrative: string
+          ref: string
+          reported_by_person_id: string | null
+          reported_person_id: string | null
+          severity: Database["public"]["Enums"]["concern_severity"] | null
+          status: Database["public"]["Enums"]["concern_status"]
+          subject_person_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          closed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          legal_hold?: boolean
+          narrative: string
+          ref: string
+          reported_by_person_id?: string | null
+          reported_person_id?: string | null
+          severity?: Database["public"]["Enums"]["concern_severity"] | null
+          status?: Database["public"]["Enums"]["concern_status"]
+          subject_person_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          closed_at?: string | null
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          legal_hold?: boolean
+          narrative?: string
+          ref?: string
+          reported_by_person_id?: string | null
+          reported_person_id?: string | null
+          severity?: Database["public"]["Enums"]["concern_severity"] | null
+          status?: Database["public"]["Enums"]["concern_status"]
+          subject_person_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "safeguarding_concerns_reported_by_person_id_fkey"
+            columns: ["reported_by_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safeguarding_concerns_reported_person_id_fkey"
+            columns: ["reported_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "safeguarding_concerns_subject_person_id_fkey"
+            columns: ["subject_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       seasons: {
         Row: {
           created_at: string
@@ -2053,6 +2540,175 @@ export type Database = {
             columns: ["staff_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      stripe_events: {
+        Row: {
+          error: string | null
+          id: string
+          livemode: boolean
+          payload: Json
+          processed_at: string | null
+          received_at: string
+          type: string
+        }
+        Insert: {
+          error?: string | null
+          id: string
+          livemode?: boolean
+          payload: Json
+          processed_at?: string | null
+          received_at?: string
+          type: string
+        }
+        Update: {
+          error?: string | null
+          id?: string
+          livemode?: boolean
+          payload?: Json
+          processed_at?: string | null
+          received_at?: string
+          type?: string
+        }
+        Relationships: []
+      }
+      subscription_plans: {
+        Row: {
+          active: boolean
+          amount_pence: number
+          billing: Database["public"]["Enums"]["billing_kind"]
+          created_at: string
+          description: string | null
+          id: string
+          instalments: number | null
+          name: string
+          season_id: string
+          stripe_price_id: string | null
+          stripe_product_id: string | null
+          team_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          amount_pence: number
+          billing?: Database["public"]["Enums"]["billing_kind"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          instalments?: number | null
+          name: string
+          season_id: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          team_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          amount_pence?: number
+          billing?: Database["public"]["Enums"]["billing_kind"]
+          created_at?: string
+          description?: string | null
+          id?: string
+          instalments?: number | null
+          name?: string
+          season_id?: string
+          stripe_price_id?: string | null
+          stripe_product_id?: string | null
+          team_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_plans_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_plans_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          amount_due_pence: number
+          cancel_reason: string | null
+          created_at: string
+          created_by: string | null
+          ended_at: string | null
+          id: string
+          payer_person_id: string
+          person_id: string
+          plan_id: string
+          started_at: string | null
+          status: Database["public"]["Enums"]["subscription_status"]
+          stripe_checkout_session_id: string | null
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_due_pence?: number
+          cancel_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          ended_at?: string | null
+          id?: string
+          payer_person_id: string
+          person_id: string
+          plan_id: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_due_pence?: number
+          cancel_reason?: string | null
+          created_at?: string
+          created_by?: string | null
+          ended_at?: string | null
+          id?: string
+          payer_person_id?: string
+          person_id?: string
+          plan_id?: string
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          stripe_checkout_session_id?: string | null
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_payer_person_id_fkey"
+            columns: ["payer_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
             referencedColumns: ["id"]
           },
         ]
@@ -2329,6 +2985,63 @@ export type Database = {
       }
     }
     Views: {
+      subscription_arrears: {
+        Row: {
+          amount_due_pence: number | null
+          created_at: string | null
+          days_since_start: number | null
+          outstanding_pence: number | null
+          paid_pence: number | null
+          payer_person_id: string | null
+          person_id: string | null
+          person_name: string | null
+          plan_id: string | null
+          plan_name: string | null
+          season_id: string | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["subscription_status"] | null
+          subscription_id: string | null
+          team_id: string | null
+          team_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscription_plans_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscription_plans_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_payer_person_id_fkey"
+            columns: ["payer_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       unallocated_home_fixtures: {
         Row: {
           allocation_conflict: boolean | null
@@ -2361,6 +3074,14 @@ export type Database = {
       }
     }
     Functions: {
+      add_concern_note: {
+        Args: { p_body: string; p_ref: string }
+        Returns: string
+      }
+      album_consent_type: {
+        Args: { p_visibility: Database["public"]["Enums"]["album_visibility"] }
+        Returns: Database["public"]["Enums"]["consent_type"]
+      }
       allocate_fixture: {
         Args: {
           p_fixture_id: string
@@ -2476,7 +3197,72 @@ export type Database = {
         Returns: boolean
       }
       can_act_for: { Args: { p_person_id: string }; Returns: boolean }
+      can_view_album: { Args: { p_album_id: string }; Returns: boolean }
+      comms_channel_enabled: {
+        Args: {
+          p_channel: Database["public"]["Enums"]["comms_channel"]
+          p_person_id: string
+        }
+        Returns: boolean
+      }
+      compliance_report: {
+        Args: never
+        Returns: {
+          dbs_status: string
+          exemption_expires_on: string
+          person_id: string
+          person_name: string
+          role: Database["public"]["Enums"]["team_role"]
+          safeguarding_status: string
+          team_id: string
+          team_name: string
+        }[]
+      }
+      concern_audit: {
+        Args: { p_action: string; p_detail?: Json; p_ref: string }
+        Returns: undefined
+      }
+      concern_names_caller: {
+        Args: {
+          c: Database["public"]["Tables"]["safeguarding_concerns"]["Row"]
+        }
+        Returns: boolean
+      }
+      confirm_media_subjects: {
+        Args: { p_item_id: string; p_person_ids: string[] }
+        Returns: undefined
+      }
       current_person_id: { Args: never; Returns: string }
+      display_name: { Args: { p_person_id: string }; Returns: string }
+      due_certification_nudges: {
+        Args: never
+        Returns: {
+          certification_id: string
+          days_before: number
+          days_left: number
+          expires_on: string
+          person_id: string
+          type: Database["public"]["Enums"]["certification_type"]
+        }[]
+      }
+      enqueue_message: {
+        Args: {
+          p_body?: string
+          p_category: Database["public"]["Enums"]["comms_category"]
+          p_channel: Database["public"]["Enums"]["comms_channel"]
+          p_entity?: string
+          p_entity_id?: string
+          p_person_id?: string
+          p_subject?: string
+          p_template?: string
+          p_to_address?: string
+        }
+        Returns: {
+          decision: string
+          message_id: string
+          status: Database["public"]["Enums"]["outbound_status"]
+        }[]
+      }
       fixture_booking_window: {
         Args: { p_fixture_id: string }
         Returns: Record<string, unknown>
@@ -2587,6 +3373,59 @@ export type Database = {
         Args: { p_role: Database["public"]["Enums"]["user_role"] }
         Returns: Database["public"]["Enums"]["app_role"]
       }
+      mark_certification_nudged: {
+        Args: { p_certification_id: string; p_days_before: number }
+        Returns: undefined
+      }
+      mark_message_failed: {
+        Args: { p_error: string; p_message_id: string }
+        Returns: number
+      }
+      mark_message_sent: {
+        Args: {
+          p_message_id: string
+          p_provider: string
+          p_provider_ref?: string
+        }
+        Returns: number
+      }
+      media_export: {
+        Args: { p_album_id: string }
+        Returns: {
+          caption: string
+          content_type: string
+          id: string
+          storage_bucket: string
+          storage_path: string
+          taken_at: string
+        }[]
+      }
+      media_gallery: {
+        Args: { p_album_id: string }
+        Returns: {
+          album_id: string
+          caption: string
+          content_type: string
+          created_at: string
+          height: number
+          id: string
+          storage_bucket: string
+          storage_path: string
+          taken_at: string
+          width: number
+        }[]
+      }
+      media_item_showable: {
+        Args: {
+          p_item_id: string
+          p_purpose: Database["public"]["Enums"]["consent_type"]
+        }
+        Returns: boolean
+      }
+      media_quarantined: {
+        Args: { p_item_id: string; p_new_path: string }
+        Returns: undefined
+      }
       migrate_room_bookings: {
         Args: never
         Returns: {
@@ -2596,6 +3435,23 @@ export type Database = {
           payments_upserted: number
           resources_upserted: number
         }[]
+      }
+      my_concern_receipts: {
+        Args: never
+        Returns: {
+          closed_at: string
+          created_at: string
+          narrative: string
+          ref: string
+          status: Database["public"]["Enums"]["concern_status"]
+        }[]
+      }
+      person_compliance_status: {
+        Args: {
+          p_person_id: string
+          p_type: Database["public"]["Enums"]["certification_type"]
+        }
+        Returns: string
       }
       person_has_role: {
         Args: {
@@ -2621,6 +3477,76 @@ export type Database = {
           team_id: string
         }[]
       }
+      queued_messages: {
+        Args: {
+          p_channel?: Database["public"]["Enums"]["comms_channel"]
+          p_limit?: number
+        }
+        Returns: {
+          body: string | null
+          category: Database["public"]["Enums"]["comms_category"]
+          channel: Database["public"]["Enums"]["comms_channel"]
+          created_at: string
+          created_by: string | null
+          decision: string | null
+          entity: string | null
+          entity_id: string | null
+          error: string | null
+          id: string
+          person_id: string | null
+          provider: string | null
+          provider_ref: string | null
+          sent_at: string | null
+          status: Database["public"]["Enums"]["outbound_status"]
+          subject: string | null
+          template: string | null
+          to_address: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "outbound_messages"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      read_concern_notes: {
+        Args: { p_ref: string }
+        Returns: {
+          author_person_id: string
+          body: string
+          created_at: string
+          id: string
+        }[]
+      }
+      read_concerns: {
+        Args: {
+          p_ref?: string
+          p_status?: Database["public"]["Enums"]["concern_status"]
+        }
+        Returns: {
+          channel: string
+          closed_at: string | null
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          legal_hold: boolean
+          narrative: string
+          ref: string
+          reported_by_person_id: string | null
+          reported_person_id: string | null
+          severity: Database["public"]["Enums"]["concern_severity"] | null
+          status: Database["public"]["Enums"]["concern_status"]
+          subject_person_id: string | null
+          updated_at: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "safeguarding_concerns"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       reconcile_room_bookings: {
         Args: never
         Returns: {
@@ -2640,6 +3566,16 @@ export type Database = {
         }
         Returns: number
       }
+      report_concern: {
+        Args: {
+          p_channel?: string
+          p_narrative: string
+          p_reported_person_id?: string
+          p_reporter_person_id?: string
+          p_subject_person_id?: string
+        }
+        Returns: string
+      }
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       split_person_name: {
         Args: { p_full_name: string }
@@ -2658,6 +3594,15 @@ export type Database = {
         }[]
       }
       unallocate_fixture: { Args: { p_fixture_id: string }; Returns: undefined }
+      update_concern: {
+        Args: {
+          p_legal_hold?: boolean
+          p_ref: string
+          p_severity?: Database["public"]["Enums"]["concern_severity"]
+          p_status?: Database["public"]["Enums"]["concern_status"]
+        }
+        Returns: undefined
+      }
       write_audit: {
         Args: {
           p_action: string
@@ -2669,6 +3614,7 @@ export type Database = {
       }
     }
     Enums: {
+      album_visibility: "team" | "club" | "public" | "social" | "press"
       app_role:
         | "club_admin"
         | "safeguarding_lead"
@@ -2678,6 +3624,7 @@ export type Database = {
         | "parent"
         | "hirer"
       availability_status: "available" | "unavailable" | "maybe"
+      billing_kind: "one_off" | "monthly" | "annual"
       booking_kind: "hire" | "block" | "fixture" | "maintenance"
       booking_status:
         | "enquiry"
@@ -2690,6 +3637,10 @@ export type Database = {
         | "safeguarding_children"
         | "first_aid"
         | "coaching_badge"
+      comms_category: "transactional" | "reminder" | "marketing"
+      comms_channel: "email" | "sms" | "push" | "in_app"
+      concern_severity: "low" | "medium" | "high" | "critical"
+      concern_status: "received" | "under_review" | "closed"
       consent_type:
         | "app_account"
         | "unsupervised_messaging"
@@ -2711,10 +3662,24 @@ export type Database = {
         | "foster_carer"
         | "legal_guardian"
         | "other"
+      outbound_status:
+        | "queued"
+        | "sent"
+        | "failed"
+        | "suppressed"
+        | "skipped_preference"
+        | "dry_run"
+      payment_kind: "hire" | "subscription" | "other"
       payment_status: "unpaid" | "deposit_paid" | "paid"
       registration_status: "pending" | "approved" | "rejected" | "withdrawn"
       resource_type: "function_room" | "pitch"
       selection_role: "starter" | "substitute"
+      subscription_status:
+        | "pending"
+        | "active"
+        | "past_due"
+        | "cancelled"
+        | "completed"
       team_role: "player" | "coach" | "assistant_coach" | "manager"
       user_role:
         | "committee"
@@ -2850,6 +3815,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      album_visibility: ["team", "club", "public", "social", "press"],
       app_role: [
         "club_admin",
         "safeguarding_lead",
@@ -2860,6 +3826,7 @@ export const Constants = {
         "hirer",
       ],
       availability_status: ["available", "unavailable", "maybe"],
+      billing_kind: ["one_off", "monthly", "annual"],
       booking_kind: ["hire", "block", "fixture", "maintenance"],
       booking_status: [
         "enquiry",
@@ -2874,6 +3841,10 @@ export const Constants = {
         "first_aid",
         "coaching_badge",
       ],
+      comms_category: ["transactional", "reminder", "marketing"],
+      comms_channel: ["email", "sms", "push", "in_app"],
+      concern_severity: ["low", "medium", "high", "critical"],
+      concern_status: ["received", "under_review", "closed"],
       consent_type: [
         "app_account",
         "unsupervised_messaging",
@@ -2898,10 +3869,26 @@ export const Constants = {
         "legal_guardian",
         "other",
       ],
+      outbound_status: [
+        "queued",
+        "sent",
+        "failed",
+        "suppressed",
+        "skipped_preference",
+        "dry_run",
+      ],
+      payment_kind: ["hire", "subscription", "other"],
       payment_status: ["unpaid", "deposit_paid", "paid"],
       registration_status: ["pending", "approved", "rejected", "withdrawn"],
       resource_type: ["function_room", "pitch"],
       selection_role: ["starter", "substitute"],
+      subscription_status: [
+        "pending",
+        "active",
+        "past_due",
+        "cancelled",
+        "completed",
+      ],
       team_role: ["player", "coach", "assistant_coach", "manager"],
       user_role: [
         "committee",

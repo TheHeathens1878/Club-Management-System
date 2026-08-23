@@ -52,6 +52,7 @@ export default async function PortalPage({
       .select("booking_id,amount_pence")
       .in("booking_id", ids);
     for (const p of payments ?? []) {
+      if (!p.booking_id) continue;
       paidByBooking.set(
         p.booking_id,
         (paidByBooking.get(p.booking_id) ?? 0) + p.amount_pence,
