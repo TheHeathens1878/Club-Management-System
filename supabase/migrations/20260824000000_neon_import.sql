@@ -883,7 +883,11 @@ begin
     parent_name, parent_email, parent_phone, coaching_note, data_consent, status, created_at
   )
   select 'app:' || a.id, 'team_application', a."playerName",
-         coalesce(to_date(nullif(a.dob, ''), 'DD/MM/YYYY'), to_date(nullif(a.dob, ''), 'YYYY-MM-DD'), current_date),
+         case
+           when a.dob ~ '^\d{2}/\d{2}/\d{4}$' then to_date(a.dob, 'DD/MM/YYYY')
+           when a.dob ~ '^\d{4}-\d{2}-\d{2}'  then left(a.dob, 10)::date
+           else current_date
+         end,
          t."ageGroup", coalesce(a."playerSex", 'MALE'), t."ageGroup" || ' ' || t.name,
          a."parentName", lower(a."parentEmail"), a."parentPhone",
          nullif(concat_ws(' · ', a.message, a."previousExperience", a."favouredPosition"), ''),
@@ -1081,8 +1085,12 @@ as $$
     join public.people p on p.legacy_neon_user_id = u.id
    where u."isActive"
      and u.email not like '%@placeholder.invalid'
-     and u."passwordHash" like '$2a$12$%'
+     and (u."passwordHash" like '$2a$%' or u."passwordHash" like '$2b$%')   -- any bcrypt cost (the seeded owner is cost 10)
      and p.email is not null                         -- not the merge-by-hand cases
+     -- a KNOWN minor gets no account here: that is P1.7's invite flow, which
+     -- needs a guardian's app_account consent first (SG-10). Unknown-DOB
+     -- adults go through (SAFEGUARDING.md §SG-10 tolerates the profile).
+     and not (p.dob is not null and public.is_minor_dob(p.dob))
      and not exists (select 1 from auth.users au where lower(au.email) = lower(u.email))
    order by u."createdAt";
 $$;

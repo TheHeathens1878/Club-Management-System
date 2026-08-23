@@ -66,8 +66,12 @@ for (const c of candidates) {
     .eq("id", data.user.id)
     .maybeSingle();
   if (profile?.person_id !== c.person_id) {
-    failures.push({ email: c.email, reason: `profile not linked to person ${c.person_id}` });
-    console.error(`  LINK MISMATCH ${c.email}: profile.person_id=${profile?.person_id ?? "null"}`);
+    // The trigger refused the adoption (a minor, a profile that already
+    // exists, ...). Do not leave an account behind that is attached to a
+    // fresh, unknown person: remove it and report.
+    await supabase.auth.admin.deleteUser(data.user.id);
+    failures.push({ email: c.email, reason: `profile not linked to person ${c.person_id} — account removed` });
+    console.error(`  LINK MISMATCH ${c.email}: profile.person_id=${profile?.person_id ?? "null"} (account removed)`);
     continue;
   }
   created += 1;

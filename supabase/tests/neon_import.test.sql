@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(115);
+select plan(116);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures: an admin, a lead-to-be, and Eve — an existing account whose email
@@ -38,13 +38,14 @@ insert into public.people (first_name, last_name, email) values ('Harry', 'Hirer
 
 -- Neon export (stub tables)
 insert into neon_legacy."User" (id, name, email, "passwordHash", role, "clubRole", "contactPhone", "dateOfBirth", "isActive", "createdAt") values
-  ('u-owner',  'Olive Owner',     'owner@neon.test',  '$2a$12$x', 'OWNER',  'Chairman', '0161 1', null, true,  '2026-05-18 09:00'),
+  ('u-owner',  'Olive Owner',     'owner@neon.test',  '$2a$10$x', 'OWNER',  'Chairman', '0161 1', null, true,  '2026-05-18 09:00'),
   ('u-coach1', 'Carl Coach',      'coach1@neon.test', '$2a$12$x', 'COACH',  null, '07700 1', null, true,  '2026-05-19 09:00'),
   ('u-coach2', 'Ina Inactive',    'coach2@neon.test', '$2a$12$x', 'COACH',  null, null, null, false, '2026-05-19 09:00'),
   ('u-parent', 'Pat Parent',      'parent@neon.test', '$2a$12$x', 'PARENT', null, null, null, true,  '2026-05-20 09:00'),
   ('u-child',  'Kit Child',       'nologin-abc@placeholder.invalid', '$2a$10$x', 'PLAYER', null, null, (current_date - interval '10 years')::timestamp, true, '2026-05-20 09:00'),
   ('u-player', 'Al Adultplayer',  'player@neon.test', '$2a$12$x', 'PLAYER', null, null, '1995-06-06', true, '2026-05-21 09:00'),
-  ('u-eve',    'Eve Existing',    'EVE@neon.test',    '$2a$12$x', 'COACH',  null, null, null, true,  '2026-05-21 09:00');
+  ('u-eve',    'Eve Existing',    'EVE@neon.test',    '$2a$12$x', 'COACH',  null, null, null, true,  '2026-05-21 09:00'),
+  ('u-teen',   'Tia Teen',        'teen@neon.test',   '$2a$12$x', 'PLAYER', null, null, (current_date - interval '15 years')::timestamp, true, '2026-05-22 09:00');
 insert into neon_legacy."Team" (id, name, "ageGroup", "ageGroupTo", "teamGender", "isRecruiting", "isActive", "contactName", "contactEmail") values
   ('t1', 'Lions', 'U05', null,  'MIXED',  true,  true,  'Carl', 'coach1@neon.test'),
   ('t2', 'Lions', 'U18', 'U19', 'MIXED',  false, true,  null, null),
@@ -116,7 +117,7 @@ select is((select count(*) from pg_trigger where tgrelid = 'public.people'::regc
 -- ---------------------------------------------------------------------------
 select lives_ok($$select * from public.migrate_neon()$$, 'migrate_neon runs');
 
-select is((select count(*) from public.people where legacy_neon_user_id is not null), 7::bigint, 'all 7 Neon users have a people row');
+select is((select count(*) from public.people where legacy_neon_user_id is not null), 8::bigint, 'all 8 Neon users have a people row');
 select is((select legacy_neon_user_id from public.people where id = current_setting('t.eve')::uuid), 'u-eve', '3a: Eve''s existing person adopted the Neon id (case-insensitive email match)');
 select is((select count(*) from public.people where lower(email) = 'eve@neon.test'), 1::bigint, 'no duplicate person for Eve');
 select is((select count(*) from public.people where email = 'coach1@neon.test'), 1::bigint, 'Harry Hirer (no account) keeps the email; the Neon coach is NOT linked to him');
@@ -171,9 +172,10 @@ select is((select is_open from public.waiting_list_age_groups where age_group = 
 select is((select author_person_id from public.waiting_list_notes where legacy_neon_note_id = 'n1'), (select id from public.people where legacy_neon_user_id = 'u-coach1'), 'note author linked');
 select is((select count(*) from public.waiting_list_access), 1::bigint, 'access row');
 
+select is((select count(*) from public.neon_auth_import_candidates()), 3::bigint, 'auth candidates = owner (cost-10 hash ok), parent, adult player — not the inactive coach, the email-dropped coach, the placeholder child, the KNOWN MINOR with an email, or Eve who has an account');
 -- idempotent
 select lives_ok($$select * from public.migrate_neon()$$, 'migrate_neon re-runs');
-select is((select count(*) from public.people where legacy_neon_user_id is not null), 7::bigint, 're-run creates no people');
+select is((select count(*) from public.people where legacy_neon_user_id is not null), 8::bigint, 're-run creates no people');
 select is((select count(*) from public.bookings where legacy_neon_ref is not null), 9::bigint, 're-run creates no bookings (4 + 1 + 4)');
 select is((select count(*) from public.audit_log where action = 'import.neon'), 2::bigint, 'each run audited');
 
