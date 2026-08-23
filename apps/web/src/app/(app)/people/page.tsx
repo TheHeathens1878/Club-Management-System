@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronRight, Plus, Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
 
 import type { Enums } from "@club/db";
 
@@ -16,12 +16,33 @@ import { isMinorDob, personLabel, sanitiseSearch } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- * The club's people (gap 2).
+ * The club's contacts database (gap 2).
  *
  * Read through the caller's own client. `people_admin_read` gives the whole
  * list to a club_admin or the safeguarding lead and to nobody else, so an empty
  * page is the database's answer, not a bug — and it is the same answer whether
  * the app's committee gate is right or wrong.
+ *
+ * WHAT A "TYPE" IS. The chips answer the three questions the club actually
+ * asks of this list, and each is answered by a LINK the database holds, not by
+ * a label somebody typed:
+ *
+ *   · Player  — a live `team_memberships` row with role `player`.
+ *   · Coach   — a live `team_memberships` row with a staff role
+ *               (coach / assistant_coach / manager), or the `coach` app role.
+ *   · Parent  — a live `guardianships` row on the guardian side, or the
+ *               `parent` app role. SAFEGUARDING.md §1.3 is emphatic that
+ *               authority comes from the LINK and never from the role, so the
+ *               link is listed first and the role is only a second way of being
+ *               found on a search screen — nothing here grants anything.
+ *
+ * Everything derived from `team_memberships` is scoped to the current season,
+ * the same scoping the team filter has always used; with no current season set
+ * the team-derived halves are empty and the card says so.
+ *
+ * The whole row is a link to `/people/[id]`, which is the only place a person
+ * is edited. There are no inline actions: a contacts list that can also change
+ * records is a list you cannot skim safely.
  *
  * The minor badge is computed from `dob` with the same rule as
  * `public.is_minor_dob()` (SG-0: an unknown date of birth is a minor). It is a
@@ -29,7 +50,7 @@ import { createClient } from "@/lib/supabase/server";
  * asks the database.
  */
 
-/** Enough to scan, few enough that the per-row enrichment stays one query each. */
+/** Enough to scan, few enough that the per-page enrichment stays four queries. */
 const PAGE_SIZE = 25;
 
 const ROLES: Enums<"app_role">[] = [
@@ -52,8 +73,30 @@ const ROLE_LABELS: Record<Enums<"app_role">, string> = {
   hirer: "Hirer",
 };
 
+/** The staff half of `team_role` — everything that is not a player. */
+const TEAM_STAFF_ROLES: Enums<"team_role">[] = ["coach", "assistant_coach", "manager"];
+
+const TYPES = ["player", "parent", "coach"] as const;
+type ContactType = (typeof TYPES)[number];
+
+const TYPE_LABELS: Record<ContactType, string> = {
+  player: "Player",
+  parent: "Parent",
+  coach: "Coach",
+};
+
+const TYPE_BADGE_VARIANT: Record<ContactType, "default" | "success" | "muted"> = {
+  player: "default",
+  parent: "success",
+  coach: "muted",
+};
+
+/** Teams are listed in full up to this many, then counted. */
+const TEAMS_SHOWN = 2;
+
 type SearchParams = {
   q?: string;
+  type?: string;
   filter?: string;
   role?: string;
   team?: string;
@@ -65,15 +108,31 @@ function intersect(current: string[] | null, ids: string[]): string[] {
   return current === null ? ids : current.filter((id) => ids.includes(id));
 }
 
-function buildHref(params: SearchParams, page: number): string {
+/** The query string the list is currently showing, with `overrides` applied. */
+function listQuery(params: SearchParams, overrides: Partial<SearchParams> = {}): string {
+  const merged = { ...params, ...overrides };
   const query = new URLSearchParams();
-  if (params.q) query.set("q", params.q);
-  if (params.filter) query.set("filter", params.filter);
-  if (params.role) query.set("role", params.role);
-  if (params.team) query.set("team", params.team);
-  if (page > 1) query.set("page", String(page));
-  const text = query.toString();
+  if (merged.q) query.set("q", merged.q);
+  if (merged.type) query.set("type", merged.type);
+  if (merged.filter) query.set("filter", merged.filter);
+  if (merged.role) query.set("role", merged.role);
+  if (merged.team) query.set("team", merged.team);
+  if (merged.page && merged.page !== "1") query.set("page", merged.page);
+  return query.toString();
+}
+
+function buildHref(params: SearchParams, overrides: Partial<SearchParams> = {}): string {
+  const text = listQuery(params, overrides);
   return text ? `/people?${text}` : "/people";
+}
+
+/**
+ * The row link. `from` carries the list's own query string so `/people/[id]`
+ * can offer a Back that lands on the page, filters and chip the reader left.
+ */
+function personHref(personId: string, params: SearchParams, page: number): string {
+  const text = listQuery(params, { page: String(page) });
+  return text ? `/people/${personId}?from=${encodeURIComponent(text)}` : `/people/${personId}`;
 }
 
 export default async function PeoplePage({
@@ -92,6 +151,9 @@ export default async function PeoplePage({
     ? (params.role as Enums<"app_role">)
     : null;
   const teamFilter = params.team && params.team !== "" ? params.team : null;
+  const typeFilter = TYPES.includes(params.type as ContactType)
+    ? (params.type as ContactType)
+    : null;
   const page = Math.max(1, Number(params.page ?? "1") || 1);
 
   const supabase = await createClient();
@@ -101,8 +163,10 @@ export default async function PeoplePage({
     supabase.from("seasons").select("id,name").eq("is_current", true).maybeSingle(),
   ]);
 
-  // The two filters that are answered by another table become an id list the
-  // people query intersects with.
+  const teamNames = new Map((teams ?? []).map((team) => [team.id, team.name] as const));
+
+  // The filters that are answered by another table become an id list the
+  // people query intersects with. Each is one query, whatever the page size.
   let restricted: string[] | null = null;
 
   if (roleFilter) {
@@ -121,6 +185,59 @@ export default async function PeoplePage({
       .eq("season_id", currentSeason.id)
       .is("left_at", null);
     restricted = intersect(restricted, (data ?? []).map((r) => r.person_id));
+  }
+  if (teamFilter && !currentSeason) {
+    // No season, no live membership to match — say "nobody" rather than
+    // silently ignoring the filter the user picked.
+    restricted = intersect(restricted, []);
+  }
+  if (typeFilter) {
+    const ids = new Set<string>();
+
+    if (typeFilter === "player" && currentSeason) {
+      const { data } = await supabase
+        .from("team_memberships")
+        .select("person_id")
+        .eq("season_id", currentSeason.id)
+        .eq("role", "player")
+        .is("left_at", null);
+      for (const row of data ?? []) ids.add(row.person_id);
+    }
+
+    if (typeFilter === "coach") {
+      const [memberships, roles] = await Promise.all([
+        currentSeason
+          ? supabase
+              .from("team_memberships")
+              .select("person_id")
+              .eq("season_id", currentSeason.id)
+              .in("role", TEAM_STAFF_ROLES)
+              .is("left_at", null)
+          : Promise.resolve({ data: [] as { person_id: string }[] }),
+        supabase
+          .from("person_roles")
+          .select("person_id")
+          .eq("role", "coach")
+          .is("revoked_at", null),
+      ]);
+      for (const row of memberships.data ?? []) ids.add(row.person_id);
+      for (const row of roles.data ?? []) ids.add(row.person_id);
+    }
+
+    if (typeFilter === "parent") {
+      const [links, roles] = await Promise.all([
+        supabase.from("guardianships").select("guardian_person_id").is("ended_at", null),
+        supabase
+          .from("person_roles")
+          .select("person_id")
+          .eq("role", "parent")
+          .is("revoked_at", null),
+      ]);
+      for (const row of links.data ?? []) ids.add(row.guardian_person_id);
+      for (const row of roles.data ?? []) ids.add(row.person_id);
+    }
+
+    restricted = intersect(restricted, [...ids]);
   }
 
   const impossible = restricted !== null && restricted.length === 0;
@@ -161,10 +278,10 @@ export default async function PeoplePage({
   const total = count ?? 0;
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  // Enrichment for the page's rows only — three bulk reads, not three per row.
-  const [rolesResult, membershipsResult, profilesResult] =
+  // Enrichment for the page's rows only — four bulk reads, not four per row.
+  const [rolesResult, membershipsResult, guardianshipsResult, profilesResult] =
     ids.length === 0
-      ? [{ data: [] }, { data: [] }, { data: [] }]
+      ? [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
       : await Promise.all([
           supabase
             .from("person_roles")
@@ -174,29 +291,72 @@ export default async function PeoplePage({
           currentSeason
             ? supabase
                 .from("team_memberships")
-                .select("person_id,team_id")
+                .select("person_id,team_id,role")
                 .in("person_id", ids)
                 .eq("season_id", currentSeason.id)
                 .is("left_at", null)
-            : Promise.resolve({ data: [] as { person_id: string; team_id: string }[] }),
+            : Promise.resolve({
+                data: [] as { person_id: string; team_id: string; role: Enums<"team_role"> }[],
+              }),
+          supabase
+            .from("guardianships")
+            .select("guardian_person_id")
+            .in("guardian_person_id", ids)
+            .is("ended_at", null),
           supabase.from("profiles").select("person_id").in("person_id", ids),
         ]);
 
-  const rolesByPerson = new Map<string, Enums<"app_role">[]>();
+  const appRoles = new Map<string, Set<Enums<"app_role">>>();
   for (const row of rolesResult.data ?? []) {
-    rolesByPerson.set(row.person_id, [...(rolesByPerson.get(row.person_id) ?? []), row.role]);
+    const held = appRoles.get(row.person_id) ?? new Set<Enums<"app_role">>();
+    held.add(row.role);
+    appRoles.set(row.person_id, held);
   }
-  const teamCount = new Map<string, number>();
+
+  const teamsByPerson = new Map<string, string[]>();
+  const typesByPerson = new Map<string, Set<ContactType>>();
+  const addType = (personId: string, type: ContactType) => {
+    const held = typesByPerson.get(personId) ?? new Set<ContactType>();
+    held.add(type);
+    typesByPerson.set(personId, held);
+  };
+
   for (const row of membershipsResult.data ?? []) {
-    teamCount.set(row.person_id, (teamCount.get(row.person_id) ?? 0) + 1);
+    const name = teamNames.get(row.team_id);
+    if (name) teamsByPerson.set(row.person_id, [...(teamsByPerson.get(row.person_id) ?? []), name]);
+    addType(row.person_id, row.role === "player" ? "player" : "coach");
   }
+  for (const row of guardianshipsResult.data ?? []) addType(row.guardian_person_id, "parent");
+  for (const [personId, held] of appRoles) {
+    if (held.has("coach")) addType(personId, "coach");
+    if (held.has("parent")) addType(personId, "parent");
+  }
+
   const withLogin = new Set((profilesResult.data ?? []).map((p) => p.person_id));
+
+  const chips: { key: string; label: string; href: string; active: boolean }[] = [
+    {
+      key: "all",
+      label: "Everyone",
+      href: buildHref(params, { type: undefined, page: undefined }),
+      active: typeFilter === null,
+    },
+    ...TYPES.map((type) => ({
+      key: type,
+      label: `${TYPE_LABELS[type]}s`,
+      href: buildHref(params, { type, page: undefined }),
+      active: typeFilter === type,
+    })),
+  ];
+
+  const filtersApplied =
+    term.length > 0 || noDob || roleFilter !== null || teamFilter !== null || typeFilter !== null;
 
   return (
     <>
       <PageHeader
         title="People"
-        subtitle="Every member record the club holds — players, coaches, parents and hirers"
+        subtitle="The club's contacts database — players, parents, coaches and hirers"
         action={
           <Link
             href="/people/new"
@@ -206,13 +366,32 @@ export default async function PeoplePage({
           </Link>
         }
       />
-      <div className="max-w-5xl space-y-6 p-6">
+      <div className="max-w-6xl space-y-6 p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="space-y-3">
             <CardTitle className="text-base">Find someone</CardTitle>
+            <div className="flex flex-wrap gap-2">
+              {chips.map((chip) => (
+                <Link
+                  key={chip.key}
+                  href={chip.href}
+                  aria-current={chip.active ? "true" : undefined}
+                  className={buttonVariants({
+                    variant: chip.active ? "default" : "outline",
+                    size: "sm",
+                  })}
+                >
+                  {chip.label}
+                </Link>
+              ))}
+            </div>
           </CardHeader>
           <CardContent>
-            <form method="get" className="grid gap-4 sm:grid-cols-4">
+            {/* A GET form so every list is a URL somebody can bookmark or send.
+                The type chip lives outside the form, so it rides along in a
+                hidden field rather than being lost on the next search. */}
+            <form method="get" className="grid gap-4 sm:grid-cols-6">
+              {typeFilter && <input type="hidden" name="type" value={typeFilter} />}
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="q">Name or email</Label>
                 <div className="relative">
@@ -226,18 +405,7 @@ export default async function PeoplePage({
                   />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="role">Role</Label>
-                <Select id="role" name="role" defaultValue={roleFilter ?? ""}>
-                  <option value="">Any role</option>
-                  {ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {ROLE_LABELS[role]}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="team">Team (this season)</Label>
                 <Select id="team" name="team" defaultValue={teamFilter ?? ""}>
                   <option value="">Any team</option>
@@ -248,20 +416,36 @@ export default async function PeoplePage({
                   ))}
                 </Select>
               </div>
-              <label className="flex items-center gap-2 text-sm sm:col-span-3">
+              <div className="space-y-1.5 sm:col-span-2">
+                <Label htmlFor="role">Role</Label>
+                <Select id="role" name="role" defaultValue={roleFilter ?? ""}>
+                  <option value="">Any role</option>
+                  {ROLES.map((role) => (
+                    <option key={role} value={role}>
+                      {ROLE_LABELS[role]}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+              <label className="flex items-center gap-2 text-sm sm:col-span-4">
                 <input type="checkbox" name="filter" value="no_dob" defaultChecked={noDob} />
                 Only people with no date of birth on file
               </label>
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 sm:col-span-2">
                 <button
                   type="submit"
                   className={buttonVariants({ variant: "default", size: "sm" })}
                 >
                   Search
                 </button>
-                <Link href="/people" className={buttonVariants({ variant: "outline", size: "sm" })}>
-                  Clear
-                </Link>
+                {filtersApplied && (
+                  <Link
+                    href="/people"
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    Clear
+                  </Link>
+                )}
               </div>
             </form>
           </CardContent>
@@ -273,7 +457,7 @@ export default async function PeoplePage({
               {total} {total === 1 ? "person" : "people"}
               {!currentSeason && (
                 <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  (no current season, so team counts are blank)
+                  (no current season, so teams and the player/coach types are blank)
                 </span>
               )}
             </CardTitle>
@@ -291,83 +475,73 @@ export default async function PeoplePage({
               </p>
             )}
             {people.length > 0 && (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="border-b text-xs text-muted-foreground">
-                    <tr>
-                      <th className="py-2 pr-3 font-medium">Name</th>
-                      <th className="py-2 pr-3 font-medium">Email</th>
-                      <th className="py-2 pr-3 font-medium">Phone</th>
-                      <th className="py-2 pr-3 font-medium">DOB</th>
-                      <th className="py-2 pr-3 font-medium">Roles</th>
-                      <th className="py-2 pr-3 font-medium">Teams</th>
-                      <th className="py-2 pr-3 font-medium">Login</th>
-                      <th className="py-2 font-medium" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {people.map((person) => {
-                      const roles = rolesByPerson.get(person.id) ?? [];
-                      const teamsHeld = teamCount.get(person.id) ?? 0;
-                      return (
-                        <tr key={person.id} className="border-b align-top last:border-0">
-                          <td className="py-2 pr-3">
-                            <Link
-                              href={`/people/${person.id}`}
-                              className="font-medium underline underline-offset-2"
-                            >
-                              {personLabel(person)}
-                            </Link>
+              <div>
+                {/* A header, not a <table>: the whole row is one link, and a
+                    link cannot wrap a <tr>. */}
+                <div className="hidden border-b pb-2 text-xs text-muted-foreground md:grid md:grid-cols-12 md:gap-3">
+                  <span className="md:col-span-4">Name</span>
+                  <span className="md:col-span-2">Type</span>
+                  <span className="md:col-span-2">Teams</span>
+                  <span className="md:col-span-4">Contact</span>
+                </div>
+                <ul className="divide-y">
+                  {people.map((person) => {
+                    const name = personLabel(person);
+                    const held = [...(typesByPerson.get(person.id) ?? [])];
+                    const heldTeams = teamsByPerson.get(person.id) ?? [];
+                    const extraTeams = heldTeams.length - TEAMS_SHOWN;
+                    const linked = withLogin.has(person.id);
+                    return (
+                      <li key={person.id}>
+                        <Link
+                          href={personHref(person.id, params, page)}
+                          className="grid gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none md:grid-cols-12 md:items-center"
+                        >
+                          <span className="flex flex-wrap items-center gap-2 md:col-span-4">
+                            <span
+                              aria-hidden="true"
+                              title={linked ? "Has a login" : "No login yet"}
+                              className={
+                                "h-2 w-2 shrink-0 rounded-full " +
+                                (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
+                              }
+                            />
+                            <span className="font-medium">{name}</span>
+                            <span className="sr-only">
+                              {linked ? "Has a login." : "No login yet."}
+                            </span>
                             {isMinorDob(person.dob) && (
-                              <Badge variant="warning" className="ml-2">
-                                Minor
+                              <Badge variant="warning">
+                                {person.dob ? "Minor" : "No DOB — treated as a minor"}
                               </Badge>
                             )}
-                          </td>
-                          <td className="py-2 pr-3 break-all">{person.email ?? "—"}</td>
-                          <td className="py-2 pr-3">{person.phone ?? "—"}</td>
-                          <td className="py-2 pr-3">
-                            {person.dob ? (
-                              <Badge variant="success">Known</Badge>
+                          </span>
+                          <span className="flex flex-wrap gap-1 md:col-span-2">
+                            {held.length === 0 ? (
+                              <span className="text-xs text-muted-foreground">—</span>
                             ) : (
-                              <Badge variant="destructive">Missing</Badge>
+                              TYPES.filter((type) => held.includes(type)).map((type) => (
+                                <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
+                                  {TYPE_LABELS[type]}
+                                </Badge>
+                              ))
                             )}
-                          </td>
-                          <td className="py-2 pr-3">
-                            {roles.length === 0 ? (
-                              <span className="text-muted-foreground">—</span>
-                            ) : (
-                              <div className="flex flex-wrap gap-1">
-                                {roles.map((role) => (
-                                  <Badge key={role} variant="muted">
-                                    {ROLE_LABELS[role]}
-                                  </Badge>
-                                ))}
-                              </div>
-                            )}
-                          </td>
-                          <td className="py-2 pr-3">{teamsHeld === 0 ? "—" : teamsHeld}</td>
-                          <td className="py-2 pr-3">
-                            {withLogin.has(person.id) ? (
-                              <Badge variant="default">Linked</Badge>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="py-2">
-                            <Link
-                              href={`/people/${person.id}`}
-                              className="text-muted-foreground hover:text-foreground"
-                              aria-label={`Open ${personLabel(person)}`}
-                            >
-                              <ChevronRight className="h-4 w-4" />
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          </span>
+                          <span className="text-xs text-muted-foreground md:col-span-2">
+                            {heldTeams.length === 0
+                              ? "—"
+                              : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
+                                (extraTeams > 0 ? ` +${extraTeams}` : "")}
+                          </span>
+                          <span className="text-xs text-muted-foreground md:col-span-4">
+                            <span className="block break-all">{person.email ?? "No email"}</span>
+                            <span className="block">{person.phone ?? "No phone"}</span>
+                          </span>
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
 
@@ -379,7 +553,7 @@ export default async function PeoplePage({
                 <div className="flex gap-2">
                   {page > 1 && (
                     <Link
-                      href={buildHref(params, page - 1)}
+                      href={buildHref(params, { page: String(page - 1) })}
                       className={buttonVariants({ variant: "outline", size: "sm" })}
                     >
                       Previous
@@ -387,7 +561,7 @@ export default async function PeoplePage({
                   )}
                   {page < lastPage && (
                     <Link
-                      href={buildHref(params, page + 1)}
+                      href={buildHref(params, { page: String(page + 1) })}
                       className={buttonVariants({ variant: "outline", size: "sm" })}
                     >
                       Next

@@ -157,3 +157,127 @@ export async function withdrawRegistration(
   revalidatePath(PATH);
   return { notice: "Registration withdrawn." };
 }
+
+// ---------------------------------------------------------------------------
+// App-account consent (SG-10)
+// ---------------------------------------------------------------------------
+// A child of 13 or over may hold their own login ONLY while an active
+// `app_account` consent from an active guardian stands — the SG-10 trigger on
+// `profiles` is what enforces that, and these two actions are the guardian's
+// end of it. Neither action decides anything:
+//
+//   · The grant is a plain INSERT. `guardian_consents_guardian_insert` admits
+//     it only when `guardian_person_id` is the caller and the caller holds a
+//     live `guardianships` row to that child, and §9a's SECURITY DEFINER guard
+//     re-checks the same thing plus "the child is a minor" and "the guardian is
+//     an adult with a known date of birth". Every one of those refusals is a
+//     P0001 written for the parent reading it, so it is shown VERBATIM.
+//   · The withdrawal is the single UPDATE a guardian may make
+//     (`guardian_consents_guardian_update`, narrowed to `revoked_at` /
+//     `revoked_by` by §9b's change guard). Any live guardian may withdraw, not
+//     only the one who granted — the database decides that, not this file.
+//
+// The partial unique index on (child_person_id, consent_type) WHERE revoked_at
+// IS NULL means a second grant while one stands comes back as 23505, which is
+// the honest answer: consent is already held.
+
+/**
+ * Which version of the monitoring notice the guardian was shown (SG-9).
+ *
+ * `guardian_consents.notice_version` is NOT NULL because a consent whose terms
+ * cannot be reconstructed is not evidence of anything. Nothing in the codebase
+ * writes a consent yet, so this is the first version: the wording on
+ * `/family`'s consent card. Bump it — and only bump it — when that wording
+ * changes, because an old row must keep naming what its guardian actually read.
+ */
+const APP_ACCOUNT_NOTICE_VERSION = "1";
+
+export async function allowAppAccess(
+  _prev: FamilyActionState,
+  formData: FormData,
+): Promise<FamilyActionState> {
+  const childId = String(formData.get("child_person_id") ?? "").trim();
+  if (!childId) return { error: "Missing the child this consent is about." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sign in again — your session has expired." };
+
+  const { data: personId } = await supabase.rpc("current_person_id");
+  if (!personId) {
+    return {
+      error:
+        "Your sign-in is not linked to a member record yet, so the club cannot record a consent from you. Ask the club to link your account.",
+    };
+  }
+
+  const { error } = await supabase.from("guardian_consents").insert({
+    child_person_id: childId,
+    guardian_person_id: personId,
+    consent_type: "app_account",
+    notice_version: APP_ACCOUNT_NOTICE_VERSION,
+    granted_by: user.id,
+  });
+
+  if (error) {
+    // P0001 is the SG-10 grant guard speaking — word for word.
+    if (error.code === "P0001") return { error: error.message };
+    if (error.code === "23505") {
+      return { error: "Consent for an app account is already held for this child." };
+    }
+    if (error.code === "42501") {
+      return {
+        error:
+          "The club's records do not show you as an active guardian of this child, so this consent was refused.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath(PATH);
+  return { notice: "Consent recorded. Your child can now create their own login." };
+}
+
+export async function withdrawAppAccess(
+  _prev: FamilyActionState,
+  formData: FormData,
+): Promise<FamilyActionState> {
+  const consentId = String(formData.get("consent_id") ?? "").trim();
+  if (!consentId) return { error: "Missing the consent to withdraw." };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: "Sign in again — your session has expired." };
+
+  const { data, error } = await supabase
+    .from("guardian_consents")
+    .update({ revoked_at: new Date().toISOString(), revoked_by: user.id })
+    .eq("id", consentId)
+    .is("revoked_at", null)
+    .select("id");
+
+  if (error) {
+    // P0001 is §9b's change guard speaking — word for word.
+    if (error.code === "P0001") return { error: error.message };
+    if (error.code === "42501") {
+      return {
+        error:
+          "Only an active guardian of this child, a club administrator or the safeguarding lead can withdraw this consent.",
+      };
+    }
+    return { error: error.message };
+  }
+  if ((data ?? []).length === 0) {
+    return {
+      error:
+        "Nothing was withdrawn — this consent is no longer yours to change, or it has already been withdrawn.",
+    };
+  }
+
+  revalidatePath(PATH);
+  return { notice: "Consent withdrawn." };
+}

@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The family screen's three forms (gap 9).
+ * The family screen's forms (gap 9, plus SG-10's app-account consent).
  *
  * Plain server-action forms driven by `useActionState` — no client-side
  * validation stands in for the database's. The date of birth field carries its
@@ -13,9 +13,11 @@
 import { useActionState, useState } from "react";
 import { Plus, UserPlus } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select, Textarea } from "@/components/ui/field";
+import { formatStamp } from "@/lib/people-display";
 import {
   KIT_SIZES,
   PHOTO_PREFERENCE_LABELS,
@@ -24,7 +26,9 @@ import {
 
 import {
   addChild,
+  allowAppAccess,
   registerForTeam,
+  withdrawAppAccess,
   withdrawRegistration,
   type FamilyActionState,
 } from "./actions";
@@ -336,5 +340,74 @@ export function WithdrawForm({ registrationId }: { registrationId: string }) {
       {state.error && <span className="text-sm text-destructive">{state.error}</span>}
       {state.notice && <span className="text-sm text-muted-foreground">{state.notice}</span>}
     </form>
+  );
+}
+
+/**
+ * The app-account consent for one child (SG-10).
+ *
+ * Two buttons and a sentence. The sentence matters: a guardian is being asked
+ * to decide something, and "Allow app access" on its own does not tell them
+ * what they are allowing. Nothing here is disabled on a guess — if the club's
+ * records do not show the caller as an active guardian, or the child is too
+ * young, the database says so and its words are printed unchanged.
+ */
+export function AppAccessForm({
+  childPersonId,
+  childName,
+  consent,
+  minAccountAge,
+}: {
+  childPersonId: string;
+  childName: string;
+  consent: { id: string; grantedAt: string } | null;
+  minAccountAge: number;
+}) {
+  const [grantState, grantAction, granting] = useActionState<FamilyActionState, FormData>(
+    allowAppAccess,
+    {},
+  );
+  const [revokeState, revokeAction, revoking] = useActionState<FamilyActionState, FormData>(
+    withdrawAppAccess,
+    {},
+  );
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Allowing app access lets {childName} create their own login at{" "}
+        <span className="font-medium">/register</span> once they are {minAccountAge} or over, using
+        their own email address; without it the club&apos;s records stay yours to see and theirs to
+        be told about.
+      </p>
+
+      {consent ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant="success">App access allowed</Badge>
+          <span className="text-xs text-muted-foreground">
+            Recorded {formatStamp(consent.grantedAt)}
+          </span>
+          <form action={revokeAction}>
+            <input type="hidden" name="consent_id" value={consent.id} />
+            <Button type="submit" size="sm" variant="outline" disabled={revoking}>
+              {revoking ? "Withdrawing…" : "Withdraw"}
+            </Button>
+          </form>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Badge variant="muted">No app access</Badge>
+          <form action={grantAction}>
+            <input type="hidden" name="child_person_id" value={childPersonId} />
+            <Button type="submit" size="sm" variant="outline" disabled={granting}>
+              {granting ? "Recording…" : "Allow app access"}
+            </Button>
+          </form>
+        </div>
+      )}
+
+      <Feedback state={grantState} />
+      <Feedback state={revokeState} />
+    </div>
   );
 }

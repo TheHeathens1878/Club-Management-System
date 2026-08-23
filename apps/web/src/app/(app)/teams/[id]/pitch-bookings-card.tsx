@@ -72,6 +72,19 @@ export function TeamPitchBookings({
               >
                 Details
               </Link>
+              {/* The same page, opened at the sheet: team staff and
+                  administrators come here to mark who turned up, and should not
+                  have to know that "Details" is where attendance lives. The
+                  page still reads as the caller — the button is a shortcut, not
+                  a permission. */}
+              {canManage && (
+                <Link
+                  href={`/pitches/${item.id}#attendance`}
+                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                >
+                  Attendance
+                </Link>
+              )}
               {/* A fixture's slot is `allocate_fixture()`'s to move, not this
                   card's — cancelling it here would orphan `fixtures.booking_id`. */}
               {canManage &&

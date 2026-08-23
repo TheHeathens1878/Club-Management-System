@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Baby, Users } from "lucide-react";
+import { Baby, ShieldCheck, Users } from "lucide-react";
 
 import type { Database, Json } from "@club/db";
 
@@ -17,7 +17,13 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { ageGroupFromDob } from "@/lib/waiting-list";
 
-import { AddChildForm, RegisterForm, WithdrawForm, type TeamOption } from "./family-forms";
+import {
+  AddChildForm,
+  AppAccessForm,
+  RegisterForm,
+  WithdrawForm,
+  type TeamOption,
+} from "./family-forms";
 
 /**
  * Children (gap 9) — the first screen a parent has ever had on this platform.
@@ -178,6 +184,42 @@ export default async function FamilyPage() {
 
   const myRegistrations = personId ? (byPerson.get(personId) ?? []) : [];
 
+  // ------------------------------------------------------------------
+  // SG-10 — the app-account consent, one live row per child at most.
+  //
+  // `guardian_consents_guardian_read` is what narrows this to the caller's own
+  // children; the `.in(...)` is only so the query is one round trip for the
+  // children already on screen. The age threshold is read from
+  // `site_settings` rather than hard-coded, because it is admin-editable and
+  // the database validates it (P1.7 §6).
+  // ------------------------------------------------------------------
+  const childIds = children.map((child) => child.person_id);
+  const [consentsResult, minAgeResult] = await Promise.all([
+    childIds.length > 0
+      ? supabase
+          .from("guardian_consents")
+          .select("id,child_person_id,granted_at")
+          .in("child_person_id", childIds)
+          .eq("consent_type", "app_account")
+          .is("revoked_at", null)
+      : Promise.resolve({
+          data: [] as { id: string; child_person_id: string; granted_at: string }[],
+          error: null,
+        }),
+    supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "safeguarding.min_account_age")
+      .maybeSingle(),
+  ]);
+
+  const consentByChild = new Map(
+    (consentsResult.data ?? []).map(
+      (row) => [row.child_person_id, { id: row.id, grantedAt: row.granted_at }] as const,
+    ),
+  );
+  const minAccountAge = Number(minAgeResult.data?.value ?? "13") || 13;
+
   return (
     <>
       <PageHeader
@@ -194,6 +236,11 @@ export default async function FamilyPage() {
         {registrationsError && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {registrationsError}
+          </p>
+        )}
+        {consentsResult.error && (
+          <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {consentsResult.error.message}
           </p>
         )}
 
@@ -261,6 +308,18 @@ export default async function FamilyPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  <div className="space-y-3 border-t pt-4">
+                    <p className="mb-1 flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                      <ShieldCheck className="h-3.5 w-3.5" /> App access
+                    </p>
+                    <AppAccessForm
+                      childPersonId={child.person_id}
+                      childName={name}
+                      consent={consentByChild.get(child.person_id) ?? null}
+                      minAccountAge={minAccountAge}
+                    />
                   </div>
 
                   <div className="space-y-3 border-t pt-4">
