@@ -30,10 +30,21 @@ async function currentPersonId(): Promise<string | null> {
   return data ?? null;
 }
 
-/** Post a message. The SG-1.7 re-check happens in the database, on insert. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Post a message. The SG-1.7 re-check happens in the database, on insert.
+ *
+ * The client may supply the message id (for optimistic rendering: the bubble
+ * it painted is confirmed, not duplicated, when the realtime insert arrives)
+ * and a `reply_to` message id (WhatsApp-style quoting — the column has been in
+ * the schema since P5.2).
+ */
 export async function sendMessage(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const conversationId = String(formData.get("conversation_id") ?? "");
   const body = String(formData.get("body") ?? "").trim();
+  const clientId = String(formData.get("client_id") ?? "");
+  const replyTo = String(formData.get("reply_to") ?? "");
   if (!conversationId) return { error: "No conversation given." };
   if (!body) return { error: "Type a message first." };
 
@@ -42,15 +53,84 @@ export async function sendMessage(_prev: ActionState, formData: FormData): Promi
 
   const supabase = await createClient();
   const { error } = await supabase.from("messages").insert({
+    ...(UUID_RE.test(clientId) ? { id: clientId } : {}),
     conversation_id: conversationId,
     sender_person_id: personId,
     body,
+    ...(UUID_RE.test(replyTo) ? { reply_to_id: replyTo } : {}),
   });
   if (error) return { error: error.message };
 
   revalidatePath(`${MESSAGES_PATH}/${conversationId}`);
   revalidatePath(MESSAGES_PATH);
   return {};
+}
+
+/**
+ * React / un-react with one emoji. Reactions are participant-scoped by RLS
+ * (no announcements, no closed conversations, no removed messages) and
+ * un-reacting is a hard delete of one's own row — the one messaging table
+ * SG-2 does not freeze, because a reaction is expression, not evidence.
+ */
+export async function toggleReaction(
+  conversationId: string,
+  messageId: string,
+  emoji: string,
+): Promise<ActionState> {
+  const trimmed = emoji.trim();
+  if (!messageId || !trimmed || trimmed.length > 16) return { error: "Not a reaction." };
+  const personId = await currentPersonId();
+  if (!personId) return { error: "Your account is not linked to a member record yet." };
+
+  const supabase = await createClient();
+  const { data: existing } = await supabase
+    .from("message_reactions")
+    .select("id")
+    .eq("message_id", messageId)
+    .eq("person_id", personId)
+    .eq("emoji", trimmed)
+    .maybeSingle();
+
+  if (existing) {
+    const { error } = await supabase.from("message_reactions").delete().eq("id", existing.id);
+    if (error) return { error: error.message };
+  } else {
+    const { error } = await supabase
+      .from("message_reactions")
+      .insert({ message_id: messageId, person_id: personId, emoji: trimmed });
+    if (error) return { error: error.message };
+  }
+  revalidatePath(`${MESSAGES_PATH}/${conversationId}`);
+  return {};
+}
+
+/**
+ * Open a photo message: the row goes in first (body is NOT NULL, so a caption
+ * or the 📎 placeholder), the browser then uploads the file to
+ * `attachments/<conversation>/<message>/…` with the USER'S OWN storage client
+ * — the storage policies only accept paths inside conversations the uploader
+ * is an active participant of — and records it in `message_attachments`.
+ * Mirrors the mobile app's flow.
+ */
+export async function openAttachmentMessage(
+  conversationId: string,
+  caption: string,
+): Promise<ActionState & { messageId?: string }> {
+  if (!conversationId) return { error: "No conversation given." };
+  const personId = await currentPersonId();
+  if (!personId) return { error: "Your account is not linked to a member record yet." };
+
+  const supabase = await createClient();
+  const messageId = crypto.randomUUID();
+  const { error } = await supabase.from("messages").insert({
+    id: messageId,
+    conversation_id: conversationId,
+    sender_person_id: personId,
+    body: caption.trim() || "📎 Photo",
+  });
+  if (error) return { error: error.message };
+  revalidatePath(`${MESSAGES_PATH}/${conversationId}`);
+  return { messageId };
 }
 
 /**

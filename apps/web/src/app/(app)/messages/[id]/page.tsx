@@ -47,7 +47,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
       .eq("conversation_id", id),
     supabase
       .from("messages")
-      .select("id,body,created_at,sender_person_id,deleted_at,redacted_at")
+      .select("id,body,created_at,sender_person_id,deleted_at,redacted_at,reply_to_id")
       .eq("conversation_id", id)
       .order("created_at", { ascending: false })
       .limit(MESSAGE_LIMIT),
@@ -59,6 +59,18 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
   if (mine.length === 0) notFound();
 
   const messages: ThreadMessage[] = (messageRows ?? []).slice().reverse();
+  const messageIds = messages.map((m) => m.id);
+  const [{ data: reactionRows }, { data: attachmentRows }] = await Promise.all([
+    messageIds.length > 0
+      ? supabase.from("message_reactions").select("id,message_id,person_id,emoji").in("message_id", messageIds)
+      : Promise.resolve({ data: [] }),
+    messageIds.length > 0
+      ? supabase
+          .from("message_attachments")
+          .select("id,message_id,storage_bucket,storage_path,content_type")
+          .in("message_id", messageIds)
+      : Promise.resolve({ data: [] }),
+  ]);
 
   const names = await resolveNames([
     ...participants.map((p) => p.person_id),
@@ -157,11 +169,21 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
 
         <ThreadClient
           conversationId={conversation.id}
+          conversationType={conversation.type}
           myPersonId={personId}
           myName={session.profile?.full_name || "Someone"}
+          myLastReadId={myLive?.last_read_message_id ?? null}
           initialMessages={messages}
+          initialReactions={reactionRows ?? []}
+          initialAttachments={attachmentRows ?? []}
+          initialReaders={activeOthers.map((p) => ({
+            person_id: p.person_id,
+            last_read_message_id: p.last_read_message_id,
+          }))}
+          hasEarlier={messages.length === MESSAGE_LIMIT}
           names={nameMap}
           canPost={!!myLive && !conversation.closed_at && !announcementReadOnly}
+          canReact={!!myLive && !conversation.closed_at && conversation.type !== "announcement"}
           readOnlyNotice={readOnlyNotice}
         />
 

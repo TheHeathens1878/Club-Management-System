@@ -1,22 +1,57 @@
 "use client";
 
 /**
- * The live half of a thread (PLAN.md P5.4): realtime delivery, read receipts,
- * the typing indicator and the composer.
+ * The live half of a thread (PLAN.md P5.4), WhatsApp-style:
+ * grouped bubbles with tails, day chips, sent/read ticks, reply-with-quote,
+ * emoji reactions, photo attachments, Enter-to-send and optimistic sending.
  *
- * The browser client is the user's own client, so Realtime applies the same
- * participant-scoped RLS as the server read did — a subscription cannot leak a
- * conversation the reader is not in.
+ * The browser client is the user's own client, so Realtime and Storage apply
+ * the same participant-scoped RLS as the server read did — a subscription
+ * cannot leak a conversation the reader is not in, and an upload cannot land
+ * outside a conversation the uploader is active in.
+ *
+ * Safeguarding shape (P5.1/P5.2): deleted and redacted bodies render as
+ * tombstones EVERYWHERE, quotes included, via `visibleBody()`; announcement
+ * read-only and the SG-9 banner are handled by the server page; reporting a
+ * message opens a real safeguarding case and stays one click away.
  */
 
-import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
-import { Flag, Loader2, Send, Trash2 } from "lucide-react";
+import {
+  Check,
+  CheckCheck,
+  Clock3,
+  CornerUpLeft,
+  Flag,
+  ImagePlus,
+  Loader2,
+  Send,
+  SmilePlus,
+  Trash2,
+  X,
+} from "lucide-react";
 
 import { Textarea } from "@/components/ui/field";
 import { createClient } from "@/lib/supabase/client";
 
-import { deleteMessage, markRead, reportMessage, sendMessage, type ActionState } from "../actions";
+import {
+  deleteMessage,
+  markRead,
+  openAttachmentMessage,
+  reportMessage,
+  sendMessage,
+  toggleReaction,
+  type ActionState,
+} from "../actions";
+import { clockLabel, dayKey, dayLabel, sameRun, visibleBody } from "./format";
 
 export type ThreadMessage = {
   id: string;
@@ -25,79 +60,163 @@ export type ThreadMessage = {
   sender_person_id: string;
   deleted_at: string | null;
   redacted_at: string | null;
+  reply_to_id: string | null;
 };
 
-const EMPTY: ActionState = {};
-/** How long a "…is typing" stays on screen after the last keystroke we heard. */
-const TYPING_TTL_MS = 4000;
-/** Backstop refresh, used only when the Realtime channel is not connected. */
-const POLL_MS = 15000;
+export type ThreadReaction = { id: string; message_id: string; person_id: string; emoji: string };
+export type ThreadAttachment = {
+  id: string;
+  message_id: string;
+  storage_bucket: string;
+  storage_path: string;
+  content_type: string | null;
+};
+export type ReaderRow = { person_id: string; last_read_message_id: string | null };
 
-function timeLabel(iso: string): string {
-  const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
-  return at.toLocaleString("en-GB", {
-    timeZone: "Europe/London",
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-}
+const EMPTY: ActionState = {};
+const TYPING_TTL_MS = 4000;
+const POLL_MS = 15000;
+const PAGE_SIZE = 100;
+const QUICK_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+
+type Pending = { id: string; body: string; created_at: string; reply_to_id: string | null };
 
 export function ThreadClient({
   conversationId,
+  conversationType,
   myPersonId,
   myName,
+  myLastReadId,
   initialMessages,
+  initialReactions,
+  initialAttachments,
+  initialReaders,
+  hasEarlier,
   names,
   canPost,
+  canReact,
   readOnlyNotice,
 }: {
   conversationId: string;
+  conversationType: string;
   myPersonId: string;
   myName: string;
+  myLastReadId: string | null;
   initialMessages: ThreadMessage[];
+  initialReactions: ThreadReaction[];
+  initialAttachments: ThreadAttachment[];
+  initialReaders: ReaderRow[];
+  hasEarlier: boolean;
   names: Record<string, string>;
   canPost: boolean;
+  canReact: boolean;
   readOnlyNotice: string | null;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const [live, setLive] = useState<ThreadMessage[]>([]);
-  const [typing, setTyping] = useState<Record<string, number>>({});
+  const [earlier, setEarlier] = useState<ThreadMessage[]>([]);
+  const [moreEarlier, setMoreEarlier] = useState(hasEarlier);
+  const [loadingEarlier, setLoadingEarlier] = useState(false);
+  const [pending, setPending] = useState<Pending[]>([]);
+  const [reactions, setReactions] = useState<ThreadReaction[]>(initialReactions);
+  const [attachments, setAttachments] = useState<ThreadAttachment[]>(initialAttachments);
+  const [readers, setReaders] = useState<Record<string, string | null>>(
+    () => Object.fromEntries(initialReaders.map((r) => [r.person_id, r.last_read_message_id])),
+  );
+  const [typing, setTyping] = useState<Record<string, { name: string; at: number }>>({});
   const [connected, setConnected] = useState(false);
+  const [replyTo, setReplyTo] = useState<ThreadMessage | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [reportFor, setReportFor] = useState<string | null>(null);
   const [sendState, sendAction, sending] = useActionState(sendMessage, EMPTY);
-  const [deleteState, deleteAction] = useActionState(deleteMessage, EMPTY);
   const [reportState, reportAction] = useActionState(reportMessage, EMPTY);
   const formRef = useRef<HTMLFormElement>(null);
+  const textRef = useRef<HTMLTextAreaElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const clientIdRef = useRef<string>(crypto.randomUUID());
   const typingSentAt = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // ---------------------------------------------------------------------------
+  // The message list: server window + pages loaded upward + realtime + pending.
+  // ---------------------------------------------------------------------------
   const messages = useMemo(() => {
     const byId = new Map<string, ThreadMessage>();
+    for (const m of earlier) byId.set(m.id, m);
     for (const m of initialMessages) byId.set(m.id, m);
     for (const m of live) byId.set(m.id, m);
+    for (const p of pending) {
+      if (!byId.has(p.id)) {
+        byId.set(p.id, {
+          id: p.id,
+          body: p.body,
+          created_at: p.created_at,
+          sender_person_id: myPersonId,
+          deleted_at: null,
+          redacted_at: null,
+          reply_to_id: p.reply_to_id,
+        });
+      }
+    }
     return Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
-  }, [initialMessages, live]);
+  }, [earlier, initialMessages, live, pending, myPersonId]);
+
+  const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
+  const confirmedIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of earlier) ids.add(m.id);
+    for (const m of initialMessages) ids.add(m.id);
+    for (const m of live) ids.add(m.id);
+    return ids;
+  }, [earlier, initialMessages, live]);
 
   const lastId = messages.length > 0 ? messages[messages.length - 1]!.id : null;
 
-  // Read receipt: after render, and again whenever the last message changes.
+  // The first message that was unread when the page opened — the divider.
+  const firstUnreadId = useMemo(() => {
+    if (!myLastReadId) return null;
+    const lastRead = messageById.get(myLastReadId);
+    if (!lastRead) return null;
+    const after = messages.find(
+      (m) => m.created_at > lastRead.created_at && m.sender_person_id !== myPersonId,
+    );
+    return after?.id ?? null;
+    // Deliberately frozen to the load-time pointer:
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
-    if (!lastId) return;
+    if (!lastId || pending.some((p) => p.id === lastId)) return;
     void markRead(conversationId, lastId);
-  }, [conversationId, lastId]);
+  }, [conversationId, lastId, pending]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [lastId]);
 
-  // Live messages. RLS applies to the subscription exactly as it does to a read.
+  // ---------------------------------------------------------------------------
+  // Realtime: messages, read pointers, reactions, attachments. RLS scopes all.
+  // ---------------------------------------------------------------------------
+  const refetchExtras = useCallback(async () => {
+    const ids = Array.from(new Set([...confirmedIds]));
+    if (ids.length === 0) return;
+    const [{ data: r }, { data: a }] = await Promise.all([
+      supabase.from("message_reactions").select("id,message_id,person_id,emoji").in("message_id", ids),
+      supabase
+        .from("message_attachments")
+        .select("id,message_id,storage_bucket,storage_path,content_type")
+        .in("message_id", ids),
+    ]);
+    if (r) setReactions(r);
+    if (a) setAttachments(a);
+  }, [supabase, confirmedIds]);
+
   useEffect(() => {
     const channel = supabase
-      .channel(`messages:${conversationId}`)
+      .channel(`thread:${conversationId}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "messages", filter: `conversation_id=eq.${conversationId}` },
@@ -105,6 +224,52 @@ export function ThreadClient({
           const row = payload.new as ThreadMessage | null;
           if (!row?.id) return;
           setLive((prev) => [...prev.filter((m) => m.id !== row.id), row]);
+          setPending((prev) => prev.filter((p) => p.id !== row.id));
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "conversation_participants",
+          filter: `conversation_id=eq.${conversationId}`,
+        },
+        (payload) => {
+          const row = payload.new as { person_id?: string; last_read_message_id?: string | null; left_at?: string | null };
+          if (!row?.person_id || row.person_id === myPersonId) return;
+          if (row.left_at) {
+            setReaders((prev) => {
+              const next = { ...prev };
+              delete next[row.person_id!];
+              return next;
+            });
+            return;
+          }
+          setReaders((prev) => ({ ...prev, [row.person_id!]: row.last_read_message_id ?? null }));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "message_reactions" },
+        (payload) => {
+          const row = payload.new as ThreadReaction | null;
+          if (!row?.id || !confirmedIds.has(row.message_id)) return;
+          setReactions((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "message_reactions" },
+        () => void refetchExtras(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "message_attachments" },
+        (payload) => {
+          const row = payload.new as ThreadAttachment | null;
+          if (!row?.id || !confirmedIds.has(row.message_id)) return;
+          setAttachments((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
         },
       )
       .subscribe((status) => setConnected(status === "SUBSCRIBED"));
@@ -112,17 +277,17 @@ export function ThreadClient({
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [supabase, conversationId]);
+  }, [supabase, conversationId, myPersonId, confirmedIds, refetchExtras]);
 
-  // If Realtime is not available (the publication has to include `messages`),
-  // fall back to a slow refresh rather than showing a thread that never moves.
   useEffect(() => {
     if (connected) return;
     const timer = setInterval(() => router.refresh(), POLL_MS);
     return () => clearInterval(timer);
   }, [connected, router]);
 
-  // Typing: broadcast only, never stored (P5.1 §6).
+  // ---------------------------------------------------------------------------
+  // Typing: broadcast only, never stored (P5.1 §6). Keyed by person id.
+  // ---------------------------------------------------------------------------
   const typingChannel = useMemo(
     () => supabase.channel(`typing:${conversationId}`, { config: { broadcast: { self: false } } }),
     [supabase, conversationId],
@@ -131,14 +296,15 @@ export function ThreadClient({
   useEffect(() => {
     typingChannel
       .on("broadcast", { event: "typing" }, ({ payload }) => {
-        const who = String((payload as { name?: string })?.name ?? "Someone");
-        setTyping((prev) => ({ ...prev, [who]: Date.now() }));
+        const p = payload as { person_id?: string; name?: string };
+        if (!p?.person_id || p.person_id === myPersonId) return;
+        setTyping((prev) => ({ ...prev, [p.person_id!]: { name: p.name ?? "Someone", at: Date.now() } }));
       })
       .subscribe();
     const sweep = setInterval(() => {
       setTyping((prev) => {
         const now = Date.now();
-        const next = Object.fromEntries(Object.entries(prev).filter(([, at]) => now - at < TYPING_TTL_MS));
+        const next = Object.fromEntries(Object.entries(prev).filter(([, v]) => now - v.at < TYPING_TTL_MS));
         return Object.keys(next).length === Object.keys(prev).length ? prev : next;
       });
     }, 1000);
@@ -146,102 +312,464 @@ export function ThreadClient({
       clearInterval(sweep);
       void supabase.removeChannel(typingChannel);
     };
-  }, [supabase, typingChannel]);
+  }, [supabase, typingChannel, myPersonId]);
 
   const announceTyping = useCallback(() => {
     const now = Date.now();
     if (now - typingSentAt.current < 2000) return;
     typingSentAt.current = now;
-    void typingChannel.send({ type: "broadcast", event: "typing", payload: { name: myName } });
-  }, [typingChannel, myName]);
+    void typingChannel.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { person_id: myPersonId, name: myName },
+    });
+  }, [typingChannel, myPersonId, myName]);
 
-  // A successful send clears the box; the message itself arrives over Realtime,
-  // or on the refresh below when Realtime is not connected. The first render is
-  // not a send, so it is skipped.
+  // ---------------------------------------------------------------------------
+  // Sending: optimistic bubble keyed by the same id the server will store.
+  // ---------------------------------------------------------------------------
+  const onComposerSubmit = useCallback(() => {
+    const body = textRef.current?.value.trim() ?? "";
+    if (!body) return;
+    setActionError(null);
+    setPending((prev) => [
+      ...prev,
+      {
+        id: clientIdRef.current,
+        body,
+        created_at: new Date().toISOString(),
+        reply_to_id: replyTo?.id ?? null,
+      },
+    ]);
+  }, [replyTo]);
+
   const sentOnce = useRef(false);
   useEffect(() => {
     if (sending) {
       sentOnce.current = true;
       return;
     }
-    if (!sentOnce.current || sendState.error) return;
+    if (!sentOnce.current) return;
+    if (sendState.error) {
+      // The optimistic bubble was wrong — take it back and say why.
+      setPending((prev) => prev.filter((p) => p.id !== clientIdRef.current));
+      setActionError(sendState.error);
+      return;
+    }
+    clientIdRef.current = crypto.randomUUID();
     formRef.current?.reset();
+    if (textRef.current) textRef.current.style.height = "auto";
+    setReplyTo(null);
     if (!connected) router.refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendState, sending]);
 
-  const typingNames = Object.keys(typing);
+  const onComposerKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      formRef.current?.requestSubmit();
+    }
+  }, []);
+
+  const autoGrow = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget;
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Reactions: optimistic toggle, server settles it.
+  // ---------------------------------------------------------------------------
+  const react = useCallback(
+    (messageId: string, emoji: string) => {
+      setActionError(null);
+      setReactions((prev) => {
+        const mine = prev.find(
+          (r) => r.message_id === messageId && r.person_id === myPersonId && r.emoji === emoji,
+        );
+        if (mine) return prev.filter((r) => r.id !== mine.id);
+        return [
+          ...prev,
+          { id: `optimistic-${crypto.randomUUID()}`, message_id: messageId, person_id: myPersonId, emoji },
+        ];
+      });
+      void toggleReaction(conversationId, messageId, emoji).then((res) => {
+        if (res.error) {
+          setActionError(res.error);
+          void refetchExtras();
+        }
+      });
+    },
+    [conversationId, myPersonId, refetchExtras],
+  );
+
+  // ---------------------------------------------------------------------------
+  // Attachments: message row first, then the user's own storage client.
+  // ---------------------------------------------------------------------------
+  const onPickFile = useCallback(
+    async (file: File) => {
+      setActionError(null);
+      if (!file.type.startsWith("image/")) {
+        setActionError("Only images can be attached here for now.");
+        return;
+      }
+      if (file.size > MAX_UPLOAD_BYTES) {
+        setActionError("That image is over 20 MB — send something smaller.");
+        return;
+      }
+      setUploading(true);
+      try {
+        const caption = textRef.current?.value.trim() ?? "";
+        const opened = await openAttachmentMessage(conversationId, caption);
+        if (opened.error || !opened.messageId) {
+          setActionError(opened.error ?? "Could not start the photo message.");
+          return;
+        }
+        const safeName = file.name.replace(/[^A-Za-z0-9._-]/g, "_") || "photo";
+        const path = `${conversationId}/${opened.messageId}/${safeName}`;
+        const { error: upError } = await supabase.storage.from("attachments").upload(path, file, {
+          contentType: file.type,
+          upsert: false,
+        });
+        if (upError) {
+          setActionError(`Upload failed: ${upError.message}`);
+          return;
+        }
+        const { error: rowError } = await supabase.from("message_attachments").insert({
+          message_id: opened.messageId,
+          storage_bucket: "attachments",
+          storage_path: path,
+          content_type: file.type,
+          byte_size: file.size,
+        });
+        if (rowError) setActionError(rowError.message);
+        formRef.current?.reset();
+        if (textRef.current) textRef.current.style.height = "auto";
+        if (!connected) router.refresh();
+      } finally {
+        setUploading(false);
+        if (fileRef.current) fileRef.current.value = "";
+      }
+    },
+    [conversationId, supabase, connected, router],
+  );
+
+  // Load an earlier page (keyset on created_at).
+  const loadEarlier = useCallback(async () => {
+    const oldest = messages.find((m) => confirmedIds.has(m.id));
+    if (!oldest || loadingEarlier) return;
+    setLoadingEarlier(true);
+    try {
+      const { data } = await supabase
+        .from("messages")
+        .select("id,body,created_at,sender_person_id,deleted_at,redacted_at,reply_to_id")
+        .eq("conversation_id", conversationId)
+        .lt("created_at", oldest.created_at)
+        .order("created_at", { ascending: false })
+        .limit(PAGE_SIZE);
+      const rows = (data ?? []) as ThreadMessage[];
+      setEarlier((prev) => [...prev, ...rows]);
+      setMoreEarlier(rows.length === PAGE_SIZE);
+      if (rows.length > 0) {
+        const ids = rows.map((m) => m.id);
+        const [{ data: r }, { data: a }] = await Promise.all([
+          supabase.from("message_reactions").select("id,message_id,person_id,emoji").in("message_id", ids),
+          supabase
+            .from("message_attachments")
+            .select("id,message_id,storage_bucket,storage_path,content_type")
+            .in("message_id", ids),
+        ]);
+        if (r) setReactions((prev) => [...prev.filter((x) => !r.some((y) => y.id === x.id)), ...r]);
+        if (a) setAttachments((prev) => [...prev.filter((x) => !a.some((y) => y.id === x.id)), ...a]);
+      }
+    } finally {
+      setLoadingEarlier(false);
+    }
+  }, [messages, confirmedIds, loadingEarlier, supabase, conversationId]);
+
+  // ---------------------------------------------------------------------------
+  // Derived per-message display data.
+  // ---------------------------------------------------------------------------
+  const otherIds = Object.keys(readers);
+  const lastReadAt = useMemo(() => {
+    const at: Record<string, string> = {};
+    for (const [pid, mid] of Object.entries(readers)) {
+      if (!mid) continue;
+      const m = messageById.get(mid);
+      if (m) at[pid] = m.created_at;
+    }
+    return at;
+  }, [readers, messageById]);
+
+  const readByAll = useCallback(
+    (m: ThreadMessage) =>
+      otherIds.length > 0 && otherIds.every((pid) => (lastReadAt[pid] ?? "") >= m.created_at),
+    [otherIds, lastReadAt],
+  );
+
+  const reactionsFor = useMemo(() => {
+    const map = new Map<string, Map<string, { count: number; mine: boolean }>>();
+    for (const r of reactions) {
+      const per = map.get(r.message_id) ?? new Map();
+      const entry = per.get(r.emoji) ?? { count: 0, mine: false };
+      entry.count += 1;
+      if (r.person_id === myPersonId) entry.mine = true;
+      per.set(r.emoji, entry);
+      map.set(r.message_id, per);
+    }
+    return map;
+  }, [reactions, myPersonId]);
+
+  const attachmentsFor = useMemo(() => {
+    const map = new Map<string, ThreadAttachment[]>();
+    for (const a of attachments) {
+      map.set(a.message_id, [...(map.get(a.message_id) ?? []), a]);
+    }
+    return map;
+  }, [attachments]);
+
+  const typingNames = Object.values(typing).map((t) => t.name);
+  const showSenderNames = conversationType !== "dm";
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="space-y-3">
+    <div className="flex flex-col gap-3">
+      <div className="space-y-0.5">
+        {moreEarlier && (
+          <div className="flex justify-center pb-2">
+            <button
+              type="button"
+              onClick={() => void loadEarlier()}
+              disabled={loadingEarlier}
+              className="rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground hover:bg-secondary"
+            >
+              {loadingEarlier ? "Loading…" : "Load earlier messages"}
+            </button>
+          </div>
+        )}
+
         {messages.length === 0 && (
           <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
-            No messages yet.
+            No messages yet. Say hello.
           </p>
         )}
 
-        {messages.map((message) => {
+        {messages.map((message, i) => {
+          const prev = i > 0 ? messages[i - 1]! : null;
+          const next = i < messages.length - 1 ? messages[i + 1]! : null;
           const mine = message.sender_person_id === myPersonId;
-          const who = names[message.sender_person_id] ?? "Club member";
-          return (
-            <div key={message.id} className={mine ? "flex justify-end" : "flex justify-start"}>
-              <div
-                className={
-                  "max-w-[85%] rounded-lg border px-3 py-2 text-sm " +
-                  (mine ? "bg-primary/10 border-primary/20" : "bg-card")
-                }
-              >
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xs font-medium">{mine ? "You" : who}</span>
-                  <span className="text-[11px] text-muted-foreground">{timeLabel(message.created_at)}</span>
-                </div>
-                <p className="mt-1 whitespace-pre-wrap break-words">
-                  {message.deleted_at ? (
-                    <span className="italic text-muted-foreground">Message deleted</span>
-                  ) : message.redacted_at ? (
-                    <span className="italic text-muted-foreground">
-                      [redacted by the safeguarding lead]
-                    </span>
-                  ) : (
-                    message.body
-                  )}
-                </p>
+          const isPending = !confirmedIds.has(message.id);
+          const newDay = !prev || dayKey(prev.created_at) !== dayKey(message.created_at);
+          const firstOfRun = newDay || !prev || !sameRun(prev, message);
+          const lastOfRun = !next || !sameRun(message, next) || dayKey(next.created_at) !== dayKey(message.created_at);
+          const body = visibleBody(message);
+          const quoted = message.reply_to_id ? messageById.get(message.reply_to_id) : undefined;
+          const per = reactionsFor.get(message.id);
+          const files = attachmentsFor.get(message.id) ?? [];
 
-                {!message.deleted_at && (
-                  <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px]">
-                    {mine && (
-                      <form action={deleteAction}>
-                        <input type="hidden" name="message_id" value={message.id} />
-                        <input type="hidden" name="conversation_id" value={conversationId} />
-                        <button type="submit" className="inline-flex items-center gap-1 text-muted-foreground hover:text-destructive">
-                          <Trash2 className="h-3 w-3" /> Delete
-                        </button>
-                      </form>
+          return (
+            <div key={message.id}>
+              {newDay && (
+                <div className="flex justify-center py-3">
+                  <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-medium text-secondary-foreground shadow-sm">
+                    {dayLabel(message.created_at)}
+                  </span>
+                </div>
+              )}
+              {message.id === firstUnreadId && (
+                <div className="flex items-center gap-3 py-2" aria-label="Unread messages">
+                  <span className="h-px flex-1 bg-primary/30" />
+                  <span className="text-[11px] font-medium uppercase tracking-wide text-primary">Unread</span>
+                  <span className="h-px flex-1 bg-primary/30" />
+                </div>
+              )}
+
+              <div className={`group flex ${mine ? "justify-end" : "justify-start"} ${firstOfRun ? "pt-2" : "pt-0.5"}`}>
+                <div className={`relative max-w-[75%] min-w-0 ${mine ? "items-end" : "items-start"}`}>
+                  <div
+                    className={
+                      "rounded-2xl border px-3 py-1.5 text-sm shadow-sm " +
+                      (mine ? "bg-primary/15 border-primary/20 " : "bg-card ") +
+                      (lastOfRun ? (mine ? "rounded-br-md" : "rounded-bl-md") : "")
+                    }
+                  >
+                    {showSenderNames && !mine && firstOfRun && (
+                      <p className="text-xs font-semibold text-primary">
+                        {names[message.sender_person_id] ?? "Club member"}
+                      </p>
                     )}
-                    <details>
-                      <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-muted-foreground hover:text-foreground">
-                        <Flag className="h-3 w-3" /> Report
-                      </summary>
-                      <form action={reportAction} className="mt-2 space-y-2">
-                        <input type="hidden" name="message_id" value={message.id} />
-                        <Textarea
-                          name="reason"
-                          required
-                          rows={2}
-                          placeholder="What is the concern? This opens a safeguarding case."
-                          className="text-xs"
-                        />
+
+                    {quoted !== undefined && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          document.getElementById(`msg-${quoted.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })
+                        }
+                        className="mt-0.5 mb-1 block w-full rounded-md border-l-2 border-primary/60 bg-secondary/60 px-2 py-1 text-left"
+                      >
+                        <span className="block text-[11px] font-medium text-primary">
+                          {quoted.sender_person_id === myPersonId
+                            ? "You"
+                            : (names[quoted.sender_person_id] ?? "Club member")}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {visibleBody(quoted).text}
+                        </span>
+                      </button>
+                    )}
+                    {message.reply_to_id && quoted === undefined && (
+                      <span className="mt-0.5 mb-1 block rounded-md border-l-2 border-muted bg-secondary/60 px-2 py-1 text-xs italic text-muted-foreground">
+                        Earlier message
+                      </span>
+                    )}
+
+                    {files.map((file) => (
+                      <AttachmentImage key={file.id} attachment={file} />
+                    ))}
+
+                    <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
+                      {body.state === "ok" ? (
+                        body.text
+                      ) : (
+                        <span className="italic text-muted-foreground">{body.text}</span>
+                      )}
+                    </p>
+
+                    <span className="float-right ml-2 mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                      {clockLabel(message.created_at)}
+                      {mine &&
+                        body.state === "ok" &&
+                        (isPending ? (
+                          <Clock3 className="h-3 w-3" aria-label="Sending" />
+                        ) : readByAll(message) ? (
+                          <CheckCheck className="h-3.5 w-3.5 text-sky-500" aria-label="Read by everyone" />
+                        ) : (
+                          <Check className="h-3.5 w-3.5" aria-label="Sent" />
+                        ))}
+                    </span>
+                  </div>
+
+                  {per && per.size > 0 && (
+                    <div className={`-mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"} relative z-10`}>
+                      {Array.from(per.entries()).map(([emoji, info]) => (
                         <button
-                          type="submit"
-                          className="rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-secondary"
+                          key={emoji}
+                          type="button"
+                          disabled={!canReact}
+                          onClick={() => react(message.id, emoji)}
+                          className={
+                            "rounded-full border bg-card px-1.5 py-0.5 text-xs shadow-sm " +
+                            (info.mine ? "border-primary/50 bg-primary/10" : "")
+                          }
+                          title={info.mine ? "Tap to remove your reaction" : "React too"}
                         >
+                          {emoji}
+                          {info.count > 1 && <span className="ml-0.5 text-[10px]">{info.count}</span>}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Hover actions */}
+                  {body.state === "ok" && !isPending && (
+                    <div
+                      className={
+                        "absolute top-0 hidden items-center gap-0.5 rounded-full border bg-card px-1 py-0.5 shadow-sm group-hover:flex " +
+                        (mine ? "right-full mr-1" : "left-full ml-1")
+                      }
+                    >
+                      {canReact && (
+                        <details className="relative">
+                          <summary className="flex cursor-pointer list-none items-center rounded-full p-1 hover:bg-secondary" title="React">
+                            <SmilePlus className="h-3.5 w-3.5 text-muted-foreground" />
+                          </summary>
+                          <div className={`absolute z-20 mt-1 flex gap-1 rounded-full border bg-card p-1 shadow-md ${mine ? "right-0" : "left-0"}`}>
+                            {QUICK_EMOJI.map((emoji) => (
+                              <button
+                                key={emoji}
+                                type="button"
+                                className="rounded-full p-0.5 text-base hover:bg-secondary"
+                                onClick={(e) => {
+                                  react(message.id, emoji);
+                                  (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                                }}
+                              >
+                                {emoji}
+                              </button>
+                            ))}
+                          </div>
+                        </details>
+                      )}
+                      {canPost && (
+                        <button
+                          type="button"
+                          className="rounded-full p-1 hover:bg-secondary"
+                          title="Reply"
+                          onClick={() => {
+                            setReplyTo(message);
+                            textRef.current?.focus();
+                          }}
+                        >
+                          <CornerUpLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      )}
+                      {mine && (
+                        <button
+                          type="button"
+                          className="rounded-full p-1 hover:bg-secondary"
+                          title="Delete for everyone (the record keeps a tombstone)"
+                          onClick={() => {
+                            const fd = new FormData();
+                            fd.set("message_id", message.id);
+                            fd.set("conversation_id", conversationId);
+                            void deleteMessage(EMPTY, fd).then((res) => {
+                              if (res.error) setActionError(res.error);
+                              else router.refresh();
+                            });
+                          }}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="rounded-full p-1 hover:bg-secondary"
+                        title="Report to the safeguarding lead"
+                        onClick={() => setReportFor(reportFor === message.id ? null : message.id)}
+                      >
+                        <Flag className="h-3.5 w-3.5 text-muted-foreground" />
+                      </button>
+                    </div>
+                  )}
+
+                  {reportFor === message.id && (
+                    <form
+                      action={reportAction}
+                      className="mt-1 space-y-2 rounded-lg border bg-card p-2 shadow-sm"
+                      onSubmit={() => setReportFor(null)}
+                    >
+                      <input type="hidden" name="message_id" value={message.id} />
+                      <Textarea
+                        name="reason"
+                        required
+                        rows={2}
+                        placeholder="What is the concern? This opens a safeguarding case."
+                        className="text-xs"
+                      />
+                      <div className="flex gap-2">
+                        <button type="submit" className="rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-secondary">
                           Send report
                         </button>
-                      </form>
-                    </details>
-                  </div>
-                )}
+                        <button
+                          type="button"
+                          onClick={() => setReportFor(null)}
+                          className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </div>
               </div>
             </div>
           );
@@ -249,9 +777,9 @@ export function ThreadClient({
         <div ref={bottomRef} />
       </div>
 
-      {deleteState.error && (
+      {actionError && (
         <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {deleteState.error}
+          {actionError}
         </p>
       )}
       {reportState.error && (
@@ -273,35 +801,117 @@ export function ThreadClient({
       {readOnlyNotice ? (
         <p className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{readOnlyNotice}</p>
       ) : canPost ? (
-        <form ref={formRef} action={sendAction} className="space-y-2">
+        <form ref={formRef} action={sendAction} onSubmit={onComposerSubmit} className="space-y-2">
           <input type="hidden" name="conversation_id" value={conversationId} />
-          <Textarea
-            name="body"
-            rows={3}
-            required
-            placeholder="Write a message…"
-            onChange={announceTyping}
-          />
-          {sendState.error && (
-            <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {sendState.error}
-            </p>
+          <input type="hidden" name="client_id" value={clientIdRef.current} />
+          <input type="hidden" name="reply_to" value={replyTo?.id ?? ""} />
+
+          {replyTo && (
+            <div className="flex items-start gap-2 rounded-lg border-l-4 border-primary/60 bg-secondary/60 px-3 py-2 text-xs">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-primary">
+                  Replying to{" "}
+                  {replyTo.sender_person_id === myPersonId
+                    ? "yourself"
+                    : (names[replyTo.sender_person_id] ?? "Club member")}
+                </p>
+                <p className="truncate text-muted-foreground">{visibleBody(replyTo).text}</p>
+              </div>
+              <button type="button" onClick={() => setReplyTo(null)} aria-label="Cancel reply">
+                <X className="h-3.5 w-3.5 text-muted-foreground" />
+              </button>
+            </div>
           )}
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-[11px] text-muted-foreground">
-              {connected ? "Live" : "Reconnecting — messages refresh every few seconds"}
-            </span>
+
+          <div className="flex items-end gap-2">
+            <label
+              className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border text-muted-foreground hover:bg-secondary"
+              title="Attach a photo"
+            >
+              {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
+              <input
+                ref={fileRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                disabled={uploading}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) void onPickFile(file);
+                }}
+              />
+            </label>
+            <Textarea
+              ref={textRef}
+              name="body"
+              rows={1}
+              required
+              placeholder="Write a message…"
+              className="max-h-40 min-h-[2.25rem] flex-1 resize-none"
+              onChange={announceTyping}
+              onInput={autoGrow}
+              onKeyDown={onComposerKeyDown}
+            />
             <button
               type="submit"
-              disabled={sending}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              disabled={sending || uploading}
+              aria-label="Send"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
             >
-              {sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Send className="h-3.5 w-3.5" />}
-              Send
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            Enter sends · Shift+Enter for a new line ·{" "}
+            {connected ? "Live" : "Reconnecting — messages refresh every few seconds"}
+          </p>
         </form>
       ) : null}
     </div>
+  );
+}
+
+/** An image attachment, resolved to a short-lived signed URL on the reader's own client. */
+function AttachmentImage({ attachment }: { attachment: ThreadAttachment }) {
+  const supabase = useMemo(() => createClient(), []);
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.storage
+      .from(attachment.storage_bucket)
+      .createSignedUrl(attachment.storage_path, 300)
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error || !data?.signedUrl) setFailed(true);
+        else setUrl(data.signedUrl);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [supabase, attachment.storage_bucket, attachment.storage_path]);
+
+  if (failed) {
+    return (
+      <p className="mb-1 rounded-md border bg-secondary/50 px-2 py-1 text-xs italic text-muted-foreground">
+        Attachment unavailable
+      </p>
+    );
+  }
+  if (!url) {
+    return <div className="mb-1 h-32 w-48 animate-pulse rounded-lg bg-secondary" aria-label="Loading image" />;
+  }
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="block">
+      {/* Signed, short-lived URL from a private bucket — next/image cannot optimise it. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt="Attachment"
+        className="mb-1 max-h-72 max-w-full rounded-lg border object-cover"
+        loading="lazy"
+      />
+    </a>
   );
 }
