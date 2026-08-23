@@ -1,13 +1,21 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { isSafeguardingLead } from "@/lib/person";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import { ChevronLeft } from "lucide-react";
+import {
+  CertificationsPanel,
+  type CertificationRow,
+  type ExemptionRow,
+  type StaffMember,
+} from "./certifications-panel";
 import { FullTimePanel, type ClubSeasonView, type FullTimeLinkView } from "./fulltime-panel";
 import { ManualImportPanel, type ImportRunView } from "./import-panel";
 
@@ -84,6 +92,67 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
 
   const fixtures = fixturesResult.data ?? [];
   const currentSeason = clubSeasons.find((s) => s.is_current) ?? null;
+  // --------------------------------------------------------------------
+  // SG-6: the team's child-facing staff and their paperwork.
+  //
+  // The roster comes from the admin client, as the rest of this page does.
+  // The safeguarding rows do NOT: `certifications`, `certification_exemptions`
+  // and `person_compliance_status()` are read through the signed-in user's own
+  // client so that RLS and the lead-only policies are what decide, not the
+  // service key.
+  // --------------------------------------------------------------------
+  const userClient = await createClient();
+  const lead = await isSafeguardingLead();
+
+  const { data: staffRows } = await admin
+    .from("team_memberships")
+    .select("person_id,role,people(first_name,last_name,preferred_name)")
+    .eq("team_id", id)
+    .is("left_at", null)
+    .neq("role", "player");
+
+  const staffIds = (staffRows ?? []).map((m) => m.person_id);
+  const [{ data: certRows }, { data: exemptionRows }, complianceRows] = await Promise.all([
+    userClient
+      .from("certifications")
+      .select("id,person_id,type,reference,issued_on,expires_on,verified_at,revoked_at")
+      .in("person_id", staffIds)
+      .order("expires_on", { nullsFirst: false }),
+    userClient
+      .from("certification_exemptions")
+      .select("id,person_id,reason,expires_on,revoked_at")
+      .eq("team_id", id),
+    Promise.all(
+      staffIds.map(async (personId) => {
+        const [dbs, safeguarding] = await Promise.all([
+          userClient.rpc("person_compliance_status", { p_person_id: personId, p_type: "fa_dbs" }),
+          userClient.rpc("person_compliance_status", {
+            p_person_id: personId,
+            p_type: "safeguarding_children",
+          }),
+        ]);
+        return { personId, dbs: dbs.data ?? "missing", safeguarding: safeguarding.data ?? "missing" };
+      }),
+    ),
+  ]);
+
+  const complianceByPerson = new Map(complianceRows.map((row) => [row.personId, row]));
+  const staff: StaffMember[] = (staffRows ?? []).map((member) => {
+    const person = member.people;
+    const compliance = complianceByPerson.get(member.person_id);
+    return {
+      personId: member.person_id,
+      name: person
+        ? `${person.preferred_name || person.first_name} ${person.last_name}`.trim()
+        : "Club member",
+      role: member.role,
+      dbs: compliance?.dbs ?? "missing",
+      safeguarding: compliance?.safeguarding ?? "missing",
+    };
+  });
+  const certifications: CertificationRow[] = certRows ?? [];
+  const exemptions: ExemptionRow[] = exemptionRows ?? [];
+
   const runs: ImportRunView[] = (runsResult.data ?? []).map((run) => ({
     id: run.id,
     trigger: run.trigger,
@@ -148,6 +217,27 @@ export default async function TeamPage({ params }: { params: Promise<{ id: strin
               ftTeamName={link?.ft_team_name ?? team.name}
               currentSeason={currentSeason ? { id: currentSeason.id, name: currentSeason.name } : null}
               runs={runs}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Certifications</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              DBS checks, safeguarding and coaching qualifications for everyone in a child-facing
+              role on this team (SG-6). A certification counts once it has been verified; expiry
+              nudges go out at 90, 30 and 7 days. Only the club&apos;s safeguarding lead can grant a
+              short exemption while paperwork clears.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <CertificationsPanel
+              teamId={team.id}
+              staff={staff}
+              certifications={certifications}
+              exemptions={exemptions}
+              isLead={lead}
             />
           </CardContent>
         </Card>

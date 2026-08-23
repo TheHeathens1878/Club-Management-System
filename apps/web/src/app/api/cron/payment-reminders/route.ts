@@ -93,7 +93,16 @@ export async function GET(request: Request) {
         deposit_due_date: b.deposit_due_date ? formatBookingDate(b.deposit_due_date) : "—",
         portal_url: portalUrl,
       }, brandColor);
-      await sendEmail({ to: b.booker_email, ...tpl });
+      await sendEmail({
+        to: b.booker_email,
+        ...tpl,
+        // P4.4: a payment nudge is a reminder, so a hirer who has switched
+        // reminders off does not get one. The decision is logged either way.
+        category: "reminder",
+        template: "deposit_reminder",
+        entity: "bookings",
+        entityId: b.id,
+      });
       await admin.from("bookings").update({ deposit_reminder_sent_at: new Date().toISOString() }).eq("id", b.id);
       depositSent++;
     } catch (e) {
@@ -129,7 +138,14 @@ export async function GET(request: Request) {
         balance_due_date: b.balance_due_date ? formatBookingDate(b.balance_due_date) : "—",
         portal_url: portalUrl,
       }, brandColor);
-      await sendEmail({ to: b.booker_email, ...tpl });
+      await sendEmail({
+        to: b.booker_email,
+        ...tpl,
+        category: "reminder",
+        template: "balance_reminder",
+        entity: "bookings",
+        entityId: b.id,
+      });
       await admin.from("bookings").update({ balance_reminder_sent_at: new Date().toISOString() }).eq("id", b.id);
       balanceSent++;
     } catch (e) {
@@ -180,7 +196,16 @@ export async function GET(request: Request) {
             end_time: window.endTime,
             cancellation_reason: reason,
           }, brandColor);
-          await sendEmail({ to: b.booker_email, cc: ccAuto, ...tpl });
+          await sendEmail({
+            to: b.booker_email,
+            cc: ccAuto,
+            ...tpl,
+            // Not a nudge: the booking has been cancelled and the hirer has to
+            // be told, so this one stays transactional.
+            template: "room_booking_cancelled",
+            entity: "bookings",
+            entityId: b.id,
+          });
         } catch (e) {
           console.error("[cron] auto-cancel email failed for", b.id, e);
         }
