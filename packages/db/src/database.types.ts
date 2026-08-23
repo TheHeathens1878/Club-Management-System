@@ -908,6 +908,121 @@ export type Database = {
         }
         Relationships: []
       }
+      conversation_participants: {
+        Row: {
+          added_by: string | null
+          basis: Database["public"]["Enums"]["participant_basis"]
+          conversation_id: string
+          id: string
+          joined_at: string
+          last_read_message_id: string | null
+          left_at: string | null
+          muted_until: string | null
+          person_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          basis?: Database["public"]["Enums"]["participant_basis"]
+          conversation_id: string
+          id?: string
+          joined_at?: string
+          last_read_message_id?: string | null
+          left_at?: string | null
+          muted_until?: string | null
+          person_id: string
+        }
+        Update: {
+          added_by?: string | null
+          basis?: Database["public"]["Enums"]["participant_basis"]
+          conversation_id?: string
+          id?: string
+          joined_at?: string
+          last_read_message_id?: string | null
+          left_at?: string | null
+          muted_until?: string | null
+          person_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_participants_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_participants_last_read_fkey"
+            columns: ["last_read_message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_participants_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          created_at: string
+          created_by_person_id: string | null
+          id: string
+          legal_hold: boolean
+          supervised_by_lead: boolean
+          team_id: string | null
+          title: string | null
+          type: Database["public"]["Enums"]["conversation_type"]
+          updated_at: string
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by_person_id?: string | null
+          id?: string
+          legal_hold?: boolean
+          supervised_by_lead?: boolean
+          team_id?: string | null
+          title?: string | null
+          type: Database["public"]["Enums"]["conversation_type"]
+          updated_at?: string
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          created_at?: string
+          created_by_person_id?: string | null
+          id?: string
+          legal_hold?: boolean
+          supervised_by_lead?: boolean
+          team_id?: string | null
+          title?: string | null
+          type?: Database["public"]["Enums"]["conversation_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_created_by_person_id_fkey"
+            columns: ["created_by_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       email_templates: {
         Row: {
           body_html: string | null
@@ -1528,6 +1643,105 @@ export type Database = {
           },
         ]
       }
+      message_attachments: {
+        Row: {
+          byte_size: number | null
+          content_type: string | null
+          created_at: string
+          id: string
+          message_id: string
+          storage_bucket: string
+          storage_path: string
+        }
+        Insert: {
+          byte_size?: number | null
+          content_type?: string | null
+          created_at?: string
+          id?: string
+          message_id: string
+          storage_bucket?: string
+          storage_path: string
+        }
+        Update: {
+          byte_size?: number | null
+          content_type?: string | null
+          created_at?: string
+          id?: string
+          message_id?: string
+          storage_bucket?: string
+          storage_path?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_attachments_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          redacted_at: string | null
+          redaction_reason: string | null
+          reply_to_id: string | null
+          sender_person_id: string
+        }
+        Insert: {
+          body: string
+          conversation_id: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          redacted_at?: string | null
+          redaction_reason?: string | null
+          reply_to_id?: string | null
+          sender_person_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          redacted_at?: string | null
+          redaction_reason?: string | null
+          reply_to_id?: string | null
+          sender_person_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_id_fkey"
+            columns: ["reply_to_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_person_id_fkey"
+            columns: ["sender_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       non_user_staff: {
         Row: {
           active: boolean
@@ -1876,6 +2090,41 @@ export type Database = {
             foreignKeyName: "profiles_person_id_fkey"
             columns: ["person_id"]
             isOneToOne: true
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          device_name: string | null
+          person_id: string
+          platform: string
+          token: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          device_name?: string | null
+          person_id: string
+          platform?: string
+          token: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          device_name?: string | null
+          person_id?: string
+          platform?: string
+          token?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
             referencedRelation: "people"
             referencedColumns: ["id"]
           },
@@ -3232,6 +3481,26 @@ export type Database = {
         Args: { p_item_id: string; p_person_ids: string[] }
         Returns: undefined
       }
+      conversation_exemptable: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
+      conversation_has_minor: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
+      conversation_is_compliant: {
+        Args: {
+          p_conversation_id: string
+          p_dob?: string
+          p_dob_person?: string
+          p_ignore_child?: string
+          p_ignore_guardian?: string
+          p_min_unsup_age?: number
+          p_revoked_consent_child?: string
+        }
+        Returns: boolean
+      }
       current_person_id: { Args: never; Returns: string }
       display_name: { Args: { p_person_id: string }; Returns: string }
       due_certification_nudges: {
@@ -3262,6 +3531,18 @@ export type Database = {
           message_id: string
           status: Database["public"]["Enums"]["outbound_status"]
         }[]
+      }
+      ensure_team_conversation: {
+        Args: {
+          p_season_id: string
+          p_team_id: string
+          p_type?: Database["public"]["Enums"]["conversation_type"]
+        }
+        Returns: string
+      }
+      export_conversation_as_lead: {
+        Args: { p_conversation_id: string; p_reason: string }
+        Returns: Json
       }
       fixture_booking_window: {
         Args: { p_fixture_id: string }
@@ -3342,6 +3623,10 @@ export type Database = {
       }
       is_account_eligible: { Args: { p_person_id: string }; Returns: boolean }
       is_active_guardian_of: { Args: { p_child: string }; Returns: boolean }
+      is_active_participant: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
       is_at_least_age: {
         Args: { d: string; p_years: number }
         Returns: boolean
@@ -3359,6 +3644,10 @@ export type Database = {
       is_committee: { Args: never; Returns: boolean }
       is_minor: { Args: { person_id: string }; Returns: boolean }
       is_minor_dob: { Args: { d: string }; Returns: boolean }
+      is_participant_ever: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
+      }
       is_safeguarding_lead: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
       is_supervision_exempt: { Args: { p_person_id: string }; Returns: boolean }
@@ -3425,6 +3714,14 @@ export type Database = {
       media_quarantined: {
         Args: { p_item_id: string; p_new_path: string }
         Returns: undefined
+      }
+      message_retention_candidates: {
+        Args: never
+        Returns: {
+          conversation_id: string
+          created_at: string
+          message_id: string
+        }[]
       }
       migrate_room_bookings: {
         Args: never
@@ -3547,6 +3844,19 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      read_conversation_as_lead: {
+        Args: { p_conversation_id: string; p_reason: string }
+        Returns: {
+          body: string
+          created_at: string
+          deleted_at: string
+          id: string
+          redacted_at: string
+          reply_to_id: string
+          sender_name: string
+          sender_person_id: string
+        }[]
+      }
       reconcile_room_bookings: {
         Args: never
         Returns: {
@@ -3566,6 +3876,10 @@ export type Database = {
         }
         Returns: number
       }
+      redact_message_as_lead: {
+        Args: { p_message_id: string; p_reason: string }
+        Returns: undefined
+      }
       report_concern: {
         Args: {
           p_channel?: string
@@ -3576,13 +3890,44 @@ export type Database = {
         }
         Returns: string
       }
+      report_message: {
+        Args: { p_message_id: string; p_reason: string }
+        Returns: string
+      }
+      retention_run: {
+        Args: { p_dry_run?: boolean }
+        Returns: {
+          mode: string
+          redacted: number
+        }[]
+      }
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
+      sg1_nightly_check: {
+        Args: never
+        Returns: {
+          conversation_id: string
+          type: Database["public"]["Enums"]["conversation_type"]
+        }[]
+      }
       split_person_name: {
         Args: { p_full_name: string }
         Returns: {
           first_name: string
           last_name: string
         }[]
+      }
+      team_conversation_add: {
+        Args: {
+          p_person_id: string
+          p_role: Database["public"]["Enums"]["team_role"]
+          p_season_id: string
+          p_team_id: string
+        }
+        Returns: undefined
+      }
+      team_conversation_remove: {
+        Args: { p_person_id: string; p_season_id: string; p_team_id: string }
+        Returns: undefined
       }
       team_has_minors: { Args: { p_team_id: string }; Returns: boolean }
       team_noncompliant_child_facing: {
@@ -3648,6 +3993,7 @@ export type Database = {
         | "photo_club_website"
         | "photo_social_media"
         | "photo_press"
+      conversation_type: "dm" | "group" | "team" | "announcement"
       fixture_source: "fulltime" | "manual"
       fixture_status:
         | "scheduled"
@@ -3669,6 +4015,12 @@ export type Database = {
         | "suppressed"
         | "skipped_preference"
         | "dry_run"
+      participant_basis:
+        | "member"
+        | "guardian"
+        | "staff"
+        | "creator"
+        | "oversight"
       payment_kind: "hire" | "subscription" | "other"
       payment_status: "unpaid" | "deposit_paid" | "paid"
       registration_status: "pending" | "approved" | "rejected" | "withdrawn"
@@ -3853,6 +4205,7 @@ export const Constants = {
         "photo_social_media",
         "photo_press",
       ],
+      conversation_type: ["dm", "group", "team", "announcement"],
       fixture_source: ["fulltime", "manual"],
       fixture_status: [
         "scheduled",
@@ -3876,6 +4229,13 @@ export const Constants = {
         "suppressed",
         "skipped_preference",
         "dry_run",
+      ],
+      participant_basis: [
+        "member",
+        "guardian",
+        "staff",
+        "creator",
+        "oversight",
       ],
       payment_kind: ["hire", "subscription", "other"],
       payment_status: ["unpaid", "deposit_paid", "paid"],
