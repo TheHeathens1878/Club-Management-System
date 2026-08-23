@@ -92,6 +92,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "availability_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "unallocated_home_fixtures"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "availability_person_id_fkey"
             columns: ["person_id"]
             isOneToOne: false
@@ -322,6 +329,7 @@ export type Database = {
           ends_at: string
           estimated_guests: number | null
           extras_total_pence: number
+          fixture_id: string | null
           id: string
           internal_notes: string | null
           is_member: boolean
@@ -385,6 +393,7 @@ export type Database = {
           ends_at: string
           estimated_guests?: number | null
           extras_total_pence?: number
+          fixture_id?: string | null
           id?: string
           internal_notes?: string | null
           is_member?: boolean
@@ -448,6 +457,7 @@ export type Database = {
           ends_at?: string
           estimated_guests?: number | null
           extras_total_pence?: number
+          fixture_id?: string | null
           id?: string
           internal_notes?: string | null
           is_member?: boolean
@@ -496,6 +506,20 @@ export type Database = {
             columns: ["booker_profile_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: true
+            referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: true
+            referencedRelation: "unallocated_home_fixtures"
             referencedColumns: ["id"]
           },
           {
@@ -856,12 +880,71 @@ export type Database = {
         }
         Relationships: []
       }
+      fixture_import_runs: {
+        Row: {
+          created_at: string
+          error: string | null
+          fetched_at: string | null
+          id: number
+          inserted: number
+          run_by: string | null
+          source_url: string | null
+          status: string
+          team_id: string | null
+          trigger: string
+          unchanged: number
+          updated: number
+          warnings: Json
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          fetched_at?: string | null
+          id?: never
+          inserted?: number
+          run_by?: string | null
+          source_url?: string | null
+          status: string
+          team_id?: string | null
+          trigger: string
+          unchanged?: number
+          updated?: number
+          warnings?: Json
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          fetched_at?: string | null
+          id?: never
+          inserted?: number
+          run_by?: string | null
+          source_url?: string | null
+          status?: string
+          team_id?: string | null
+          trigger?: string
+          unchanged?: number
+          updated?: number
+          warnings?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixture_import_runs_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fixtures: {
         Row: {
+          allocation_conflict: boolean
           away_score: number | null
+          booking_id: string | null
           competition: string | null
           created_at: string
           created_by: string | null
+          duration_minutes: number
           external_ref: string | null
           home_score: number | null
           id: string
@@ -880,10 +963,13 @@ export type Database = {
           venue_text: string | null
         }
         Insert: {
+          allocation_conflict?: boolean
           away_score?: number | null
+          booking_id?: string | null
           competition?: string | null
           created_at?: string
           created_by?: string | null
+          duration_minutes?: number
           external_ref?: string | null
           home_score?: number | null
           id?: string
@@ -902,10 +988,13 @@ export type Database = {
           venue_text?: string | null
         }
         Update: {
+          allocation_conflict?: boolean
           away_score?: number | null
+          booking_id?: string | null
           competition?: string | null
           created_at?: string
           created_by?: string | null
+          duration_minutes?: number
           external_ref?: string | null
           home_score?: number | null
           id?: string
@@ -924,6 +1013,13 @@ export type Database = {
           venue_text?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fixtures_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "fixtures_season_id_fkey"
             columns: ["season_id"]
@@ -1829,6 +1925,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "selections_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "unallocated_home_fixtures"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "selections_person_id_fkey"
             columns: ["person_id"]
             isOneToOne: false
@@ -2226,9 +2329,47 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      unallocated_home_fixtures: {
+        Row: {
+          allocation_conflict: boolean | null
+          competition: string | null
+          duration_minutes: number | null
+          id: string | null
+          kickoff_at: string | null
+          opponent: string | null
+          season_id: string | null
+          status: Database["public"]["Enums"]["fixture_status"] | null
+          team_id: string | null
+          team_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixtures_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixtures_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
+      allocate_fixture: {
+        Args: {
+          p_fixture_id: string
+          p_post_buffer_minutes?: number
+          p_pre_buffer_minutes?: number
+          p_resource_id: string
+        }
+        Returns: string
+      }
       backfill_person_roles: {
         Args: never
         Returns: {
@@ -2280,6 +2421,7 @@ export type Database = {
           ends_at: string
           estimated_guests: number | null
           extras_total_pence: number
+          fixture_id: string | null
           id: string
           internal_notes: string | null
           is_member: boolean
@@ -2335,7 +2477,37 @@ export type Database = {
       }
       can_act_for: { Args: { p_person_id: string }; Returns: boolean }
       current_person_id: { Args: never; Returns: string }
+      fixture_booking_window: {
+        Args: { p_fixture_id: string }
+        Returns: Record<string, unknown>
+      }
+      fixture_conflict_message: {
+        Args: {
+          p_ends_at: string
+          p_exclude: string
+          p_post: number
+          p_pre: number
+          p_resource_id: string
+          p_starts_at: string
+        }
+        Returns: string
+      }
       fixture_team_id: { Args: { p_fixture_id: string }; Returns: string }
+      fulltime_import_targets: {
+        Args: never
+        Returns: {
+          division_id: string
+          fixture_group_key: string
+          ft_season_id: string
+          ft_team_id: string
+          ft_team_name: string
+          league_id: string
+          season_id: string
+          source_url: string
+          team_id: string
+          team_name: string
+        }[]
+      }
       has_active_consent: {
         Args: {
           p_child_person_id: string
@@ -2361,6 +2533,26 @@ export type Database = {
       has_role: {
         Args: { p_role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
+      }
+      import_fixtures: {
+        Args: {
+          p_fixtures: Json
+          p_season_id: string
+          p_source_url?: string
+          p_team_id: string
+          p_trigger?: string
+          p_warnings?: Json
+        }
+        Returns: {
+          inserted: number
+          run_id: number
+          unchanged: number
+          updated: number
+        }[]
+      }
+      invoke_edge_function: {
+        Args: { p_body?: Json; p_name: string }
+        Returns: number
       }
       is_account_eligible: { Args: { p_person_id: string }; Returns: boolean }
       is_active_guardian_of: { Args: { p_child: string }; Returns: boolean }
@@ -2412,6 +2604,23 @@ export type Database = {
         }
         Returns: boolean
       }
+      pitch_grid: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          blocked_from: string
+          blocked_until: string
+          booking_id: string
+          ends_at: string
+          fixture_id: string
+          kind: Database["public"]["Enums"]["booking_kind"]
+          label: string
+          resource_id: string
+          resource_name: string
+          starts_at: string
+          status: Database["public"]["Enums"]["booking_status"]
+          team_id: string
+        }[]
+      }
       reconcile_room_bookings: {
         Args: never
         Returns: {
@@ -2420,6 +2629,16 @@ export type Database = {
           ok: boolean
           unified: number
         }[]
+      }
+      record_fixture_import_failure: {
+        Args: {
+          p_error: string
+          p_source_url: string
+          p_status: string
+          p_team_id: string
+          p_trigger: string
+        }
+        Returns: number
       }
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       split_person_name: {
@@ -2438,6 +2657,7 @@ export type Database = {
           role: Database["public"]["Enums"]["team_role"]
         }[]
       }
+      unallocate_fixture: { Args: { p_fixture_id: string }; Returns: undefined }
       write_audit: {
         Args: {
           p_action: string
