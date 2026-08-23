@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 
+import { HeaderTools } from "@/components/header-tools";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isBooker } from "@/lib/auth";
 import { navFor } from "@/lib/nav";
@@ -51,6 +52,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               {ROLE_VIEW_LABELS[view]} view · change
             </Link>
           </div>
+
+          {/* Notifications bell (gap 5) + pitch calendar link (gap 6). */}
+          <HeaderTools />
 
           {groups.map((group) => (
             <div key={group.group} className="flex flex-col gap-0.5">

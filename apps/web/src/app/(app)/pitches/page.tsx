@@ -21,7 +21,7 @@ import {
   weekendWindow,
   type GridEntry,
 } from "@/lib/pitch-grid";
-import { AlertCircle, ChevronLeft, ChevronRight, ShieldAlert } from "lucide-react";
+import { AlertCircle, CalendarRange, ChevronLeft, ChevronRight, ShieldAlert } from "lucide-react";
 import { AllocateControl, type PitchOption } from "./allocate-control";
 import { WeekendPitchGrid, type GridDay } from "./weekend-grid";
 
@@ -167,6 +167,14 @@ export default async function PitchesPage({
       <PageHeader
         title="Pitches"
         subtitle="Allocate home fixtures to a pitch, and see the weekend as the booking system sees it"
+        action={
+          <Link
+            href="/pitches/calendar"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            <CalendarRange className="h-4 w-4" /> Calendar
+          </Link>
+        }
       />
       <div className="space-y-6 p-6">
         {loadError && (
