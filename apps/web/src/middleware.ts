@@ -36,6 +36,10 @@ export async function middleware(request: NextRequest) {
     path === "/manifest.json" ||
     path === "/sw.js" ||
     path.startsWith("/login") ||
+    // Gap 4: public self-registration, allow-listed the same way as the
+    // waiting list form. Everything it does runs on the anon client, and
+    // SG-10 decides in the database whether the account may exist at all.
+    path.startsWith("/register") ||
     path.startsWith("/privacy") ||
     path.startsWith("/auth") ||
     path.startsWith("/_next") ||
@@ -83,6 +87,38 @@ export async function middleware(request: NextRequest) {
       url.search = "";
       return NextResponse.redirect(url);
     }
+  }
+
+  // Gap 4 first-login nudge: someone who has never said which hat they wear is
+  // sent to /welcome once. It runs AFTER the DOB gate above on purpose — an
+  // imported account finishes that first — and only on a GET, so a server
+  // action POST is never turned into a redirect. `club.role_view_prompted` is
+  // set here so it happens exactly once whether or not they pick a tile;
+  // `club.role_view` is written only when they actually choose one.
+  if (
+    user &&
+    !isPublic &&
+    request.method === "GET" &&
+    !path.startsWith("/welcome") &&
+    !path.startsWith("/complete-profile") &&
+    !path.startsWith("/portal") &&
+    !path.startsWith("/api") &&
+    !path.startsWith("/auth") &&
+    !request.cookies.has("club.role_view") &&
+    !request.cookies.has("club.role_view_prompted")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/welcome";
+    url.search = "";
+    const redirectResponse = NextResponse.redirect(url);
+    // Carry over anything the session refresh above wrote.
+    for (const cookie of response.cookies.getAll()) redirectResponse.cookies.set(cookie);
+    redirectResponse.cookies.set("club.role_view_prompted", "1", {
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+      sameSite: "lax",
+    });
+    return redirectResponse;
   }
 
   return response;
