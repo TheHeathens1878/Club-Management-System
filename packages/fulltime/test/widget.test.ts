@@ -72,7 +72,7 @@ describe("parseWidgetHtml on a recorded team widget", () => {
 describe("widget additions", () => {
   it("undoes JavaScript string escapes in the envelope", () => {
     const body =
-      "document.getElementById('lrep1').innerHTML = '<a href=\"https:\/\/x\">St Mary\'s\tFC<\/a>\n';";
+      "document.getElementById('lrep1').innerHTML = '<a href=\"https:\\/\\/x\">St Mary\\'s\\tFC<\\/a>\\n';";
     expect(widgetHtmlFrom(body)).toBe('<a href="https://x">St Mary\'s\tFC</a>\n');
   });
 
