@@ -1,8 +1,22 @@
 import { redirect } from "next/navigation";
 import { getSessionProfile, isStaff, isBarManager, isCommittee, isBooker } from "@/lib/auth";
+import { isSafeguardingLead } from "@/lib/person";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
-import { CalendarDays, Clock, LogOut, Settings, Beer, Users, LandPlot } from "lucide-react";
+import {
+  CalendarDays,
+  Clock,
+  LogOut,
+  Settings,
+  Beer,
+  Users,
+  LandPlot,
+  MessageSquare,
+  Receipt,
+  ShieldAlert,
+  Images,
+  Wallet,
+} from "lucide-react";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSessionProfile();
@@ -18,6 +32,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const showSettings = isCommittee(role);
   // Teams, seasons and the Full-Time links are committee-and-above (P2.3).
   const showTeams = isCommittee(role);
+  // The safeguarding desk is the lead's, plus club administrators (SG-3, SG-9).
+  // `person_roles` is the authority on the lead, not `profiles.role`.
+  const lead = await isSafeguardingLead();
+  const showSafeguarding = lead || isCommittee(role);
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
@@ -74,14 +92,87 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </Link>
           )}
 
-          {showSettings && (
+          {/* Messages are for everyone with a member record (P5.4). */}
+          <Link
+            href="/messages"
+            className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+          >
+            <MessageSquare className="h-4 w-4" /> Messages
+          </Link>
+
+          <div className="flex flex-col gap-0.5">
+            {showSettings && (
+              <Link
+                href="/subs"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+              >
+                <Receipt className="h-4 w-4" /> Subs
+              </Link>
+            )}
             <Link
-              href="/settings"
-              className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+              href="/my-subs"
+              className={
+                buttonVariants({ variant: "ghost", size: "sm" }) +
+                (showSettings
+                  ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
+                  : " justify-start gap-2")
+              }
             >
-              <Settings className="h-4 w-4" /> Settings
+              <Wallet className={showSettings ? "h-3 w-3" : "h-4 w-4"} /> My subs
             </Link>
-          )}
+          </div>
+
+          <div className="flex flex-col gap-0.5">
+            {showSafeguarding && (
+              <Link
+                href="/safeguarding"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+              >
+                <ShieldAlert className="h-4 w-4" /> Safeguarding
+              </Link>
+            )}
+            {/* Reporting a concern is open to everyone (SG-3). */}
+            <Link
+              href="/safeguarding/report"
+              className={
+                buttonVariants({ variant: "ghost", size: "sm" }) +
+                (showSafeguarding
+                  ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
+                  : " justify-start gap-2")
+              }
+            >
+              <ShieldAlert className={showSafeguarding ? "h-3 w-3" : "h-4 w-4"} /> Report a concern
+            </Link>
+          </div>
+
+          <Link
+            href="/media"
+            className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+          >
+            <Images className="h-4 w-4" /> Media
+          </Link>
+
+          <div className="flex flex-col gap-0.5">
+            {showSettings && (
+              <Link
+                href="/settings"
+                className={buttonVariants({ variant: "ghost", size: "sm" }) + " justify-start gap-2"}
+              >
+                <Settings className="h-4 w-4" /> Settings
+              </Link>
+            )}
+            <Link
+              href="/settings/comms"
+              className={
+                buttonVariants({ variant: "ghost", size: "sm" }) +
+                (showSettings
+                  ? " justify-start gap-2 pl-7 text-muted-foreground text-xs h-7"
+                  : " justify-start gap-2")
+              }
+            >
+              <MessageSquare className={showSettings ? "h-3 w-3" : "h-4 w-4"} /> Comms
+            </Link>
+          </div>
 
           <div className="lg:mt-auto">
             <form action="/auth/signout" method="post">

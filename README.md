@@ -50,3 +50,18 @@ npx supabase db diff --linked                        # expect: no schema changes
 ```
 
 If the diff is not empty, amend the baseline (never prod) until it is, then commit.
+
+## Web vs mobile (P6.5)
+
+| Journey | Web (`apps/web`) | Mobile (`apps/mobile`) |
+|---|---|---|
+| Room / pitch hire bookings, public hire form | **web-first** (the only place) | not in v1 |
+| Pitch allocation, Full-Time links, teams/seasons admin | web | opens the web pages (admin section) |
+| My teams, fixtures + availability | web (team page) | native |
+| Subs: view + pay | web (`/my-subs`) | native list, Stripe web checkout |
+| Messaging | web (`/messages`, realtime) | native, push via Expo |
+| Safeguarding concerns, media, comms preferences | web | report-a-concern only in v1 |
+
+Push notifications deep-link into the app: `aomclub://messages/<conversation_id>`
+(handled in `apps/mobile/lib/deep-link.ts`); magic links use
+`aomclub://auth/callback`. Bookings stay web-first by design (PLAN §10 P6.5).

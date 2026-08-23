@@ -24,3 +24,9 @@ export function getSupabase(): TypedSupabaseClient {
   client ??= createReactNativeSupabaseClient(supabaseEnv, authStorage);
   return client;
 }
+
+/** The current session's access token, or null when signed out. */
+export async function accessToken(): Promise<string | null> {
+  const { data } = await getSupabase().auth.getSession();
+  return data.session?.access_token ?? null;
+}

@@ -2,6 +2,8 @@ import { ClientSecretCredential } from "@azure/identity";
 import { Client } from "@microsoft/microsoft-graph-client";
 import { TokenCredentialAuthenticationProvider } from "@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials";
 
+import { enqueue, markFailed, markSent, type CommsCategory } from "@/lib/comms";
+
 const TENANT_ID     = process.env.AZURE_TENANT_ID ?? "";
 const CLIENT_ID     = process.env.AZURE_CLIENT_ID ?? "";
 const CLIENT_SECRET = process.env.AZURE_CLIENT_SECRET ?? "";
@@ -28,38 +30,97 @@ type SendParams = {
   html: string;
   text?: string;
   replyTo?: string;
+  /**
+   * P4.4. Everything this app sends today is transactional — a booking
+   * confirmation, a quote, an invite, a password link — so that is the
+   * default. The payment-reminder cron passes 'reminder', which is the
+   * category a member may switch off.
+   */
+  category?: CommsCategory;
+  /** Optional provenance for the `outbound_messages` row. */
+  template?: string;
+  entity?: string;
+  entityId?: string;
+  personId?: string;
 };
 
+function addressList(value: string | string[] | undefined): string[] {
+  if (!value) return [];
+  const list = Array.isArray(value) ? value : [value];
+  return Array.from(new Set(list.map((a) => a.trim()).filter(Boolean)));
+}
+
+/**
+ * Send an email — through P4.4's comms API.
+ *
+ * Every send is enqueued first (one `outbound_messages` row per recipient), so
+ * the suppression list, the recipient's channel preference and the
+ * platform-wide dry-run switch all apply before Graph is ever called, and the
+ * result is recorded either way. Recipients the API declines are dropped from
+ * the send; if that leaves nobody in `to`, nothing is sent at all.
+ */
 export async function sendEmail(params: SendParams) {
   if (!configured) {
     console.warn(`[email skip] Graph not configured — would have sent "${params.subject}" to ${params.to}`);
     return null;
   }
 
-  const toAddresses = (Array.isArray(params.to) ? params.to : [params.to]).map((address) => ({
-    emailAddress: { address },
-  }));
+  const category: CommsCategory = params.category ?? "transactional";
+  const logBody = params.text ?? params.html;
+
+  const enqueueFor = async (address: string) => ({
+    address,
+    result: await enqueue({
+      channel: "email",
+      category,
+      toAddress: address,
+      personId: params.personId,
+      subject: params.subject,
+      body: logBody,
+      template: params.template,
+      entity: params.entity,
+      entityId: params.entityId,
+    }),
+  });
+
+  const toResults = await Promise.all(addressList(params.to).map(enqueueFor));
+  const ccResults = await Promise.all(addressList(params.cc).map(enqueueFor));
+
+  const toSend = toResults.filter((r) => r.result.send);
+  const ccSend = ccResults.filter((r) => r.result.send);
+  const enqueuedIds = [...toSend, ...ccSend].map((r) => r.result.messageId);
+
+  if (toSend.length === 0) {
+    const decisions = toResults.map((r) => `${r.address}: ${r.result.decision}`).join(", ");
+    console.log(`[email not sent] "${params.subject}" — ${decisions || "no recipients"}`);
+    return null;
+  }
 
   const message: Record<string, unknown> = {
     subject: params.subject,
     body: { contentType: "HTML", content: params.html },
-    toRecipients: toAddresses,
+    toRecipients: toSend.map((r) => ({ emailAddress: { address: r.address } })),
   };
 
-  if (params.cc) {
-    const ccList = (Array.isArray(params.cc) ? params.cc : [params.cc]).filter(Boolean);
-    if (ccList.length > 0) {
-      message.ccRecipients = ccList.map((address) => ({ emailAddress: { address } }));
-    }
+  if (ccSend.length > 0) {
+    message.ccRecipients = ccSend.map((r) => ({ emailAddress: { address: r.address } }));
   }
 
   if (params.replyTo) {
     message.replyTo = [{ emailAddress: { address: params.replyTo } }];
   }
 
-  const client = getGraphClient();
-  await client.api(`/users/${MAIL_FROM}/sendMail`).post({ message });
+  try {
+    const client = getGraphClient();
+    await client.api(`/users/${MAIL_FROM}/sendMail`).post({ message });
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    await Promise.all(enqueuedIds.map((id) => markFailed(id, reason)));
+    throw err;
+  }
 
-  console.log(`[email sent] "${params.subject}" to ${params.to}`);
+  await Promise.all(enqueuedIds.map((id) => markSent(id, "microsoft-graph")));
+
+  console.log(`[email sent] "${params.subject}" to ${toSend.map((r) => r.address).join(", ")}`);
   return true;
 }
