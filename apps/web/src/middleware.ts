@@ -58,6 +58,27 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // P3.3 first-login gate: an account imported from the pitch-booking app
+  // must record its date of birth before anything else (SG-0 treats an
+  // unknown DOB as a minor, so the person's teams stay hidden until then).
+  // One cheap SECURITY DEFINER call per page request; API, auth and asset
+  // paths are left alone so the page itself can load and sign out works.
+  if (
+    user &&
+    !isPublic &&
+    !path.startsWith("/complete-profile") &&
+    !path.startsWith("/api") &&
+    !path.startsWith("/auth")
+  ) {
+    const { data: needsDob } = await supabase.rpc("needs_dob_completion");
+    if (needsDob === true) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/complete-profile";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return response;
 }
 

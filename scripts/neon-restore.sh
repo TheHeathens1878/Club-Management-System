@@ -16,6 +16,14 @@ set -euo pipefail
 OUT="${OUT:-$(mktemp -d)}/neon.dump"
 IMG="postgres:17-alpine"
 
+# Neon's console hands out the pooled host by default; pg_dump needs the
+# direct endpoint (same host without the "-pooler" label).
+NEON_DATABASE_URL="${NEON_DATABASE_URL/-pooler./.}"
+
+# 20260824000000_neon_import.sql ships empty neon_legacy stub tables so the
+# import functions compile. Step 2 below drops that schema and the restore
+# recreates it from the dump, with the real column types.
+
 echo "1/4 dumping Neon (schema + data, no owners/privileges) → $OUT"
 docker run --rm -v "$(dirname "$OUT"):/out" "$IMG" \
   pg_dump "$NEON_DATABASE_URL" --format=custom --no-owner --no-privileges --schema=public \
