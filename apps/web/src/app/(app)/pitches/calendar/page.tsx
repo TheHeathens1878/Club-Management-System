@@ -14,6 +14,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile } from "@/lib/auth";
 import { addDays, isValidDateString, londonToday } from "@/lib/booking-time";
 import {
+  clubNameSet,
+  consecutiveWeekIds,
+  isInternalMatch,
   CALENDAR_FILTERS,
   CALENDAR_GROUP_LABELS,
   countsByGroup,
@@ -44,6 +47,7 @@ import {
   type CalendarView,
 } from "@/lib/pitch-calendar";
 import { loadPitchCalendar, loadPitchCalendarContext } from "@/lib/pitch-calendar-data";
+import { createClient } from "@/lib/supabase/server";
 import { groupByVenue } from "@/lib/pitch-venue";
 
 import { CalendarDatePicker, CalendarFilterSelect, PrintButton } from "./calendar-toolbar";
@@ -81,6 +85,8 @@ type CalendarSearchParams = {
   days?: string;
   team?: string;
   venue?: string;
+  internal?: string;
+  flagged?: string;
 };
 
 function buildHref(params: Record<string, string>): string {
@@ -96,6 +102,8 @@ type BaseState = {
   days: CalendarDays;
   team: string;
   venue: string;
+  internal: boolean;
+  flagged: boolean;
 };
 
 /** The query the toolbar links and the pickers carry forward. */
@@ -107,6 +115,8 @@ function baseParams(state: BaseState): Record<string, string> {
   if (state.days !== "weekend") params.days = state.days;
   if (state.team) params.team = state.team;
   if (state.venue) params.venue = state.venue;
+  if (state.internal) params.internal = "1";
+  if (state.flagged) params.flagged = "1";
   return params;
 }
 
@@ -126,6 +136,8 @@ export default async function PitchCalendarPage({
     days: daysParam,
     team: teamParam,
     venue: venueParam,
+    internal: internalParam,
+    flagged: flaggedParam,
   } = await searchParams;
 
   const anchor = date && isValidDateString(date) ? date : londonToday();
@@ -134,20 +146,47 @@ export default async function PitchCalendarPage({
   const mineRequested = mineParam === "1";
   const daysMode: CalendarDays = isCalendarDays(daysParam) ? daysParam : "weekend";
   const teamFilter = teamParam && /^[0-9a-f-]{36}$/i.test(teamParam) ? teamParam : "";
+  const internalOnly = internalParam === "1";
+  const flaggedRequested = flaggedParam === "1";
 
   const monday = mondayOf(anchor);
   const monthStart = monthStartOf(anchor);
+  // The fetch is a week wider each side than the display, so the ⚠️
+  // consecutive-weeks flag is honest at the edges of the visible window.
   const window =
     view === "month"
       ? monthWindow(monthStart)
       : view === "day"
-        ? dayWindow(anchor)
-        : weekWindow(monday);
+        ? { from: dayWindow(addDays(anchor, -7)).from, to: dayWindow(addDays(anchor, 7)).to }
+        : {
+            from: weekWindow(shiftWeek(monday, -1)).from,
+            to: weekWindow(shiftWeek(monday, 1)).to,
+          };
 
-  const [context, calendar] = await Promise.all([
+  const userClient = await createClient();
+  const [context, calendar, teamNameRows] = await Promise.all([
     loadPitchCalendarContext(),
     loadPitchCalendar(window.from, window.to),
+    // Active team names, for the 🟢 internal-match flag (teams_read is open
+    // to any signed-in caller).
+    userClient
+      .from("teams")
+      .select("name")
+      .eq("active", true)
+      .then((result) => (result.data ?? []).map((row) => row.name)),
   ]);
+
+  // Attach the legacy flags, then trim back to the display window.
+  const clubTeams = clubNameSet(teamNameRows);
+  const consecutive = consecutiveWeekIds(calendar.entries);
+  for (const entry of calendar.entries) {
+    entry.internalMatch = isInternalMatch(entry, clubTeams);
+    entry.consecutiveWeeks = consecutive.has(entry.bookingId);
+  }
+  if (view !== "month") {
+    const visibleDates = new Set(view === "day" ? [anchor] : weekOf(monday).days);
+    calendar.entries = calendar.entries.filter((entry) => visibleDates.has(entry.date));
+  }
 
   const myTeamIds = new Set(context.myTeamIds);
   const mineAvailable = myTeamIds.size > 0;
@@ -161,6 +200,10 @@ export default async function PitchCalendarPage({
     ? venueGroups.filter((group) => group.venue === venue)
     : venueGroups;
 
+  // "Flagged only" is the administrator's fairness lens; the legacy app hid
+  // it from coaches and so does this one.
+  const flagged = flaggedRequested && context.isAdmin;
+
   const groups = groupsForFilter(filter);
   const entries: CalendarEntry[] = calendar.entries.filter((entry) => {
     if (groups && !groups.includes(entry.group)) return false;
@@ -172,6 +215,8 @@ export default async function PitchCalendarPage({
     ) {
       return false;
     }
+    if (internalOnly && !entry.internalMatch) return false;
+    if (flagged && !entry.internalMatch && !entry.consecutiveWeeks) return false;
     return true;
   });
 
@@ -186,7 +231,7 @@ export default async function PitchCalendarPage({
     .map(([value, label]) => ({ value, label }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  const state: BaseState = { view, filter, mine, days: daysMode, team: teamFilter, venue };
+  const state: BaseState = { view, filter, mine, days: daysMode, team: teamFilter, venue, internal: internalOnly, flagged };
   const params = baseParams(state);
   const withDate = (extra: Record<string, string>) => ({
     ...params,
@@ -417,6 +462,28 @@ export default async function PitchCalendarPage({
                 </Link>
               )}
 
+              <Link
+                href={buildHref(withDate(baseParams({ ...state, internal: !internalOnly })))}
+                className={buttonVariants({
+                  variant: internalOnly ? "default" : "outline",
+                  size: "sm",
+                })}
+              >
+                Internal only
+              </Link>
+
+              {context.isAdmin && (
+                <Link
+                  href={buildHref(withDate(baseParams({ ...state, flagged: !flagged })))}
+                  className={buttonVariants({
+                    variant: flagged ? "default" : "outline",
+                    size: "sm",
+                  })}
+                >
+                  Flagged only
+                </Link>
+              )}
+
               {venueNames.length > 1 && (
                 <CalendarFilterSelect
                   label="Venue"
@@ -458,6 +525,8 @@ export default async function PitchCalendarPage({
                 Not yet confirmed
               </span>
               <span className="flex items-center gap-1.5">🔁 Weekly series</span>
+              <span className="flex items-center gap-1.5">🟢 Internal match</span>
+              <span className="flex items-center gap-1.5">⚠️ Consecutive weeks</span>
               {canBook && view !== "month" && view !== "list" && (
                 <span className="print:hidden">Click an empty slot to book it.</span>
               )}
