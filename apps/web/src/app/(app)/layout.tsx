@@ -6,6 +6,7 @@ import { HeaderTools } from "@/components/header-tools";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isBooker } from "@/lib/auth";
 import { navFor, navForUnlinked } from "@/lib/nav";
+import { NavLink } from "@/components/nav-link";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { ROLE_VIEW_LABELS, qualifiedViews, resolveRoleView } from "@/lib/role-view";
 
@@ -45,21 +46,36 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
-      <aside className="w-full shrink-0 border-b bg-card lg:w-56 lg:border-b-0 lg:border-r">
+      {/* The ink rail (crest design): dark sidebar against paper content.
+          `.theme-ink` remaps the semantic tokens, so everything inside — the
+          bell, ghost buttons, badges — adapts without bespoke styling. */}
+      <aside className="theme-ink w-full shrink-0 border-b border-border bg-background text-foreground lg:w-60 lg:border-b-0 lg:border-r">
         <div className="flex gap-2 p-3 lg:h-full lg:flex-col lg:p-4">
-          <div className="hidden lg:mb-4 lg:block">
-            <p className="text-sm font-semibold">AoM Sports Club</p>
-            <p className="truncate text-xs text-muted-foreground">{name}</p>
-            {view ? (
+          <div className="hidden items-center gap-2.5 border-b border-border pb-3 lg:mb-1 lg:flex">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/crest.png" alt="" className="h-9 w-auto" />
+            <div className="min-w-0">
+              <p className="font-display text-[13px] font-semibold uppercase leading-tight tracking-wide">
+                AoM Sports Club
+              </p>
+              <p className="truncate text-xs text-muted-foreground">{name}</p>
+            </div>
+          </div>
+
+          {view ? (
+            <div className="hidden rounded-lg border border-accent/40 bg-accent/15 px-3 py-2 lg:block">
+              <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-accent">
+                Viewing as
+              </p>
               <Link
                 href="/welcome"
-                className="mt-1 inline-block text-xs text-muted-foreground underline-offset-2 hover:underline"
+                className="mt-0.5 inline-block text-[13px] font-semibold underline-offset-2 hover:underline"
               >
                 {ROLE_VIEW_LABELS[view]}
-                {canSwitch ? " · change" : ""}
+                {canSwitch ? <span className="font-normal text-muted-foreground"> · change</span> : null}
               </Link>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
 
           {/* Notifications bell — the notifications entry in every view. */}
           <HeaderTools />
@@ -67,25 +83,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {groups.map((group) => (
             <div key={group.group} className="flex flex-col gap-0.5">
               {group.items.length > 1 ? (
-                <p className="hidden px-3 pb-0.5 pt-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground lg:block">
+                <p className="hidden px-3 pb-1 pt-3 font-display text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">
                   {group.group}
                 </p>
               ) : null}
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={
-                      buttonVariants({ variant: "ghost", size: "sm" }) +
-                      (item.child
-                        ? " h-7 justify-start gap-2 pl-7 text-xs text-muted-foreground"
-                        : " justify-start gap-2")
-                    }
-                  >
+                  <NavLink key={item.href} href={item.href} child={item.child}>
                     <Icon className={item.child ? "h-3 w-3" : "h-4 w-4"} /> {item.label}
-                  </Link>
+                  </NavLink>
                 );
               })}
             </div>
@@ -96,7 +103,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <button
                 type="submit"
                 className={
-                  buttonVariants({ variant: "ghost", size: "sm" }) + " w-full justify-start gap-2"
+                  buttonVariants({ variant: "ghost", size: "sm" }) +
+                  " w-full justify-start gap-2 text-muted-foreground hover:text-foreground"
                 }
               >
                 <LogOut className="h-4 w-4" /> Sign out
