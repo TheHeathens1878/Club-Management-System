@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { todayLondon } from "@/lib/pitch-booking";
 import { loadPitchBookingAccess, loadPitches } from "@/lib/pitch-booking-data";
+import { getStoredRoleView } from "@/lib/capabilities";
 import { ChevronLeft } from "lucide-react";
 
 import { BookForm } from "./book-form";
@@ -29,7 +30,15 @@ export default async function BookPitchPage({
   if (!session) redirect("/login");
 
   const { team: requestedTeam } = await searchParams;
-  const [access, pitches] = await Promise.all([loadPitchBookingAccess(), loadPitches()]);
+  const [access, pitches, roleView] = await Promise.all([
+    loadPitchBookingAccess(),
+    loadPitches(),
+    getStoredRoleView(),
+  ]);
+  // In the Coach view even an administrator books for their own teams only.
+  if (roleView === "coach" && access.isAdmin && access.staffTeamIds.length > 0) {
+    access.teams = access.teams.filter((team) => access.staffTeamIds.includes(team.id));
+  }
   const committee = isCommittee(session.profile?.role);
 
   if (!access.isAdmin && !committee && access.staffTeamIds.length === 0) {

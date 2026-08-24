@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getStoredRoleView } from "@/lib/capabilities";
 import { loadPitchBookingAccess, loadPitchBookings } from "@/lib/pitch-booking-data";
 import { CalendarPlus } from "lucide-react";
 
@@ -25,6 +26,10 @@ export default async function MyPitchBookingsPage() {
 
   const access = await loadPitchBookingAccess();
   const committee = isCommittee(session.profile?.role);
+  // The Coach tile scopes the data: an administrator coaching a team sees only
+  // their own teams bookings here while in that view (Adam, 2026-08-24).
+  const coachView = (await getStoredRoleView()) === "coach";
+  const asAdmin = access.isAdmin && !coachView;
   if (!access.isAdmin && !committee && access.staffTeamIds.length === 0) {
     redirect("/room-bookings");
   }
@@ -33,14 +38,15 @@ export default async function MyPitchBookingsPage() {
     kinds: ["training", "block"],
     statuses: ["pending", "confirmed"],
     upcomingOnly: true,
+    ...(asAdmin ? {} : { teamIds: access.staffTeamIds }),
   });
 
   return (
     <>
       <PageHeader
-        title={access.isAdmin ? "Pitch bookings" : "My pitch bookings"}
+        title={asAdmin ? "Pitch bookings" : "My pitch bookings"}
         subtitle={
-          access.isAdmin
+          asAdmin
             ? "Every upcoming training and block booking across the club"
             : "Training and other pitch use for the teams you run"
         }
