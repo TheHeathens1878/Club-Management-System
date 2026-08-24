@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ClipboardList } from "lucide-react";
+import { ChevronLeft, ClipboardList, MapPin } from "lucide-react";
 
 import type { Database } from "@club/db";
 
@@ -14,7 +14,8 @@ import { headcountLabel, summariseAvailability } from "@/lib/headcount";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
-import { fixtureStatusVariant } from "../../fixtures-list";
+import { fixtureStatusVariant } from "../../fixtures-shared";
+import { googleMapsUrl } from "../../../../events/shared";
 import { FixtureAvailabilityPanel, type FixtureSubject } from "./availability-panel";
 
 type AvailabilityStatus = Database["public"]["Enums"]["availability_status"];
@@ -52,11 +53,14 @@ export default async function FixtureAttendancePage({
     .maybeSingle();
   if (!fixture) notFound();
 
-  const [staffResult, admin, childrenResult] = await Promise.all([
+  const [staffResult, admin, childrenResult, eventResult] = await Promise.all([
     supabase.rpc("is_team_staff", { p_team_id: teamId }),
     isClubAdmin(),
     supabase.rpc("my_children"),
+    // The fixture's RSVP event (events module) — one per fixture, if synced.
+    supabase.from("events").select("id").eq("fixture_id", fixtureId).maybeSingle(),
   ]);
+  const eventId = eventResult.data?.id ?? null;
   const canManage = staffResult.data === true || admin;
 
   // Who the caller may answer for: themselves and their children — kept to
@@ -177,6 +181,28 @@ export default async function FixtureAttendancePage({
             <Badge variant="default">
               {headcountLabel(headcount)} of {headcount.squad}
             </Badge>
+          )}
+          {(pitchName || fixture.venue_text) && (
+            <a
+              href={googleMapsUrl(
+                fixture.is_home
+                  ? (pitchName ?? fixture.venue_text ?? "")
+                  : (fixture.venue_text ?? ""),
+              )}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              <MapPin className="h-4 w-4" /> Map
+            </a>
+          )}
+          {eventId && (
+            <Link
+              href={`/events/${eventId}`}
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+            >
+              Event &amp; RSVP
+            </Link>
           )}
         </div>
 

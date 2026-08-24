@@ -1,8 +1,47 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { MapPin } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import type { Headcount } from "@/lib/headcount";
+
+import { googleMapsUrl } from "../../events/shared";
+import { fixtureStatusVariant } from "./fixtures-shared";
+
+/**
+ * The whole row is the link (Adam, 2026-08-24: "you should be able to click
+ * into the fixture anywhere on the card") — except clicks that land on a real
+ * anchor inside it, which keep their own destination (the maps pin, the
+ * attendance link).
+ */
+function rowClick(router: ReturnType<typeof useRouter>, href: string) {
+  return (event: React.MouseEvent<HTMLElement>) => {
+    if ((event.target as HTMLElement).closest("a")) return;
+    router.push(href);
+  };
+}
+
+/** Where a fixture is played, as a maps link — the venue text or the pitch. */
+function MapsLink({ fixture }: { fixture: TeamFixture }) {
+  const place = fixture.isHome
+    ? (fixture.pitchName ?? fixture.venueText)
+    : (fixture.venueText ?? fixture.opponent);
+  if (!place) return null;
+  return (
+    <a
+      href={googleMapsUrl(place)}
+      target="_blank"
+      rel="noreferrer"
+      title={`Open ${place} in Google Maps`}
+      className="inline-flex items-center gap-0.5 text-primary underline-offset-4 hover:underline"
+    >
+      <MapPin className="h-3 w-3" /> Map
+    </a>
+  );
+}
 
 /**
  * The team's fixtures, in the two shapes the page needs: the full table on the
@@ -40,15 +79,6 @@ export function HeadcountChips({ headcount }: { headcount: Headcount }) {
   );
 }
 
-export function fixtureStatusVariant(
-  status: string,
-): "success" | "muted" | "destructive" | "warning" | "default" {
-  if (status === "played") return "success";
-  if (status === "cancelled" || status === "abandoned") return "destructive";
-  if (status === "postponed") return "warning";
-  return "default";
-}
-
 /**
  * The Attendance column (gap 8).
  *
@@ -71,6 +101,7 @@ export function FixturesTable({
   canManage: boolean;
   teamId: string;
 }) {
+  const router = useRouter();
   if (fixtures.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
@@ -99,7 +130,11 @@ export function FixturesTable({
           {fixtures.map((fixture) => {
             const local = instantToLocal(fixture.kickoffAt);
             return (
-              <tr key={fixture.id} className="border-b last:border-0">
+              <tr
+                key={fixture.id}
+                onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
+                className="cursor-pointer border-b transition-colors last:border-0 hover:bg-secondary/60"
+              >
                 <td className="whitespace-nowrap py-2 pr-3">
                   {formatBookingDateShort(local.date)}
                 </td>
@@ -110,6 +145,7 @@ export function FixturesTable({
                   {fixture.venueText && (
                     <span className="block text-xs text-muted-foreground">{fixture.venueText}</span>
                   )}
+                  <MapsLink fixture={fixture} />
                 </td>
                 <td className="py-2 pr-3">{fixture.competition ?? "—"}</td>
                 <td className="py-2 pr-3">{fixture.seasonName ?? "—"}</td>
@@ -153,6 +189,7 @@ export function FixturesSummary({
   fixtures: TeamFixture[];
   teamId: string;
 }) {
+  const router = useRouter();
   if (fixtures.length === 0) {
     return (
       <p className="py-6 text-center text-sm text-muted-foreground">
@@ -167,7 +204,11 @@ export function FixturesSummary({
         {fixtures.map((fixture) => {
           const local = instantToLocal(fixture.kickoffAt);
           return (
-            <li key={fixture.id} className="flex flex-wrap items-start justify-between gap-2 py-3 first:pt-0">
+            <li
+              key={fixture.id}
+              onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
+              className="flex cursor-pointer flex-wrap items-start justify-between gap-2 rounded-md py-3 transition-colors first:pt-0 hover:bg-secondary/60"
+            >
               <div className="min-w-0">
                 <p className="text-sm font-medium">
                   {fixture.isHome ? "v" : "away to"} {fixture.opponent}
@@ -176,6 +217,8 @@ export function FixturesSummary({
                   {formatBookingDateShort(local.date)} · {local.time}
                   {fixture.pitchName ? ` · ${fixture.pitchName}` : ""}
                   {fixture.competition ? ` · ${fixture.competition}` : ""}
+                  {" · "}
+                  <MapsLink fixture={fixture} />
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-1">

@@ -36,6 +36,8 @@ import { RecruitingPanel } from "./recruiting-panel";
 import { FixturesSummary, FixturesTable, type TeamFixture } from "./fixtures-list";
 import { PitchBookingsSummary } from "./bookings-summary";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
+import { loadThread } from "../../messages/[id]/thread-data";
+import { ThreadPanel } from "../../messages/[id]/thread-panel";
 
 /** Next 20 fixtures, read-only — the importer (P2.4) is what writes them. */
 const UPCOMING_LIMIT = 20;
@@ -149,24 +151,48 @@ export default async function TeamPage({
       }
     : null;
 
-  // A tab the caller cannot use is not rendered. Fixtures is the committee's
-  // workbench (the Full-Time link and the importer live there), so a coach
-  // only gets it when there is something to read.
+  // A tab the caller cannot use is not rendered. Chat opens first — the team
+  // room is where a team lives day to day (Adam, 2026-08-24) — and the
+  // committee's feed machinery (Match day, Full-Time, imports) sits in an
+  // admin-only Settings tab rather than among the everyday tabs.
   const tabs: TeamTab[] = [
+    { key: "chat", label: "Chat" },
     { key: "overview", label: "Overview" },
     { key: "members", label: "Members" },
     ...(committee || otherUpcomingCount > 0
       ? [{ key: "fixtures", label: "Fixtures" } as TeamTab]
       : []),
     { key: "bookings", label: "Bookings" },
+    { key: "notices", label: "Notice board" },
+    ...(committee ? [{ key: "settings", label: "Settings" } as TeamTab] : []),
   ];
   const tab: TeamTabKey = tabs.some((t) => t.key === requestedTab)
     ? (requestedTab as TeamTabKey)
-    : "overview";
+    : "chat";
 
   // --------------------------------------------------------------------
-  // Overview — the glance: match day, recruiting, the next three fixtures
-  // and the next three pitch slots.
+  // Chat / Notice board — the team's own conversation rooms (P5.3), found
+  // AS THE CALLER: the participant policies decide whether there is a room
+  // to show, so a committee member who is not in the room is told so rather
+  // than silently reading it (SG-9 — oversight lives in /safeguarding).
+  // --------------------------------------------------------------------
+  let threadData: Awaited<ReturnType<typeof loadThread>> = null;
+  if (tab === "chat" || tab === "notices") {
+    const wanted = tab === "chat" ? "team" : "announcement";
+    const { data: room } = await userClient
+      .from("conversations")
+      .select("id")
+      .eq("team_id", id)
+      .eq("type", wanted)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (room) threadData = await loadThread(room.id);
+  }
+
+  // --------------------------------------------------------------------
+  // Overview — the glance: recruiting, the next three fixtures and the next
+  // three pitch slots. (Match day moved to the Settings tab.)
   // --------------------------------------------------------------------
   let overviewFixtures: TeamFixture[] = [];
   let overviewBookings: PitchBookingItem[] = [];
@@ -424,31 +450,14 @@ export default async function TeamPage({
   let runs: ImportRunView[] = [];
 
   if (tab === "fixtures") {
-    const [fixturesResult, seasonsResult, runRows, clubNameResult] = await Promise.all([
-      userClient
-        .from("fixtures")
-        .select(FIXTURE_SELECT)
-        .eq("team_id", id)
-        .gte("kickoff_at", nowIso)
-        .order("kickoff_at")
-        .limit(UPCOMING_LIMIT),
-      userClient
-        .from("seasons")
-        .select("id,name,is_current")
-        .order("starts_on", { ascending: false }),
-      committee
-        ? admin
-            .from("fixture_import_runs")
-            .select("id,trigger,status,inserted,updated,unchanged,error,source_url,created_at")
-            .eq("team_id", id)
-            .order("created_at", { ascending: false })
-            .limit(RUN_LIMIT)
-            .then((result) => result.data ?? [])
-        : Promise.resolve([]),
-      admin.from("site_settings").select("value").eq("key", "fulltime_club_name").maybeSingle(),
-    ]);
+    const fixturesResult = await userClient
+      .from("fixtures")
+      .select(FIXTURE_SELECT)
+      .eq("team_id", id)
+      .gte("kickoff_at", nowIso)
+      .order("kickoff_at")
+      .limit(UPCOMING_LIMIT);
 
-    defaultFtName = `${(clubNameResult.data?.value ?? "").trim() || "Ashton On Mersey FC"} ${team.name}`;
     fixturesFailed = !!fixturesResult.error;
     const playerIds = await teamPlayerIds(userClient, id);
     const fixtureCounts = await fixtureHeadcounts(
@@ -470,6 +479,30 @@ export default async function TeamPage({
       pitchName: row.resources?.name ?? null,
       headcount: fixtureCounts.get(row.id) ?? null,
     }));
+  }
+
+  // --------------------------------------------------------------------
+  // Settings — the committee's feed machinery: match day, the Full-Time
+  // link and the importer with its run history. Admin-only by tab guard,
+  // and every write still meets the same RLS as anywhere else.
+  // --------------------------------------------------------------------
+  if (tab === "settings" && committee) {
+    const [seasonsResult, runRows, clubNameResult] = await Promise.all([
+      userClient
+        .from("seasons")
+        .select("id,name,is_current")
+        .order("starts_on", { ascending: false }),
+      admin
+        .from("fixture_import_runs")
+        .select("id,trigger,status,inserted,updated,unchanged,error,source_url,created_at")
+        .eq("team_id", id)
+        .order("created_at", { ascending: false })
+        .limit(RUN_LIMIT)
+        .then((result) => result.data ?? []),
+      admin.from("site_settings").select("value").eq("key", "fulltime_club_name").maybeSingle(),
+    ]);
+
+    defaultFtName = `${(clubNameResult.data?.value ?? "").trim() || "Ashton On Mersey FC"} ${team.name}`;
     clubSeasons = (seasonsResult.data ?? []).map((season) => ({
       id: season.id,
       name: season.name,
@@ -538,6 +571,24 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {/* Overview                                                         */}
         {/* ---------------------------------------------------------------- */}
+        {/* ---------------------------------------------------------------- */}
+        {/* Chat / Notice board — the team's rooms, embedded                 */}
+        {/* ---------------------------------------------------------------- */}
+        {(tab === "chat" || tab === "notices") &&
+          (threadData ? (
+            <div className="max-w-3xl">
+              <ThreadPanel data={threadData} showLeave={false} />
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-6 text-sm text-muted-foreground">
+                {tab === "chat"
+                  ? "This team's chat room isn't open to you. Players, their parents and the team's staff are added automatically when they join the team — if that's you and you still can't see it, ask a club administrator."
+                  : "This team's notice board isn't open to you. Members and staff are added automatically when they join the team."}
+              </CardContent>
+            </Card>
+          ))}
+
         {tab === "overview" && (
           <div className="space-y-6">
             <div className="grid gap-6 lg:grid-cols-2">
@@ -559,40 +610,6 @@ export default async function TeamPage({
                 </CardContent>
               </Card>
             </div>
-
-            {/* Where this team plays and how long a match takes. Written
-                through the caller's own client, so `teams_staff_update` lets a
-                coach maintain it and `trg_teams_home_resource_guard` is what
-                refuses a home resource that is not a pitch. */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Match day</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  The team&apos;s home pitch and the shape of its matches. Allocating a home fixture
-                  on{" "}
-                  <Link href="/pitches" className="underline underline-offset-2">
-                    Pitches
-                  </Link>{" "}
-                  starts from the home pitch, and the halves and half time give new fixtures their
-                  pitch slot in place of the club&apos;s standard 90 minutes.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <MatchDayPanel
-                  teamId={team.id}
-                  canEdit={canManageTeam}
-                  pitches={matchDayPitches}
-                  values={{
-                    home_resource_id: team.home_resource_id,
-                    match_halves: team.match_halves,
-                    half_length_minutes: team.half_length_minutes,
-                    half_time_minutes: team.half_time_minutes,
-                    default_pre_buffer_minutes: team.default_pre_buffer_minutes,
-                    default_post_buffer_minutes: team.default_post_buffer_minutes,
-                  }}
-                />
-              </CardContent>
-            </Card>
 
             {/* Gap 10: what the public /recruitment page says about this team.
                 Written through the caller's own client, so `teams_staff_update`
@@ -709,57 +726,92 @@ export default async function TeamPage({
               </CardContent>
             </Card>
 
-            {/* Running the team's fixture feed — the Full-Time link and the
-                manual importer — is committee work. A coach reading the list
-                above sees none of it. */}
-            {committee && (
-              <>
-                <Card>
-                  <CardHeader>
-                    <CardTitle>FA Full-Time link</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      The FA publishes no fixtures API, so fixtures and results are read from the
-                      team&apos;s Full-Time widget — the &ldquo;add to your website&rdquo; snippet.
-                      Paste it, preview what the parser reads, then save. Imports run nightly;
-                      re-linking for a new season updates this link and keeps the fixtures already
-                      imported.
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <FullTimePanel
-                      teamId={team.id}
-                      teamName={team.name}
-                      defaultFtName={defaultFtName}
-                      link={link}
-                      clubSeasons={clubSeasons}
-                    />
-                  </CardContent>
-                </Card>
+          </div>
+        )}
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle>Manual import</CardTitle>
-                    <p className="text-sm text-muted-foreground">
-                      The fallback that keeps working when the nightly importer does not: paste a
-                      Full-Time address, or paste the fixtures as CSV. Either way you see them
-                      before anything is written, and the import reconciles by fixture reference —
-                      reschedules become updates, never duplicates.
-                    </p>
-                  </CardHeader>
-                  <CardContent>
-                    <ManualImportPanel
-                      teamId={team.id}
-                      teamName={team.name}
-                      ftTeamName={link?.ft_team_name ?? team.name}
-                      currentSeason={
-                        currentSeason ? { id: currentSeason.id, name: currentSeason.name } : null
-                      }
-                      runs={runs}
-                    />
-                  </CardContent>
-                </Card>
-              </>
-            )}
+        {/* ---------------------------------------------------------------- */}
+        {/* Settings — admin-only: match day, Full-Time link, import runs    */}
+        {/* ---------------------------------------------------------------- */}
+        {tab === "settings" && committee && (
+          <div className="space-y-6">
+            {/* Where this team plays and how long a match takes. Written
+                through the caller's own client, so `teams_staff_update` lets a
+                coach maintain it and `trg_teams_home_resource_guard` is what
+                refuses a home resource that is not a pitch. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Match day</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  The team&apos;s home pitch and the shape of its matches. Allocating a home fixture
+                  on{" "}
+                  <Link href="/pitches" className="underline underline-offset-2">
+                    Pitches
+                  </Link>{" "}
+                  starts from the home pitch, and the halves and half time give new fixtures their
+                  pitch slot in place of the club&apos;s standard 90 minutes.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <MatchDayPanel
+                  teamId={team.id}
+                  canEdit={canManageTeam}
+                  pitches={matchDayPitches}
+                  values={{
+                    home_resource_id: team.home_resource_id,
+                    match_halves: team.match_halves,
+                    half_length_minutes: team.half_length_minutes,
+                    half_time_minutes: team.half_time_minutes,
+                    default_pre_buffer_minutes: team.default_pre_buffer_minutes,
+                    default_post_buffer_minutes: team.default_post_buffer_minutes,
+                  }}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>FA Full-Time link</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  The FA publishes no fixtures API, so fixtures and results are read from the
+                  team&apos;s Full-Time widget — the &ldquo;add to your website&rdquo; snippet.
+                  Paste it, preview what the parser reads, then save. Imports run nightly;
+                  re-linking for a new season updates this link and keeps the fixtures already
+                  imported.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <FullTimePanel
+                  teamId={team.id}
+                  teamName={team.name}
+                  defaultFtName={defaultFtName}
+                  link={link}
+                  clubSeasons={clubSeasons}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Manual import &amp; run history</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  The fallback that keeps working when the nightly importer does not: paste a
+                  Full-Time address, or paste the fixtures as CSV. Either way you see them
+                  before anything is written, and the import reconciles by fixture reference —
+                  reschedules become updates, never duplicates.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <ManualImportPanel
+                  teamId={team.id}
+                  teamName={team.name}
+                  ftTeamName={link?.ft_team_name ?? team.name}
+                  currentSeason={
+                    currentSeason ? { id: currentSeason.id, name: currentSeason.name } : null
+                  }
+                  runs={runs}
+                />
+              </CardContent>
+            </Card>
           </div>
         )}
 
