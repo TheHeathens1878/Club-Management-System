@@ -1,0 +1,163 @@
+import { getSessionProfile } from "@/lib/auth";
+import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames, UNNAMED } from "@/lib/person";
+import { createClient } from "@/lib/supabase/server";
+
+import type {
+  ReaderRow,
+  ThreadAttachment,
+  ThreadMessage,
+  ThreadReaction,
+} from "./thread-client";
+
+/**
+ * Everything one conversation view needs, assembled once — used by
+ * /messages/[id] and by the team page's Chat and Notice board tabs, so the
+ * two can never disagree about what a thread shows or who may post.
+ *
+ * USER-SCOPED client throughout: the caller sees this conversation because
+ * the P5.2 participant policies say so, and for no other reason. `null` means
+ * "not yours to see" — the conversation does not exist, or the caller was
+ * never a participant. There is deliberately no admin bypass here (SG-9:
+ * oversight reads live in /safeguarding and are audited).
+ */
+
+/** The visible tail of a thread; older messages page in on demand. */
+export const MESSAGE_LIMIT = 200;
+
+export type ThreadData = {
+  conversation: {
+    id: string;
+    type: string;
+    title: string | null;
+    team_id: string | null;
+    supervised_by_lead: boolean;
+    closed_at: string | null;
+    created_by_person_id: string | null;
+  };
+  personId: string;
+  myName: string;
+  myLive: { last_read_message_id: string | null } | null;
+  participants: {
+    person_id: string;
+    basis: string;
+    left_at: string | null;
+    joined_at: string;
+    last_read_message_id: string | null;
+  }[];
+  messages: ThreadMessage[];
+  reactions: ThreadReaction[];
+  attachments: ThreadAttachment[];
+  readers: ReaderRow[];
+  nameMap: Record<string, string>;
+  title: string;
+  announcementReadOnly: boolean;
+  readOnlyNotice: string | null;
+  canManageGroup: boolean;
+  unnamedLabel: string;
+};
+
+export async function loadThread(conversationId: string): Promise<ThreadData | null> {
+  const session = await getSessionProfile();
+  if (!session) return null;
+  const personId = await getCurrentPersonId();
+  if (!personId) return null;
+
+  const supabase = await createClient();
+
+  const { data: conversation } = await supabase
+    .from("conversations")
+    .select("id,type,title,team_id,supervised_by_lead,closed_at,created_by_person_id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (!conversation) return null;
+
+  const [{ data: participantRows }, { data: messageRows }] = await Promise.all([
+    supabase
+      .from("conversation_participants")
+      .select("person_id,basis,left_at,joined_at,last_read_message_id")
+      .eq("conversation_id", conversationId),
+    supabase
+      .from("messages")
+      .select("id,body,created_at,sender_person_id,deleted_at,redacted_at,reply_to_id")
+      .eq("conversation_id", conversationId)
+      .order("created_at", { ascending: false })
+      .limit(MESSAGE_LIMIT),
+  ]);
+
+  const participants = participantRows ?? [];
+  const mine = participants.filter((p) => p.person_id === personId);
+  if (mine.length === 0) return null;
+  const myLive = mine.find((p) => p.left_at === null) ?? null;
+
+  const messages: ThreadMessage[] = (messageRows ?? []).slice().reverse();
+  const messageIds = messages.map((m) => m.id);
+  const [{ data: reactionRows }, { data: attachmentRows }] = await Promise.all([
+    messageIds.length > 0
+      ? supabase
+          .from("message_reactions")
+          .select("id,message_id,person_id,emoji")
+          .in("message_id", messageIds)
+      : Promise.resolve({ data: [] }),
+    messageIds.length > 0
+      ? supabase
+          .from("message_attachments")
+          .select("id,message_id,storage_bucket,storage_path,content_type")
+          .in("message_id", messageIds)
+      : Promise.resolve({ data: [] }),
+  ]);
+
+  const names = await resolveNames([
+    ...participants.map((p) => p.person_id),
+    ...messages.map((m) => m.sender_person_id),
+  ]);
+  const nameMap: Record<string, string> = {};
+  for (const p of participants) nameMap[p.person_id] = nameOf(names, p.person_id);
+  for (const m of messages) nameMap[m.sender_person_id] = nameOf(names, m.sender_person_id);
+
+  const activeOthers = participants.filter(
+    (p) => p.left_at === null && p.person_id !== personId,
+  );
+  const isStaffHere = myLive ? myLive.basis === "staff" || myLive.basis === "creator" : false;
+  const announcementReadOnly = conversation.type === "announcement" && !isStaffHere;
+
+  const readOnlyNotice = conversation.closed_at
+    ? "This conversation is closed. Its history is kept, but nothing new can be posted."
+    : !myLive
+      ? "You have left this conversation. You can still read what was said while you were in it."
+      : announcementReadOnly
+        ? "Announcements are one-way. Only team staff can post here."
+        : null;
+
+  const canManageGroup =
+    conversation.type === "group" &&
+    (conversation.created_by_person_id === personId || (await isClubAdmin()));
+
+  const title =
+    conversation.title ||
+    (activeOthers.length > 0
+      ? activeOthers.map((p) => nameOf(names, p.person_id)).join(", ")
+      : conversation.type === "announcement"
+        ? "Announcements"
+        : "Conversation");
+
+  return {
+    conversation,
+    personId,
+    myName: session.profile?.full_name || "Someone",
+    myLive,
+    participants,
+    messages,
+    reactions: (reactionRows ?? []) as ThreadReaction[],
+    attachments: (attachmentRows ?? []) as ThreadAttachment[],
+    readers: activeOthers.map((p) => ({
+      person_id: p.person_id,
+      last_read_message_id: p.last_read_message_id,
+    })),
+    nameMap,
+    title,
+    announcementReadOnly,
+    readOnlyNotice,
+    canManageGroup,
+    unnamedLabel: UNNAMED,
+  };
+}

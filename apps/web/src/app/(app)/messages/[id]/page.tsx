@@ -1,193 +1,81 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Eye, Settings } from "lucide-react";
+import { ChevronLeft, Settings } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { getSessionProfile } from "@/lib/auth";
-import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames, UNNAMED } from "@/lib/person";
-import { createClient } from "@/lib/supabase/server";
 
-import { LeaveButton } from "./leave-button";
-import { ThreadClient, type ThreadMessage } from "./thread-client";
+
+import { loadThread } from "./thread-data";
+import { ThreadPanel } from "./thread-panel";
 
 /**
  * A thread (PLAN.md P5.4).
+ *
+ * The data assembly and the rendering live in `thread-data.ts` /
+ * `thread-panel.tsx`, shared with the team page's Chat and Notice board tabs.
+ * This page is the standalone shell: header, back link, and — for a group's
+ * creator or an administrator — the Group settings link.
  *
  * User-scoped client: the reader sees this conversation because the P5.2
  * participant policies say so, and for no other reason. There is deliberately
  * no admin path through this page — oversight lives in /safeguarding, goes
  * through `read_conversation_as_lead()`, and is audited (SG-9).
  */
-
-/** The visible tail of a thread; older messages stay in the export. */
-const MESSAGE_LIMIT = 200;
-
 export default async function ThreadPage({ params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
   const { id } = await params;
-  const personId = await getCurrentPersonId();
-  if (!personId) redirect("/messages");
+  const data = await loadThread(id);
+  if (!data) notFound();
 
-  const supabase = await createClient();
-
-  const { data: conversation } = await supabase
-    .from("conversations")
-    .select("id,type,title,team_id,supervised_by_lead,closed_at,created_by_person_id")
-    .eq("id", id)
-    .maybeSingle();
-  if (!conversation) notFound();
-
-  const [{ data: participantRows }, { data: messageRows }] = await Promise.all([
-    supabase
-      .from("conversation_participants")
-      .select("person_id,basis,left_at,joined_at,last_read_message_id")
-      .eq("conversation_id", id),
-    supabase
-      .from("messages")
-      .select("id,body,created_at,sender_person_id,deleted_at,redacted_at,reply_to_id")
-      .eq("conversation_id", id)
-      .order("created_at", { ascending: false })
-      .limit(MESSAGE_LIMIT),
-  ]);
-
-  const participants = participantRows ?? [];
-  const mine = participants.filter((p) => p.person_id === personId);
-  const myLive = mine.find((p) => p.left_at === null) ?? null;
-  if (mine.length === 0) notFound();
-
-  const messages: ThreadMessage[] = (messageRows ?? []).slice().reverse();
-  const messageIds = messages.map((m) => m.id);
-  const [{ data: reactionRows }, { data: attachmentRows }] = await Promise.all([
-    messageIds.length > 0
-      ? supabase.from("message_reactions").select("id,message_id,person_id,emoji").in("message_id", messageIds)
-      : Promise.resolve({ data: [] }),
-    messageIds.length > 0
-      ? supabase
-          .from("message_attachments")
-          .select("id,message_id,storage_bucket,storage_path,content_type")
-          .in("message_id", messageIds)
-      : Promise.resolve({ data: [] }),
-  ]);
-
-  const names = await resolveNames([
-    ...participants.map((p) => p.person_id),
-    ...messages.map((m) => m.sender_person_id),
-  ]);
-  const nameMap: Record<string, string> = {};
-  for (const p of participants) nameMap[p.person_id] = nameOf(names, p.person_id);
-  for (const m of messages) nameMap[m.sender_person_id] = nameOf(names, m.sender_person_id);
-
-  const activeOthers = participants.filter((p) => p.left_at === null && p.person_id !== personId);
-  const isStaffHere = myLive ? myLive.basis === "staff" || myLive.basis === "creator" : false;
-  const announcementReadOnly = conversation.type === "announcement" && !isStaffHere;
-
-  const readOnlyNotice = conversation.closed_at
-    ? "This conversation is closed. Its history is kept, but nothing new can be posted."
-    : !myLive
-      ? "You have left this conversation. You can still read what was said while you were in it."
-      : announcementReadOnly
-        ? "Announcements are one-way. Only team staff can post here."
-        : null;
-
-  // A group's name and what it is attached to are edited on /groups/[id] —
-  // offered here to the people RLS already lets change it. Team rooms never get
-  // this link: they are named by `ensure_team_conversation()`.
-  const canManageGroup =
-    conversation.type === "group" &&
-    (conversation.created_by_person_id === personId || (await isClubAdmin()));
-
-  const title =
-    conversation.title ||
-    (activeOthers.length > 0
-      ? activeOthers.map((p) => nameOf(names, p.person_id)).join(", ")
-      : conversation.type === "announcement"
-        ? "Announcements"
-        : "Conversation");
+  // A team room's thread also lives on its team page — offer the way there.
+  const teamHref = data.conversation.team_id ? `/teams/${data.conversation.team_id}` : null;
 
   return (
     <>
       <PageHeader
-        title={title}
+        title={data.title}
         subtitle={
-          conversation.type === "team"
+          data.conversation.type === "team"
             ? "Team room"
-            : conversation.type === "announcement"
+            : data.conversation.type === "announcement"
               ? "Announcements"
-              : conversation.type === "group"
+              : data.conversation.type === "group"
                 ? "Group"
                 : "Direct message"
         }
         action={
           <div className="flex items-center gap-4">
-            {canManageGroup && (
+            {data.canManageGroup && (
               <Link
-                href={`/groups/${conversation.id}`}
+                href={`/groups/${data.conversation.id}`}
                 className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
               >
                 <Settings className="h-4 w-4" /> Group settings
               </Link>
             )}
-            <Link href="/messages" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+            {teamHref && (
+              <Link
+                href={teamHref}
+                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              >
+                Team page
+              </Link>
+            )}
+            <Link
+              href="/messages"
+              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+            >
               <ChevronLeft className="h-4 w-4" /> All messages
             </Link>
           </div>
         }
       />
 
-      <div className="p-6 space-y-4 max-w-3xl">
-        {/*
-          SG-9 acceptance criterion (P5.4): a conversation that is monitored
-          without this banner is a defect. It is persistent, it is shown to
-          every participant, and it says plainly who can read what.
-        */}
-        {conversation.supervised_by_lead && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            <Eye className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
-              <p className="font-medium">The club&apos;s safeguarding lead can read this conversation.</p>
-              <p className="mt-0.5">
-                This conversation is supervised because a young person is taking part without a
-                parent or guardian in the room. The safeguarding lead (and a club administrator)
-                can open and export everything said here, and every time they do it is recorded.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <span>In this conversation:</span>
-          {participants.map((p) => (
-            <Badge key={`${p.person_id}-${p.joined_at}`} variant={p.left_at ? "muted" : "outline"}>
-              {p.person_id === personId ? "You" : (nameMap[p.person_id] ?? UNNAMED)}
-              {p.left_at ? " (left)" : ""}
-            </Badge>
-          ))}
-        </div>
-
-        <ThreadClient
-          conversationId={conversation.id}
-          conversationType={conversation.type}
-          myPersonId={personId}
-          myName={session.profile?.full_name || "Someone"}
-          myLastReadId={myLive?.last_read_message_id ?? null}
-          initialMessages={messages}
-          initialReactions={reactionRows ?? []}
-          initialAttachments={attachmentRows ?? []}
-          initialReaders={activeOthers.map((p) => ({
-            person_id: p.person_id,
-            last_read_message_id: p.last_read_message_id,
-          }))}
-          hasEarlier={messages.length === MESSAGE_LIMIT}
-          names={nameMap}
-          canPost={!!myLive && !conversation.closed_at && !announcementReadOnly}
-          canReact={!!myLive && !conversation.closed_at && conversation.type !== "announcement"}
-          readOnlyNotice={readOnlyNotice}
-        />
-
-        {myLive && !conversation.closed_at && <LeaveButton conversationId={conversation.id} />}
+      <div className="max-w-3xl p-6">
+        <ThreadPanel data={data} />
       </div>
     </>
   );
