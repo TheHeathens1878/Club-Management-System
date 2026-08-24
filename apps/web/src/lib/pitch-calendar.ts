@@ -66,10 +66,29 @@ export function groupsForFilter(filter: CalendarFilter): CalendarGroup[] | null 
   return found?.groups ? [...found.groups] : null;
 }
 
-export type CalendarView = "week" | "month";
+export type CalendarView = "week" | "day" | "list" | "month";
 
 export function isCalendarView(value: string | undefined): value is CalendarView {
-  return value === "week" || value === "month";
+  return value === "week" || value === "day" || value === "list" || value === "month";
+}
+
+/**
+ * Which of the week's days a view shows. The legacy pitch app opened on
+ * Saturday + Sunday only — that IS the club's mental model of a pitch diary —
+ * so weekends-only is the default here too, switchable to all seven days.
+ */
+export type CalendarDays = "weekend" | "all";
+
+export function isCalendarDays(value: string | undefined): value is CalendarDays {
+  return value === "weekend" || value === "all";
+}
+
+/** Saturday and Sunday of the week `days` spans (Monday-first). */
+export function weekendOnly(days: string[]): string[] {
+  return days.filter((date) => {
+    const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
+    return weekday === 6 || weekday === 0;
+  });
 }
 
 /**
@@ -103,6 +122,8 @@ export type CalendarEntry = {
   sharedTeamIds: string[];
   /** Team names for `sharedTeamIds` that the caller could resolve. */
   sharedTeamNames: string[];
+  /** Set when the booking is one week of a weekly series (the 🔁 marker). */
+  recurrenceGroupId: string | null;
 };
 
 function minutesOf(time: string): number {
@@ -147,6 +168,7 @@ export function toCalendarEntry(
     sharedTeamNames: shared
       .map((id) => teamNames.get(id))
       .filter((name): name is string => Boolean(name)),
+    recurrenceGroupId: row.recurrence_group_id ?? null,
   };
 }
 
@@ -196,6 +218,14 @@ export function weekWindow(monday: string): { from: string; to: string } {
   return {
     from: localToInstant(monday, "00:00"),
     to: localToInstant(addDays(monday, 7), "00:00"),
+  };
+}
+
+/** The half-open instant window covering one London day. */
+export function dayWindow(date: string): { from: string; to: string } {
+  return {
+    from: localToInstant(date, "00:00"),
+    to: localToInstant(addDays(date, 1), "00:00"),
   };
 }
 

@@ -1,20 +1,29 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ChevronRight, LandPlot } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
+  LandPlot,
+} from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile } from "@/lib/auth";
-import { isValidDateString, londonToday } from "@/lib/booking-time";
+import { addDays, isValidDateString, londonToday } from "@/lib/booking-time";
 import {
   CALENDAR_FILTERS,
   CALENDAR_GROUP_LABELS,
   countsByGroup,
+  dayHeadingLong,
+  dayWindow,
   entriesByDate,
   entryTouchesTeams,
   GROUP_STYLES,
   groupsForFilter,
+  isCalendarDays,
   isCalendarFilter,
   isCalendarView,
   mondayOf,
@@ -24,22 +33,25 @@ import {
   monthWindow,
   shiftMonth,
   shiftWeek,
+  weekendOnly,
   weekHeading,
   weekOf,
   weekWindow,
+  type CalendarDays,
   type CalendarEntry,
   type CalendarFilter,
   type CalendarGroup,
   type CalendarView,
 } from "@/lib/pitch-calendar";
 import { loadPitchCalendar, loadPitchCalendarContext } from "@/lib/pitch-calendar-data";
+import { groupByVenue } from "@/lib/pitch-venue";
 
-import { CalendarDatePicker } from "./calendar-toolbar";
+import { CalendarDatePicker, CalendarFilterSelect, PrintButton } from "./calendar-toolbar";
 import { WeekCalendar } from "./calendar-views";
 import { ClosePitchForm } from "./closure-form";
 
 /**
- * `/pitches/calendar` — the club's pitch diary (gap 6).
+ * `/pitches/calendar` — the club's pitch diary (gap 6, legacy-app parity).
  *
  * Distinct from `/pitches`, which is the committee's weekend allocation grid,
  * and from the function-room calendar, which answers a different question
@@ -48,8 +60,13 @@ import { ClosePitchForm } from "./closure-form";
  * with one, or a club role, and nothing at all to anyone else — which is why
  * "you are not linked to a team yet" is a real answer here and not a guess.
  *
- * Every filter is in the URL, so a week is a link a coach can send. The only
- * client state on the page is which block is open.
+ * Legacy behaviours carried over: week / day / list / month views; weekends
+ * only by default (the club's pitch week IS Saturday and Sunday); « » jumps
+ * four weeks; venue sections with a venue filter; a team filter; click an
+ * empty slot to start a prefilled booking; confirm / decline / cancel in the
+ * popover for administrators; a weekly-series marker; Print / PDF.
+ *
+ * Every filter is in the URL, so a week is a link a coach can send.
  */
 
 export const dynamic = "force-dynamic";
@@ -61,6 +78,9 @@ type CalendarSearchParams = {
   view?: string;
   filter?: string;
   mine?: string;
+  days?: string;
+  team?: string;
+  venue?: string;
 };
 
 function buildHref(params: Record<string, string>): string {
@@ -69,12 +89,24 @@ function buildHref(params: Record<string, string>): string {
   return text ? `/pitches/calendar?${text}` : "/pitches/calendar";
 }
 
-/** The query the toolbar links and the date picker carry forward. */
-function baseParams(view: CalendarView, filter: CalendarFilter, mine: boolean) {
+type BaseState = {
+  view: CalendarView;
+  filter: CalendarFilter;
+  mine: boolean;
+  days: CalendarDays;
+  team: string;
+  venue: string;
+};
+
+/** The query the toolbar links and the pickers carry forward. */
+function baseParams(state: BaseState): Record<string, string> {
   const params: Record<string, string> = {};
-  if (view !== "week") params.view = view;
-  if (filter !== "all") params.filter = filter;
-  if (mine) params.mine = "1";
+  if (state.view !== "week") params.view = state.view;
+  if (state.filter !== "all") params.filter = state.filter;
+  if (state.mine) params.mine = "1";
+  if (state.days !== "weekend") params.days = state.days;
+  if (state.team) params.team = state.team;
+  if (state.venue) params.venue = state.venue;
   return params;
 }
 
@@ -86,61 +118,130 @@ export default async function PitchCalendarPage({
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
-  const { date, view: viewParam, filter: filterParam, mine: mineParam } = await searchParams;
+  const {
+    date,
+    view: viewParam,
+    filter: filterParam,
+    mine: mineParam,
+    days: daysParam,
+    team: teamParam,
+    venue: venueParam,
+  } = await searchParams;
 
   const anchor = date && isValidDateString(date) ? date : londonToday();
   const view: CalendarView = isCalendarView(viewParam) ? viewParam : "week";
   const filter: CalendarFilter = isCalendarFilter(filterParam) ? filterParam : "all";
   const mineRequested = mineParam === "1";
+  const daysMode: CalendarDays = isCalendarDays(daysParam) ? daysParam : "weekend";
+  const teamFilter = teamParam && /^[0-9a-f-]{36}$/i.test(teamParam) ? teamParam : "";
 
   const monday = mondayOf(anchor);
   const monthStart = monthStartOf(anchor);
-  const window = view === "month" ? monthWindow(monthStart) : weekWindow(monday);
+  const window =
+    view === "month"
+      ? monthWindow(monthStart)
+      : view === "day"
+        ? dayWindow(anchor)
+        : weekWindow(monday);
 
   const [context, calendar] = await Promise.all([
     loadPitchCalendarContext(),
     loadPitchCalendar(window.from, window.to),
   ]);
 
-  // "My teams" narrows to the teams the caller plays in, staffs, or whose
-  // children play in — computed from `team_memberships` + `guardianships` under
-  // the caller's own RLS. With no teams there is nothing to narrow to, so the
-  // toggle is offered but falls back to everything rather than an empty week.
   const myTeamIds = new Set(context.myTeamIds);
   const mineAvailable = myTeamIds.size > 0;
   const mine = mineRequested && mineAvailable;
+
+  // Venue grouping comes from the pitch-name convention ("Venue – Pitch 2").
+  const venueGroups = groupByVenue(calendar.pitches);
+  const venueNames = venueGroups.map((group) => group.venue);
+  const venue = venueParam && venueNames.includes(venueParam) ? venueParam : "";
+  const visibleGroups = venue
+    ? venueGroups.filter((group) => group.venue === venue)
+    : venueGroups;
 
   const groups = groupsForFilter(filter);
   const entries: CalendarEntry[] = calendar.entries.filter((entry) => {
     if (groups && !groups.includes(entry.group)) return false;
     if (mine && !entryTouchesTeams(entry, myTeamIds)) return false;
+    if (
+      teamFilter &&
+      entry.teamId !== teamFilter &&
+      !entry.sharedTeamIds.includes(teamFilter)
+    ) {
+      return false;
+    }
     return true;
   });
 
-  const params = baseParams(view, filter, mineRequested && mineAvailable);
+  // Team options for the filter: every team seen in the loaded window.
+  const teamOptions = Array.from(
+    new Map(
+      calendar.entries
+        .filter((entry) => entry.teamId && entry.teamName)
+        .map((entry) => [entry.teamId as string, entry.teamName as string]),
+    ),
+  )
+    .map(([value, label]) => ({ value, label }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  const state: BaseState = { view, filter, mine, days: daysMode, team: teamFilter, venue };
+  const params = baseParams(state);
+  const withDate = (extra: Record<string, string>) => ({
+    ...params,
+    ...(date && isValidDateString(date) ? { date: anchor } : {}),
+    ...extra,
+  });
   const canAllocate = context.isAdmin;
+  const canBook = context.isAdmin || context.staffTeamIds.length > 0;
+
+  // Week/list show Sat+Sun unless all days asked for; day shows the anchor.
+  const weekDays =
+    view === "day"
+      ? [anchor]
+      : daysMode === "weekend"
+        ? weekendOnly(weekOf(monday).days)
+        : weekOf(monday).days;
+
+  // Navigation steps: a day in day view; a week otherwise. Jumps: a week in
+  // day view; four weeks otherwise (the legacy « » behaviour).
+  const stepBack = view === "day" ? addDays(anchor, -1) : shiftWeek(monday, -1);
+  const stepForward = view === "day" ? addDays(anchor, 1) : shiftWeek(monday, 1);
+  const jumpBack = view === "day" ? addDays(anchor, -7) : shiftWeek(monday, -4);
+  const jumpForward = view === "day" ? addDays(anchor, 7) : shiftWeek(monday, 4);
+
+  const heading =
+    view === "month"
+      ? monthHeading(monthStart)
+      : view === "day"
+        ? dayHeadingLong(anchor)
+        : weekHeading(monday);
 
   const header = (
     <PageHeader
       title="Pitch calendar"
       subtitle="Every match, training session and closure on the club's pitches"
       action={
-        <Link
-          href="/pitches"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          <LandPlot className="h-4 w-4" /> Allocate fixtures
-        </Link>
+        <div className="flex flex-wrap items-center gap-2 print:hidden">
+          {canBook && (
+            <Link href="/pitches/book" className={buttonVariants({ size: "sm" })}>
+              Book a pitch
+            </Link>
+          )}
+          {canAllocate && (
+            <Link
+              href="/pitches"
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <LandPlot className="h-4 w-4" /> Allocate fixtures
+            </Link>
+          )}
+        </div>
       }
     />
   );
 
-  // Nobody `can_view_pitch_calendar()` accepts — no membership, no guarded
-  // child with one, no club role. The database's answer, not a guess.
-  //
-  // `pitch_calendar()` also lets the `staff`/`club_admin` app roles through by
-  // a second route, so an administrator whose week happens to be empty is not
-  // told they have no team: the emptiness is real, not a refusal.
   if (calendar.denied && !context.isAdmin && context.staffTeamIds.length === 0) {
     return (
       <>
@@ -180,26 +281,37 @@ export default async function PitchCalendarPage({
           <CardHeader className="gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <CardTitle>
-                  {view === "month" ? monthHeading(monthStart) : weekHeading(monday)}
-                </CardTitle>
-                <p className="mt-1 text-sm text-muted-foreground">
+                <CardTitle>{heading}</CardTitle>
+                <p className="mt-1 text-sm text-muted-foreground print:hidden">
                   {view === "month"
                     ? "How busy each day is. Pick one to open its week."
-                    : "Monday to Sunday, 08:00–22:00 Europe/London."}
+                    : view === "day"
+                      ? "One day, 08:00–22:00 Europe/London."
+                      : daysMode === "weekend"
+                        ? "Saturday and Sunday, 08:00–22:00 Europe/London."
+                        : "Monday to Sunday, 08:00–22:00 Europe/London."}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 print:hidden">
+                {view !== "month" && (
+                  <Link
+                    href={buildHref(withDate({ date: jumpBack }))}
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    aria-label={view === "day" ? "Back a week" : "Back four weeks"}
+                  >
+                    <ChevronsLeft className="h-4 w-4" />
+                  </Link>
+                )}
                 <Link
-                  href={buildHref({
-                    ...params,
-                    date:
-                      view === "month" ? shiftMonth(monthStart, -1) : shiftWeek(monday, -1),
-                  })}
+                  href={buildHref(
+                    withDate({
+                      date: view === "month" ? shiftMonth(monthStart, -1) : stepBack,
+                    }),
+                  )}
                   className={buttonVariants({ variant: "outline", size: "sm" })}
-                  aria-label={view === "month" ? "Previous month" : "Previous week"}
+                  aria-label="Previous"
                 >
-                  <ChevronLeft className="h-4 w-4" /> Previous
+                  <ChevronLeft className="h-4 w-4" /> Prev
                 </Link>
                 <Link
                   href={buildHref(params)}
@@ -208,28 +320,40 @@ export default async function PitchCalendarPage({
                   Today
                 </Link>
                 <Link
-                  href={buildHref({
-                    ...params,
-                    date: view === "month" ? shiftMonth(monthStart, 1) : shiftWeek(monday, 1),
-                  })}
+                  href={buildHref(
+                    withDate({
+                      date: view === "month" ? shiftMonth(monthStart, 1) : stepForward,
+                    }),
+                  )}
                   className={buttonVariants({ variant: "outline", size: "sm" })}
-                  aria-label={view === "month" ? "Next month" : "Next week"}
+                  aria-label="Next"
                 >
                   Next <ChevronRight className="h-4 w-4" />
                 </Link>
+                {view !== "month" && (
+                  <Link
+                    href={buildHref(withDate({ date: jumpForward }))}
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    aria-label={view === "day" ? "Forward a week" : "Forward four weeks"}
+                  >
+                    <ChevronsRight className="h-4 w-4" />
+                  </Link>
+                )}
                 <CalendarDatePicker value={anchor} params={params} />
+                <PrintButton />
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 print:hidden">
               <div className="flex flex-wrap items-center gap-1">
                 {CALENDAR_FILTERS.map((option) => (
                   <Link
                     key={option.value}
-                    href={buildHref({
-                      ...baseParams(view, option.value, mineRequested && mineAvailable),
-                      ...(date && isValidDateString(date) ? { date: anchor } : {}),
-                    })}
+                    href={buildHref(
+                      withDate(
+                        baseParams({ ...state, filter: option.value }),
+                      ),
+                    )}
                     className={buttonVariants({
                       variant: option.value === filter ? "default" : "outline",
                       size: "sm",
@@ -241,29 +365,49 @@ export default async function PitchCalendarPage({
               </div>
 
               <div className="flex flex-wrap items-center gap-1">
-                {(["week", "month"] as const).map((option) => (
+                {(
+                  [
+                    ["week", "Week"],
+                    ["day", "Day"],
+                    ["list", "List"],
+                    ["month", "Month"],
+                  ] as const
+                ).map(([option, label]) => (
                   <Link
                     key={option}
-                    href={buildHref({
-                      ...baseParams(option, filter, mineRequested && mineAvailable),
-                      ...(date && isValidDateString(date) ? { date: anchor } : {}),
-                    })}
+                    href={buildHref(withDate(baseParams({ ...state, view: option })))}
                     className={buttonVariants({
                       variant: option === view ? "secondary" : "outline",
                       size: "sm",
                     })}
                   >
-                    {option === "week" ? "Week" : "Month"}
+                    {label}
                   </Link>
                 ))}
               </div>
 
+              {view !== "day" && view !== "month" && (
+                <Link
+                  href={buildHref(
+                    withDate(
+                      baseParams({
+                        ...state,
+                        days: daysMode === "weekend" ? "all" : "weekend",
+                      }),
+                    ),
+                  )}
+                  className={buttonVariants({
+                    variant: daysMode === "weekend" ? "default" : "outline",
+                    size: "sm",
+                  })}
+                >
+                  {daysMode === "weekend" ? "Weekends only" : "All days"}
+                </Link>
+              )}
+
               {mineAvailable && (
                 <Link
-                  href={buildHref({
-                    ...baseParams(view, filter, !mine),
-                    ...(date && isValidDateString(date) ? { date: anchor } : {}),
-                  })}
+                  href={buildHref(withDate(baseParams({ ...state, mine: !mine })))}
                   className={buttonVariants({
                     variant: mine ? "default" : "outline",
                     size: "sm",
@@ -271,6 +415,28 @@ export default async function PitchCalendarPage({
                 >
                   {mine ? "My teams only" : "My teams"}
                 </Link>
+              )}
+
+              {venueNames.length > 1 && (
+                <CalendarFilterSelect
+                  label="Venue"
+                  paramKey="venue"
+                  value={venue}
+                  options={venueNames.map((name) => ({ value: name, label: name }))}
+                  params={withDate(baseParams({ ...state, venue: "" }))}
+                  allLabel="All venues"
+                />
+              )}
+
+              {teamOptions.length > 0 && (
+                <CalendarFilterSelect
+                  label="Team"
+                  paramKey="team"
+                  value={teamFilter}
+                  options={teamOptions}
+                  params={withDate(baseParams({ ...state, team: "" }))}
+                  allLabel="All teams"
+                />
               )}
             </div>
 
@@ -291,6 +457,10 @@ export default async function PitchCalendarPage({
                 />
                 Not yet confirmed
               </span>
+              <span className="flex items-center gap-1.5">🔁 Weekly series</span>
+              {canBook && view !== "month" && view !== "list" && (
+                <span className="print:hidden">Click an empty slot to book it.</span>
+              )}
             </div>
           </CardHeader>
 
@@ -299,21 +469,37 @@ export default async function PitchCalendarPage({
               <MonthView
                 monthStart={monthStart}
                 entries={entries}
-                params={baseParams("week", filter, mineRequested && mineAvailable)}
+                params={baseParams({ ...state, view: "week" })}
               />
             ) : (
-              <WeekCalendar
-                days={weekOf(monday).days}
-                pitches={calendar.pitches}
-                entries={entries}
-                permissions={{ isAdmin: context.isAdmin, staffTeamIds: context.staffTeamIds }}
-              />
+              <div className="space-y-8">
+                {visibleGroups.map((group) => (
+                  <section key={group.venue} className="space-y-3">
+                    {venueNames.length > 1 && (
+                      <h3 className="border-b pb-1 text-sm font-semibold">{group.venue}</h3>
+                    )}
+                    <WeekCalendar
+                      days={weekDays}
+                      pitches={group.pitches}
+                      entries={entries.filter((entry) =>
+                        group.pitches.some((pitch) => pitch.id === entry.resourceId),
+                      )}
+                      permissions={{
+                        isAdmin: context.isAdmin,
+                        staffTeamIds: context.staffTeamIds,
+                      }}
+                      canBook={canBook}
+                      mode={view === "list" ? "list" : "auto"}
+                    />
+                  </section>
+                ))}
+              </div>
             )}
           </CardContent>
         </Card>
 
         {canAllocate && (
-          <Card>
+          <Card className="print:hidden">
             <CardHeader>
               <CardTitle>Close a pitch</CardTitle>
               <p className="text-sm text-muted-foreground">
