@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
+import type { Headcount } from "@/lib/headcount";
 
 /**
  * The team's fixtures, in the two shapes the page needs: the full table on the
@@ -22,7 +23,22 @@ export type TeamFixture = {
   allocationConflict: boolean;
   seasonName: string | null;
   pitchName: string | null;
+  /** Squad availability counts — staff and admin view only. */
+  headcount: Headcount | null;
 };
+
+/** `✓ 5 · ✗ 2 · ? 5` — the marker at a glance; unanswered fold into "?". */
+export function HeadcountChips({ headcount }: { headcount: Headcount }) {
+  return (
+    <span className="inline-flex items-center gap-1 whitespace-nowrap text-xs">
+      <Badge variant="success">✓ {headcount.going}</Badge>
+      <Badge variant={headcount.notGoing > 0 ? "destructive" : "muted"}>
+        ✗ {headcount.notGoing}
+      </Badge>
+      <Badge variant="muted">? {headcount.maybe + headcount.unanswered}</Badge>
+    </span>
+  );
+}
 
 export function fixtureStatusVariant(
   status: string,
@@ -49,9 +65,11 @@ export function fixtureStatusVariant(
 export function FixturesTable({
   fixtures,
   canManage,
+  teamId,
 }: {
   fixtures: TeamFixture[];
   canManage: boolean;
+  teamId: string;
 }) {
   if (fixtures.length === 0) {
     return (
@@ -108,21 +126,15 @@ export function FixturesTable({
                 </td>
                 {canManage && (
                   <td className="whitespace-nowrap py-2">
-                    {fixture.bookingId ? (
+                    <span className="inline-flex items-center gap-2">
+                      {fixture.headcount && <HeadcountChips headcount={fixture.headcount} />}
                       <Link
-                        href={`/pitches/${fixture.bookingId}#attendance`}
+                        href={`/teams/${teamId}/fixtures/${fixture.id}`}
                         className="font-medium text-primary underline-offset-4 hover:underline"
                       >
                         Attendance
                       </Link>
-                    ) : (
-                      <span
-                        className="text-muted-foreground"
-                        title="Allocate a pitch first — attendance is kept against the pitch booking."
-                      >
-                        Attendance
-                      </span>
-                    )}
+                    </span>
                   </td>
                 )}
               </tr>
@@ -167,6 +179,7 @@ export function FixturesSummary({
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-1">
+                {fixture.headcount && <HeadcountChips headcount={fixture.headcount} />}
                 <Badge variant={fixtureStatusVariant(fixture.status)} className="capitalize">
                   {fixture.status}
                 </Badge>

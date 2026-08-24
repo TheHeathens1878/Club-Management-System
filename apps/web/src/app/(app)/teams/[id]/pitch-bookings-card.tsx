@@ -23,6 +23,9 @@ import {
   type PitchBookingItem,
 } from "@/lib/pitch-booking";
 
+import type { Headcount } from "@/lib/headcount";
+
+import { HeadcountChips } from "./fixtures-list";
 import { cancelPitchBooking } from "../../pitches/booking-actions";
 import { BookingFeedback, EMPTY_BOOKING_STATE } from "../../pitches/booking-feedback";
 
@@ -30,10 +33,13 @@ export function TeamPitchBookings({
   teamId,
   items,
   canManage,
+  headcounts = {},
 }: {
   teamId: string;
   items: PitchBookingItem[];
   canManage: boolean;
+  /** Squad availability per booking id — staff view (gap: attendance markers). */
+  headcounts?: Record<string, Headcount>;
 }) {
   const [state, action, pending] = useActionState(cancelPitchBooking, EMPTY_BOOKING_STATE);
 
@@ -57,6 +63,7 @@ export function TeamPitchBookings({
                   <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge>
                   <Badge variant="muted">{kindLabel(item.kind)}</Badge>
                   {item.teamId !== teamId && <Badge variant="outline">Shared session</Badge>}
+                  {headcounts[item.id] && <HeadcountChips headcount={headcounts[item.id]!} />}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {formatSlot(item)} · {item.resourceName}
