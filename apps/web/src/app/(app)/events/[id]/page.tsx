@@ -11,13 +11,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
-import { RespondButtons, responseLabel, responseVariant } from "../respond-buttons";
+import { RespondButtons } from "../respond-buttons";
 import {
   eventTypeLabel,
   formatEventDate,
   formatEventTime,
   googleMapsUrl,
   type EventPerson,
+  responseLabel,
+  responseVariant,
 } from "../shared";
 import { RemindButton } from "./remind-button";
 
