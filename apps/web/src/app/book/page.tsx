@@ -33,9 +33,15 @@ export default async function BookPage() {
   threeMonthsOut.setMonth(threeMonthsOut.getMonth() + 3);
   const lastDate = londonToday(threeMonthsOut);
 
+  // Function-room slots only: `bookings` also holds every pitch booking
+  // (fixtures, training), which are no business of the room availability grid.
   const { data: rawBookings } = await admin
     .from("bookings")
     .select("resource_id, starts_at, ends_at")
+    .in(
+      "resource_id",
+      (rooms ?? []).map((room) => room.id),
+    )
     .in("status", ["pending", "confirmed"])
     .lt("starts_at", localToInstant(addDays(lastDate, 1), "00:00"));
 
