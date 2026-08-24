@@ -24,12 +24,24 @@ import { BookForm } from "./book-form";
 export default async function BookPitchPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string }>;
+  searchParams: Promise<{
+    team?: string;
+    pitch?: string;
+    date?: string;
+    start?: string;
+    end?: string;
+  }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
-  const { team: requestedTeam } = await searchParams;
+  const {
+    team: requestedTeam,
+    pitch: requestedPitch,
+    date: requestedDate,
+    start: requestedStart,
+    end: requestedEnd,
+  } = await searchParams;
   const [access, pitches, roleView] = await Promise.all([
     loadPitchBookingAccess(),
     loadPitches(),
@@ -106,6 +118,21 @@ export default async function BookPitchPage({
                 defaultTeamId={defaultTeamId}
                 homePitchByTeam={homePitchByTeam}
                 today={todayLondon()}
+                prefill={{
+                  // A calendar slot click lands here with the slot it named.
+                  pitchId:
+                    requestedPitch && bookable.has(requestedPitch) ? requestedPitch : undefined,
+                  date:
+                    requestedDate && /^\d{4}-\d{2}-\d{2}$/.test(requestedDate)
+                      ? requestedDate
+                      : undefined,
+                  start:
+                    requestedStart && /^\d{2}:\d{2}$/.test(requestedStart)
+                      ? requestedStart
+                      : undefined,
+                  end:
+                    requestedEnd && /^\d{2}:\d{2}$/.test(requestedEnd) ? requestedEnd : undefined,
+                }}
               />
             )}
           </CardContent>

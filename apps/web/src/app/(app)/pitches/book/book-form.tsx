@@ -48,6 +48,7 @@ export function BookForm({
   defaultTeamId,
   homePitchByTeam,
   today,
+  prefill,
 }: {
   teams: TeamOption[];
   pitches: PitchOption[];
@@ -56,13 +57,17 @@ export function BookForm({
   /** `teams.home_resource_id` by team id, already filtered to bookable pitches. */
   homePitchByTeam: Record<string, string>;
   today: string;
+  /** From a calendar slot click: the pitch and window the click named. */
+  prefill?: { pitchId?: string; date?: string; start?: string; end?: string };
 }) {
   const [state, action, pending] = useActionState(createPitchBooking, EMPTY_BOOKING_STATE);
   const initialTeamId = defaultTeamId ?? teams[0]?.id ?? "";
   const [teamId, setTeamId] = useState(initialTeamId);
-  const [resourceId, setResourceId] = useState(homePitchByTeam[initialTeamId] ?? "");
+  const [resourceId, setResourceId] = useState(
+    prefill?.pitchId ?? homePitchByTeam[initialTeamId] ?? "",
+  );
   /** Once the pitch has been chosen by hand, the team stops overriding it. */
-  const [pitchTouched, setPitchTouched] = useState(false);
+  const [pitchTouched, setPitchTouched] = useState(Boolean(prefill?.pitchId));
   const [kind, setKind] = useState<PitchBookingKind>("training");
   const [repeats, setRepeats] = useState(false);
 
@@ -123,15 +128,34 @@ export function BookForm({
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-1">
           <Label htmlFor="date">Date</Label>
-          <Input id="date" name="date" type="date" required min={today} defaultValue={today} />
+          <Input
+            id="date"
+            name="date"
+            type="date"
+            required
+            min={today}
+            defaultValue={prefill?.date ?? today}
+          />
         </div>
         <div className="space-y-1">
           <Label htmlFor="start_time">Start</Label>
-          <Input id="start_time" name="start_time" type="time" required defaultValue="18:00" />
+          <Input
+            id="start_time"
+            name="start_time"
+            type="time"
+            required
+            defaultValue={prefill?.start ?? "18:00"}
+          />
         </div>
         <div className="space-y-1">
           <Label htmlFor="end_time">End</Label>
-          <Input id="end_time" name="end_time" type="time" required defaultValue="19:30" />
+          <Input
+            id="end_time"
+            name="end_time"
+            type="time"
+            required
+            defaultValue={prefill?.end ?? "19:30"}
+          />
         </div>
       </div>
       <p className="text-xs text-muted-foreground">

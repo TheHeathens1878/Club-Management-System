@@ -48,3 +48,63 @@ export function CalendarDatePicker({
     </label>
   );
 }
+
+/** A query-carrying <select> — the team and venue filters. */
+export function CalendarFilterSelect({
+  label,
+  paramKey,
+  value,
+  options,
+  params,
+  allLabel,
+}: {
+  label: string;
+  paramKey: string;
+  /** The currently selected value, or "" for all. */
+  value: string;
+  options: { value: string; label: string }[];
+  /** The query to keep, minus the key this select sets. */
+  params: Record<string, string>;
+  allLabel: string;
+}) {
+  const router = useRouter();
+
+  return (
+    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="whitespace-nowrap">{label}</span>
+      <select
+        value={value}
+        aria-label={label}
+        className="h-9 rounded-md border border-input bg-card px-2 text-sm text-foreground"
+        onChange={(event) => {
+          const next = event.target.value;
+          const query = new URLSearchParams(params);
+          if (next) query.set(paramKey, next);
+          else query.delete(paramKey);
+          const text = query.toString();
+          router.push(text ? `/pitches/calendar?${text}` : "/pitches/calendar");
+        }}
+      >
+        <option value="">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+/** "Print week" — the browser's print-to-PDF is the club's export path. */
+export function PrintButton() {
+  return (
+    <button
+      type="button"
+      onClick={() => window.print()}
+      className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-card px-3 text-sm font-medium hover:bg-secondary print:hidden"
+    >
+      Print / PDF
+    </button>
+  );
+}

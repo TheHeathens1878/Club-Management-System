@@ -1,31 +1,39 @@
 "use client";
 
 /**
- * The pitch calendar's week and list views (gap 6).
+ * The pitch calendar's grid, list and day views (gap 6 → legacy parity).
  *
- * Filtering — the tabs and the "My teams" toggle — is done on the server and
- * carried in the URL, so a week is a link somebody can send to a coach. The
- * only state here is which block is open: that has to be client-side, because
- * a popover is the whole point of clicking one.
+ * Filtering — tabs, team, venue, weekends, "My teams" — is done on the server
+ * and carried in the URL, so a week is a link somebody can send to a coach.
+ * Client state is: which block is open, and which page of pitches each grid
+ * shows (the legacy app capped visible pitches at 1/3/5 by viewport with a
+ * mobile pitch navigator; so does this one).
  *
- * The grid is the wide view and the stacked list is the narrow one, chosen by
- * a media query rather than a toggle: a phone gets the list without anyone
- * having to pick it, and both are rendered from the same entries so they can
- * never disagree.
+ * Two legacy behaviours live here besides the pagination:
+ *   · clicking EMPTY grid space starts a booking — the click's height picks
+ *     the half-hour, and /pitches/book opens prefilled (staff and admins
+ *     only; everyone else's click does nothing, exactly like a paper diary);
+ *   · a club administrator confirms, declines (with the reason the coach is
+ *     told) or cancels a booking straight from the popover — the same server
+ *     actions the requests desk uses, refused by RLS for anyone else.
  */
 
 import Link from "next/link";
-import { useActionState, useState } from "react";
-import { CalendarX2, Users, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useState } from "react";
+import { CalendarX2, ChevronLeft, ChevronRight, Repeat2, Users, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/field";
 import type { PitchOption } from "@/lib/pitch-booking";
 import {
   blockClasses,
   blockGeometry,
   CALENDAR_GROUP_LABELS,
   DAY_HOURS,
+  DAY_START_MINUTES,
+  DAY_END_MINUTES,
   dayHeading,
   dayHeadingLong,
   entriesByDate,
@@ -34,10 +42,17 @@ import {
   type CalendarEntry,
 } from "@/lib/pitch-calendar";
 
+import {
+  cancelPitchBooking,
+  confirmPitchBooking,
+  declinePitchBooking,
+  type PitchBookingActionState,
+} from "../booking-actions";
 import { cancelPitchClosure, type ClosureActionState } from "./closure-actions";
 import { EMPTY_CLOSURE_STATE } from "./closure-feedback";
 
 const GRID_HEIGHT = (DAY_HOURS.length - 1) * HOUR_HEIGHT;
+const EMPTY_ACTION_STATE: PitchBookingActionState = {};
 
 export type CalendarPermissions = {
   isAdmin: boolean;
@@ -54,7 +69,7 @@ function manageLink(
     if (entry.group === "fixture") {
       return { href: "/pitches", label: "Allocate fixtures" };
     }
-    return { href: "/pitches/requests", label: "Manage in pitch requests" };
+    return null; // admins act right here in the popover now
   }
   if (entry.teamId && permissions.staffTeamIds.includes(entry.teamId)) {
     return { href: "/pitches/mine", label: "Manage in my pitch bookings" };
@@ -84,15 +99,19 @@ function EntryMeta({ entry }: { entry: CalendarEntry }) {
           <span>Shared with {entry.sharedTeamNames.join(", ")}</span>
         </p>
       )}
+      {entry.recurrenceGroupId && (
+        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Repeat2 className="h-3 w-3 shrink-0" /> Part of a weekly series
+        </p>
+      )}
     </>
   );
 }
 
 /**
- * The read-only detail, plus whatever the caller is allowed to do about it.
- *
- * A club administrator can lift a closure straight from here — the same
- * `bookings` update the requests desk makes, refused by RLS for anyone else.
+ * The read-only detail, plus whatever the caller is allowed to do about it:
+ * closures can be lifted, pending bookings confirmed or declined, confirmed
+ * ones cancelled — administrators only, and RLS is the rule either way.
  */
 function EntryPopover({
   entry,
@@ -103,11 +122,30 @@ function EntryPopover({
   permissions: CalendarPermissions;
   onClose: () => void;
 }) {
-  const [state, action, pending] = useActionState<ClosureActionState, FormData>(
-    cancelPitchClosure,
-    EMPTY_CLOSURE_STATE,
+  const [closureState, closureAction, closurePending] = useActionState<
+    ClosureActionState,
+    FormData
+  >(cancelPitchClosure, EMPTY_CLOSURE_STATE);
+  const [confirmState, confirmAction, confirming] = useActionState(
+    confirmPitchBooking,
+    EMPTY_ACTION_STATE,
   );
+  const [declineState, declineAction, declining] = useActionState(
+    declinePitchBooking,
+    EMPTY_ACTION_STATE,
+  );
+  const [cancelState, cancelAction, cancelling] = useActionState(
+    cancelPitchBooking,
+    EMPTY_ACTION_STATE,
+  );
+  const [showDecline, setShowDecline] = useState(false);
   const manage = manageLink(entry, permissions);
+  const isClosure = entry.group === "closed";
+  const canAct = permissions.isAdmin && !isClosure;
+
+  const feedback = [closureState, confirmState, declineState, cancelState];
+  const error = feedback.map((s) => s.error).find(Boolean);
+  const notice = feedback.map((s) => s.notice).find(Boolean);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -141,17 +179,18 @@ function EntryPopover({
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="muted">{CALENDAR_GROUP_LABELS[entry.group]}</Badge>
           {entry.status === "pending" && <Badge variant="warning">Not yet confirmed</Badge>}
+          {entry.recurrenceGroupId && <Badge variant="outline">Weekly series</Badge>}
         </div>
 
         <div className="space-y-1">
           <EntryMeta entry={entry} />
         </div>
 
-        {state.error && <p className="text-xs text-destructive">{state.error}</p>}
-        {state.notice && <p className="text-xs text-emerald-700">{state.notice}</p>}
+        {error && <p className="text-xs text-destructive">{error}</p>}
+        {notice && <p className="text-xs text-emerald-700">{notice}</p>}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          {entry.group !== "closed" && (
+          {!isClosure && (
             <Link
               href={`/pitches/${entry.bookingId}`}
               className={buttonVariants({ variant: "outline", size: "sm" })}
@@ -167,10 +206,40 @@ function EntryPopover({
               {manage.label}
             </Link>
           )}
-          {permissions.isAdmin && entry.group === "closed" && entry.status !== "cancelled" && (
-            <form action={action}>
+
+          {canAct && entry.status === "pending" && (
+            <form action={confirmAction}>
               <input type="hidden" name="booking_id" value={entry.bookingId} />
-              <Button type="submit" variant="ghost" size="sm" disabled={pending}>
+              <input type="hidden" name="team_id" value={entry.teamId ?? ""} />
+              <Button type="submit" size="sm" disabled={confirming}>
+                {confirming ? "Confirming…" : "Confirm"}
+              </Button>
+            </form>
+          )}
+          {canAct && entry.status === "pending" && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowDecline((value) => !value)}
+            >
+              Decline…
+            </Button>
+          )}
+          {canAct && entry.status === "confirmed" && entry.group !== "fixture" && (
+            <form action={cancelAction}>
+              <input type="hidden" name="booking_id" value={entry.bookingId} />
+              <input type="hidden" name="team_id" value={entry.teamId ?? ""} />
+              <Button type="submit" variant="ghost" size="sm" disabled={cancelling}>
+                {cancelling ? "Cancelling…" : "Cancel booking"}
+              </Button>
+            </form>
+          )}
+
+          {permissions.isAdmin && isClosure && entry.status !== "cancelled" && (
+            <form action={closureAction}>
+              <input type="hidden" name="booking_id" value={entry.bookingId} />
+              <Button type="submit" variant="ghost" size="sm" disabled={closurePending}>
                 Re-open the pitch
               </Button>
             </form>
@@ -182,26 +251,58 @@ function EntryPopover({
             </p>
           )}
         </div>
+
+        {canAct && entry.status === "pending" && showDecline && (
+          <form action={declineAction} className="space-y-2 rounded-lg border p-3">
+            <input type="hidden" name="booking_id" value={entry.bookingId} />
+            <input type="hidden" name="team_id" value={entry.teamId ?? ""} />
+            <Textarea
+              name="reason"
+              rows={2}
+              required
+              placeholder="Why is it declined? The coach is told this."
+              className="text-xs"
+            />
+            <Button type="submit" variant="destructive" size="sm" disabled={declining}>
+              {declining ? "Declining…" : "Confirm decline"}
+            </Button>
+          </form>
+        )}
       </div>
     </div>
   );
+}
+
+/** Snap a click inside a column to the half-hour it landed in. */
+function minutesFromClick(offsetY: number): number {
+  const minutes = DAY_START_MINUTES + (offsetY / HOUR_HEIGHT) * 60;
+  const snapped = Math.floor(minutes / 30) * 30;
+  return Math.min(Math.max(snapped, DAY_START_MINUTES), DAY_END_MINUTES - 60);
+}
+
+function timeOf(minutes: number): string {
+  return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
 }
 
 function DayGrid({
   date,
   pitches,
   entries,
+  canBook,
   onSelect,
 }: {
   date: string;
   pitches: PitchOption[];
   entries: CalendarEntry[];
+  canBook: boolean;
   onSelect: (entry: CalendarEntry) => void;
 }) {
+  const router = useRouter();
+
   return (
     <div className="overflow-x-auto">
       <div
-        className="grid min-w-[36rem]"
+        className="grid"
         style={{
           gridTemplateColumns: `3.25rem repeat(${Math.max(pitches.length, 1)}, minmax(7rem, 1fr))`,
         }}
@@ -237,13 +338,27 @@ function DayGrid({
           return (
             <div
               key={pitch.id}
-              className="relative border-l"
+              className={"relative border-l " + (canBook ? "cursor-copy" : "")}
               style={{ height: GRID_HEIGHT }}
+              title={canBook ? "Click an empty slot to book this pitch" : undefined}
+              onClick={(event) => {
+                if (!canBook || event.target !== event.currentTarget) return;
+                const rect = event.currentTarget.getBoundingClientRect();
+                const start = minutesFromClick(event.clientY - rect.top);
+                const end = Math.min(start + 60, DAY_END_MINUTES);
+                const query = new URLSearchParams({
+                  pitch: pitch.id,
+                  date,
+                  start: timeOf(start),
+                  end: timeOf(end),
+                });
+                router.push(`/pitches/book?${query.toString()}`);
+              }}
             >
               {DAY_HOURS.slice(1, -1).map((hour, index) => (
                 <div
                   key={hour}
-                  className="absolute left-0 right-0 border-t border-dashed border-border/60"
+                  className="pointer-events-none absolute left-0 right-0 border-t border-dashed border-border/60"
                   style={{ top: (index + 1) * HOUR_HEIGHT }}
                 />
               ))}
@@ -261,7 +376,10 @@ function DayGrid({
                     }
                     style={{ top: `${geometry.topPct}%`, height: `${geometry.heightPct}%` }}
                   >
-                    <span className="block truncate font-medium">{entry.label}</span>
+                    <span className="block truncate font-medium">
+                      {entry.recurrenceGroupId ? "🔁 " : ""}
+                      {entry.label}
+                    </span>
                     <span className="block truncate opacity-80">{timeRange(entry)}</span>
                     {entry.teamName && (
                       <span className="block truncate opacity-80">{entry.teamName}</span>
@@ -304,7 +422,10 @@ function DayList({
                 }
               >
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                  <span className="text-sm font-medium">{entry.label}</span>
+                  <span className="text-sm font-medium">
+                    {entry.recurrenceGroupId ? "🔁 " : ""}
+                    {entry.label}
+                  </span>
                   {entry.status === "pending" && (
                     <span className="rounded-full border border-current px-1.5 text-[10px]">
                       Pending
@@ -329,61 +450,147 @@ function DayList({
   );
 }
 
+/** 1 pitch below 640px, 3 below 1024px, 5 from 1024px — the legacy caps. */
+function pitchesPerPage(width: number): number {
+  if (width < 640) return 1;
+  if (width < 1024) return 3;
+  return 5;
+}
+
 export function WeekCalendar({
   days,
   pitches,
   entries,
   permissions,
+  canBook,
+  mode = "auto",
 }: {
   days: string[];
   pitches: PitchOption[];
   entries: CalendarEntry[];
   permissions: CalendarPermissions;
+  /** Staff or admin — a click on empty grid space starts a booking. */
+  canBook: boolean;
+  /** "auto": grid on desktop, list on phones. "list": the list, everywhere. */
+  mode?: "auto" | "list";
 }) {
   const [selected, setSelected] = useState<CalendarEntry | null>(null);
+  const [perPage, setPerPage] = useState(5);
+  const [offset, setOffset] = useState(0);
   const byDate = entriesByDate(entries);
+
+  useEffect(() => {
+    const update = () => setPerPage(pitchesPerPage(window.innerWidth));
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+
+  const pages = Math.max(1, Math.ceil(pitches.length / perPage));
+  const page = Math.min(offset, pages - 1);
+  const visiblePitches = pitches.slice(page * perPage, page * perPage + perPage);
+  const paged = pitches.length > perPage;
+
+  const pager = paged ? (
+    <div className="flex items-center justify-between gap-2 rounded-md border bg-secondary/50 px-2 py-1 print:hidden">
+      <button
+        type="button"
+        onClick={() => setOffset(Math.max(0, page - 1))}
+        disabled={page === 0}
+        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-40"
+        aria-label="Previous pitches"
+      >
+        <ChevronLeft className="h-3.5 w-3.5" /> Prev
+      </button>
+      <span className="truncate text-xs text-muted-foreground">
+        {perPage === 1
+          ? (visiblePitches[0]?.name ?? "")
+          : `Pitches ${page * perPage + 1}–${Math.min((page + 1) * perPage, pitches.length)} of ${pitches.length}`}
+        {perPage === 1 ? ` · ${page + 1} of ${pages}` : ""}
+      </span>
+      <button
+        type="button"
+        onClick={() => setOffset(Math.min(pages - 1, page + 1))}
+        disabled={page >= pages - 1}
+        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-40"
+        aria-label="Next pitches"
+      >
+        Next <ChevronRight className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  ) : null;
+
+  const listView = (
+    <div className="space-y-5">
+      {days.map((date) => (
+        <DayList
+          key={date}
+          date={date}
+          entries={byDate.get(date) ?? []}
+          onSelect={setSelected}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <>
-      {/* Wide: the pitch-by-hour grid, one block per day that has anything. */}
-      <div className="hidden space-y-6 md:block">
-        {days.map((date) => {
-          const dayEntries = byDate.get(date) ?? [];
-          if (dayEntries.length === 0) {
-            return (
-              <div key={date} className="flex items-baseline gap-3 border-b pb-2">
-                <span className="text-sm font-medium">{dayHeading(date)}</span>
-                <span className="text-xs text-muted-foreground">Nothing booked.</span>
-              </div>
-            );
-          }
-          return (
-            <DayGrid
-              key={date}
-              date={date}
-              pitches={pitches}
-              entries={dayEntries}
-              onSelect={setSelected}
-            />
-          );
-        })}
-      </div>
+      {mode === "list" ? (
+        listView
+      ) : (
+        <>
+          {/* Wide: the pitch-by-hour grid, one block per day that has anything. */}
+          <div className="hidden space-y-4 md:block">
+            {pager}
+            {days.map((date) => {
+              const dayEntries = byDate.get(date) ?? [];
+              if (dayEntries.length === 0 && !canBook) {
+                return (
+                  <div key={date} className="flex items-baseline gap-3 border-b pb-2">
+                    <span className="text-sm font-medium">{dayHeading(date)}</span>
+                    <span className="text-xs text-muted-foreground">Nothing booked.</span>
+                  </div>
+                );
+              }
+              return (
+                <DayGrid
+                  key={date}
+                  date={date}
+                  pitches={visiblePitches}
+                  entries={dayEntries}
+                  canBook={canBook}
+                  onSelect={setSelected}
+                />
+              );
+            })}
+          </div>
 
-      {/* Narrow: the same week, stacked. */}
-      <div className="space-y-5 md:hidden">
-        {days.map((date) => (
-          <DayList
-            key={date}
-            date={date}
-            entries={byDate.get(date) ?? []}
-            onSelect={setSelected}
-          />
-        ))}
-      </div>
+          {/* Narrow: pitch navigator + the same days as grids one pitch wide. */}
+          <div className="space-y-4 md:hidden">
+            {pager}
+            {canBook ? (
+              days.map((date) => (
+                <DayGrid
+                  key={date}
+                  date={date}
+                  pitches={visiblePitches}
+                  entries={(byDate.get(date) ?? []).filter((entry) =>
+                    visiblePitches.some((pitch) => pitch.id === entry.resourceId),
+                  )}
+                  canBook={canBook}
+                  onSelect={setSelected}
+                />
+              ))
+            ) : (
+              listView
+            )}
+          </div>
+        </>
+      )}
 
       {entries.length === 0 && (
         <p className="flex items-center gap-2 pt-4 text-sm text-muted-foreground">
-          <CalendarX2 className="h-4 w-4" /> Nothing on the pitches this week.
+          <CalendarX2 className="h-4 w-4" /> Nothing on these pitches in this view.
         </p>
       )}
 
