@@ -144,10 +144,10 @@ select throws_like($$ delete from public.events where id = current_setting('ev.f
   '%cancel or delete the fixture%', 'fixture events cannot be deleted by hand');
 
 -- F. series ------------------------------------------------------------------
-select set_config('ev.series', public.create_event_series(
+select set_config('ev.series', (select series_id::text from public.create_event_series(
   '8e8e8e8e-3333-4111-8111-000000000001', 'practice', 'Tuesday practice',
   now() + interval '3 days', 60,
-  (now() at time zone 'Europe/London')::date + 38)::text, true);
+  (now() at time zone 'Europe/London')::date + 38)), true);
 select is((select count(*) from public.events where series_id = current_setting('ev.series')::uuid),
   6::bigint, 'a weekly series until day 38 materialises six occurrences');
 reset role;

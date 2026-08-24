@@ -33,6 +33,8 @@ import { EVENT_TYPES, type EventType } from "./shared";
 export type EventActionState = {
   error?: string;
   notice?: string;
+  /** Occurrences of a series whose pitch was already taken, London wall clock. */
+  clashes?: string[];
 };
 
 const RESPOND_REFUSED =
@@ -139,6 +141,8 @@ export async function createEvent(
   const notes = text(formData, "notes", 1000);
   const repeats = text(formData, "repeats", 5) === "true";
   const repeatUntil = text(formData, "repeat_until", 10);
+  // Reserving the pitch only means anything when the venue IS a club pitch.
+  const bookPitch = text(formData, "book_pitch", 5) === "true" && !!venueResourceId;
 
   if (!teamId) return { error: "Choose a team." };
   if (!EVENT_TYPES.includes(type as EventType)) return { error: "Choose an event type." };
@@ -172,27 +176,39 @@ export async function createEvent(
       p_venue_resource_id: venueResourceId || undefined,
       p_venue_text: venueText || undefined,
       p_notes: notes || undefined,
+      p_book: bookPitch,
     });
     if (error) return { error: friendlyDbError(error, CREATE_REFUSED) };
-    if (!data) return { error: "The series was not created." };
+    const result = data?.[0];
+    if (!result) return { error: "The series was not created." };
+
+    // A clashing week keeps its event and loses only the pitch, so the series
+    // is not lost — but the coach has to be told which weeks to sort out.
+    if (bookPitch && result.clashes && result.clashes.length > 0) {
+      revalidatePath("/events");
+      return {
+        notice: `Series created: ${result.booked} of ${result.occurrences} weeks have the pitch reserved.`,
+        error: `The pitch was already taken for ${result.clashes.length} of the ${result.occurrences} weeks. Those events were still created — move them, or book another pitch.`,
+        clashes: result.clashes,
+      };
+    }
   } else {
-    const endsAt = new Date(Date.parse(startsAt) + duration * 60_000).toISOString();
-    const id = crypto.randomUUID();
-    const { error } = await supabase.from("events").insert({
-      id,
-      team_id: teamId,
-      type: type as EventType,
-      title,
-      starts_at: startsAt,
-      ends_at: endsAt,
-      venue_resource_id: venueResourceId || null,
-      venue_text: venueText || null,
-      notes: notes || null,
+    const { error } = await supabase.rpc("create_team_event", {
+      p_team_id: teamId,
+      p_type: type,
+      p_title: title,
+      p_starts_at: startsAt,
+      p_duration_minutes: duration,
+      p_venue_resource_id: venueResourceId || undefined,
+      p_venue_text: venueText || undefined,
+      p_notes: notes || undefined,
+      p_book: bookPitch,
     });
     if (error) return { error: friendlyDbError(error, CREATE_REFUSED) };
   }
 
   revalidatePath("/events");
+  revalidatePath("/pitches/mine");
   redirect("/events");
 }
 
@@ -211,23 +227,14 @@ export async function cancelEvent(
   const eventId = text(formData, "event_id", 40);
   if (!eventId) return { error: "No event given." };
 
+  // `cancel_team_event` refuses fixture events (the fixture is the master) and
+  // hands back the pitch when the event was holding one.
   const supabase = await createClient();
-  const { data: event } = await supabase
-    .from("events")
-    .select("fixture_id")
-    .eq("id", eventId)
-    .maybeSingle();
-  if (event?.fixture_id) {
-    return { error: "This event mirrors a fixture — cancel or postpone the fixture instead." };
-  }
-
-  const { error } = await supabase
-    .from("events")
-    .update({ status: "cancelled" })
-    .eq("id", eventId);
+  const { error } = await supabase.rpc("cancel_team_event", { p_event_id: eventId });
   if (error) return { error: friendlyDbError(error, CREATE_REFUSED) };
 
   revalidatePath(`/events/${eventId}`);
   revalidatePath("/events");
-  return { notice: "Event cancelled." };
+  revalidatePath("/pitches/mine");
+  return { notice: "Event cancelled. Any pitch it was holding has been released." };
 }
