@@ -32,11 +32,24 @@ export default async function RoomBookingsPage({
   // UK "today" date — server runs UTC, so use London timezone
   const todayStr = londonToday();
 
+  // The bookings table also holds every PITCH booking (fixtures, training —
+  // gap 3 and the Neon import), and those belong to /pitches/calendar, not
+  // here. Scope this page to function-room resources — all of them, active or
+  // not, so a deactivated room's history stays visible.
+  const { data: roomResourceRows } = await admin
+    .from("resources")
+    .select("id")
+    .eq("type", FUNCTION_ROOM);
+  const roomResourceIds = (roomResourceRows ?? []).map((row) => row.id);
+
   const [{ data: bookingRows }, { data: rooms }, { data: staffProfiles }, { data: awayRows }, { data: nonUserStaffRows }, authUsersResult] = await Promise.all([
-    admin
-      .from("bookings")
-      .select(BOOKING_LIST_SELECT)
-      .order("starts_at", { ascending: true }),
+    roomResourceIds.length === 0
+      ? Promise.resolve({ data: [] })
+      : admin
+          .from("bookings")
+          .select(BOOKING_LIST_SELECT)
+          .in("resource_id", roomResourceIds)
+          .order("starts_at", { ascending: true }),
     admin
       .from("resources")
       .select("id,name")

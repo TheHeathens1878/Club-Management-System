@@ -35,10 +35,14 @@ export default async function PortalPage({
 
   const sumupEnabled = isSumUpConfigured();
   const admin = createAdminClient();
+  // Function-room hires only: pitch bookings (training a coach booked) also
+  // carry the booker's profile id, but they are team business with no invoice
+  // — they live on /pitches/mine, not in the hirer portal.
   const { data: bookings } = await admin
     .from("bookings")
-    .select("id,starts_at,ends_at,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources(name)")
+    .select("id,starts_at,ends_at,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources!inner(name,type)")
     .eq("booker_profile_id", session.userId)
+    .eq("resources.type", "function_room")
     .order("starts_at", { ascending: true });
 
   const list = bookings ?? [];
