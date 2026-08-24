@@ -74,7 +74,7 @@ select ok((select relrowsecurity from pg_class where oid = 'public.registrations
 select policies_are('public', 'registrations',
   array['registrations_admin_read', 'registrations_admin_insert', 'registrations_admin_update',
         'registrations_self_read', 'registrations_self_insert', 'registrations_self_withdraw',
-        'registrations_guardian_read', 'registrations_guardian_insert', 'registrations_guardian_withdraw'],
+        'registrations_guardian_read', 'registrations_guardian_insert', 'registrations_household_insert', 'registrations_guardian_withdraw'],
   'registrations policy list');
 select ok(not has_table_privilege('anon', 'public.registrations', 'SELECT'), 'anon cannot read registrations');
 select ok(not has_table_privilege('authenticated', 'public.registrations', 'DELETE'), 'authenticated cannot delete registrations');
