@@ -74,3 +74,24 @@ export function parseEventPeople(value: Json | null | undefined): EventPerson[] 
   }
   return out;
 }
+
+/**
+ * Badge styling for an accept/decline response. Lives here — NOT in the
+ * "use client" respond-buttons module — because the server-rendered event
+ * detail page calls it too, and a function exported from a client module is a
+ * client reference the server cannot invoke (the /events/[id] 500 of
+ * 2026-08-24, digest 1259262124).
+ */
+export function responseVariant(
+  response: "accepted" | "declined" | null,
+): "success" | "destructive" | "muted" {
+  if (response === "accepted") return "success";
+  if (response === "declined") return "destructive";
+  return "muted";
+}
+
+export function responseLabel(response: "accepted" | "declined" | null): string {
+  if (response === "accepted") return "Accepted";
+  if (response === "declined") return "Declined";
+  return "No response";
+}

@@ -14,23 +14,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { respondToEvent, type EventActionState } from "./actions";
-import type { EventPerson } from "./shared";
+import { responseLabel, responseVariant, type EventPerson } from "./shared";
 
 const EMPTY: EventActionState = {};
-
-export function responseVariant(
-  response: "accepted" | "declined" | null,
-): "success" | "destructive" | "muted" {
-  if (response === "accepted") return "success";
-  if (response === "declined") return "destructive";
-  return "muted";
-}
-
-export function responseLabel(response: "accepted" | "declined" | null): string {
-  if (response === "accepted") return "Accepted";
-  if (response === "declined") return "Declined";
-  return "No response";
-}
 
 export function RespondButtons({
   eventId,
