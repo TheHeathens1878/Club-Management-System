@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import Link from "next/link";
 import { Bell, CalendarDays } from "lucide-react";
 import { formatDistanceToNow, format, isToday, isTomorrow, isThisWeek } from "date-fns";
 
@@ -185,13 +186,13 @@ export function NoticeBell({
             >
               All announcements →
             </a>
-            <a
+            <Link
               href="/events"
               onClick={() => setOpen(false)}
               className="text-xs font-medium text-primary hover:underline"
             >
               All events →
-            </a>
+            </Link>
           </div>
         </div>
       )}
