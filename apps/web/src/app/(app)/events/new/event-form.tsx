@@ -18,24 +18,43 @@ import { EVENT_TYPES, eventTypeLabel } from "../shared";
 const EMPTY: EventActionState = {};
 
 export type TeamOption = { id: string; name: string };
+/** A club pitch. `isPitch` decides whether reserving it is even offered. */
 export type VenueOption = { id: string; name: string };
 
 export function EventForm({
   teams,
   venues,
+  canConfirm,
 }: {
   teams: TeamOption[];
   venues: VenueOption[];
+  /** Club admins hold the pitch outright; a coach's booking is a request. */
+  canConfirm: boolean;
 }) {
   const [state, action, saving] = useActionState(createEvent, EMPTY);
   const [repeats, setRepeats] = useState(false);
   const [venueMode, setVenueMode] = useState<"resource" | "text">("resource");
+  const [venueId, setVenueId] = useState("");
+
+  const canBook = venueMode === "resource" && venueId !== "";
 
   return (
     <form action={action} className="max-w-xl space-y-4">
       {state.error ? (
-        <p className="whitespace-pre-line rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {state.error}
+        <div className="space-y-1 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p className="whitespace-pre-line">{state.error}</p>
+          {state.clashes && state.clashes.length > 0 ? (
+            <ul className="list-inside list-disc text-xs">
+              {state.clashes.map((clash) => (
+                <li key={clash}>{clash}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+      {state.notice ? (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {state.notice}
         </p>
       ) : null}
 
@@ -149,7 +168,8 @@ export function EventForm({
           <select
             name="venue_resource_id"
             className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
-            defaultValue=""
+            value={venueId}
+            onChange={(e) => setVenueId(e.target.value)}
           >
             <option value="">No venue yet</option>
             {venues.map((venue) => (
@@ -165,6 +185,20 @@ export function EventForm({
             placeholder="e.g. Longford Park, Stretford M32 8DA"
           />
         )}
+
+        {canBook ? (
+          <label className="flex items-start gap-2 pt-2 text-sm">
+            <input type="checkbox" name="book_pitch" value="true" defaultChecked className="mt-1" />
+            <span>
+              Reserve this pitch
+              <span className="block text-xs text-muted-foreground">
+                {canConfirm
+                  ? "The pitch is booked and confirmed straight away. A clash stops the event being created."
+                  : "A pitch request goes to the club for confirmation, exactly as booking from the pitches page does. A clash stops the event being created."}
+              </span>
+            </span>
+          </label>
+        ) : null}
       </div>
 
       <div className="space-y-1.5 rounded-lg border p-4">
@@ -187,6 +221,9 @@ export function EventForm({
             <p className="text-xs text-muted-foreground">
               One event every week on the same day and time, up to and including this date (at
               most 60).
+              {canBook
+                ? " A week whose pitch is already taken still gets its event — you will be told which weeks to sort out."
+                : ""}
             </p>
           </div>
         ) : null}

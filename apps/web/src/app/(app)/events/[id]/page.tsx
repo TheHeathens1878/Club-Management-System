@@ -52,6 +52,8 @@ type Detail = {
   notes: string | null;
   createdByName: string;
   booked: boolean;
+  /** 'confirmed' | 'pending' | … from the linked booking, when there is one. */
+  bookingStatus: string | null;
   series: { title: string; weekday: string; time: string; repeatUntil: string; occurrences: number } | null;
 };
 
@@ -95,6 +97,7 @@ function parseDetail(value: Json | null): Detail | null {
     notes: str(record, "notes"),
     createdByName: str(record, "created_by_name") ?? "the club",
     booked: record["booked"] === true,
+    bookingStatus: str(record, "booking_status"),
     series,
   };
 }
@@ -218,6 +221,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                       <Badge variant="success">
                         <CircleCheck className="h-3.5 w-3.5" /> Venue booked
                       </Badge>
+                    ) : detail.bookingStatus === "pending" ? (
+                      <Badge variant="warning">Pitch requested — awaiting the club</Badge>
                     ) : null}
                   </>
                 ) : (

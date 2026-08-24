@@ -54,10 +54,13 @@ export default async function NewEventPage() {
     }
   }
 
+  // Pitches only: a club venue an event can actually reserve. Anywhere else
+  // (an away ground, the clubhouse) is typed in as free text.
   const { data: venueRows } = await supabase
     .from("resources")
     .select("id,name")
     .eq("active", true)
+    .eq("type", "pitch")
     .order("sort_order")
     .order("name");
   const venues: VenueOption[] = venueRows ?? [];
@@ -80,7 +83,7 @@ export default async function NewEventPage() {
             for. Match events are created automatically from fixtures.
           </p>
         ) : (
-          <EventForm teams={teams} venues={venues} />
+          <EventForm teams={teams} venues={venues} canConfirm={capabilities.isClubAdmin} />
         )}
       </div>
     </>
