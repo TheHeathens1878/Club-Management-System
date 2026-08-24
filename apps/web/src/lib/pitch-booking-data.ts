@@ -37,7 +37,7 @@ import { createClient } from "@/lib/supabase/server";
  * only a literal carries that type.
  */
 const BOOKING_SELECT =
-  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,internal_notes,team_id,booker_name,booker_email,recurrence_group_id,resources!inner(name,type),teams(name)";
+  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,internal_notes,team_id,booker_name,booker_email,recurrence_group_id,resources!inner(name,type),teams!bookings_team_id_fkey(name)";
 
 type BookingSelectRow = {
   id: string;
