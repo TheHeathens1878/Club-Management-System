@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getStoredRoleView } from "@/lib/capabilities";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -154,7 +155,14 @@ export default async function TeamsPage({
     isClubAdmin(),
     supabase.rpc("current_person_id"),
   ]);
-  const canAdmin = committee || clubAdmin;
+  // The active tile scopes the data, not just the menu: an administrator who
+  // is also a coach sees ONLY their own teams while in the Coach view
+  // ("coaches and managers should only be able to see the teams they are
+  // associated with" — Adam, 2026-08-24). Switching to the Admin tile brings
+  // the full list back.
+  const roleView = await getStoredRoleView();
+  const coachView = roleView === "coach";
+  const canAdmin = (committee || clubAdmin) && !coachView;
 
   let staffTeamIds: string[] = [];
   if (!canAdmin && personResult.data) {
@@ -166,7 +174,11 @@ export default async function TeamsPage({
       .in("role", STAFF_TEAM_ROLES);
     staffTeamIds = Array.from(new Set((data ?? []).map((row) => row.team_id)));
   }
-  if (!canAdmin && staffTeamIds.length === 0) redirect("/room-bookings");
+  if (!canAdmin && staffTeamIds.length === 0) {
+    // In the coach view an admin with no coached team gets sent back to their
+    // role picker rather than a booking page they did not ask for.
+    redirect(coachView && (committee || clubAdmin) ? "/welcome" : "/room-bookings");
+  }
 
   // `teams_read` is open to any signed-in user, so the caller's own client is
   // enough — the admin client is kept for the two admin-only reads below.
