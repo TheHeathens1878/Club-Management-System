@@ -62,7 +62,7 @@ export type BookingFixture = {
  * from the select text, and only a literal carries that type.
  */
 const DETAIL_SELECT =
-  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,team_id,fixture_id,resources!inner(name,type),teams(name)";
+  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,team_id,fixture_id,resources!inner(name,type),teams!bookings_team_id_fkey(name)";
 
 export async function loadBookingDetail(bookingId: string): Promise<BookingDetail | null> {
   const supabase = await createClient();
