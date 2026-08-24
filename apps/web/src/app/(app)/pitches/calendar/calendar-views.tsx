@@ -46,6 +46,7 @@ import {
   cancelPitchBooking,
   confirmPitchBooking,
   declinePitchBooking,
+  deletePitchBooking,
   type PitchBookingActionState,
 } from "../booking-actions";
 import { cancelPitchClosure, type ClosureActionState } from "./closure-actions";
@@ -104,8 +105,27 @@ function EntryMeta({ entry }: { entry: CalendarEntry }) {
           <Repeat2 className="h-3 w-3 shrink-0" /> Part of a weekly series
         </p>
       )}
+      {entry.internalMatch && (
+        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800">
+          🟢 Internal match — two of the club&apos;s own teams.
+        </p>
+      )}
+      {entry.consecutiveWeeks && (
+        <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+          ⚠️ This team has this pitch two or more weeks in a row.
+        </p>
+      )}
     </>
   );
+}
+
+/** The tile prefix: every flag the legacy calendar drew on a booking. */
+function flagPrefix(entry: CalendarEntry): string {
+  let prefix = "";
+  if (entry.recurrenceGroupId) prefix += "🔁 ";
+  if (entry.internalMatch) prefix += "🟢 ";
+  if (entry.consecutiveWeeks) prefix += "⚠️ ";
+  return prefix;
 }
 
 /**
@@ -138,12 +158,24 @@ function EntryPopover({
     cancelPitchBooking,
     EMPTY_ACTION_STATE,
   );
+  const [deleteState, deleteAction, deleting] = useActionState(
+    deletePitchBooking,
+    EMPTY_ACTION_STATE,
+  );
   const [showDecline, setShowDecline] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const manage = manageLink(entry, permissions);
   const isClosure = entry.group === "closed";
   const canAct = permissions.isAdmin && !isClosure;
+  // A coach may cancel their own team's pending request right here — the
+  // legacy app's floating Edit/Cancel bar, in the popover.
+  const staffOwn =
+    !permissions.isAdmin &&
+    entry.teamId !== null &&
+    permissions.staffTeamIds.includes(entry.teamId) &&
+    entry.group !== "fixture";
 
-  const feedback = [closureState, confirmState, declineState, cancelState];
+  const feedback = [closureState, confirmState, declineState, cancelState, deleteState];
   const error = feedback.map((s) => s.error).find(Boolean);
   const notice = feedback.map((s) => s.notice).find(Boolean);
 
@@ -235,6 +267,26 @@ function EntryPopover({
               </Button>
             </form>
           )}
+          {staffOwn && entry.status === "pending" && (
+            <form action={cancelAction}>
+              <input type="hidden" name="booking_id" value={entry.bookingId} />
+              <input type="hidden" name="team_id" value={entry.teamId ?? ""} />
+              <Button type="submit" variant="outline" size="sm" disabled={cancelling}>
+                {cancelling ? "Cancelling…" : "Cancel my request"}
+              </Button>
+            </form>
+          )}
+          {canAct && !confirmDelete && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="text-destructive"
+              onClick={() => setConfirmDelete(true)}
+            >
+              Delete…
+            </Button>
+          )}
 
           {permissions.isAdmin && isClosure && entry.status !== "cancelled" && (
             <form action={closureAction}>
@@ -251,6 +303,25 @@ function EntryPopover({
             </p>
           )}
         </div>
+
+        {canAct && confirmDelete && (
+          <form action={deleteAction} className="space-y-2 rounded-lg border border-destructive/30 p-3">
+            <input type="hidden" name="booking_id" value={entry.bookingId} />
+            <input type="hidden" name="team_id" value={entry.teamId ?? ""} />
+            <p className="text-xs text-muted-foreground">
+              Deleting removes the booking and its history outright — cancelling is the everyday
+              path. A fixture&apos;s slot cannot be deleted here; unallocate it on Pitches.
+            </p>
+            <div className="flex gap-2">
+              <Button type="submit" variant="destructive" size="sm" disabled={deleting}>
+                {deleting ? "Deleting…" : "Delete booking"}
+              </Button>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setConfirmDelete(false)}>
+                Keep it
+              </Button>
+            </div>
+          </form>
+        )}
 
         {canAct && entry.status === "pending" && showDecline && (
           <form action={declineAction} className="space-y-2 rounded-lg border p-3">
@@ -377,7 +448,7 @@ function DayGrid({
                     style={{ top: `${geometry.topPct}%`, height: `${geometry.heightPct}%` }}
                   >
                     <span className="block truncate font-medium">
-                      {entry.recurrenceGroupId ? "🔁 " : ""}
+                      {flagPrefix(entry)}
                       {entry.label}
                     </span>
                     <span className="block truncate opacity-80">{timeRange(entry)}</span>
@@ -423,7 +494,7 @@ function DayList({
               >
                 <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
                   <span className="text-sm font-medium">
-                    {entry.recurrenceGroupId ? "🔁 " : ""}
+                    {flagPrefix(entry)}
                     {entry.label}
                   </span>
                   {entry.status === "pending" && (

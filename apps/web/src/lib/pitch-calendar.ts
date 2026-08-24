@@ -124,6 +124,10 @@ export type CalendarEntry = {
   sharedTeamNames: string[];
   /** Set when the booking is one week of a weekly series (the 🔁 marker). */
   recurrenceGroupId: string | null;
+  /** 🟢 The opponent is another of the club's own teams (attached by the page). */
+  internalMatch?: boolean;
+  /** ⚠️ Same team, same pitch, adjacent weeks (attached by the page). */
+  consecutiveWeeks?: boolean;
 };
 
 function minutesOf(time: string): number {
@@ -403,3 +407,52 @@ export function countsByGroup(entries: CalendarEntry[]): Record<CalendarGroup, n
 }
 
 export { londonToday };
+
+// ---------------------------------------------------------------------------
+// Legacy-app flags: internal matches and consecutive weeks
+// ---------------------------------------------------------------------------
+
+function normalisedName(name: string): string {
+  return name.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/** Active club team names, folded for comparison against opponents. */
+export function clubNameSet(names: string[]): Set<string> {
+  return new Set(names.map(normalisedName).filter((name) => name !== ""));
+}
+
+/**
+ * 🟢 An internal match: a fixture whose opponent is another of the club's own
+ * teams. The legacy app stamped this at creation; here it is recomputed from
+ * the opponent's name against the club's team list, which survives imports.
+ */
+export function isInternalMatch(entry: CalendarEntry, clubTeams: Set<string>): boolean {
+  if (entry.group !== "fixture" || !entry.opponent) return false;
+  return clubTeams.has(normalisedName(entry.opponent));
+}
+
+/**
+ * ⚠️ Consecutive weeks: the same team on the same pitch for a MATCH in
+ * adjacent weeks — the legacy fairness flag, so one team does not quietly own
+ * a Saturday slot. Computed over whatever window the caller loaded (the page
+ * widens its fetch by a week each side so edges are honest). Training is
+ * weekly by design and is never flagged.
+ */
+export function consecutiveWeekIds(entries: CalendarEntry[]): Set<string> {
+  const flagged = new Set<string>();
+  const byKey = new Map<string, CalendarEntry[]>();
+  for (const entry of entries) {
+    if (entry.group !== "fixture" || !entry.teamId) continue;
+    const key = `${entry.teamId}|${entry.resourceId}`;
+    byKey.set(key, [...(byKey.get(key) ?? []), entry]);
+  }
+  for (const group of byKey.values()) {
+    const dates = new Set(group.map((entry) => entry.date));
+    for (const entry of group) {
+      if (dates.has(addDays(entry.date, -7)) || dates.has(addDays(entry.date, 7))) {
+        flagged.add(entry.bookingId);
+      }
+    }
+  }
+  return flagged;
+}

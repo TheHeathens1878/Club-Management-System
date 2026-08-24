@@ -45,6 +45,8 @@ import {
   type PitchBookingKind,
 } from "@/lib/pitch-booking";
 import { getSessionProfile } from "@/lib/auth";
+import { writeAudit } from "@/lib/audit";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type PitchBookingActionState = {
@@ -439,4 +441,51 @@ export async function declinePitchBooking(
 
   revalidatePitchPaths(teamId);
   return { notice: "Request declined." };
+}
+
+/**
+ * Delete a pitch booking outright — the legacy app's "Delete booking".
+ * Administrators only, never a fixture's slot (unallocate that on /pitches so
+ * the fixture keeps its state), and audited like the room-booking deletes.
+ * Cancelling remains the everyday path; deletion is for entries that should
+ * never have existed.
+ */
+export async function deletePitchBooking(
+  _prev: PitchBookingActionState,
+  formData: FormData,
+): Promise<PitchBookingActionState> {
+  const bookingId = text(formData, "booking_id", 40);
+  if (!bookingId) return { error: "No booking given." };
+  const teamId = text(formData, "team_id", 40) || null;
+
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in again first." };
+  const supabase = await createClient();
+  const { data: isAdmin } = await supabase.rpc("is_club_admin");
+  if (isAdmin !== true) return { error: "Only a club administrator can delete a booking." };
+
+  const admin = createAdminClient();
+  const { data: existing } = await admin
+    .from("bookings")
+    .select("id,kind,fixture_id")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!existing) return { error: "That booking no longer exists." };
+  if (existing.kind === "fixture" || existing.fixture_id) {
+    return { error: "A fixture's pitch slot is removed by unallocating it on Pitches, not deleted." };
+  }
+
+  const { error } = await admin.from("bookings").delete().eq("id", bookingId);
+  if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "delete",
+    entity: "pitch_booking",
+    entityId: bookingId,
+  });
+
+  revalidatePitchPaths(teamId);
+  return { notice: "Booking deleted." };
 }
