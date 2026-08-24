@@ -61,6 +61,9 @@ export async function middleware(request: NextRequest) {
     // /recruitment redirect is served from next.config before middleware runs;
     // it is listed here so a direct hit can never bounce to /login instead.
     path === "/waiting-list" ||
+    // The join-the-club wizard: public for its first step (account creation);
+    // every later step runs signed-in through its server actions.
+    path.startsWith("/join") ||
     path.startsWith("/recruitment") ||
     // Server-to-server callbacks with no session — they guard themselves:
     // the SumUp webhook + payment-return are idempotent and keyed by checkout

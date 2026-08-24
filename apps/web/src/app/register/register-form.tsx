@@ -145,6 +145,12 @@ export function RegisterForm({
           >
             <ArrowLeft className="h-3 w-3" /> Already have an account? Sign in
           </Link>
+          <Link
+            href="/join"
+            className="flex items-center justify-center gap-1 text-sm font-medium text-primary underline-offset-2 hover:underline"
+          >
+            Joining as a player or family? Use the full registration form
+          </Link>
           <p className="mt-2 text-center text-xs text-muted-foreground">
             <a href="/privacy" className="hover:underline">
               Privacy notice
