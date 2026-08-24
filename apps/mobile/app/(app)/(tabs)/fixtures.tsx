@@ -11,8 +11,10 @@ import {
   type Fixture,
 } from "../../../lib/fixtures";
 import { useHouseholdContext } from "../../../lib/household-context";
+import { type Session } from "../../../lib/sessions";
 import { theme } from "../../../lib/theme";
 import { useFixtures } from "../../../lib/use-fixtures";
+import { useSessions } from "../../../lib/use-sessions";
 
 /**
  * Next fixtures for every team in the household, with the pitch as soon as
@@ -30,6 +32,7 @@ export default function FixturesScreen() {
     refresh,
     setAvailability,
   } = useFixtures(household.data);
+  const sessionsState = useSessions(household.data);
 
   if ((loading || household.loading) && fixtures.length === 0) {
     return <Loading label="Loading fixtures…" />;
@@ -45,6 +48,7 @@ export default function FixturesScreen() {
           onRefresh={() => {
             household.refresh();
             refresh();
+            sessionsState.refresh();
           }}
           tintColor={theme.colour.muted}
         />
@@ -67,7 +71,76 @@ export default function FixturesScreen() {
           onSet={setAvailability}
         />
       ))}
+
+      {/* Training sessions — the other half of "how many children will be
+          there?". Same three-way toggle, written to booking_availability. */}
+      {(sessionsState.sessions.length > 0 || sessionsState.error) && (
+        <Text style={styles.sectionTitle}>Training</Text>
+      )}
+      {sessionsState.error ? <Notice tone="error">{sessionsState.error}</Notice> : null}
+      {sessionsState.sessions.map((session) => (
+        <SessionCard
+          key={session.id}
+          session={session}
+          saving={sessionsState.saving}
+          onSet={sessionsState.setAvailability}
+        />
+      ))}
     </ScrollView>
+  );
+}
+
+function SessionCard({
+  session,
+  saving,
+  onSet,
+}: {
+  session: Session;
+  saving: string | null;
+  onSet: (
+    bookingId: string,
+    personId: string,
+    status: (typeof AVAILABILITY_OPTIONS)[number],
+  ) => Promise<void>;
+}) {
+  return (
+    <Card
+      title={session.title}
+      subtitle={session.when}
+      meta={session.resourceName}
+      accessory={
+        session.status === "pending" ? <Pill label="Awaiting confirmation" tone="neutral" /> : null
+      }
+    >
+      {session.respondents.length === 0 ? null : (
+        <View style={styles.availability}>
+          {session.respondents.map((respondent) => {
+            const key = `${session.id}:${respondent.personId}`;
+            return (
+              <View key={respondent.personId} style={styles.respondent}>
+                <View style={styles.respondentHeader}>
+                  <Text style={styles.respondentName}>{respondent.label}</Text>
+                  <Text style={styles.respondentStatus}>
+                    {availabilityLabel(respondent.status)}
+                  </Text>
+                </View>
+                <Segmented
+                  options={AVAILABILITY_OPTIONS.map((status) => ({
+                    value: status,
+                    label: availabilityLabel(status),
+                  }))}
+                  value={respondent.status}
+                  disabled={saving === key}
+                  onChange={(status) => {
+                    void onSet(session.id, respondent.personId, status);
+                  }}
+                />
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </Card>
   );
 }
 
@@ -144,5 +217,11 @@ const styles = StyleSheet.create({
     alignItems: "baseline",
   },
   respondentName: { color: theme.colour.text, fontWeight: "600" },
+  sectionTitle: {
+    color: theme.colour.text,
+    fontSize: 18,
+    fontWeight: "700",
+    marginTop: theme.space.sm,
+  },
   respondentStatus: { color: theme.colour.muted, fontSize: 12 },
 });

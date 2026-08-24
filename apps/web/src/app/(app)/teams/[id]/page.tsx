@@ -12,6 +12,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { loadPitches, loadTeamPitchBookings } from "@/lib/pitch-booking-data";
+import { bookingHeadcounts, fixtureHeadcounts, teamPlayerIds } from "@/lib/event-headcounts";
+import type { Headcount } from "@/lib/headcount";
 import type { PitchBookingItem } from "@/lib/pitch-booking";
 
 import {
@@ -168,8 +170,9 @@ export default async function TeamPage({
   // --------------------------------------------------------------------
   let overviewFixtures: TeamFixture[] = [];
   let overviewBookings: PitchBookingItem[] = [];
+  let bookingCounts: Record<string, Headcount> = {};
   if (tab === "overview") {
-    const [fixturesResult, bookings] = await Promise.all([
+    const [fixturesResult, bookings, playerIds] = await Promise.all([
       userClient
         .from("fixtures")
         .select(FIXTURE_SELECT)
@@ -178,7 +181,23 @@ export default async function TeamPage({
         .order("kickoff_at")
         .limit(OVERVIEW_LIMIT),
       loadTeamPitchBookings(id, OVERVIEW_LIMIT),
+      teamPlayerIds(userClient, id),
     ]);
+    // "How many children will be there?" — squad availability per event. This
+    // page only admits staff and committee, whose RLS returns every answer.
+    const [fixtureCounts, bookingCountMap] = await Promise.all([
+      fixtureHeadcounts(
+        userClient,
+        (fixturesResult.data ?? []).map((row) => row.id),
+        playerIds,
+      ),
+      bookingHeadcounts(
+        userClient,
+        bookings.map((booking) => booking.id),
+        playerIds,
+      ),
+    ]);
+    bookingCounts = Object.fromEntries(bookingCountMap);
     overviewFixtures = (fixturesResult.data ?? []).map((row) => ({
       id: row.id,
       bookingId: row.booking_id,
@@ -191,6 +210,7 @@ export default async function TeamPage({
       allocationConflict: row.allocation_conflict,
       seasonName: row.seasons?.name ?? null,
       pitchName: row.resources?.name ?? null,
+      headcount: fixtureCounts.get(row.id) ?? null,
     }));
     overviewBookings = bookings;
   }
@@ -430,6 +450,12 @@ export default async function TeamPage({
 
     defaultFtName = `${(clubNameResult.data?.value ?? "").trim() || "Ashton On Mersey FC"} ${team.name}`;
     fixturesFailed = !!fixturesResult.error;
+    const playerIds = await teamPlayerIds(userClient, id);
+    const fixtureCounts = await fixtureHeadcounts(
+      userClient,
+      (fixturesResult.data ?? []).map((row) => row.id),
+      playerIds,
+    );
     fixtures = (fixturesResult.data ?? []).map((row) => ({
       id: row.id,
       bookingId: row.booking_id,
@@ -442,6 +468,7 @@ export default async function TeamPage({
       allocationConflict: row.allocation_conflict,
       seasonName: row.seasons?.name ?? null,
       pitchName: row.resources?.name ?? null,
+      headcount: fixtureCounts.get(row.id) ?? null,
     }));
     clubSeasons = (seasonsResult.data ?? []).map((season) => ({
       id: season.id,
@@ -470,6 +497,14 @@ export default async function TeamPage({
   let pitchBookings: PitchBookingItem[] = [];
   if (tab === "bookings") {
     pitchBookings = await loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT);
+    const playerIds = await teamPlayerIds(userClient, id);
+    bookingCounts = Object.fromEntries(
+      await bookingHeadcounts(
+        userClient,
+        pitchBookings.map((booking) => booking.id),
+        playerIds,
+      ),
+    );
   }
 
   return (
@@ -520,7 +555,7 @@ export default async function TeamPage({
                   <CardTitle className="text-base">Next pitch bookings</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <PitchBookingsSummary teamId={team.id} items={overviewBookings} />
+                  <PitchBookingsSummary teamId={team.id} items={overviewBookings} headcounts={bookingCounts} />
                 </CardContent>
               </Card>
             </div>
@@ -669,7 +704,7 @@ export default async function TeamPage({
                     Could not load this team&apos;s fixtures.
                   </p>
                 ) : (
-                  <FixturesTable fixtures={fixtures} canManage={canManageTeam} />
+                  <FixturesTable fixtures={fixtures} canManage={canManageTeam} teamId={team.id} />
                 )}
               </CardContent>
             </Card>
@@ -747,6 +782,7 @@ export default async function TeamPage({
                 teamId={team.id}
                 items={pitchBookings}
                 canManage={canManageTeam}
+                headcounts={bookingCounts}
               />
             </CardContent>
           </Card>

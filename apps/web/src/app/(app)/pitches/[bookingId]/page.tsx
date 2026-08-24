@@ -16,6 +16,7 @@ import {
   type BookingFixture,
 } from "@/lib/booking-detail";
 import { nameOf, resolveNames } from "@/lib/person";
+import { headcountLabel, summariseAvailability } from "@/lib/headcount";
 import { formatSlot, kindLabel, statusLabel, statusVariant } from "@/lib/pitch-booking";
 import { createClient } from "@/lib/supabase/server";
 
@@ -220,6 +221,19 @@ export default async function BookingDetailPage({
     })
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  // "How many children will be there?" — squad availability, staff eyes only
+  // (a parent's client only reads their own household, so their count would be
+  // partial and misleading).
+  const headcount = canMarkAttendance
+    ? summariseAvailability(
+        (availabilityResult.data ?? []).map((row) => ({
+          person_id: row.person_id,
+          status: row.status,
+        })),
+        memberships.filter((row) => row.role === "player").map((row) => row.person_id),
+      )
+    : null;
+
   const backHref = canMarkAttendance ? "/pitches/mine" : "/pitches/calendar";
   const title = fixture
     ? `${booking.teamName ?? "Team"} v ${fixture.opponent}`
@@ -247,6 +261,11 @@ export default async function BookingDetailPage({
               {team.id === booking.teamId ? team.name : `${team.name} (sharing)`}
             </Badge>
           ))}
+          {headcount && (
+            <Badge variant="default">
+              {headcountLabel(headcount)} of {headcount.squad}
+            </Badge>
+          )}
         </div>
 
         <Card>

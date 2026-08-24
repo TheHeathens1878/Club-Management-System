@@ -1,5 +1,9 @@
 import Link from "next/link";
 
+import type { Headcount } from "@/lib/headcount";
+
+import { HeadcountChips } from "./fixtures-list";
+
 import { Badge } from "@/components/ui/badge";
 import {
   formatSlot,
@@ -17,9 +21,12 @@ import {
 export function PitchBookingsSummary({
   teamId,
   items,
+  headcounts = {},
 }: {
   teamId: string;
   items: PitchBookingItem[];
+  /** Squad availability per booking id — staff view. */
+  headcounts?: Record<string, Headcount>;
 }) {
   if (items.length === 0) {
     return (
@@ -51,6 +58,7 @@ export function PitchBookingsSummary({
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-1">
+              {headcounts[item.id] && <HeadcountChips headcount={headcounts[item.id]!} />}
               <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge>
               <Badge variant="muted">{kindLabel(item.kind)}</Badge>
             </div>
