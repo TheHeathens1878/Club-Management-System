@@ -99,6 +99,17 @@ export const NAV: readonly NavEntry[] = [
     views: ["parent"],
   },
   {
+    // Matches, practices and socials with accept/decline — fed by my_events(),
+    // so every view sees only its own teams' occasions.
+    href: "/events",
+    label: "Events",
+    icon: CalendarCheck,
+    group: "Club",
+    allowed: (c) =>
+      c.hasPlayerMembership || c.isGuardian || c.hasParentRole || c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: CLUB_VIEWS,
+  },
+  {
     href: "/teams",
     label: "Teams",
     icon: Users,
