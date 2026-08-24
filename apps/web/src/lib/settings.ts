@@ -69,22 +69,26 @@ export async function getSettings(): Promise<SiteSettings> {
 }
 
 export const THEMES = {
-  blue:   { label: "Blue (default)", primary: "221 83% 41%", accent: "199 89% 48%", hex: "#1249bf" },
-  green:  { label: "Green",          primary: "142 71% 45%", accent: "158 64% 52%", hex: "#21c45d" },
-  purple: { label: "Purple",         primary: "262 83% 58%", accent: "280 87% 65%", hex: "#7c3bed" },
-  navy:   { label: "Navy",           primary: "220 70% 28%", accent: "199 89% 48%", hex: "#153779" },
-  red:    { label: "Crimson",        primary: "0 72% 51%",   accent: "24 89% 48%",  hex: "#dc2828" },
+  // The club's own palette — crest orange on warm ink and paper, from the
+  // linked Claude Design project. This is the default and what globals.css
+  // ships; picking it emits no override at all.
+  crest:  { label: "Crest (club default)", primary: "12 75% 44%",  accent: "12 76% 51%",  hex: "#C23D1C" },
+  blue:   { label: "Blue",                 primary: "221 83% 41%", accent: "199 89% 48%", hex: "#1249bf" },
+  green:  { label: "Green",                primary: "142 71% 45%", accent: "158 64% 52%", hex: "#21c45d" },
+  purple: { label: "Purple",               primary: "262 83% 58%", accent: "280 87% 65%", hex: "#7c3bed" },
+  navy:   { label: "Navy",                 primary: "220 70% 28%", accent: "199 89% 48%", hex: "#153779" },
+  red:    { label: "Crimson",              primary: "0 72% 51%",   accent: "24 89% 48%",  hex: "#dc2828" },
 } as const;
 
 export async function getEmailBrandColor(): Promise<string> {
   const settings = await getSettings();
-  return THEMES[settings.color_theme as ThemeKey]?.hex ?? THEMES.blue.hex;
+  return THEMES[settings.color_theme as ThemeKey]?.hex ?? THEMES.crest.hex;
 }
 
 export type ThemeKey = keyof typeof THEMES;
 
 export function themeVars(theme: string): string {
-  const t = THEMES[theme as ThemeKey] ?? THEMES.blue;
+  const t = THEMES[theme as ThemeKey] ?? THEMES.crest;
   return `--primary:${t.primary};--ring:${t.primary};--accent:${t.accent};`;
 }
 

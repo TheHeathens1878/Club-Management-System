@@ -3,45 +3,73 @@
 @tailwind utilities;
 
 @layer base {
+  /*
+   * The crest theme — Adam's UI framework from the linked Claude Design
+   * project ("Football club management system"): warm near-black ink, crest
+   * orange, paper. Geometry and radius stay shadcn; only the colours and the
+   * typefaces (Oswald display, Source Sans 3 body — wired in app/layout.tsx)
+   * changed.
+   */
   :root {
-    --background: 210 40% 98%;
-    --foreground: 222 47% 11%;
-    --card: 0 0% 100%;
-    --card-foreground: 222 47% 11%;
-    --primary: 221 83% 41%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222 47% 11%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215 16% 47%;
-    --accent: 199 89% 48%;
-    --accent-foreground: 210 40% 98%;
+    --background: 34 30% 96%; /* paper  #F7F4F0 */
+    --foreground: 20 18% 7%; /*  ink    #14100E */
+    --card: 40 27% 98%; /*        #FBFAF8 */
+    --card-foreground: 20 18% 7%;
+    --primary: 12 75% 44%; /*  crest orange #C23D1C */
+    --primary-foreground: 34 30% 96%;
+    --secondary: 33 20% 91%; /*     #EDE9E4 */
+    --secondary-foreground: 20 18% 7%;
+    --muted: 33 20% 91%;
+    --muted-foreground: 24 7% 45%; /* #7A716B */
+    --accent: 12 76% 51%; /*   bright crest #E14A25 */
+    --accent-foreground: 34 30% 96%;
     --destructive: 0 72% 51%;
     --destructive-foreground: 210 40% 98%;
-    --border: 214 32% 91%;
-    --input: 214 32% 91%;
-    --ring: 221 83% 41%;
+    --border: 30 12% 85%;
+    --input: 30 12% 85%;
+    --ring: 12 75% 44%;
     --radius: 0.75rem;
   }
 
   .dark {
-    --background: 222 47% 11%;
-    --foreground: 210 40% 98%;
-    --card: 222 47% 14%;
-    --card-foreground: 210 40% 98%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 222 47% 11%;
-    --secondary: 217 33% 18%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217 33% 18%;
-    --muted-foreground: 215 20% 65%;
-    --accent: 199 89% 48%;
-    --accent-foreground: 210 40% 98%;
+    --background: 20 18% 7%;
+    --foreground: 34 30% 96%;
+    --card: 20 12% 11%;
+    --card-foreground: 34 30% 96%;
+    --primary: 12 76% 51%;
+    --primary-foreground: 34 30% 96%;
+    --secondary: 20 8% 16%;
+    --secondary-foreground: 34 30% 96%;
+    --muted: 20 8% 16%;
+    --muted-foreground: 30 10% 65%;
+    --accent: 12 76% 51%;
+    --accent-foreground: 34 30% 96%;
     --destructive: 0 63% 31%;
     --destructive-foreground: 210 40% 98%;
-    --border: 217 33% 22%;
-    --input: 217 33% 22%;
-    --ring: 217 91% 60%;
+    --border: 24 8% 22%;
+    --input: 24 8% 22%;
+    --ring: 12 76% 51%;
+  }
+
+  /*
+   * The ink scope — the sidebar's own palette (crest design: a dark rail
+   * against paper content). Anything rendered inside adapts through the same
+   * semantic tokens, so ghost buttons, the notifications bell and badges need
+   * no per-component styling.
+   */
+  .theme-ink {
+    --background: 20 18% 7%;
+    --foreground: 34 30% 96%;
+    --card: 20 12% 12%;
+    --card-foreground: 34 30% 96%;
+    --secondary: 24 8% 17%;
+    --secondary-foreground: 34 30% 96%;
+    --muted: 24 8% 17%;
+    --muted-foreground: 30 8% 62%;
+    --accent: 12 76% 51%;
+    --accent-foreground: 34 30% 96%;
+    --border: 24 8% 24%;
+    --input: 24 8% 24%;
   }
 
   * {
