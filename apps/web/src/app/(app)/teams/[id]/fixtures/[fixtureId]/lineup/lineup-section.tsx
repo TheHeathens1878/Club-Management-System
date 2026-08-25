@@ -15,8 +15,13 @@
 import type { Database } from "@club/db";
 
 import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
-import { formationByName, playingFormatFor, type PlayingFormat } from "@/lib/formations";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import {
+  formationByName,
+  isBenchKey,
+  playingFormatFor,
+  type PlayingFormat,
+} from "@/lib/formations";
 import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
@@ -99,12 +104,14 @@ export async function loadLineupSection(
 
   // A formation saved before the age group rolled over may no longer exist for
   // this format; `formationByName` lands on the format's first shape instead,
-  // and only the placements whose slot key survives that come with it.
+  // and only the placements whose slot key survives that come with it. The
+  // bench keys belong to no formation, so substitutes survive every such
+  // change untouched.
   const formation = formationByName(format, lineup?.formation);
   const liveSlots = new Set(formation.slots.map((slot) => slot.key));
   const placements: Record<string, string> = {};
   for (const row of slotRows ?? []) {
-    if (liveSlots.has(row.slot)) placements[row.slot] = row.person_id;
+    if (liveSlots.has(row.slot) || isBenchKey(row.slot)) placements[row.slot] = row.person_id;
   }
 
   // The squad is the live players the caller can see, plus anyone already on
@@ -161,8 +168,9 @@ export function LineupSection({ data }: { data: LineupSectionData }) {
     <>
       {data.canManage ? (
         <p className="mx-auto mb-4 w-full max-w-md text-sm text-muted-foreground">
-          Pick a shape, then tap a position to name a player. Nothing is saved until you press
-          Save.
+          Pick a shape, then drag a shirt onto a position or a substitutes place — or tap one to
+          name a player. Drag a shirt back to the list to take that player off. Nothing is saved
+          until you press Save.
         </p>
       ) : null}
       <LineupBuilder

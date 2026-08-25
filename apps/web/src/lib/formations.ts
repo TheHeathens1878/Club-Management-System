@@ -242,3 +242,38 @@ export function formationByName(format: PlayingFormat, name: string | null | und
 export function slotKeys(formation: Formation): string[] {
   return formation.slots.map((slot) => slot.key);
 }
+
+/**
+ * The bench (Adam, 2026-08-25: "Should be able to drag and drop players on to
+ * the pitch and also substitutes").
+ *
+ * A substitute is not a second kind of record — it is a slot whose key is
+ * "SUB1".."SUB7", stored in `fixture_lineup_slots` beside the pitch slots. The
+ * table's two unique keys then say everything the bench needs saying on their
+ * own: one player per bench place, and nobody both on the pitch and on the
+ * bench. Bench keys are deliberately outside every formation's slot list, so
+ * changing shape leaves the bench alone.
+ *
+ * Seven places, because seven 44px targets are what a 390px phone fits across
+ * one strip without a sideways scroll a coach cannot reach mid-drag, and no
+ * format the club fields names more. If a league ever wants more, raise this —
+ * but it must stay a single digit, because the column's CHECK admits
+ * `^[A-Z]{2,4}[0-9]?$` and would refuse "SUB10".
+ */
+export const BENCH_SIZE = 7;
+
+/** "SUB1" … "SUB7", in bench order. */
+export function benchKeys(): string[] {
+  return Array.from({ length: BENCH_SIZE }, (_, index) => `SUB${index + 1}`);
+}
+
+/** True for a bench slot key this app issues — "SUB1".."SUB7" and no other. */
+export function isBenchKey(key: string): boolean {
+  const match = /^SUB([1-9])$/.exec(key);
+  return match !== null && Number(match[1]) <= BENCH_SIZE;
+}
+
+/** "Substitute 3" — what a bench place is called in a sheet or a label. */
+export function benchLabel(key: string): string {
+  return `Substitute ${key.slice(3)}`;
+}
