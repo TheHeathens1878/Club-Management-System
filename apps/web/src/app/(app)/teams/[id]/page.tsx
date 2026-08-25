@@ -928,6 +928,8 @@ export default async function TeamPage({
                     home_resource_id: team.home_resource_id,
                     home_kickoff_time: team.home_kickoff_time,
                     central_venue_name: team.central_venue_name,
+                    league: team.league,
+                    division: team.division,
                     match_halves: team.match_halves,
                     half_length_minutes: team.half_length_minutes,
                     half_time_minutes: team.half_time_minutes,

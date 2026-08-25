@@ -87,6 +87,14 @@ export async function updateTeamMatchDay(
   }
   const homeKickoffTime = central ? null : kickoffRaw || null;
 
+  // Blank means null — the 20260824440000 CHECKs refuse an empty string, and
+  // 120 characters is their ceiling too.
+  const league = String(formData.get("league") ?? "").trim() || null;
+  const division = String(formData.get("division") ?? "").trim() || null;
+  if ((league && league.length > 120) || (division && division.length > 120)) {
+    return { error: "League and division are short labels — 120 characters at most." };
+  }
+
   const halves = requiredInt(formData, "match_halves", LIMITS.match_halves.min, LIMITS.match_halves.max);
   if (halves === "invalid") {
     return { error: `A match has between ${LIMITS.match_halves.min} and ${LIMITS.match_halves.max} halves.` };
@@ -131,6 +139,8 @@ export async function updateTeamMatchDay(
       home_resource_id: homeResourceId,
       home_kickoff_time: homeKickoffTime,
       central_venue_name: central ? centralVenueName : null,
+      league,
+      division,
       match_halves: halves,
       half_length_minutes: halfLength,
       half_time_minutes: halfTime,
