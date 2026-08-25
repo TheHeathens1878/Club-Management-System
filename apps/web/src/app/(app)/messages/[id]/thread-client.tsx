@@ -112,6 +112,8 @@ export function ThreadClient({
   readOnlyNotice,
   matchPosts = {},
   isReferee = false,
+  isRefereesGroup = false,
+  isAdmin = false,
 }: {
   conversationId: string;
   conversationType: string;
@@ -130,6 +132,9 @@ export function ThreadClient({
   /** The Referees group's game cards, keyed by message id. */
   matchPosts?: Record<string, MatchPostView>;
   isReferee?: boolean;
+  /** The Referees group: games are requested through the form, not the chat. */
+  isRefereesGroup?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -761,7 +766,12 @@ export function ThreadClient({
                         same tombstone rule as the attachments above. */}
                     {body.state === "ok" && matchPosts[message.id] !== undefined ? (
                       <span id={`msg-${message.id}`} className="block">
-                        <MatchPostCard post={matchPosts[message.id]!} isReferee={isReferee} />
+                        <MatchPostCard
+                          post={matchPosts[message.id]!}
+                          isReferee={isReferee}
+                          myPersonId={myPersonId}
+                          isAdmin={isAdmin}
+                        />
                       </span>
                     ) : (
                       <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
@@ -914,6 +924,15 @@ export function ThreadClient({
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
             </div>
+          )}
+
+          {/* Adam, 2026-08-25: the chat is not the way to ask for a referee —
+              the structured Post a game form above is, and it says so where
+              the eye lands before typing. */}
+          {isRefereesGroup && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+              If you want to request a referee, use the form above.
+            </p>
           )}
 
           <div className="flex items-end gap-2">
