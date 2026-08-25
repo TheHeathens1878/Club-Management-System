@@ -53,10 +53,16 @@ insert into public.certifications (person_id, type, expires_on, verified_at) val
   (current_setting('lr.coach')::uuid, 'safeguarding_children', current_date + 300, now());
 
 -- Two players: one the coach reports as having left, one for the reject path.
+-- SG-1: a team conversation may not hold exactly one adult and one minor with
+-- no guardian in it, and `team_memberships_sync_conversations` puts every new
+-- member into one. So each team gets a SECOND ADULT before any minor joins —
+-- the same shape `match_stats.test.sql` uses, and the reason team 2's player
+-- is an adult rather than another child.
 insert into public.people (id, first_name, last_name, dob) values
-  ('c9c9c9c9-9999-4111-8111-000000000001', 'Kid',  'Leaver',  current_date - interval '12 years'),
-  ('c9c9c9c9-9999-4111-8111-000000000002', 'Kid',  'Stayer',  current_date - interval '12 years'),
-  ('c9c9c9c9-9999-4111-8111-000000000003', 'Kid',  'Elsewhere', current_date - interval '12 years');
+  ('c9c9c9c9-9999-4111-8111-000000000001', 'Kid',   'Leaver',    current_date - interval '12 years'),
+  ('c9c9c9c9-9999-4111-8111-000000000002', 'Kid',   'Stayer',    current_date - interval '12 years'),
+  ('c9c9c9c9-9999-4111-8111-000000000003', 'Alex',  'Elsewhere', '1990-03-03'),
+  ('c9c9c9c9-9999-4111-8111-000000000004', 'Sam',   'Senior',    '1991-04-04');
 insert into public.guardianships (guardian_person_id, child_person_id, relationship) values
   (current_setting('lr.parent')::uuid, 'c9c9c9c9-9999-4111-8111-000000000001', 'parent'),
   (current_setting('lr.parent')::uuid, 'c9c9c9c9-9999-4111-8111-000000000002', 'parent');
@@ -69,6 +75,9 @@ insert into public.teams (id, name, age_group) values
 insert into public.team_memberships (id, person_id, team_id, season_id, role) values
   ('b9b9b9b9-9999-4111-8111-000000000001', current_setting('lr.coach')::uuid,
    '7a7a7a7a-9999-4111-8111-000000000001', '5a5a5a5a-9999-4111-8111-000000000001', 'coach'),
+  -- The second adult on team 1, ahead of the two children (SG-1, above).
+  ('b9b9b9b9-9999-4111-8111-000000000006', 'c9c9c9c9-9999-4111-8111-000000000004',
+   '7a7a7a7a-9999-4111-8111-000000000001', '5a5a5a5a-9999-4111-8111-000000000001', 'player'),
   ('b9b9b9b9-9999-4111-8111-000000000002', 'c9c9c9c9-9999-4111-8111-000000000001',
    '7a7a7a7a-9999-4111-8111-000000000001', '5a5a5a5a-9999-4111-8111-000000000001', 'player'),
   ('b9b9b9b9-9999-4111-8111-000000000003', 'c9c9c9c9-9999-4111-8111-000000000002',
