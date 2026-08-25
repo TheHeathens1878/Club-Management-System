@@ -35,6 +35,15 @@ type FullTimeLinkSummary = {
   last_error: string | null;
 };
 
+type NextOut = {
+  when: string;
+  opponent: string;
+  home: boolean;
+  pitch: string | null;
+  /** Home fixture with no booking — the design's "no pitch yet" amber note. */
+  unallocated: boolean;
+};
+
 type TeamCard = {
   id: string;
   name: string;
@@ -42,9 +51,24 @@ type TeamCard = {
   gender: string | null;
   active: boolean;
   homePitch: string | null;
-  members: number;
-  staff: number;
+  players: number;
+  managerName: string | null;
+  assistantCount: number;
+  nextOut: NextOut | null;
+  /** null = no subscriptions set up for this squad, shown as an em-dash. */
+  subsOwing: number | null;
 };
+
+/** "Sat 09:30" — the design's Next-out cell, London wall clock. */
+function kickoffShort(iso: string): string {
+  return new Date(iso).toLocaleString("en-GB", {
+    timeZone: "Europe/London",
+    weekday: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+}
 
 const GENDER_LABELS: Record<string, string> = {
   mixed: "Mixed",
@@ -139,6 +163,7 @@ export default async function TeamsPage({
   const { saved, error: errorParam, q, status } = await searchParams;
   const query = (q ?? "").trim();
   const showAll = status === "all";
+  const nowIso = new Date().toISOString();
 
   // ------------------------------------------------------------------
   // Who may be here, and which teams they get.
@@ -208,7 +233,8 @@ export default async function TeamsPage({
   // `team_fulltime_links` and `site_settings` are club-admin-only, and the
   // link state is an administrator's concern — a coach never pays for either.
   const adminClient = canAdmin ? createAdminClient() : null;
-  const [memberships, pitches, links, clubCodeRows] = await Promise.all([
+  const [memberships, pitches, links, clubCodeRows, upcomingFixtures, subscriptionRows] =
+    await Promise.all([
     teamIds.length > 0
       ? supabase
           .from("team_memberships")
@@ -237,34 +263,120 @@ export default async function TeamsPage({
           .in("key", ["fulltime_club_fixtures_code", "fulltime_club_results_code"])
           .then((result) => result.data ?? [])
       : Promise.resolve([] as { key: string; value: string | null }[]),
+    // The table's Next-out column: the earliest upcoming fixture per team.
+    teamIds.length > 0
+      ? supabase
+          .from("fixtures")
+          .select("team_id,kickoff_at,opponent,is_home,booking_id,resources!fixtures_venue_resource_id_fkey(name)")
+          .in("team_id", teamIds)
+          .eq("status", "scheduled")
+          .gte("kickoff_at", nowIso)
+          .order("kickoff_at")
+          .then((result) => result.data ?? [])
+      : Promise.resolve([]),
+    // The Subs pill. Owing = a live past_due subscription; a squad with no
+    // subscriptions at all shows an em-dash rather than claiming "All paid".
+    adminClient
+      ? adminClient
+          .from("subscriptions")
+          .select("person_id,status")
+          .in("status", ["active", "past_due", "pending"])
+          .then((result) => result.data ?? [])
+      : Promise.resolve([] as { person_id: string; status: string }[]),
   ]);
+
+  // Staff names need the people rows behind the staff memberships — a second
+  // hop because the ids only exist once the memberships are in hand.
+  const staffPersonIds = Array.from(
+    new Set(
+      memberships
+        .filter((row) => STAFF_TEAM_ROLES.includes(row.role))
+        .map((row) => row.person_id),
+    ),
+  );
+  const staffPeople =
+    staffPersonIds.length > 0
+      ? await supabase
+          .from("people")
+          .select("id,first_name,last_name")
+          .in("id", staffPersonIds)
+          .then((result) => result.data ?? [])
+      : [];
 
   const pitchNames = new Map(pitches.map((row) => [row.id, row.name]));
   const linkByTeam = new Map(links.map((link) => [link.team_id, link]));
   const clubCodes = new Map(clubCodeRows.map((row) => [row.key, row.value]));
+  const personName = new Map(
+    staffPeople.map((person) => [
+      person.id,
+      `${person.first_name ?? ""} ${person.last_name ?? ""}`.trim(),
+    ]),
+  );
 
-  const memberIds = new Map<string, Set<string>>();
+  const playerIds = new Map<string, Set<string>>();
+  const managerBy = new Map<string, string>();
+  const coachBy = new Map<string, string>();
   const staffIds = new Map<string, Set<string>>();
   for (const row of memberships) {
-    if (!memberIds.has(row.team_id)) memberIds.set(row.team_id, new Set());
-    memberIds.get(row.team_id)?.add(row.person_id);
+    if (row.role === "player") {
+      if (!playerIds.has(row.team_id)) playerIds.set(row.team_id, new Set());
+      playerIds.get(row.team_id)?.add(row.person_id);
+    }
     if (STAFF_TEAM_ROLES.includes(row.role)) {
       if (!staffIds.has(row.team_id)) staffIds.set(row.team_id, new Set());
       staffIds.get(row.team_id)?.add(row.person_id);
+      // The name on the Staff cell: the manager, else the (head) coach.
+      if (row.role === "manager" && !managerBy.has(row.team_id)) {
+        managerBy.set(row.team_id, row.person_id);
+      }
+      if (row.role === "coach" && !coachBy.has(row.team_id)) {
+        coachBy.set(row.team_id, row.person_id);
+      }
     }
   }
 
+  // Earliest upcoming fixture per team — rows arrive kickoff-ordered.
+  const nextFixture = new Map<string, (typeof upcomingFixtures)[number]>();
+  for (const fixture of upcomingFixtures) {
+    if (!nextFixture.has(fixture.team_id)) nextFixture.set(fixture.team_id, fixture);
+  }
+
+  const owingPeople = new Set(
+    subscriptionRows.filter((row) => row.status === "past_due").map((row) => row.person_id),
+  );
+  const subscribedPeople = new Set(subscriptionRows.map((row) => row.person_id));
+
   const allTeams: TeamCard[] = teamRows
-    .map((team) => ({
-      id: team.id,
-      name: team.name,
-      ageGroup: team.age_group,
-      gender: team.gender,
-      active: team.active,
-      homePitch: team.home_resource_id ? pitchNames.get(team.home_resource_id) ?? null : null,
-      members: memberIds.get(team.id)?.size ?? 0,
-      staff: staffIds.get(team.id)?.size ?? 0,
-    }))
+    .map((team) => {
+      const players = playerIds.get(team.id) ?? new Set<string>();
+      const staff = staffIds.get(team.id) ?? new Set<string>();
+      const lead = managerBy.get(team.id) ?? coachBy.get(team.id) ?? null;
+      const fixture = nextFixture.get(team.id) ?? null;
+      const squadSubscribed = Array.from(players).some((id) => subscribedPeople.has(id));
+      return {
+        id: team.id,
+        name: team.name,
+        ageGroup: team.age_group,
+        gender: team.gender,
+        active: team.active,
+        homePitch: team.home_resource_id ? pitchNames.get(team.home_resource_id) ?? null : null,
+        players: players.size,
+        managerName: lead ? personName.get(lead) ?? null : null,
+        assistantCount: Math.max(0, staff.size - (lead ? 1 : 0)),
+        nextOut: fixture
+          ? {
+              when: kickoffShort(fixture.kickoff_at),
+              opponent: fixture.opponent,
+              home: fixture.is_home,
+              pitch: fixture.resources?.name ?? null,
+              unallocated: fixture.is_home && fixture.booking_id === null,
+            }
+          : null,
+        subsOwing: squadSubscribed
+          ? Array.from(players).filter((id) => owingPeople.has(id)).length
+          : null,
+      };
+    })
     .sort(compareTeams);
 
   const currentSeason = seasons.find((season) => season.is_current) ?? null;
@@ -346,71 +458,108 @@ export default async function TeamsPage({
               </details>
             ) : null
           }
+          head={
+            <tr>
+              <th className="px-4 py-2.5 font-medium">Team</th>
+              <th className="px-4 py-2.5 font-medium">Staff</th>
+              <th className="px-4 py-2.5 font-medium">Squad</th>
+              <th className="px-4 py-2.5 font-medium">Next out</th>
+              {canAdmin && <th className="px-4 py-2.5 font-medium">Subs</th>}
+              <th className="px-4 py-2.5">
+                <span className="sr-only">Actions</span>
+              </th>
+            </tr>
+          }
           items={allTeams.map((team): TeamFilterItem => {
             const ft = canAdmin ? fullTimeState(linkByTeam.get(team.id)) : null;
+            const needsStaff = team.managerName === null;
             return {
               key: team.id,
               haystack: `${team.name} ${team.ageGroup ?? ""}`.toLocaleLowerCase("en-GB"),
               active: team.active,
-              card: (
-                <div className="relative flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 focus-within:border-primary/40">
-                  <div className="min-w-0">
-                    {/* The stretched link makes the whole card the target;
-                        the active toggle below sits above it on the z-axis so
-                        it stays a button, not part of the link. */}
+              needsStaff,
+              row: (
+                <tr className={"transition-colors hover:bg-secondary/40" + (team.active ? "" : " opacity-60")}>
+                  <td className="px-4 py-3 align-top">
                     <Link
                       href={`/teams/${team.id}`}
-                      className="flex items-center gap-1 font-semibold leading-tight after:absolute after:inset-0 after:content-[''] hover:underline"
+                      className="font-semibold leading-tight hover:underline"
                     >
-                      <span className="truncate">{team.name}</span>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      {team.name}
+                      <ChevronRight className="ml-0.5 inline h-3.5 w-3.5 text-muted-foreground" />
                     </Link>
-                    <p className="mt-1 text-sm text-muted-foreground">
+                    <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
                       {team.ageGroup ?? "No age group"}
+                      {team.gender ? <> · {GENDER_LABELS[team.gender] ?? team.gender}</> : null}
+                      {!team.active && <Badge variant="muted">Inactive</Badge>}
+                      {ft && (
+                        <span className="inline-flex items-center gap-1" title={ft.detail}>
+                          <span className={`h-2 w-2 shrink-0 rounded-full ${ft.dot}`} aria-hidden />
+                          {ft.label}
+                        </span>
+                      )}
                     </p>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    {team.gender && (
-                      <Badge variant="muted">
-                        {GENDER_LABELS[team.gender] ?? team.gender}
-                      </Badge>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    {team.managerName ? (
+                      <>
+                        <p>{team.managerName}</p>
+                        {team.assistantCount > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            + {team.assistantCount}{" "}
+                            {team.assistantCount === 1 ? "assistant" : "assistants"}
+                          </p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="font-medium text-primary">No staff</p>
                     )}
-                    <Badge variant={team.active ? "success" : "muted"}>
-                      {team.active ? "Active" : "Inactive"}
-                    </Badge>
-                    {team.homePitch && (
-                      <Badge variant="outline" className="max-w-[11rem] truncate">
-                        {team.homePitch}
-                      </Badge>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    {team.players} {team.players === 1 ? "player" : "players"}
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    {team.nextOut ? (
+                      <>
+                        <p>{team.nextOut.when}</p>
+                        <p className="text-xs text-muted-foreground">
+                          v {team.nextOut.opponent}
+                          {team.nextOut.unallocated ? (
+                            <span className="ml-1 font-medium text-amber-700">no pitch yet</span>
+                          ) : team.nextOut.home && team.nextOut.pitch ? (
+                            <> · {team.nextOut.pitch}</>
+                          ) : team.nextOut.home ? null : (
+                            <> · away</>
+                          )}
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
                     )}
-                  </div>
-
-                  <p className="text-xs text-muted-foreground">
-                    {team.members} {team.members === 1 ? "member" : "members"} · {team.staff}{" "}
-                    {team.staff === 1 ? "coach" : "coaches"}
-                  </p>
-
-                  {ft && (
-                    <p
-                      className="flex items-center gap-1.5 text-xs text-muted-foreground"
-                      title={ft.detail}
-                    >
-                      <span className={`h-2 w-2 shrink-0 rounded-full ${ft.dot}`} aria-hidden />
-                      {ft.label}
-                    </p>
-                  )}
-
+                  </td>
                   {canAdmin && (
-                    <form action={setTeamActive} className="relative z-10 mt-auto pt-1">
-                      <input type="hidden" name="team_id" value={team.id} />
-                      <input type="hidden" name="active" value={team.active ? "false" : "true"} />
-                      <Button type="submit" variant="outline" size="sm">
-                        {team.active ? "Mark inactive" : "Mark active"}
-                      </Button>
-                    </form>
+                    <td className="px-4 py-3 align-top">
+                      {team.subsOwing === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : team.subsOwing === 0 ? (
+                        <Badge variant="success">All paid</Badge>
+                      ) : (
+                        <Badge variant="warning">{team.subsOwing} owing</Badge>
+                      )}
+                    </td>
                   )}
-                </div>
+                  <td className="px-4 py-3 text-right align-top">
+                    {canAdmin && (
+                      <form action={setTeamActive} className="inline">
+                        <input type="hidden" name="team_id" value={team.id} />
+                        <input type="hidden" name="active" value={team.active ? "false" : "true"} />
+                        <Button type="submit" variant="ghost" size="sm" className="h-7 px-2 text-xs">
+                          {team.active ? "Mark inactive" : "Mark active"}
+                        </Button>
+                      </form>
+                    )}
+                  </td>
+                </tr>
               ),
             };
           })}
