@@ -9,28 +9,35 @@
  * are gated on these, so a wrong answer here is a wrong answer everywhere.
  */
 
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 
-/** `public.current_person_id()` — the caller's `people.id`, or null if unlinked. */
-export async function getCurrentPersonId(): Promise<string | null> {
+/**
+ * `public.current_person_id()` — the caller's `people.id`, or null if unlinked.
+ *
+ * `cache()`d because half the screens ask for it and then ask again in a child
+ * component; the answer cannot change while one page renders.
+ */
+export const getCurrentPersonId = cache(async function getCurrentPersonId(): Promise<string | null> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("current_person_id");
   return data ?? null;
-}
+});
 
 /** `public.is_safeguarding_lead()` — the `person_roles` answer, not `profiles.role`. */
-export async function isSafeguardingLead(): Promise<boolean> {
+export const isSafeguardingLead = cache(async function isSafeguardingLead(): Promise<boolean> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("is_safeguarding_lead");
   return data === true;
-}
+});
 
 /** `public.is_club_admin()` — the `person_roles` answer. */
-export async function isClubAdmin(): Promise<boolean> {
+export const isClubAdmin = cache(async function isClubAdmin(): Promise<boolean> {
   const supabase = await createClient();
   const { data } = await supabase.rpc("is_club_admin");
   return data === true;
-}
+});
 
 /**
  * Does the caller hold a `waiting_list_access` row for any age group?
@@ -39,13 +46,13 @@ export async function isClubAdmin(): Promise<boolean> {
  * this is a safe question for any signed-in user to ask. Club administrators
  * reach the desk through `is_club_admin()` instead — they need no grant.
  */
-export async function hasWaitingListAccess(): Promise<boolean> {
+export const hasWaitingListAccess = cache(async function hasWaitingListAccess(): Promise<boolean> {
   const supabase = await createClient();
   const { count } = await supabase
     .from("waiting_list_access")
     .select("age_group", { count: "exact", head: true });
   return (count ?? 0) > 0;
-}
+});
 
 /**
  * A display name the caller is entitled to see, for a set of people.
