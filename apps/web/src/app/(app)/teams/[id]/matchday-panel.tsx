@@ -36,12 +36,19 @@ export type MatchDayPitch = { id: string; name: string };
 
 export type MatchDayValues = {
   home_resource_id: string | null;
+  home_kickoff_time: string | null;
+  central_venue_name: string | null;
   match_halves: number;
   half_length_minutes: number | null;
   half_time_minutes: number;
   default_pre_buffer_minutes: number | null;
   default_post_buffer_minutes: number | null;
 };
+
+/** Postgres `time` arrives as "10:30:00"; the time input wants "10:30". */
+function toTimeField(value: string | null): string {
+  return value ? value.slice(0, 5) : "";
+}
 
 /** Blank stays blank; anything else is read as written so 0 survives. */
 function toField(value: number | null): string {
@@ -69,6 +76,10 @@ export function MatchDayPanel({
   const [state, action, pending] = useActionState<MatchDayState, FormData>(updateTeamMatchDay, {});
 
   const [homeResourceId, setHomeResourceId] = useState(values.home_resource_id ?? "");
+  const [venueMode, setVenueMode] = useState<"own" | "central">(
+    values.central_venue_name ? "central" : "own",
+  );
+  const [centralName, setCentralName] = useState(values.central_venue_name ?? "");
   const [halves, setHalves] = useState(String(values.match_halves));
   const [halfLength, setHalfLength] = useState(toField(values.half_length_minutes));
   const [halfTime, setHalfTime] = useState(String(values.half_time_minutes));
@@ -89,9 +100,15 @@ export function MatchDayPanel({
     return (
       <div className="space-y-1 text-sm text-muted-foreground">
         <p>
-          {homePitch
-            ? `Home pitch: ${homePitch.name}.`
-            : "No home pitch set, so allocation starts from the first pitch on the list."}
+          {values.central_venue_name
+            ? `Plays at ${values.central_venue_name} — a central venue the club does not manage, so no pitch bookings are made.`
+            : homePitch
+              ? `Home pitch: ${homePitch.name}.${
+                  values.home_kickoff_time
+                    ? ` Home kick-off ${toTimeField(values.home_kickoff_time)}.`
+                    : ""
+                }`
+              : "No home pitch set, so allocation starts from the first pitch on the list."}
         </p>
         <p>
           {duration === null
@@ -106,29 +123,77 @@ export function MatchDayPanel({
     <form action={action} className="space-y-5">
       <input type="hidden" name="team_id" value={teamId} />
 
-      <div className="space-y-1">
-        <Label htmlFor={`home-resource-${teamId}`}>Home venue and pitch</Label>
-        <Select
-          id={`home-resource-${teamId}`}
-          name="home_resource_id"
-          value={homeResourceId}
-          onChange={(event) => setHomeResourceId(event.target.value)}
-        >
-          <option value="">No home pitch</option>
-          {venues.map((group) => (
-            <optgroup key={group.venue} label={group.venue}>
-              {group.pitches.map((pitch) => (
-                <option key={pitch.id} value={pitch.id}>
-                  {splitVenue(pitch.name).pitch}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          Allocating one of this team&apos;s home fixtures starts here, and so does booking its
-          training. Every other pitch stays selectable — this is a default, not a restriction.
-        </p>
+      <div className="space-y-3">
+        <div className="space-y-1">
+          <Label htmlFor={`venue-mode-${teamId}`}>Where the team plays</Label>
+          <Select
+            id={`venue-mode-${teamId}`}
+            name="venue_mode"
+            value={venueMode}
+            onChange={(event) => setVenueMode(event.target.value as "own" | "central")}
+          >
+            <option value="own">One of the club&apos;s own pitches</option>
+            <option value="central">A central venue (not managed by us)</option>
+          </Select>
+        </div>
+
+        {venueMode === "own" ? (
+          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+            <div className="space-y-1">
+              <Label htmlFor={`home-resource-${teamId}`}>Home venue and pitch</Label>
+              <Select
+                id={`home-resource-${teamId}`}
+                name="home_resource_id"
+                value={homeResourceId}
+                onChange={(event) => setHomeResourceId(event.target.value)}
+              >
+                <option value="">No home pitch</option>
+                {venues.map((group) => (
+                  <optgroup key={group.venue} label={group.venue}>
+                    {group.pitches.map((pitch) => (
+                      <option key={pitch.id} value={pitch.id}>
+                        {splitVenue(pitch.name).pitch}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`home-kickoff-${teamId}`}>Home kick-off</Label>
+              <Input
+                id={`home-kickoff-${teamId}`}
+                name="home_kickoff_time"
+                type="time"
+                defaultValue={toTimeField(values.home_kickoff_time)}
+                className="w-32"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground sm:col-span-2">
+              Allocating one of this team&apos;s home fixtures starts from this pitch and kick-off
+              time, and booking its training starts from the pitch. Every other pitch and time
+              stays selectable — these are defaults, not restrictions.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <Label htmlFor={`central-venue-${teamId}`}>Central venue name</Label>
+            <Input
+              id={`central-venue-${teamId}`}
+              name="central_venue_name"
+              placeholder="e.g. Timperley Sports Club"
+              value={centralName}
+              onChange={(event) => setCentralName(event.target.value)}
+              required
+            />
+            <p className="text-xs text-muted-foreground">
+              The league&apos;s venue, not ours: the team&apos;s fixtures carry this name and never
+              book the club&apos;s pitches. New fixtures from Full-Time pick it up automatically;
+              use &ldquo;Send every fixture to the central venue&rdquo; below for the ones already
+              imported.
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

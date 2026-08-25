@@ -31,6 +31,7 @@ import {
   type TeamRoleValue,
 } from "./members-panel";
 import { MatchDayPanel, type MatchDayPitch } from "./matchday-panel";
+import { AllocateAllPanel } from "./allocate-all-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
 import { RecruitingPanel } from "./recruiting-panel";
 import { FixturesSummary, FixturesTable, type TeamFixture } from "./fixtures-list";
@@ -758,12 +759,41 @@ export default async function TeamPage({
                   pitches={matchDayPitches}
                   values={{
                     home_resource_id: team.home_resource_id,
+                    home_kickoff_time: team.home_kickoff_time,
+                    central_venue_name: team.central_venue_name,
                     match_halves: team.match_halves,
                     half_length_minutes: team.half_length_minutes,
                     half_time_minutes: team.half_time_minutes,
                     default_pre_buffer_minutes: team.default_pre_buffer_minutes,
                     default_post_buffer_minutes: team.default_post_buffer_minutes,
                   }}
+                />
+              </CardContent>
+            </Card>
+
+            {/* The whole season in one go: every future home fixture onto one
+                pitch at one kick-off — or, for a central-venue team, every
+                fixture pointed at the league's venue and our pitches freed.
+                The RPCs are club_admin-only; committee holds that through the
+                profiles → person_roles sync. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {team.central_venue_name ? "Central venue" : "Allocate the season"}
+                </CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {team.central_venue_name
+                    ? `${team.name} plays at ${team.central_venue_name}, which the club does not manage — its fixtures never occupy our pitch calendar.`
+                    : "Put every future home fixture on a pitch in one go, starting from the team's saved defaults. Individual fixtures can still be moved afterwards on the Pitches screen."}
+                </p>
+              </CardHeader>
+              <CardContent>
+                <AllocateAllPanel
+                  teamId={team.id}
+                  pitches={matchDayPitches}
+                  homeResourceId={team.home_resource_id}
+                  homeKickoffTime={team.home_kickoff_time}
+                  centralVenueName={team.central_venue_name}
                 />
               </CardContent>
             </Card>

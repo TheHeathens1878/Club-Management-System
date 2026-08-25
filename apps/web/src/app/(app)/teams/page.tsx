@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Plus,
-  Search,
 } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
@@ -24,6 +23,7 @@ import { formatBookingDateShort } from "@/lib/booking-time";
 
 import { createSeason, createTeam, setCurrentSeason, setTeamActive } from "./actions";
 import { ClubWidgetsPanel } from "./club-widgets-panel";
+import { TeamFilterGrid, type TeamFilterItem } from "./team-filter";
 
 /** The Full-Time link columns this list condenses into one dot and one label. */
 type FullTimeLinkSummary = {
@@ -267,16 +267,6 @@ export default async function TeamsPage({
     }))
     .sort(compareTeams);
 
-  const needle = query.toLocaleLowerCase("en-GB");
-  const teams = allTeams.filter((team) => {
-    if (!showAll && !team.active) return false;
-    if (!needle) return true;
-    return (
-      team.name.toLocaleLowerCase("en-GB").includes(needle) ||
-      (team.ageGroup ?? "").toLocaleLowerCase("en-GB").includes(needle)
-    );
-  });
-
   const currentSeason = seasons.find((season) => season.is_current) ?? null;
   const loadError = teamsResult.error ?? seasonsResult.error;
 
@@ -310,101 +300,60 @@ export default async function TeamsPage({
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Find a team                                                      */}
+        {/* Find a team — the box filters as you type (client-side over the  */}
+        {/* server-rendered cards), and the URL keeps up so the view shares. */}
         {/* ---------------------------------------------------------------- */}
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <form method="get" action="/teams" className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="team-search" className="sr-only">
-                Search teams
-              </Label>
-              <div className="relative">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="team-search"
-                  name="q"
-                  defaultValue={query}
-                  placeholder="Search name or age group"
-                  className="w-full pl-9 sm:w-64"
-                />
-              </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="team-status" className="sr-only">
-                Show
-              </Label>
-              <Select
-                id="team-status"
-                name="status"
-                defaultValue={showAll ? "all" : "active"}
-                className="w-auto"
-              >
-                <option value="active">Active only</option>
-                <option value="all">All teams</option>
-              </Select>
-            </div>
-            <Button type="submit" variant="outline">
-              Search
-            </Button>
-          </form>
-
-          {canAdmin && (
-            <details className="group">
-              <summary className="inline-flex cursor-pointer list-none [&::-webkit-details-marker]:hidden items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
-                <Plus className="h-4 w-4" /> New team
-              </summary>
-              <Card className="mt-3 w-full sm:w-96">
-                <CardContent className="pt-6">
-                  <form action={createTeam} className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="team-name">Team name *</Label>
-                      <Input
-                        id="team-name"
-                        name="name"
-                        placeholder="e.g. AoM FC First Team"
-                        required
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="team-age">Age group</Label>
-                      <Input
-                        id="team-age"
-                        name="age_group"
-                        placeholder="e.g. Under 12s, Open age"
-                      />
-                    </div>
-                    <Button type="submit">
-                      <Plus className="h-3.5 w-3.5" /> Create team
-                    </Button>
-                  </form>
-                </CardContent>
-              </Card>
-            </details>
-          )}
-        </div>
-
-        {/* ---------------------------------------------------------------- */}
-        {/* The teams themselves                                             */}
-        {/* ---------------------------------------------------------------- */}
-        {teams.length === 0 ? (
-          <Card>
-            <CardContent className="py-10 text-center text-sm text-muted-foreground">
-              {allTeams.length === 0
-                ? canAdmin
-                  ? "No teams yet. Use “New team” to add the first one."
-                  : "You are not listed as staff on any team yet."
-                : "No team matches that search."}
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {teams.map((team) => {
-              const ft = canAdmin ? fullTimeState(linkByTeam.get(team.id)) : null;
-              return (
-                <div
-                  key={team.id}
-                  className="relative flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 focus-within:border-primary/40"
-                >
+        <TeamFilterGrid
+          initialQuery={query}
+          initialShowAll={showAll}
+          noTeamsMessage={
+            canAdmin
+              ? "No teams yet. Use “New team” to add the first one."
+              : "You are not listed as staff on any team yet."
+          }
+          actions={
+            canAdmin ? (
+              <details className="group">
+                <summary className="inline-flex cursor-pointer list-none [&::-webkit-details-marker]:hidden items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+                  <Plus className="h-4 w-4" /> New team
+                </summary>
+                <Card className="mt-3 w-full sm:w-96">
+                  <CardContent className="pt-6">
+                    <form action={createTeam} className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="team-name">Team name *</Label>
+                        <Input
+                          id="team-name"
+                          name="name"
+                          placeholder="e.g. AoM FC First Team"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="team-age">Age group</Label>
+                        <Input
+                          id="team-age"
+                          name="age_group"
+                          placeholder="e.g. Under 12s, Open age"
+                        />
+                      </div>
+                      <Button type="submit">
+                        <Plus className="h-3.5 w-3.5" /> Create team
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </details>
+            ) : null
+          }
+          items={allTeams.map((team): TeamFilterItem => {
+            const ft = canAdmin ? fullTimeState(linkByTeam.get(team.id)) : null;
+            return {
+              key: team.id,
+              haystack: `${team.name} ${team.ageGroup ?? ""}`.toLocaleLowerCase("en-GB"),
+              active: team.active,
+              card: (
+                <div className="relative flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm transition-colors hover:border-primary/40 focus-within:border-primary/40">
                   <div className="min-w-0">
                     {/* The stretched link makes the whole card the target;
                         the active toggle below sits above it on the z-axis so
@@ -462,10 +411,10 @@ export default async function TeamsPage({
                     </form>
                   )}
                 </div>
-              );
-            })}
-          </div>
-        )}
+              ),
+            };
+          })}
+        />
 
         {/* ---------------------------------------------------------------- */}
         {/* Season toolbar — administrators only                             */}

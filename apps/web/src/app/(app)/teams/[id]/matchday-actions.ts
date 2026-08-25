@@ -67,7 +67,25 @@ export async function updateTeamMatchDay(
   const teamId = String(formData.get("team_id") ?? "").trim();
   if (!teamId) return { error: "Missing team." };
 
-  const homeResourceId = String(formData.get("home_resource_id") ?? "").trim() || null;
+  // Own pitch and central venue are mutually exclusive — the mode decides
+  // which of the two columns survives, and `trg_teams_home_resource_guard`
+  // enforces the same rule underneath.
+  const central = String(formData.get("venue_mode") ?? "own") === "central";
+  const centralVenueName = central
+    ? String(formData.get("central_venue_name") ?? "").trim()
+    : "";
+  if (central && !centralVenueName) {
+    return { error: "Name the central venue, or switch back to one of the club's own pitches." };
+  }
+  const homeResourceId = central
+    ? null
+    : String(formData.get("home_resource_id") ?? "").trim() || null;
+
+  const kickoffRaw = String(formData.get("home_kickoff_time") ?? "").trim();
+  if (kickoffRaw !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(kickoffRaw)) {
+    return { error: "The home kick-off must be a time like 10:30, or blank for none." };
+  }
+  const homeKickoffTime = central ? null : kickoffRaw || null;
 
   const halves = requiredInt(formData, "match_halves", LIMITS.match_halves.min, LIMITS.match_halves.max);
   if (halves === "invalid") {
@@ -111,6 +129,8 @@ export async function updateTeamMatchDay(
     .from("teams")
     .update({
       home_resource_id: homeResourceId,
+      home_kickoff_time: homeKickoffTime,
+      central_venue_name: central ? centralVenueName : null,
       match_halves: halves,
       half_length_minutes: halfLength,
       half_time_minutes: halfTime,
@@ -141,8 +161,87 @@ export async function updateTeamMatchDay(
 
   revalidatePath(`/teams/${teamId}`);
   // New fixtures inherit the duration, and allocation now defaults to the home
-  // pitch and the team's buffers — both of those screens read this row.
+  // pitch, kick-off and the team's buffers — those screens read this row.
   revalidatePath("/pitches");
   revalidatePath("/pitches/book");
   return { notice: "Match day defaults saved." };
+}
+
+// ---------------------------------------------------------------------------
+// Bulk allocation (migration 20260824340000)
+// ---------------------------------------------------------------------------
+
+/** One failed Sunday out of allocate_team_fixtures(), named. */
+export type BulkConflict = { fixture_id: string; label: string; error: string };
+
+export type BulkAllocationState = {
+  error?: string;
+  /** allocate_team_fixtures: how the run went, clash by clash. */
+  allocated?: { total: number; allocated: number; conflicts: BulkConflict[] };
+  /** allocate_team_fixtures_central: what was pointed away and freed. */
+  central?: { updated: number; bookingsFreed: number };
+};
+
+function revalidateAllocation(teamId: string) {
+  revalidatePath(`/teams/${teamId}`);
+  revalidatePath("/pitches");
+  revalidatePath("/pitches/calendar");
+  revalidatePath("/pitches/mine");
+}
+
+/**
+ * Every future scheduled home fixture onto one pitch at one kick-off, in a
+ * single call. The database RPC owns the rules — club_admin only, home
+ * fixtures only, one sub-transaction per fixture so a clash on one Sunday
+ * leaves the rest standing — and its per-fixture conflict messages are shown
+ * verbatim, because they name the bookings in the way.
+ */
+export async function allocateAllTeamFixtures(
+  _prev: BulkAllocationState,
+  formData: FormData,
+): Promise<BulkAllocationState> {
+  const teamId = String(formData.get("team_id") ?? "").trim();
+  if (!teamId) return { error: "Missing team." };
+  const resourceId = String(formData.get("resource_id") ?? "").trim() || null;
+  const kickoff = String(formData.get("kickoff_time") ?? "").trim();
+  if (kickoff !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(kickoff)) {
+    return { error: "The kick-off must be a time like 10:30, or blank to keep each fixture's own." };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("allocate_team_fixtures", {
+    p_team_id: teamId,
+    ...(resourceId ? { p_resource_id: resourceId } : {}),
+    ...(kickoff ? { p_kickoff_time: kickoff } : {}),
+  });
+  if (error) {
+    if (error.code === "42501") return { error: "Only a club administrator can allocate fixtures." };
+    return { error: error.message };
+  }
+
+  const result = data as { total: number; allocated: number; conflicts: BulkConflict[] };
+  revalidateAllocation(teamId);
+  return { allocated: result };
+}
+
+/** Point every future scheduled fixture at the team's central venue and free any pitch bookings. */
+export async function sendFixturesToCentralVenue(
+  _prev: BulkAllocationState,
+  formData: FormData,
+): Promise<BulkAllocationState> {
+  const teamId = String(formData.get("team_id") ?? "").trim();
+  if (!teamId) return { error: "Missing team." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("allocate_team_fixtures_central", {
+    p_team_id: teamId,
+  });
+  if (error) {
+    if (error.code === "42501") return { error: "Only a club administrator can allocate fixtures." };
+    return { error: error.message };
+  }
+
+  const result = data as { updated: number; bookings_freed: number };
+  revalidateAllocation(teamId);
+  return { central: { updated: result.updated, bookingsFreed: result.bookings_freed } };
 }

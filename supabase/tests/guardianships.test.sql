@@ -371,8 +371,8 @@ select throws_like(
   $$insert into public.guardianships (guardian_person_id, child_person_id, relationship)
     values ('99999999-9999-4999-8999-000000000005',
             '99999999-9999-4999-8999-000000000001', 'grandparent')$$,
-  '%guardian must be an adult%',
-  'a guardian who is themselves a minor is rejected (SG-4)'
+  '%Minor Wouldbeguardian%cannot be recorded as the guardian of Child One%guardian must be an adult%',
+  'a guardian who is themselves a minor is rejected, by name and direction (SG-4)'
 );
 
 -- 41, 42 — self_guardianship_throws. The BEFORE ROW trigger runs before the

@@ -38,6 +38,8 @@ export type AllocateInput = {
   /** Blank means "use the pitch's default". */
   preBufferMinutes?: number | null;
   postBufferMinutes?: number | null;
+  /** "HH:MM" re-times the fixture to that London time on its own date; null keeps its time. */
+  kickoffTime?: string | null;
 };
 
 async function requireCommittee() {
@@ -78,11 +80,17 @@ export async function allocateFixture(input: AllocateInput): Promise<AllocationR
     .eq("id", input.fixtureId)
     .maybeSingle();
 
+  const kickoff =
+    input.kickoffTime && /^([01]\d|2[0-3]):[0-5]\d$/.test(input.kickoffTime)
+      ? input.kickoffTime
+      : undefined;
+
   const { data, error } = await admin.rpc("allocate_fixture", {
     p_fixture_id: input.fixtureId,
     p_resource_id: input.resourceId,
     p_pre_buffer_minutes: buffer(input.preBufferMinutes),
     p_post_buffer_minutes: buffer(input.postBufferMinutes),
+    ...(kickoff ? { p_kickoff_time: kickoff } : {}),
   });
 
   if (error) {
@@ -103,6 +111,7 @@ export async function allocateFixture(input: AllocateInput): Promise<AllocationR
       booking_id: data,
       pre_buffer_minutes: buffer(input.preBufferMinutes) ?? null,
       post_buffer_minutes: buffer(input.postBufferMinutes) ?? null,
+      kickoff_time: kickoff ?? null,
     },
   });
 
