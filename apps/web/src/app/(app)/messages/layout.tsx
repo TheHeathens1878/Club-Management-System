@@ -70,7 +70,7 @@ export default async function MessagesLayout({ children }: { children: React.Rea
     // One string literal, not a concatenation: supabase-js infers the row type
     // from the select text, and only a literal carries that type.
     .select(
-      "conversation_id,last_read_message_id,left_at,joined_at,muted_until,basis,conversations(id,type,title,team_id,resource_id,scope_label,supervised_by_lead,closed_at,created_at,resources(name),teams(name))",
+      "conversation_id,last_read_message_id,left_at,joined_at,archived_at,muted_until,basis,conversations(id,type,title,team_id,resource_id,scope_label,supervised_by_lead,closed_at,created_at,resources(name),teams(name))",
     )
     .eq("person_id", personId)
     .limit(CONVERSATION_LIMIT);
@@ -196,6 +196,10 @@ export default async function MessagesLayout({ children }: { children: React.Rea
         supervised: conversation.supervised_by_lead,
         closed: conversation.closed_at !== null,
         left: row.left_at !== null,
+        // WhatsApp semantics: shelved until something newer arrives.
+        archived:
+          row.archived_at !== null &&
+          (last?.created_at ?? conversation.created_at) <= row.archived_at,
       },
     ];
   });
