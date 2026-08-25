@@ -61,9 +61,16 @@ export default async function MyPitchBookingsPage() {
           <CardHeader className="p-4 lg:p-6">
             <CardTitle>Upcoming</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Anything still to come, pending or confirmed. Pending bookings can be moved; a
-              confirmed one can be cancelled, and a club administrator can move it. Fixtures are
-              not listed here — they are allocated on{" "}
+              Anything still to come, pending or confirmed.{" "}
+              {!asAdmin && (
+                <>
+                  <span className="font-medium">Awaiting confirmation</span> means a club
+                  administrator has not decided it yet — the slot is held for you until they do,
+                  and you will get a notification either way.{" "}
+                </>
+              )}
+              Pending bookings can be moved; a confirmed one can be cancelled, and a club
+              administrator can move it. Fixtures are not listed here — they are allocated on{" "}
               <Link href="/pitches" className="underline underline-offset-2">
                 Pitches
               </Link>

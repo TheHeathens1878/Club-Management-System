@@ -6,9 +6,9 @@
  * One form, two audiences. A coach gets exactly what
  * `bookings_team_staff_insert` allows — a pending training or block booking on
  * a pitch for a team they staff — and the status control is simply absent,
- * because the policy would pin it to `pending` anyway and offering a choice the
- * database refuses is worse than not offering it. A club administrator gets the
- * same form plus the choice to confirm on the spot.
+ * because `bookings_team_guard()` pins the row to `pending` anyway and offering
+ * a choice the database overrides is worse than not offering it. A club
+ * administrator gets the same form plus the choice to confirm on the spot.
  *
  * The weekly repeat is shown only for training: a one-off block booking that
  * silently recurred twenty times is the sort of surprise a pitch diary never
@@ -75,6 +75,23 @@ export function BookForm({
 
   return (
     <form action={action} className="space-y-5">
+      {/* Said plainly, once, before anything is filled in: a coach is asking,
+          not booking. The database says the same thing — `bookings_team_guard()`
+          pins a non-administrator's pitch booking to `pending` whatever is
+          posted — but nobody should have to submit the form to find out. */}
+      {!isAdmin && (
+        <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+          This is a <span className="font-medium">request</span>. It goes to a club administrator
+          for approval and is held as <span className="font-medium">Awaiting confirmation</span>{" "}
+          until they confirm it — the pitch is reserved for you in the meantime, and you can see
+          where it has got to on{" "}
+          <Link href="/pitches/mine" className="underline underline-offset-2">
+            My pitch bookings
+          </Link>
+          .
+        </p>
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="team_id">Team</Label>

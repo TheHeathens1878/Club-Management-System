@@ -4,7 +4,8 @@ import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { PostForm, type TeamOption } from "./post-form";
@@ -22,7 +23,11 @@ export default async function NewLobbyPostPage() {
   const capabilities = await getCapabilities();
   // Adam, 2026-08-25: only admins post to the club noticeboard. Team staff
   // post to their team's lobby from the team page, not from here.
-  if (!capabilities.isClubAdmin && !capabilities.isCommittee) {
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  if (
+    (!capabilities.isClubAdmin && !capabilities.isCommittee) ||
+    (view !== "admin" && view !== null)
+  ) {
     redirect("/lobby");
   }
 

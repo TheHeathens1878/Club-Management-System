@@ -72,6 +72,11 @@ export type ThreadMessage = {
 };
 
 export type ThreadReaction = { id: string; message_id: string; person_id: string; emoji: string };
+
+/** The identity of a reaction — never its row id, which an optimistic row invents. */
+function sameReaction(a: ThreadReaction, b: ThreadReaction): boolean {
+  return a.message_id === b.message_id && a.person_id === b.person_id && a.emoji === b.emoji;
+}
 export type ThreadAttachment = {
   id: string;
   message_id: string;
@@ -270,7 +275,11 @@ export function ThreadClient({
         (payload) => {
           const row = payload.new as ThreadReaction | null;
           if (!row?.id || !confirmedIds.has(row.message_id)) return;
-          setReactions((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
+          // Adam, 2026-08-25: "when I post emojis it is doubling them up". The
+          // optimistic row carries a temporary id, so matching on id alone let
+          // the real row land beside it. One person, one emoji, one message —
+          // that triple is the identity; the server row replaces the guess.
+          setReactions((prev) => [...prev.filter((x) => !sameReaction(x, row)), row]);
         },
       )
       .on(
@@ -487,7 +496,7 @@ export function ThreadClient({
             .select("id,message_id,storage_bucket,storage_path,content_type")
             .in("message_id", ids),
         ]);
-        if (r) setReactions((prev) => [...prev.filter((x) => !r.some((y) => y.id === x.id)), ...r]);
+        if (r) setReactions((prev) => [...prev.filter((x) => !r.some((y) => sameReaction(x, y))), ...r]);
         if (a) setAttachments((prev) => [...prev.filter((x) => !a.some((y) => y.id === x.id)), ...a]);
       }
     } finally {
@@ -517,7 +526,12 @@ export function ThreadClient({
 
   const reactionsFor = useMemo(() => {
     const map = new Map<string, Map<string, { count: number; mine: boolean }>>();
+    const seen = new Set<string>();
     for (const r of reactions) {
+      // Count people, not rows — a stray duplicate can never show as two.
+      const key = `${r.message_id} ${r.person_id} ${r.emoji}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       const per = map.get(r.message_id) ?? new Map();
       const entry = per.get(r.emoji) ?? { count: 0, mine: false };
       entry.count += 1;
