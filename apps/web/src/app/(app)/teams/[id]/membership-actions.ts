@@ -109,11 +109,17 @@ export async function changeMemberRole(
   if (!membershipId) return { error: "No membership given." };
   if (!TEAM_ROLES.includes(role as TeamRole)) return { error: "Choose a role." };
 
+  // Only `team_memberships_admin_update` grants UPDATE, and a policy's USING
+  // is a row FILTER: a coach's update matches nothing and returns no error at
+  // all. `.select("id")` turns that silence into the refusal it is (Adam,
+  // 2026-08-25: "coaches should not be able to change the role of people in
+  // the squad" — the screen hides the control, and this is the door itself).
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("team_memberships")
     .update({ role: role as TeamRole })
-    .eq("id", membershipId);
+    .eq("id", membershipId)
+    .select("id");
   if (error) {
     return {
       error: friendlyDbError(
@@ -123,6 +129,7 @@ export async function changeMemberRole(
       ),
     };
   }
+  if (!changed || changed.length === 0) return { error: NOT_ADMIN };
 
   revalidatePath(teamPath(teamId));
   return { notice: "Role updated." };
