@@ -6,7 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
 
@@ -52,13 +53,24 @@ export default async function MatchesPage({
     params.period === "month" ? "month" : params.period === "results" ? "results" : "weekend";
   const { from, to } = periodWindow(period);
 
+  // The chosen hat scopes the desk (Adam, 2026-08-25: "I should just be able
+  // to see my own team" in the coach view): the RPC answers for everything the
+  // caller may see, and the VIEW narrows it — coach → their staffed teams,
+  // further narrowed by a team-scoped switcher pick.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const scope = await getTeamScope(view, capabilities);
+  const coachTeamIds =
+    view === "coach" ? new Set(capabilities.staffTeams.map((team) => team.id)) : null;
+  const inView = (teamId: string): boolean =>
+    scope ? teamId === scope.id : coachTeamIds ? coachTeamIds.has(teamId) : true;
+
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("matchday_fixtures", {
     p_from: from.toISOString(),
     p_to: to.toISOString(),
   });
-  const fixtures = (data ?? []).filter((row) =>
-    period === "results" ? true : row.status === "scheduled",
+  const fixtures = (data ?? []).filter(
+    (row) => inView(row.team_id) && (period === "results" ? true : row.status === "scheduled"),
   );
 
   const needPitch = fixtures.filter(
