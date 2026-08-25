@@ -13,7 +13,7 @@
 
 begin;
 
-select plan(16);
+select plan(23);
 
 -- --- A: self accounts --------------------------------------------------------
 select lives_ok(
@@ -142,6 +142,81 @@ select throws_ok(
   'P0001', null,
   'a claimed game cannot be re-claimed');
 
+-- --- E: releases (20260825180000) — the referee, the poster, or an admin ------
+select lives_ok(
+  $$ update public.referee_match_posts
+        set claimed_by_person_id = null, claimed_at = null
+      where id = '90570000-aaaa-4111-8111-000000000001' $$,
+  'the referee holding a game hands it back');
+select is((select claimed_by_person_id from public.referee_match_posts
+            where id = '90570000-aaaa-4111-8111-000000000001'), null,
+  'and the game is open again');
+reset role;
+
+-- A coach (no admin hat) posts a second game.
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('5e1f5e1f-aaaa-4111-8111-000000000005', 'rp-coach@test.invalid', '{"full_name": "Cal Coach", "dob": "1985-03-03"}'::jsonb);
+select set_config('rp.coach', (select person_id::text from public.profiles where id = '5e1f5e1f-aaaa-4111-8111-000000000005'), true);
+insert into public.conversation_participants (conversation_id, person_id, basis)
+  values (public.referees_group_id(), current_setting('rp.coach')::uuid, 'member');
+-- reset role leaves the last session's claims in place, and the messages guard
+-- insists the sender is the caller — so the coach speaks as the coach.
+set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000005","role":"authenticated"}';
+insert into public.messages (id, conversation_id, sender_person_id, body)
+  values ('9e55a9e0-aaaa-4111-8111-000000000002', public.referees_group_id(),
+          current_setting('rp.coach')::uuid, 'Referee needed: U12 v Altrincham');
+insert into public.referee_match_posts
+  (id, message_id, conversation_id, posted_by_person_id, fixture_text, format_text, kickoff_at)
+values
+  ('90570000-aaaa-4111-8111-000000000002', '9e55a9e0-aaaa-4111-8111-000000000002',
+   public.referees_group_id(), current_setting('rp.coach')::uuid,
+   'U12 Arrows v Altrincham', '9v9', now() + interval '12 days');
+
+set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000003","role":"authenticated"}';
+set local role authenticated;
+select lives_ok(
+  $$ update public.referee_match_posts
+        set claimed_by_person_id = current_setting('rp.adult')::uuid, claimed_at = now()
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
+  'the referee claims the coach''s game');
+reset role;
+
+set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000005","role":"authenticated"}';
+set local role authenticated;
+select lives_ok(
+  $$ update public.referee_match_posts
+        set claimed_by_person_id = null, claimed_at = null
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
+  'the coach who posted the game releases the referee');
+select is((select claimed_by_person_id from public.referee_match_posts
+            where id = '90570000-aaaa-4111-8111-000000000002'), null,
+  'and that game is open again too');
+reset role;
+
+set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000003","role":"authenticated"}';
+set local role authenticated;
+select lives_ok(
+  $$ update public.referee_match_posts
+        set claimed_by_person_id = current_setting('rp.adult')::uuid, claimed_at = now()
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
+  'a released game can be claimed again');
+reset role;
+
+set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000004","role":"authenticated"}';
+set local role authenticated;
+select lives_ok(
+  $$ update public.referee_match_posts
+        set claimed_by_person_id = null, claimed_at = null
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
+  'a club admin, neither poster nor referee, can still release a game');
+reset role;
+
+-- Put the first game back the way section D left it for what follows.
+set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000003","role":"authenticated"}';
+set local role authenticated;
+update public.referee_match_posts
+   set claimed_by_person_id = current_setting('rp.adult')::uuid, claimed_at = now()
+ where id = '90570000-aaaa-4111-8111-000000000001';
 reset role;
 
 -- Revoking the hat walks the referee out of the group.

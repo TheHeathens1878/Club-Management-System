@@ -72,6 +72,11 @@ export type ThreadMessage = {
 };
 
 export type ThreadReaction = { id: string; message_id: string; person_id: string; emoji: string };
+
+/** The identity of a reaction — never its row id, which an optimistic row invents. */
+function sameReaction(a: ThreadReaction, b: ThreadReaction): boolean {
+  return a.message_id === b.message_id && a.person_id === b.person_id && a.emoji === b.emoji;
+}
 export type ThreadAttachment = {
   id: string;
   message_id: string;
@@ -107,6 +112,8 @@ export function ThreadClient({
   readOnlyNotice,
   matchPosts = {},
   isReferee = false,
+  isRefereesGroup = false,
+  isAdmin = false,
 }: {
   conversationId: string;
   conversationType: string;
@@ -125,6 +132,9 @@ export function ThreadClient({
   /** The Referees group's game cards, keyed by message id. */
   matchPosts?: Record<string, MatchPostView>;
   isReferee?: boolean;
+  /** The Referees group: games are requested through the form, not the chat. */
+  isRefereesGroup?: boolean;
+  isAdmin?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -270,7 +280,11 @@ export function ThreadClient({
         (payload) => {
           const row = payload.new as ThreadReaction | null;
           if (!row?.id || !confirmedIds.has(row.message_id)) return;
-          setReactions((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
+          // Adam, 2026-08-25: "when I post emojis it is doubling them up". The
+          // optimistic row carries a temporary id, so matching on id alone let
+          // the real row land beside it. One person, one emoji, one message —
+          // that triple is the identity; the server row replaces the guess.
+          setReactions((prev) => [...prev.filter((x) => !sameReaction(x, row)), row]);
         },
       )
       .on(
@@ -487,7 +501,7 @@ export function ThreadClient({
             .select("id,message_id,storage_bucket,storage_path,content_type")
             .in("message_id", ids),
         ]);
-        if (r) setReactions((prev) => [...prev.filter((x) => !r.some((y) => y.id === x.id)), ...r]);
+        if (r) setReactions((prev) => [...prev.filter((x) => !r.some((y) => sameReaction(x, y))), ...r]);
         if (a) setAttachments((prev) => [...prev.filter((x) => !a.some((y) => y.id === x.id)), ...a]);
       }
     } finally {
@@ -517,7 +531,12 @@ export function ThreadClient({
 
   const reactionsFor = useMemo(() => {
     const map = new Map<string, Map<string, { count: number; mine: boolean }>>();
+    const seen = new Set<string>();
     for (const r of reactions) {
+      // Count people, not rows — a stray duplicate can never show as two.
+      const key = `${r.message_id} ${r.person_id} ${r.emoji}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       const per = map.get(r.message_id) ?? new Map();
       const entry = per.get(r.emoji) ?? { count: 0, mine: false };
       entry.count += 1;
@@ -747,7 +766,12 @@ export function ThreadClient({
                         same tombstone rule as the attachments above. */}
                     {body.state === "ok" && matchPosts[message.id] !== undefined ? (
                       <span id={`msg-${message.id}`} className="block">
-                        <MatchPostCard post={matchPosts[message.id]!} isReferee={isReferee} />
+                        <MatchPostCard
+                          post={matchPosts[message.id]!}
+                          isReferee={isReferee}
+                          myPersonId={myPersonId}
+                          isAdmin={isAdmin}
+                        />
                       </span>
                     ) : (
                       <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
@@ -900,6 +924,15 @@ export function ThreadClient({
                 <X className="h-3.5 w-3.5 text-muted-foreground" />
               </button>
             </div>
+          )}
+
+          {/* Adam, 2026-08-25: the chat is not the way to ask for a referee —
+              the structured Post a game form above is, and it says so where
+              the eye lands before typing. */}
+          {isRefereesGroup && (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
+              If you want to request a referee, use the form above.
+            </p>
           )}
 
           <div className="flex items-end gap-2">
