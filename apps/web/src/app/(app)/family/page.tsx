@@ -102,7 +102,7 @@ function RegistrationList({
         return (
           <li key={registration.id} className="rounded-md border bg-card px-3 py-2 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="font-medium">
+              <span className="w-full font-medium lg:w-auto">
                 {registration.team_id
                   ? (teamNames.get(registration.team_id) ?? "Team")
                   : "No team requested"}
@@ -113,7 +113,7 @@ function RegistrationList({
               <Badge variant={registrationStatusVariant(status)}>
                 {REGISTRATION_STATUS_LABELS[status]}
               </Badge>
-              <span className="ml-auto text-xs text-muted-foreground">
+              <span className="w-full text-xs text-muted-foreground lg:ml-auto lg:w-auto">
                 Sent {formatStamp(registration.submitted_at)}
               </span>
             </div>
@@ -227,7 +227,7 @@ export default async function FamilyPage() {
         subtitle="The children the club has you down as a guardian for, and their registrations"
       />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         {childrenResult.error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {childrenResult.error.message}
@@ -245,7 +245,7 @@ export default async function FamilyPage() {
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2 text-base">
               <Baby className="h-4 w-4" /> Add a child
             </CardTitle>
@@ -254,7 +254,7 @@ export default async function FamilyPage() {
               step. Once they are here you can register them for a team.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <AddChildForm />
           </CardContent>
         </Card>
@@ -278,7 +278,7 @@ export default async function FamilyPage() {
 
             return (
               <Card key={child.person_id}>
-                <CardHeader>
+                <CardHeader className="p-4 lg:p-6">
                   <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                     {name}
                     <Badge variant="outline">{ageGroupHint(child.dob)}</Badge>
@@ -292,7 +292,7 @@ export default async function FamilyPage() {
                     administrator and they will change it on the record.
                   </p>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
                   <div>
                     <p className="mb-1 flex items-center gap-2 text-xs uppercase text-muted-foreground">
                       <Users className="h-3.5 w-3.5" /> Teams
@@ -346,13 +346,13 @@ export default async function FamilyPage() {
 
         {myRegistrations.length > 0 && (
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle className="text-base">Your own registrations</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Registrations in your own name, as a player.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <RegistrationList
                 registrations={myRegistrations}
                 teamNames={teamNames}

@@ -43,7 +43,13 @@ export function AddAdultForm() {
     return (
       <div className="space-y-3">
         <Feedback state={state} />
-        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           <UserPlus className="h-4 w-4" /> Connect an adult
         </Button>
       </div>
@@ -91,11 +97,17 @@ export function AddAdultForm() {
 
       <Feedback state={state} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
           {pending ? "Connecting…" : "Connect adult"}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          className="min-h-[44px] lg:min-h-0"
+        >
           Cancel
         </Button>
       </div>

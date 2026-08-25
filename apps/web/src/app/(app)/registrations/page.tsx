@@ -125,14 +125,17 @@ export default async function RegistrationsPage({
         action={
           <Link
             href={showDecided ? "/registrations" : "/registrations?show=decided"}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) +
+              " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+            }
           >
             {showDecided ? "Back to pending" : "Recent decisions"}
           </Link>
         }
       />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         {!admin && (
           <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Only a club administrator can approve or reject a registration. You can read what the
@@ -147,7 +150,7 @@ export default async function RegistrationsPage({
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2 text-base">
               <ClipboardCheck className="h-4 w-4" />
               {showDecided ? "Recent decisions" : "Pending"}
@@ -158,7 +161,7 @@ export default async function RegistrationsPage({
               registration stays pending and the reason is shown here.
             </p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
             {registrations.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 {showDecided ? "Nothing has been decided yet." : "Nothing is waiting."}
@@ -172,8 +175,10 @@ export default async function RegistrationsPage({
 
               return (
                 <details key={registration.id} className="rounded-lg border bg-card" open={!showDecided}>
-                  <summary className="flex cursor-pointer select-none flex-wrap items-center gap-2 px-4 py-3 text-sm hover:bg-secondary/40">
-                    <span className="font-medium">{nameOf(names, registration.person_id)}</span>
+                  <summary className="flex min-h-[44px] cursor-pointer select-none flex-wrap items-center gap-2 px-4 py-3 text-sm hover:bg-secondary/40">
+                    <span className="w-full font-medium lg:w-auto">
+                      {nameOf(names, registration.person_id)}
+                    </span>
                     <Badge variant="outline">
                       {registration.team_id
                         ? (teamNames.get(registration.team_id) ?? "Team")
@@ -185,7 +190,7 @@ export default async function RegistrationsPage({
                     <Badge variant={registrationStatusVariant(status)}>
                       {REGISTRATION_STATUS_LABELS[status]}
                     </Badge>
-                    <span className="ml-auto text-xs text-muted-foreground">
+                    <span className="w-full text-xs text-muted-foreground lg:ml-auto lg:w-auto">
                       {formatStamp(registration.submitted_at)}
                     </span>
                   </summary>

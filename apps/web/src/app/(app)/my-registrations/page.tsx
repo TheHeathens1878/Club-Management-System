@@ -65,7 +65,7 @@ export default async function MyRegistrationsPage() {
         subtitle="Where every registration in your household stands"
       />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         {registrationsResult.error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {registrationsResult.error.message}
@@ -88,14 +88,14 @@ export default async function MyRegistrationsPage() {
         ) : (
           Array.from(byPerson.entries()).map(([personId, entry]) => (
             <Card key={personId}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-base">
+              <CardHeader className="p-4 lg:p-6">
+                <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                   <ClipboardCheck className="h-4 w-4" />
                   {entry.name}
                   {entry.isSelf && <Badge variant="outline">You</Badge>}
                 </CardTitle>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
                 <ul className="space-y-2">
                   {entry.rows.map((row) => {
                     const status = row.status as RegistrationStatusValue;
@@ -108,12 +108,14 @@ export default async function MyRegistrationsPage() {
                         className="rounded-md border bg-card px-3 py-2 text-sm"
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{row.team_name ?? "No team requested"}</span>
+                          <span className="w-full font-medium lg:w-auto">
+                            {row.team_name ?? "No team requested"}
+                          </span>
                           <Badge variant="outline">{row.season_name}</Badge>
                           <Badge variant={registrationStatusVariant(status)}>
                             {REGISTRATION_STATUS_LABELS[status]}
                           </Badge>
-                          <span className="ml-auto text-xs text-muted-foreground">
+                          <span className="w-full text-xs text-muted-foreground lg:ml-auto lg:w-auto">
                             Sent {formatStamp(row.submitted_at)}
                           </span>
                         </div>

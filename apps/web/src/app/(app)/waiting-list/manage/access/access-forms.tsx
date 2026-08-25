@@ -39,7 +39,13 @@ export function GrantForm({ ageGroups }: { ageGroups: string[] }) {
 
       <div className="space-y-1.5">
         <Label htmlFor="wl-access-age-group">Age group</Label>
-        <Select id="wl-access-age-group" name="age_group" defaultValue="" required>
+        <Select
+          id="wl-access-age-group"
+          name="age_group"
+          defaultValue=""
+          required
+          className="min-h-[44px] lg:min-h-0"
+        >
           <option value="">Choose an age group</option>
           {ageGroups.map((group) => (
             <option key={group} value={group}>
@@ -65,7 +71,12 @@ export function GrantForm({ ageGroups }: { ageGroups: string[] }) {
         </p>
       )}
 
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button
+        type="submit"
+        size="sm"
+        disabled={pending}
+        className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+      >
         <Plus className="h-4 w-4" />
         {pending ? "Granting…" : "Grant access"}
       </Button>
@@ -83,7 +94,13 @@ export function RevokeForm({ personId, ageGroup }: { personId: string; ageGroup:
     <form action={action} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="person_id" value={personId} />
       <input type="hidden" name="age_group" value={ageGroup} />
-      <Button type="submit" size="sm" variant="ghost" disabled={pending}>
+      <Button
+        type="submit"
+        size="sm"
+        variant="ghost"
+        disabled={pending}
+        className="min-h-[44px] lg:min-h-0"
+      >
         <Trash2 className="h-3.5 w-3.5" />
         {pending ? "Revoking…" : "Revoke"}
       </Button>

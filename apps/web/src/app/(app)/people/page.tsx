@@ -97,6 +97,18 @@ const TYPE_BADGE_VARIANT: Record<ContactType, "default" | "success" | "muted"> =
 /** Teams are listed in full up to this many, then counted. */
 const TEAMS_SHOWN = 2;
 
+/** The card stack's avatar (mobile design): up to two initials, never empty. */
+function initialsOf(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? "")
+      .join("") || "?"
+  );
+}
+
 type SearchParams = {
   q?: string;
   type?: string;
@@ -473,46 +485,56 @@ export default async function PeoplePage({
         title="People"
         subtitle="The club's contacts database — players, parents, coaches and staff. Hirers live in the function room's own contacts book."
         action={
-          <span className="flex gap-2">
+          <span className="flex w-full gap-2 lg:w-auto">
             {/* A plain anchor on purpose: this is a file download from a route
                 handler, and Link would try to client-navigate/prefetch it. */}
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/people/export"
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+              className={
+                buttonVariants({ variant: "outline", size: "sm" }) +
+                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+              }
             >
               Export CSV
             </a>
             <Link
               href="/people/new"
-              className={buttonVariants({ variant: "default", size: "sm" }) + " gap-2"}
+              className={
+                buttonVariants({ variant: "default", size: "sm" }) +
+                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+              }
             >
               <Plus className="h-4 w-4" /> Add a person
             </Link>
           </span>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         <Card>
-          <CardHeader className="space-y-3">
+          <CardHeader className="space-y-3 p-4 lg:p-6">
             <CardTitle className="text-base">Find someone</CardTitle>
-            <div className="flex flex-wrap gap-2">
+            {/* The chips scroll sideways in their own lane on a phone rather
+                than wrapping into four lines. */}
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
               {chips.map((chip) => (
                 <Link
                   key={chip.key}
                   href={chip.href}
                   aria-current={chip.active ? "true" : undefined}
-                  className={buttonVariants({
-                    variant: chip.active ? "default" : "outline",
-                    size: "sm",
-                  })}
+                  className={
+                    buttonVariants({
+                      variant: chip.active ? "default" : "outline",
+                      size: "sm",
+                    }) + " min-h-[44px] shrink-0 whitespace-nowrap lg:min-h-0"
+                  }
                 >
                   {chip.label}
                 </Link>
               ))}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {/* A GET form so every list is a URL somebody can bookmark or send.
                 The type chip lives outside the form, so it rides along in a
                 hidden field rather than being lost on the next search. */}
@@ -527,13 +549,18 @@ export default async function PeoplePage({
                     name="q"
                     defaultValue={params.q ?? ""}
                     placeholder="Search…"
-                    className="pl-8"
+                    className="min-h-[44px] pl-8 lg:min-h-0"
                   />
                 </div>
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="team">Team (this season)</Label>
-                <Select id="team" name="team" defaultValue={teamFilter ?? ""}>
+                <Select
+                  id="team"
+                  name="team"
+                  defaultValue={teamFilter ?? ""}
+                  className="min-h-[44px] lg:min-h-0"
+                >
                   <option value="">Any team</option>
                   {(teams ?? []).map((team) => (
                     <option key={team.id} value={team.id}>
@@ -544,7 +571,12 @@ export default async function PeoplePage({
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="role">Role</Label>
-                <Select id="role" name="role" defaultValue={roleFilter ?? ""}>
+                <Select
+                  id="role"
+                  name="role"
+                  defaultValue={roleFilter ?? ""}
+                  className="min-h-[44px] lg:min-h-0"
+                >
                   <option value="">Any role</option>
                   {ROLES.map((role) => (
                     <option key={role} value={role}>
@@ -553,21 +585,27 @@ export default async function PeoplePage({
                   ))}
                 </Select>
               </div>
-              <label className="flex items-center gap-2 text-sm sm:col-span-4">
+              <label className="flex min-h-[44px] items-center gap-2 text-sm sm:col-span-4 lg:min-h-0">
                 <input type="checkbox" name="filter" value="no_dob" defaultChecked={noDob} />
                 Only people with no date of birth on file
               </label>
               <div className="flex items-end gap-2 sm:col-span-2">
                 <button
                   type="submit"
-                  className={buttonVariants({ variant: "default", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "default", size: "sm" }) +
+                    " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                  }
                 >
                   Search
                 </button>
                 {filtersApplied && (
                   <Link
                     href="/people"
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    className={
+                      buttonVariants({ variant: "outline", size: "sm" }) +
+                      " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                    }
                   >
                     Clear
                   </Link>
@@ -578,7 +616,7 @@ export default async function PeoplePage({
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">
               {total} {total === 1 ? "person" : "people"}
               {!currentSeason && (
@@ -588,7 +626,7 @@ export default async function PeoplePage({
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {error && (
               <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 Could not load people. Your account may not hold the club_admin or safeguarding_lead
@@ -604,14 +642,14 @@ export default async function PeoplePage({
               <div>
                 {/* A header, not a <table>: the whole row is one link, and a
                     link cannot wrap a <tr>. */}
-                <div className="hidden border-b pb-2 text-xs text-muted-foreground md:grid md:grid-cols-12 md:gap-3">
-                  <span className="md:col-span-3">Name</span>
-                  <span className="md:col-span-2">Type</span>
-                  <span className="md:col-span-2">Teams</span>
-                  <span className="md:col-span-3">Contact</span>
-                  <span className="md:col-span-2">Status</span>
+                <div className="hidden border-b pb-2 text-xs text-muted-foreground lg:grid lg:grid-cols-12 lg:gap-3">
+                  <span className="lg:col-span-3">Name</span>
+                  <span className="lg:col-span-2">Type</span>
+                  <span className="lg:col-span-2">Teams</span>
+                  <span className="lg:col-span-3">Contact</span>
+                  <span className="lg:col-span-2">Status</span>
                 </div>
-                <ul className="divide-y">
+                <ul className="space-y-2 lg:space-y-0 lg:divide-y">
                   {people.map((person) => {
                     const name = personLabel(person);
                     const held = [...(typesByPerson.get(person.id) ?? [])];
@@ -622,13 +660,82 @@ export default async function PeoplePage({
                     const guardian = minor
                       ? guardianPeople.get(guardianOf.get(person.id) ?? "")
                       : undefined;
+                    const shownTypes = TYPES.filter((type) => held.includes(type));
+                    const teamsText =
+                      heldTeams.length === 0
+                        ? "—"
+                        : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
+                          (extraTeams > 0 ? ` +${extraTeams}` : "");
+                    // One status per person, so the card and the table row can
+                    // never drift apart.
+                    const status = needsReview.has(person.id)
+                      ? { label: "Needs review", variant: "destructive" as const }
+                      : dbsDue.has(person.id)
+                        ? { label: "DBS due", variant: "warning" as const }
+                        : minor
+                          ? { label: "Registered", variant: "success" as const }
+                          : linked
+                            ? { label: "Active", variant: "success" as const }
+                            : { label: "No login", variant: "muted" as const };
+                    const href = personHref(person.id, params, page);
                     return (
                       <li key={person.id}>
+                        {/* The phone's card: avatar, name, the muted role and
+                            contact lines, team and status down the right. */}
                         <Link
-                          href={personHref(person.id, params, page)}
-                          className="grid gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none md:grid-cols-12 md:items-center"
+                          href={href}
+                          className="flex min-h-[44px] items-start gap-3 rounded-xl border bg-card p-3 lg:hidden"
                         >
-                          <span className="flex flex-wrap items-center gap-2 md:col-span-3">
+                          <span
+                            aria-hidden="true"
+                            className="relative inline-flex h-9 w-9 flex-none items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-foreground/70"
+                          >
+                            {initialsOf(name)}
+                            <span
+                              className={
+                                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card " +
+                                (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
+                              }
+                            />
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-sm font-medium leading-tight">{name}</span>
+                              {minor && (
+                                <Badge variant="warning">
+                                  {person.dob ? "Minor" : "No DOB"}
+                                </Badge>
+                              )}
+                            </span>
+                            <span className="sr-only">
+                              {linked ? "Has a login." : "No login yet."}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
+                              {shownTypes.length === 0
+                                ? "No type recorded"
+                                : shownTypes.map((type) => TYPE_LABELS[type]).join(" · ")}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
+                              {minor && guardian
+                                ? `via ${guardian.name} · ${guardian.phone ?? "No phone"}`
+                                : `${person.email ?? "No email"} · ${person.phone ?? "No phone"}`}
+                            </span>
+                          </span>
+                          <span className="flex max-w-[104px] flex-none flex-col items-end gap-1">
+                            <Badge variant={status.variant} className="whitespace-nowrap">
+                              {status.label}
+                            </Badge>
+                            <span className="w-full truncate text-right text-[11px] leading-tight text-muted-foreground">
+                              {teamsText}
+                            </span>
+                          </span>
+                        </Link>
+
+                        <Link
+                          href={href}
+                          className="hidden gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none lg:grid lg:grid-cols-12 lg:items-center"
+                        >
+                          <span className="flex flex-wrap items-center gap-2 lg:col-span-3">
                             <span
                               aria-hidden="true"
                               title={linked ? "Has a login" : "No login yet"}
@@ -647,24 +754,21 @@ export default async function PeoplePage({
                               </Badge>
                             )}
                           </span>
-                          <span className="flex flex-wrap gap-1 md:col-span-2">
+                          <span className="flex flex-wrap gap-1 lg:col-span-2">
                             {held.length === 0 ? (
                               <span className="text-xs text-muted-foreground">—</span>
                             ) : (
-                              TYPES.filter((type) => held.includes(type)).map((type) => (
+                              shownTypes.map((type) => (
                                 <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
                                   {TYPE_LABELS[type]}
                                 </Badge>
                               ))
                             )}
                           </span>
-                          <span className="text-xs text-muted-foreground md:col-span-2">
-                            {heldTeams.length === 0
-                              ? "—"
-                              : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
-                                (extraTeams > 0 ? ` +${extraTeams}` : "")}
+                          <span className="text-xs text-muted-foreground lg:col-span-2">
+                            {teamsText}
                           </span>
-                          <span className="text-xs text-muted-foreground md:col-span-3">
+                          <span className="text-xs text-muted-foreground lg:col-span-3">
                             {/* The design's rule, stated on the page: an
                                 under-18's contact goes through their guardian. */}
                             {minor && guardian ? (
@@ -681,18 +785,8 @@ export default async function PeoplePage({
                               </>
                             )}
                           </span>
-                          <span className="md:col-span-2">
-                            {needsReview.has(person.id) ? (
-                              <Badge variant="destructive">Needs review</Badge>
-                            ) : dbsDue.has(person.id) ? (
-                              <Badge variant="warning">DBS due</Badge>
-                            ) : minor ? (
-                              <Badge variant="success">Registered</Badge>
-                            ) : linked ? (
-                              <Badge variant="success">Active</Badge>
-                            ) : (
-                              <Badge variant="muted">No login</Badge>
-                            )}
+                          <span className="lg:col-span-2">
+                            <Badge variant={status.variant}>{status.label}</Badge>
                           </span>
                         </Link>
                       </li>
@@ -717,7 +811,10 @@ export default async function PeoplePage({
                   {page > 1 && (
                     <Link
                       href={buildHref(params, { page: String(page - 1) })}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      className={
+                        buttonVariants({ variant: "outline", size: "sm" }) +
+                        " min-h-[44px] lg:min-h-0"
+                      }
                     >
                       Previous
                     </Link>
@@ -725,7 +822,10 @@ export default async function PeoplePage({
                   {page < lastPage && (
                     <Link
                       href={buildHref(params, { page: String(page + 1) })}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      className={
+                        buttonVariants({ variant: "outline", size: "sm" }) +
+                        " min-h-[44px] lg:min-h-0"
+                      }
                     >
                       Next
                     </Link>

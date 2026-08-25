@@ -193,13 +193,15 @@ export default async function PersonPage({
         action={
           <Link
             href={backHref(from)}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
           >
             <ChevronLeft className="h-4 w-4" /> Back to people
           </Link>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
           {person.deleted_at && <Badge variant="destructive">Retired</Badge>}
           {isMinorDob(person.dob) && (
