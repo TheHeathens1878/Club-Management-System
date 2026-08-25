@@ -10,6 +10,12 @@
  * Read-only callers pass no `onSlotTap`, and the slots render as plain spans so
  * a parent's screen has nothing to press.
  *
+ * Every slot is also a DROP ZONE (it registers itself through `zoneRef`) and
+ * every filled slot is a DRAG HANDLE (`handleProps`), so a player can be
+ * dragged from the list onto a position, from one position to another, or off
+ * the pitch. The gesture lives in `use-lineup-drag.ts`; the board only lends it
+ * rectangles and shirts. Tapping still does everything dragging does.
+ *
  * The markings are one SVG scaled to the box (`preserveAspectRatio="none"`, so
  * the pitch fills whatever aspect the card gives it) and the tokens are HTML
  * positioned in percentages on top — that keeps the 44px hit target a real
@@ -21,6 +27,8 @@ import { Plus } from "lucide-react";
 import { PlayerToken, firstNameOf } from "@/components/player-token";
 import type { Formation } from "@/lib/formations";
 import { cn } from "@/lib/utils";
+
+import type { CarriedToken, DragHandleProps } from "./use-lineup-drag";
 
 export type PlacedPlayer = {
   personId: string;
@@ -75,6 +83,9 @@ export function PitchBoard({
   playersById,
   onSlotTap,
   activeSlot,
+  zoneRef,
+  handleProps,
+  carrying,
 }: {
   formation: Formation;
   /** slot key → person id. */
@@ -83,6 +94,11 @@ export function PitchBoard({
   /** Absent for the read-only view. */
   onSlotTap?: (slotKey: string) => void;
   activeSlot?: string | null;
+  /** Registers each slot as a drop zone. Absent for the read-only view. */
+  zoneRef?: (key: string) => (element: HTMLElement | null) => void;
+  /** Makes a filled slot draggable. Absent for the read-only view. */
+  handleProps?: (personId: string, from: string | null) => DragHandleProps;
+  carrying?: CarriedToken | null;
 }) {
   return (
     <div className="relative aspect-[68/100] w-full overflow-hidden rounded-xl bg-emerald-800 shadow-inner">
@@ -91,19 +107,26 @@ export function PitchBoard({
         const personId = placements[slot.key];
         const player = personId ? playersById.get(personId) : undefined;
         const active = activeSlot === slot.key;
+        const over = carrying?.over === slot.key;
+        const lifted = carrying?.personId !== undefined && carrying.personId === personId;
         const body = (
           <>
             {player ? (
               <PlayerToken
                 name={player.name}
                 shirtNumber={player.shirtNumber}
-                className={cn("h-11 w-11", active && "ring-2 ring-white")}
+                className={cn(
+                  "h-11 w-11",
+                  (active || over) && "ring-2 ring-white",
+                  lifted && "opacity-40",
+                )}
               />
             ) : (
               <span
                 className={cn(
                   "flex h-11 w-11 items-center justify-center rounded-full border-2 border-dashed border-white/70 bg-white/10 text-white",
-                  active && "border-solid bg-white/25",
+                  (active || over) && "border-solid bg-white/25",
+                  over && "scale-110",
                 )}
               >
                 <Plus className="h-5 w-5" aria-hidden="true" />
@@ -115,15 +138,22 @@ export function PitchBoard({
           </>
         );
         const positioned = "absolute flex -translate-x-1/2 -translate-y-1/2 flex-col items-center";
-        const style = { left: `${slot.x}%`, top: `${slot.y}%` };
+        const place = { left: `${slot.x}%`, top: `${slot.y}%` };
+        // Only an occupied slot can be picked up; an empty one is a target.
+        const drag = player && handleProps ? handleProps(player.personId, slot.key) : undefined;
 
         return onSlotTap ? (
           <button
             key={slot.key}
             type="button"
-            style={style}
+            ref={zoneRef?.(slot.key)}
+            style={{ ...place, ...drag?.style }}
             onClick={() => onSlotTap(slot.key)}
-            className={cn(positioned, "rounded-lg")}
+            onPointerDown={drag?.onPointerDown}
+            onPointerMove={drag?.onPointerMove}
+            onPointerUp={drag?.onPointerUp}
+            onPointerCancel={drag?.onPointerCancel}
+            className={cn(positioned, "rounded-lg", player && "cursor-grab")}
             aria-label={
               player
                 ? `${slot.label}: ${player.name}. Change or remove.`
@@ -133,7 +163,7 @@ export function PitchBoard({
             {body}
           </button>
         ) : (
-          <span key={slot.key} style={style} className={positioned}>
+          <span key={slot.key} style={place} className={positioned}>
             {body}
             <span className="sr-only">
               {slot.label}: {player ? player.name : "empty"}
