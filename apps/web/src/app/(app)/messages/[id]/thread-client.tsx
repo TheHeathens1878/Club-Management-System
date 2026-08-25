@@ -164,6 +164,10 @@ export function ThreadClient({
   const clientIdRef = useRef<string>(crypto.randomUUID());
   const typingSentAt = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** The conversation itself — the only thing that scrolls. */
+  const listRef = useRef<HTMLDivElement>(null);
+  /** False until the first scroll has been placed, so it happens once. */
+  const openedAt = useRef(false);
 
   // ---------------------------------------------------------------------------
   // The message list: server window + pages loaded upward + realtime + pending.
@@ -218,9 +222,36 @@ export function ThreadClient({
     void markRead(conversationId, lastId);
   }, [conversationId, lastId, pending]);
 
+  // Adam, 2026-08-25: "make it just the conversation that scrolls and it
+  // always shows the first unread message." The list below is the scroll
+  // container — the banner, the participant chips and the composer stay put —
+  // so this moves THAT box rather than the page.
+  //
+  // On open: the first unread message, at the top of the view with its divider
+  // above it. Nothing unread means the newest message, as before. Afterwards a
+  // new message pulls the view down only if the reader is already near the
+  // bottom; somebody reading back through the morning is left where they are.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [lastId]);
+    const container = listRef.current;
+    if (!container) return;
+
+    if (!openedAt.current) {
+      openedAt.current = true;
+      const anchor =
+        (firstUnreadId && document.getElementById("thread-unread-divider")) ||
+        (firstUnreadId && document.getElementById(`msg-${firstUnreadId}`));
+      if (anchor instanceof HTMLElement) {
+        container.scrollTop = Math.max(0, anchor.offsetTop - container.offsetTop - 8);
+        return;
+      }
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
+
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    if (distanceFromBottom < 160) container.scrollTop = container.scrollHeight;
+  }, [lastId, firstUnreadId]);
 
   // ---------------------------------------------------------------------------
   // Realtime: messages, read pointers, reactions, attachments. RLS scopes all.
@@ -660,7 +691,10 @@ export function ThreadClient({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="space-y-0.5">
+      <div
+        ref={listRef}
+        className="max-h-[58dvh] min-h-[16rem] space-y-0.5 overflow-y-auto overscroll-contain px-0.5 lg:max-h-[calc(100dvh-20rem)]"
+      >
         {moreEarlier && (
           <div className="flex justify-center pb-2">
             <button
@@ -703,7 +737,11 @@ export function ThreadClient({
                 </div>
               )}
               {message.id === firstUnreadId && (
-                <div className="flex items-center gap-3 py-2" aria-label="Unread messages">
+                <div
+                  id="thread-unread-divider"
+                  className="flex items-center gap-3 py-2"
+                  aria-label="Unread messages"
+                >
                   <span className="h-px flex-1 bg-primary/30" />
                   <span className="text-[11px] font-medium uppercase tracking-wide text-primary">Unread</span>
                   <span className="h-px flex-1 bg-primary/30" />
