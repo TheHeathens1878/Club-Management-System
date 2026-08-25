@@ -20,7 +20,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { scorelineLabel } from "@/lib/scoreline";
 import { createClient } from "@/lib/supabase/server";
 
@@ -190,8 +191,15 @@ export default async function EventPage({
   // Admins assign the pitch right here (Adam, 2026-08-25): offered when the
   // event holds no confirmed pitch yet — a fixture reassign included.
   const capabilities = await getCapabilities();
+  // …and only while wearing the admin hat (Adam, 2026-08-25: "make sure
+  // coaches cannot assign pitches") — an admin looking at the event as a
+  // coach sees what a coach sees.
+  const hat = resolveRoleView(await getStoredRoleView(), capabilities);
   const canAssignPitch =
-    capabilities.isClubAdmin && detail.status === "scheduled" && !detail.booked;
+    capabilities.isClubAdmin &&
+    (hat === "admin" || hat === null) &&
+    detail.status === "scheduled" &&
+    !detail.booked;
   // The select opens on the team's home pitch (Adam, 2026-08-25: allocation
   // defaults to the team's own venue) — a starting value, not a rule.
   const [{ data: pitchRows }, { data: teamRow }] = canAssignPitch

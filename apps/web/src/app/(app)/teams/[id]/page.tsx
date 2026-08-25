@@ -123,6 +123,12 @@ export default async function TeamPage({
   // which button the page draws.
   const view = resolveRoleView(await getStoredRoleView(), capabilities);
   const staffTools = canManageTeam && view !== "parent" && view !== "player" && view !== "me";
+  // Adam, 2026-08-25: "make sure coaches cannot assign pitches". Allocation
+  // — the season in one go, and the team's home-pitch defaults the allocator
+  // starts from — is the club admin's, and only while wearing the admin hat.
+  // The RPCs behind it are club_admin-only already; this is the screen agreeing.
+  const allocationTools =
+    (committee || capabilities.isClubAdmin) && (view === "admin" || view === null);
 
   const admin = createAdminClient();
   const nowIso = new Date().toISOString();
@@ -1494,7 +1500,7 @@ export default async function TeamPage({
               <CardContent>
                 <MatchDayPanel
                   teamId={team.id}
-                  canEdit={canManageTeam}
+                  canEdit={allocationTools}
                   pitches={matchDayPitches}
                   values={{
                     home_resource_id: team.home_resource_id,
@@ -1517,6 +1523,7 @@ export default async function TeamPage({
                 fixture pointed at the league's venue and our pitches freed.
                 The RPCs are club_admin-only; committee holds that through the
                 profiles → person_roles sync. */}
+            {allocationTools && (
             <Card>
               <CardHeader>
                 <CardTitle>
@@ -1538,6 +1545,7 @@ export default async function TeamPage({
                 />
               </CardContent>
             </Card>
+            )}
 
             <Card>
               <CardHeader>
