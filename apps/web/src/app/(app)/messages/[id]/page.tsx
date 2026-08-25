@@ -2,14 +2,16 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ChevronLeft, Settings } from "lucide-react";
 
+
 import { PageHeader } from "@/components/page-header";
-import { getSessionProfile } from "@/lib/auth";
+import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { getCapabilities } from "@/lib/capabilities";
 import { instantToLocal } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
 import { createClient } from "@/lib/supabase/server";
 
 import { type FixtureOption } from "./match-post-composer";
+import { ParticipantsButton } from "./participants-button";
 import { loadThread } from "./thread-data";
 import { ThreadPanel } from "./thread-panel";
 
@@ -116,6 +118,21 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
         }
         action={
           <div className="flex flex-wrap items-center gap-x-4">
+            {/* Who is in here, on demand — the list used to sit above the
+                first message and, on a phone, pushed the conversation off the
+                screen (Adam, 2026-08-25). */}
+            <ParticipantsButton
+              participants={data.participants.map((p) => ({
+                personId: p.person_id,
+                name:
+                  p.person_id === data.personId
+                    ? "You"
+                    : (data.nameMap[p.person_id] ?? data.unnamedLabel),
+                isSelf: p.person_id === data.personId,
+                left: p.left_at !== null,
+              }))}
+              canOpenContacts={isCommittee(session.profile?.role)}
+            />
             {data.canManageGroup && (
               <Link
                 href={`/groups/${data.conversation.id}`}
