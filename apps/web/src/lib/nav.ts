@@ -121,12 +121,23 @@ export const NAV: readonly NavEntry[] = [
     views: ["player"],
   },
   {
-    // The guardian's own screen — their children and those children's teams.
-    href: "/family",
-    label: "Children",
-    icon: Baby,
+    // Adam's parent menu (2026-08-25): "Club — Club Lobby, Team, My Groups
+    // [and Messages]; Me — My Children, My Subs, Comms Preferences". Team is
+    // the scoped child's team via the /my-team redirect; My Groups is the
+    // messages list narrowed to groups.
+    href: "/my-team",
+    label: "Team",
+    icon: Shirt,
     group: "Club",
     allowed: (c) => c.isGuardian || c.hasParentRole,
+    views: ["parent"],
+  },
+  {
+    href: "/messages?filter=groups",
+    label: "My Groups",
+    icon: UsersRound,
+    group: "Club",
+    allowed: () => true,
     views: ["parent"],
   },
   {
@@ -198,7 +209,9 @@ export const NAV: readonly NavEntry[] = [
     group: "Matchday",
     allowed: (c) =>
       c.hasPlayerMembership || c.isGuardian || c.hasParentRole || c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: CLUB_VIEWS,
+    // Adam's parent menu has no Events entry — a parent's diary lives on the
+    // child's team page and the lobby.
+    views: ["player", "coach", "admin"],
   },
   {
     href: "/training",
@@ -214,7 +227,7 @@ export const NAV: readonly NavEntry[] = [
     icon: CalendarDays,
     group: "Matchday",
     allowed: () => true,
-    views: CLUB_VIEWS,
+    views: ["player", "coach", "admin"],
   },
 
   // --- Pitches (a different diary entirely from the function room) ---------
@@ -322,7 +335,33 @@ export const NAV: readonly NavEntry[] = [
     icon: Wallet,
     group: "Money",
     allowed: () => true,
-    views: CLUB_VIEWS,
+    views: ["player", "coach", "admin"],
+  },
+
+  // --- Me (Adam's parent menu, 2026-08-25) ---------------------------------
+  {
+    href: "/family",
+    label: "My Children",
+    icon: Baby,
+    group: "Me",
+    allowed: (c) => c.isGuardian || c.hasParentRole,
+    views: ["parent"],
+  },
+  {
+    href: "/my-subs",
+    label: "My Subs",
+    icon: Wallet,
+    group: "Me",
+    allowed: () => true,
+    views: ["parent"],
+  },
+  {
+    href: "/settings/comms",
+    label: "Comms Preferences",
+    icon: Mail,
+    group: "Me",
+    allowed: () => true,
+    views: ["parent"],
   },
 
   // --- Safeguarding --------------------------------------------------------
@@ -380,17 +419,20 @@ export const NAV: readonly NavEntry[] = [
     icon: Mail,
     group: "Settings",
     allowed: () => true,
-    views: CLUB_VIEWS,
+    views: ["player", "coach", "admin"],
   },
 
   // --- You -----------------------------------------------------------------
   {
+    // Parents switch hats in the sidebar dropdown; the tiles page stays for
+    // everyone else. SG-3's "Report a concern" above remains in EVERY view,
+    // the parent's included — that entry never thins.
     href: "/welcome",
     label: "My role",
     icon: UserCircle,
     group: "You",
     allowed: () => true,
-    views: ALL_VIEWS,
+    views: ["player", "coach", "admin", "function_room"],
   },
 ];
 

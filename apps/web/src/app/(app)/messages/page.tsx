@@ -44,9 +44,16 @@ function whenLabel(iso: string | null): string {
   });
 }
 
-export default async function MessagesPage() {
+export default async function MessagesPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ filter?: string }>;
+}) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
+  // "My Groups" in the parent menu (Adam, 2026-08-25) is this list narrowed to
+  // the WhatsApp-style groups; everything else about the page is unchanged.
+  const groupsOnly = (await searchParams).filter === "groups";
 
   const personId = await getCurrentPersonId();
   const supabase = await createClient();
@@ -77,7 +84,9 @@ export default async function MessagesPage() {
     .eq("person_id", personId)
     .limit(CONVERSATION_LIMIT);
 
-  const rows = (participantRows ?? []).filter((r) => r.conversations !== null);
+  const rows = (participantRows ?? []).filter(
+    (r) => r.conversations !== null && (!groupsOnly || r.conversations.type === "group"),
+  );
 
   // One round trip for every "where had I got to", rather than one per row.
   const lastReadIds = rows.map((r) => r.last_read_message_id).filter((id): id is string => !!id);
@@ -134,8 +143,8 @@ export default async function MessagesPage() {
   return (
     <>
       <PageHeader
-        title="Messages"
-        subtitle="Club conversations you are part of"
+        title={groupsOnly ? "My Groups" : "Messages"}
+        subtitle={groupsOnly ? "The groups you are in" : "Club conversations you are part of"}
         action={
           <Link href="/messages/new" className={buttonVariants({ size: "sm" }) + " gap-2"}>
             <MessageSquarePlus className="h-4 w-4" /> New message
