@@ -219,13 +219,16 @@ export const NAV: readonly NavEntry[] = [
 
   // --- Pitches (a different diary entirely from the function room) ---------
   {
+    // Adam, 2026-08-25: "Parents don't need to see pitch calendars" — the
+    // parent view drops the whole Pitches section (their child's times live
+    // on the team page and in Events).
     href: "/pitches/calendar",
     label: "Pitch calendar",
     icon: CalendarDays,
     group: "Pitches",
     allowed: (c) =>
       c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
-    views: CLUB_VIEWS,
+    views: ["player", "coach", "admin"],
   },
   {
     href: "/pitches/book",
