@@ -1,7 +1,19 @@
+import { cache } from "react";
+
 import { createClient } from "@/lib/supabase/server";
 import { isBookerRole, type Profile, type UserRole } from "@/lib/types";
 
-export async function getSessionProfile(): Promise<{
+/**
+ * Who is signed in, and what their profile row says.
+ *
+ * `cache()` is not an optimisation detail here, it is what makes the app
+ * responsive. `auth.getUser()` is a NETWORK call to the Supabase auth server,
+ * and this function is asked the same question many times while one page
+ * renders — the layout, `getCapabilities()`, and the page itself all need it.
+ * React's per-request cache collapses those into one call and one profile
+ * read; the answer cannot change mid-render, so nothing is stale.
+ */
+export const getSessionProfile = cache(async function getSessionProfile(): Promise<{
   userId: string;
   email: string | null;
   profile: Profile | null;
@@ -19,7 +31,7 @@ export async function getSessionProfile(): Promise<{
     .maybeSingle();
 
   return { userId: user.id, email: user.email ?? null, profile: profile ?? null };
-}
+});
 
 export function isSuperUser(role: UserRole | undefined | null): boolean {
   return role === "super_user";
