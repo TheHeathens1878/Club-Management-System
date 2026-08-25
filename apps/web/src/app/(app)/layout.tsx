@@ -51,7 +51,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {/* The ink rail (crest design): dark sidebar against paper content.
           `.theme-ink` remaps the semantic tokens, so everything inside — the
           bell, ghost buttons, badges — adapts without bespoke styling. */}
-      <aside className="theme-ink w-full shrink-0 border-b border-border bg-background text-foreground lg:w-60 lg:border-b-0 lg:border-r">
+      <aside className="theme-ink w-full shrink-0 border-b border-border bg-background text-foreground lg:w-[232px] lg:border-b-0 lg:border-r">
         <div className="flex gap-2 p-3 lg:h-full lg:flex-col lg:p-4">
           <div className="hidden items-center gap-2.5 border-b border-border pb-3 lg:mb-1 lg:flex">
             {/* The crest is a black shield on a dark rail, so its silhouette
@@ -62,13 +62,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <img
               src="/crest.png"
               alt=""
-              className="h-10 w-auto shrink-0 [filter:drop-shadow(0_0_1px_hsl(34_30%_96%_/_0.9))_drop-shadow(0_0_1px_hsl(34_30%_96%_/_0.6))]"
+              className="h-[30px] w-auto shrink-0 [filter:drop-shadow(0_0_1px_hsl(34_30%_96%_/_0.9))_drop-shadow(0_0_1px_hsl(34_30%_96%_/_0.6))]"
             />
             <div className="min-w-0">
-              <p className="font-display text-[13px] font-semibold uppercase leading-tight tracking-wide">
+              <p className="font-display text-[12.5px] font-semibold uppercase leading-tight tracking-wide">
                 AoM Sports Club
               </p>
-              <p className="truncate text-xs text-muted-foreground">{name}</p>
+              <p className="truncate text-[11px] text-foreground/55">{name}</p>
             </div>
           </div>
 
@@ -85,11 +85,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
           {groups.map((group) => (
             <div key={group.group} className="flex flex-col gap-0.5">
-              {group.items.length > 1 ? (
-                <p className="hidden px-3 pb-1 pt-3 font-display text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">
-                  {group.group}
-                </p>
-              ) : null}
+              {/* Every group carries its eyebrow (design §1.3) — a lone item
+                  is still findable under its section name. */}
+              <p className="hidden px-3 pb-1 pt-3 font-display text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">
+                {group.group}
+              </p>
               {group.items.map((item) => {
                 const Icon = item.icon;
                 return (
