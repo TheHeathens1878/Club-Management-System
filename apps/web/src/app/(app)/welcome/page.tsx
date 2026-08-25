@@ -102,7 +102,7 @@ export default async function WelcomePage({
         }
       />
 
-      <div className="space-y-6 p-8">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-8">
         {qualified.length > 0 ? (
           <RoleTiles views={qualified} current={resolveRoleView(storedView, capabilities)} />
         ) : (
@@ -111,17 +111,17 @@ export default async function WelcomePage({
 
         {requests.length > 0 ? (
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle className="text-base">Requests you have already sent</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
               <p className="text-sm text-muted-foreground">
                 These were sent before the club moved joining to the registration forms. A club
                 administrator still decides them; you can take back one that is still waiting.
               </p>
               <ul className="space-y-3">
                 {requests.map((request) => (
-                  <li key={request.id} className="rounded-lg border p-4">
+                  <li key={request.id} className="rounded-lg border p-3 lg:p-4">
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div>
                         <p className="font-medium">
@@ -200,12 +200,12 @@ export default async function WelcomePage({
 function UnlinkedPanel({ contactEmail }: { contactEmail: string }) {
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-4 lg:p-6">
         <CardTitle className="text-base">
           Your account isn&apos;t linked to a club record yet
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
         <p className="text-sm text-muted-foreground">
           You are signed in, but the club has not yet connected this sign-in to a player, a parent,
           a coach or a member of staff. Until it does there is nothing here to show you — the app
@@ -214,7 +214,7 @@ function UnlinkedPanel({ contactEmail }: { contactEmail: string }) {
         <div className="grid gap-3 sm:grid-cols-2">
           <Link
             href="/register"
-            className="flex items-start gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/40 hover:bg-secondary"
+            className="flex min-h-[44px] items-start gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/40 hover:bg-secondary"
           >
             <UserPlus className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
             <span>
@@ -227,7 +227,7 @@ function UnlinkedPanel({ contactEmail }: { contactEmail: string }) {
           </Link>
           <Link
             href="/waiting-list"
-            className="flex items-start gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/40 hover:bg-secondary"
+            className="flex min-h-[44px] items-start gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/40 hover:bg-secondary"
           >
             <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
             <span>
