@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { LogOut } from "lucide-react";
 
@@ -7,8 +6,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isBooker } from "@/lib/auth";
 import { navFor, navForUnlinked } from "@/lib/nav";
 import { NavLink } from "@/components/nav-link";
-import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
-import { ROLE_VIEW_LABELS, qualifiedViews, resolveRoleView } from "@/lib/role-view";
+import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
+import { RoleSwitcher } from "@/components/role-switcher";
 
 /**
  * The signed-in shell.
@@ -41,8 +41,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const storedView = await getStoredRoleView();
   const view = resolveRoleView(storedView, capabilities);
   const groups = view ? navFor(view, capabilities) : navForUnlinked();
-  // Only worth offering "change" when there is something to change to.
-  const canSwitch = qualifiedViews(capabilities).length > 1;
+  // The role–team dropdown (Adam, 2026-08-25): every hat the person holds,
+  // team by team. With one option the component renders plain text.
+  const scope = view ? await getTeamScope(view, capabilities) : null;
+  const switcher = view ? roleSwitcherProps(capabilities, view, scope?.id ?? null) : null;
 
   return (
     <div className="flex min-h-screen flex-col lg:flex-row">
@@ -67,18 +69,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          {view ? (
+          {switcher ? (
             <div className="hidden rounded-lg border border-accent/40 bg-accent/15 px-3 py-2 lg:block">
               <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-accent">
                 Viewing as
               </p>
-              <Link
-                href="/welcome"
-                className="mt-0.5 inline-block text-[13px] font-semibold underline-offset-2 hover:underline"
-              >
-                {ROLE_VIEW_LABELS[view]}
-                {canSwitch ? <span className="font-normal text-muted-foreground"> · change</span> : null}
-              </Link>
+              <RoleSwitcher options={switcher.options} current={switcher.current} />
             </div>
           ) : null}
 
