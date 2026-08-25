@@ -38,6 +38,8 @@ export type MatchDayValues = {
   home_resource_id: string | null;
   home_kickoff_time: string | null;
   central_venue_name: string | null;
+  league: string | null;
+  division: string | null;
   match_halves: number;
   half_length_minutes: number | null;
   half_time_minutes: number;
@@ -115,6 +117,12 @@ export function MatchDayPanel({
             ? "No match length set — new fixtures are given the club's standard 90 minutes."
             : `${halvesValue} × ${halfLengthValue} + ${halfTimeValue} = ${duration} min pitch slot.`}
         </p>
+        {values.league && (
+          <p>
+            Plays in {values.league}
+            {values.division ? `, ${values.division}` : ""}.
+          </p>
+        )}
       </div>
     );
   }
@@ -194,6 +202,37 @@ export function MatchDayPanel({
             </p>
           </div>
         )}
+      </div>
+
+      {/* Which competition the team actually plays in — free text, because a
+          few teams sit outside the Timperley league and SMGFL that the club
+          Full-Time widgets cover, and this is where that is recorded. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor={`league-${teamId}`}>League</Label>
+          <Input
+            id={`league-${teamId}`}
+            name="league"
+            maxLength={120}
+            placeholder="e.g. Timperley & District JFL"
+            defaultValue={values.league ?? ""}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`division-${teamId}`}>Division</Label>
+          <Input
+            id={`division-${teamId}`}
+            name="division"
+            maxLength={120}
+            placeholder="e.g. Division 2"
+            defaultValue={values.division ?? ""}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground sm:col-span-2">
+          Shown on the Teams list. Useful for the sides the club-wide Full-Time widgets
+          don&apos;t cover — a team playing outside the club&apos;s usual leagues is still
+          accounted for here.
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

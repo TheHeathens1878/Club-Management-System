@@ -63,6 +63,10 @@ type TeamCard = {
   gender: string | null;
   active: boolean;
   homePitch: string | null;
+  /** Which competition the team plays in — the teams outside the club
+      Full-Time leagues are exactly the ones this column accounts for. */
+  league: string | null;
+  division: string | null;
   players: number;
   managerName: string | null;
   assistantCount: number;
@@ -71,15 +75,22 @@ type TeamCard = {
   subsOwing: number | null;
 };
 
-/** "Sat 09:30" — the design's Next-out cell, London wall clock. */
+/** "Sat 30 Aug · 09:30" — Adam: "next out needs a date and not just a day". */
 function kickoffShort(iso: string): string {
-  return new Date(iso).toLocaleString("en-GB", {
+  const at = new Date(iso);
+  const day = at.toLocaleString("en-GB", {
     timeZone: "Europe/London",
     weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const time = at.toLocaleString("en-GB", {
+    timeZone: "Europe/London",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
   });
+  return `${day} · ${time}`;
 }
 
 const GENDER_LABELS: Record<string, string> = {
@@ -262,7 +273,7 @@ export default async function TeamsPage({
   // enough — the admin client is kept for the two admin-only reads below.
   let teamsQuery = supabase
     .from("teams")
-    .select("id,name,age_group,gender,active,home_resource_id");
+    .select("id,name,age_group,gender,active,home_resource_id,league,division");
   if (!canAdmin) teamsQuery = teamsQuery.in("id", staffTeamIds);
 
   const [teamsResult, seasonsResult] = await Promise.all([
@@ -439,6 +450,8 @@ export default async function TeamsPage({
         gender: team.gender,
         active: team.active,
         homePitch: team.home_resource_id ? pitchNames.get(team.home_resource_id) ?? null : null,
+        league: team.league,
+        division: team.division,
         players: players.size,
         managerName: lead ? personName.get(lead) ?? null : null,
         assistantCount: Math.max(0, staff.size - (lead ? 1 : 0)),
@@ -540,6 +553,7 @@ export default async function TeamsPage({
           head={
             <tr>
               <th className="px-4 py-2.5 font-medium">Team</th>
+              <th className="px-4 py-2.5 font-medium">League</th>
               <th className="px-4 py-2.5 font-medium">Staff</th>
               <th className="px-4 py-2.5 font-medium">Squad</th>
               <th className="px-4 py-2.5 font-medium">Next out</th>
@@ -560,7 +574,9 @@ export default async function TeamsPage({
             const needsStaff = team.managerName === null;
             return {
               key: team.id,
-              haystack: `${team.name} ${team.ageGroup ?? ""}`.toLocaleLowerCase("en-GB"),
+              haystack: `${team.name} ${team.ageGroup ?? ""} ${team.league ?? ""} ${
+                team.division ?? ""
+              }`.toLocaleLowerCase("en-GB"),
               active: team.active,
               needsStaff,
               row: (
@@ -584,6 +600,18 @@ export default async function TeamsPage({
                         </span>
                       )}
                     </p>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    {team.league ? (
+                      <>
+                        <p>{team.league}</p>
+                        {team.division && (
+                          <p className="text-xs text-muted-foreground">{team.division}</p>
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 align-top">
                     {team.managerName ? (
