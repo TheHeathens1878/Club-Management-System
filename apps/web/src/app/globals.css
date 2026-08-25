@@ -70,6 +70,17 @@
     --accent-foreground: 34 30% 96%;
     --border: 24 8% 24%;
     --input: 24 8% 24%;
+    /* Native form controls (the role dropdown's option list, scrollbars)
+       follow the UA, not our tokens — without this the popup opens WHITE with
+       the rail's pale text inherited into it, which is unreadable. */
+    color-scheme: dark;
+  }
+  /* Belt and braces for browsers that style option lists from the element:
+     ink surface, ink text, whatever the UA decides about the popup itself. */
+  .theme-ink select,
+  .theme-ink option {
+    background-color: hsl(20 12% 12%);
+    color: hsl(34 30% 96%);
   }
 
   * {
