@@ -35,7 +35,7 @@ export function PitchBookingsSummary({
           No pitch bookings for this team yet.
         </p>
         <Link
-          href={`/teams/${teamId}?tab=bookings`}
+          href={`/teams/${teamId}?tab=training`}
           className="text-sm font-medium text-primary underline-offset-4 hover:underline"
         >
           Book a pitch
@@ -66,7 +66,7 @@ export function PitchBookingsSummary({
         ))}
       </ul>
       <Link
-        href={`/teams/${teamId}?tab=bookings`}
+        href={`/teams/${teamId}?tab=training`}
         className="text-sm font-medium text-primary underline-offset-4 hover:underline"
       >
         All pitch bookings

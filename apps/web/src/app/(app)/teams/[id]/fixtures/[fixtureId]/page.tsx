@@ -162,7 +162,7 @@ export default async function FixtureAttendancePage({
         }`}
         action={
           <Link
-            href={`/teams/${teamId}?tab=fixtures`}
+            href={`/teams/${teamId}?tab=matchday`}
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
             <ChevronLeft className="h-4 w-4" /> Back to fixtures

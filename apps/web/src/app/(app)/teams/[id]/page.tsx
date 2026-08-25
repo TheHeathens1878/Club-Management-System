@@ -34,11 +34,13 @@ import { MatchDayPanel, type MatchDayPitch } from "./matchday-panel";
 import { AllocateAllPanel } from "./allocate-all-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
 import { RecruitingPanel } from "./recruiting-panel";
-import { FixturesSummary, FixturesTable, type TeamFixture } from "./fixtures-list";
-import { PitchBookingsSummary } from "./bookings-summary";
+import { FixturesTable, type TeamFixture } from "./fixtures-list";
+import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
+import { formatBookingDateShort } from "@/lib/booking-time";
 import { loadThread } from "../../messages/[id]/thread-data";
 import { ThreadPanel } from "../../messages/[id]/thread-panel";
+import { googleMapsUrl } from "../../events/shared";
 
 /** Next 20 fixtures, read-only — the importer (P2.4) is what writes them. */
 const UPCOMING_LIMIT = 20;
@@ -46,8 +48,6 @@ const UPCOMING_LIMIT = 20;
 const PITCH_BOOKING_LIMIT = 10;
 /** Enough import history to see a pattern without becoming a log viewer. */
 const RUN_LIMIT = 10;
-/** Overview is a glance, not a list: three of each. */
-const OVERVIEW_LIMIT = 3;
 
 /**
  * One string literal, not a concatenation: supabase-js infers the row type
@@ -105,7 +105,7 @@ export default async function TeamPage({
   // pitch badge, and — for the committee only — the Full-Time link that the
   // header condenses into a badge. A coach never triggers the Full-Time read.
   // --------------------------------------------------------------------
-  const [teamResult, matchDayPitches, linkRow, otherUpcomingCount] = await Promise.all([
+  const [teamResult, matchDayPitches, linkRow] = await Promise.all([
     admin.from("teams").select("*").eq("id", id).maybeSingle(),
     loadPitches(),
     committee
@@ -116,16 +116,6 @@ export default async function TeamPage({
           .maybeSingle()
           .then((result) => result.data)
       : Promise.resolve(null),
-    // Only asked when the Fixtures tab is not already the committee's by
-    // right: it decides whether a coach is offered the tab at all.
-    committee
-      ? Promise.resolve(0)
-      : userClient
-          .from("fixtures")
-          .select("id", { count: "exact", head: true })
-          .eq("team_id", id)
-          .gte("kickoff_at", nowIso)
-          .then((result) => result.count ?? 0),
   ]);
 
   const team = teamResult.data;
@@ -152,24 +142,35 @@ export default async function TeamPage({
       }
     : null;
 
-  // A tab the caller cannot use is not rendered. Chat opens first — the team
-  // room is where a team lives day to day (Adam, 2026-08-24) — and the
-  // committee's feed machinery (Match day, Full-Time, imports) sits in an
-  // admin-only Settings tab rather than among the everyday tabs.
+  // The design's five tabs (spec §2.4, matchday-led): Matchday opens first,
+  // Communications holds the bulletin board and the team chat, Squad is the
+  // roster, Training the pitch diary — and the committee keeps Subs and the
+  // Settings machinery. A tab the caller cannot use is not rendered.
   const tabs: TeamTab[] = [
-    { key: "chat", label: "Chat" },
-    { key: "overview", label: "Overview" },
-    { key: "members", label: "Members" },
-    ...(committee || otherUpcomingCount > 0
-      ? [{ key: "fixtures", label: "Fixtures" } as TeamTab]
+    { key: "matchday", label: "Matchday" },
+    { key: "board", label: "Communications" },
+    { key: "squad", label: "Squad" },
+    { key: "training", label: "Training" },
+    ...(committee
+      ? [
+          { key: "subs", label: "Subs" } as TeamTab,
+          { key: "settings", label: "Settings" } as TeamTab,
+        ]
       : []),
-    { key: "bookings", label: "Bookings" },
-    { key: "notices", label: "Notice board" },
-    ...(committee ? [{ key: "settings", label: "Settings" } as TeamTab] : []),
   ];
-  const tab: TeamTabKey = tabs.some((t) => t.key === requestedTab)
-    ? (requestedTab as TeamTabKey)
-    : "chat";
+  // Old bookmarks keep working: every pre-design tab maps to its new home.
+  const LEGACY_TABS: Record<string, TeamTabKey> = {
+    chat: "board",
+    notices: "board",
+    overview: "matchday",
+    fixtures: "matchday",
+    members: "squad",
+    bookings: "training",
+  };
+  const requested = LEGACY_TABS[requestedTab ?? ""] ?? requestedTab;
+  const tab: TeamTabKey = tabs.some((t) => t.key === requested)
+    ? (requested as TeamTabKey)
+    : "matchday";
 
   // --------------------------------------------------------------------
   // Chat / Notice board — the team's own conversation rooms (P5.3), found
@@ -178,69 +179,53 @@ export default async function TeamPage({
   // than silently reading it (SG-9 — oversight lives in /safeguarding).
   // --------------------------------------------------------------------
   let threadData: Awaited<ReturnType<typeof loadThread>> = null;
-  if (tab === "chat" || tab === "notices") {
-    const wanted = tab === "chat" ? "team" : "announcement";
-    const { data: room } = await userClient
-      .from("conversations")
-      .select("id")
-      .eq("team_id", id)
-      .eq("type", wanted)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (room) threadData = await loadThread(room.id);
+  let boardPosts: BoardPost[] = [];
+  let glancePlayers = 0;
+  let glanceNextSlot: PitchBookingItem | null = null;
+  if (tab === "board") {
+    const [roomResult, postsResult, playerIdRows, nextSlots] = await Promise.all([
+      userClient
+        .from("conversations")
+        .select("id")
+        .eq("team_id", id)
+        .eq("type", "team")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      userClient.rpc("team_board_posts", { p_team_id: id, p_limit: 20 }),
+      teamPlayerIds(userClient, id),
+      loadTeamPitchBookings(id, 1),
+    ]);
+    if (roomResult.data) threadData = await loadThread(roomResult.data.id);
+    boardPosts = (postsResult.data ?? []).map((row) => ({
+      postId: row.post_id,
+      title: row.title,
+      body: row.body,
+      audience: row.audience,
+      pinned: row.pinned,
+      authorName: row.author_name,
+      createdAt: row.created_at,
+      readCount: row.read_count,
+      readOf: row.read_of,
+      replyCount: row.reply_count,
+      canManage: row.can_manage,
+    }));
+    glancePlayers = playerIdRows.length;
+    glanceNextSlot = nextSlots[0] ?? null;
+    // Opening the tab is reading the board. Idempotent by construction (a
+    // bare INSERT … ON CONFLICT DO NOTHING) so a re-render costs nothing and
+    // read_at keeps its first value.
+    const unread = (postsResult.data ?? []).filter((row) => !row.my_read).map((row) => row.post_id);
+    if (unread.length > 0) {
+      await userClient.rpc("mark_board_posts_read", { p_post_ids: unread });
+    }
   }
 
   // --------------------------------------------------------------------
   // Overview — the glance: recruiting, the next three fixtures and the next
   // three pitch slots. (Match day moved to the Settings tab.)
   // --------------------------------------------------------------------
-  let overviewFixtures: TeamFixture[] = [];
-  let overviewBookings: PitchBookingItem[] = [];
   let bookingCounts: Record<string, Headcount> = {};
-  if (tab === "overview") {
-    const [fixturesResult, bookings, playerIds] = await Promise.all([
-      userClient
-        .from("fixtures")
-        .select(FIXTURE_SELECT)
-        .eq("team_id", id)
-        .gte("kickoff_at", nowIso)
-        .order("kickoff_at")
-        .limit(OVERVIEW_LIMIT),
-      loadTeamPitchBookings(id, OVERVIEW_LIMIT),
-      teamPlayerIds(userClient, id),
-    ]);
-    // "How many children will be there?" — squad availability per event. This
-    // page only admits staff and committee, whose RLS returns every answer.
-    const [fixtureCounts, bookingCountMap] = await Promise.all([
-      fixtureHeadcounts(
-        userClient,
-        (fixturesResult.data ?? []).map((row) => row.id),
-        playerIds,
-      ),
-      bookingHeadcounts(
-        userClient,
-        bookings.map((booking) => booking.id),
-        playerIds,
-      ),
-    ]);
-    bookingCounts = Object.fromEntries(bookingCountMap);
-    overviewFixtures = (fixturesResult.data ?? []).map((row) => ({
-      id: row.id,
-      bookingId: row.booking_id,
-      kickoffAt: row.kickoff_at,
-      isHome: row.is_home,
-      opponent: row.opponent,
-      competition: row.competition,
-      status: row.status,
-      venueText: row.venue_text,
-      allocationConflict: row.allocation_conflict,
-      seasonName: row.seasons?.name ?? null,
-      pitchName: row.resources?.name ?? null,
-      headcount: fixtureCounts.get(row.id) ?? null,
-    }));
-    overviewBookings = bookings;
-  }
 
   // --------------------------------------------------------------------
   // Members — the season's roster, the held-back imports, and (committee
@@ -266,7 +251,7 @@ export default async function TeamPage({
   let exemptions: ExemptionRow[] = [];
   let lead = false;
 
-  if (tab === "members") {
+  if (tab === "squad") {
     const [
       seasonsResult,
       childFacingResult,
@@ -450,7 +435,7 @@ export default async function TeamPage({
   let defaultFtName = "";
   let runs: ImportRunView[] = [];
 
-  if (tab === "fixtures") {
+  if (tab === "matchday") {
     const fixturesResult = await userClient
       .from("fixtures")
       .select(FIXTURE_SELECT)
@@ -529,7 +514,7 @@ export default async function TeamPage({
   // page admits falls back to `pitch_calendar()`, which carries no booker PII.
   // --------------------------------------------------------------------
   let pitchBookings: PitchBookingItem[] = [];
-  if (tab === "bookings") {
+  if (tab === "training") {
     pitchBookings = await loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT);
     const playerIds = await teamPlayerIds(userClient, id);
     bookingCounts = Object.fromEntries(
@@ -539,6 +524,75 @@ export default async function TeamPage({
         playerIds,
       ),
     );
+  }
+
+  // --------------------------------------------------------------------
+  // Subs — committee only: each player's latest subscription, plainly. The
+  // club bills people, not teams, so this is a per-player read joined to the
+  // roster; a squad with no subscriptions says so instead of pretending.
+  // --------------------------------------------------------------------
+  type SubsRow = {
+    personId: string;
+    name: string;
+    planName: string | null;
+    status: string | null;
+    amountDuePence: number | null;
+    payerName: string | null;
+  };
+  let subsRows: SubsRow[] = [];
+  if (tab === "subs" && committee) {
+    const { data: roster } = await admin
+      .from("team_memberships")
+      .select("person_id,people(first_name,last_name,preferred_name)")
+      .eq("team_id", id)
+      .is("left_at", null)
+      .eq("role", "player");
+    const playerRows = roster ?? [];
+    const playerIdList = Array.from(new Set(playerRows.map((row) => row.person_id)));
+    const { data: subs } = playerIdList.length
+      ? await admin
+          .from("subscriptions")
+          .select("person_id,status,amount_due_pence,payer_person_id,created_at,subscription_plans(name)")
+          .in("person_id", playerIdList)
+          .order("created_at", { ascending: false })
+      : { data: [] };
+    // Newest subscription per player is the one that speaks for them.
+    const latest = new Map<string, NonNullable<typeof subs>[number]>();
+    for (const row of subs ?? []) {
+      if (!latest.has(row.person_id)) latest.set(row.person_id, row);
+    }
+    const payerIds = Array.from(
+      new Set(
+        Array.from(latest.values())
+          .map((row) => row.payer_person_id)
+          .filter((value): value is string => !!value),
+      ),
+    );
+    const { data: payers } = payerIds.length
+      ? await admin.from("people").select("id,first_name,last_name,preferred_name").in("id", payerIds)
+      : { data: [] };
+    const payerName = new Map(
+      (payers ?? []).map((person) => [
+        person.id,
+        `${person.preferred_name || person.first_name} ${person.last_name}`.trim(),
+      ]),
+    );
+    subsRows = playerRows
+      .map((row) => {
+        const person = row.people;
+        const sub = latest.get(row.person_id) ?? null;
+        return {
+          personId: row.person_id,
+          name: person
+            ? `${person.preferred_name || person.first_name} ${person.last_name}`.trim()
+            : "Club member",
+          planName: sub?.subscription_plans?.name ?? null,
+          status: sub?.status ?? null,
+          amountDuePence: sub?.amount_due_pence ?? null,
+          payerName: sub?.payer_person_id ? payerName.get(sub.payer_person_id) ?? null : null,
+        };
+      })
+      .sort((a, b) => a.name.localeCompare(b.name, "en-GB"));
   }
 
   return (
@@ -570,89 +624,85 @@ export default async function TeamPage({
         <TeamTabs teamId={team.id} tabs={tabs} active={tab} />
 
         {/* ---------------------------------------------------------------- */}
-        {/* Overview                                                         */}
+        {/* Communications — the bulletin board and the team chat (§2.4)     */}
         {/* ---------------------------------------------------------------- */}
-        {/* ---------------------------------------------------------------- */}
-        {/* Chat / Notice board — the team's rooms, embedded                 */}
-        {/* ---------------------------------------------------------------- */}
-        {(tab === "chat" || tab === "notices") &&
-          (threadData ? (
-            <div className="max-w-3xl">
-              <ThreadPanel data={threadData} showLeave={false} />
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="p-6 text-sm text-muted-foreground">
-                {tab === "chat"
-                  ? "This team's chat room isn't open to you. Players, their parents and the team's staff are added automatically when they join the team — if that's you and you still can't see it, ask a club administrator."
-                  : "This team's notice board isn't open to you. Members and staff are added automatically when they join the team."}
-              </CardContent>
-            </Card>
-          ))}
-
-        {tab === "overview" && (
-          <div className="space-y-6">
-            <div className="grid gap-6 lg:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Next fixtures</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <FixturesSummary fixtures={overviewFixtures} teamId={team.id} />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Next pitch bookings</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <PitchBookingsSummary teamId={team.id} items={overviewBookings} headcounts={bookingCounts} />
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Gap 10: what the public /recruitment page says about this team.
-                Written through the caller's own client, so `teams_staff_update`
-                lets a coach maintain it and the guard refuses anything else. */}
+        {tab === "board" && (
+          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
             <Card>
               <CardHeader>
-                <CardTitle>Recruiting</CardTitle>
+                <CardTitle>Bulletin board</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  What a parent looking for a team sees on the club&apos;s public recruitment page.
-                  The team&apos;s name and age group are a club administrator&apos;s to change;
-                  everything here belongs to the people who run the team.
+                  Visible to squad, parents and staff. A post marked Club-wide came from the club
+                  lobby — replies to it belong on the club post, so its link takes you there.
                 </p>
               </CardHeader>
               <CardContent>
-                <RecruitingPanel
-                  teamId={team.id}
-                  canEdit={canManageTeam}
-                  values={{
-                    recruiting: team.recruiting,
-                    gender: team.gender,
-                    join_type: team.join_type,
-                    join_instructions: team.join_instructions,
-                    session_details: team.session_details,
-                    contact_name: team.contact_name,
-                    contact_email: team.contact_email,
-                    contact_phone: team.contact_phone,
-                    show_coach_contact: team.show_coach_contact,
-                  }}
-                />
+                <BoardPanel teamId={team.id} posts={boardPosts} canPost={canManageTeam} />
               </CardContent>
             </Card>
+
+            <div className="space-y-6">
+              {threadData ? (
+                <ThreadPanel data={threadData} showLeave={false} />
+              ) : (
+                <Card>
+                  <CardContent className="p-6 text-sm text-muted-foreground">
+                    This team&apos;s chat room isn&apos;t open to you. Players, their parents and
+                    the team&apos;s staff are added automatically when they join the team — if
+                    that&apos;s you and you still can&apos;t see it, ask a club administrator.
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Team at a glance</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <dl className="space-y-2 text-sm">
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-muted-foreground">Squad</dt>
+                      <dd className="font-medium">
+                        {glancePlayers} {glancePlayers === 1 ? "player" : "players"}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-muted-foreground">Next pitch slot</dt>
+                      <dd className="text-right font-medium">
+                        {glanceNextSlot ? (
+                          <Link
+                            href={`/teams/${team.id}?tab=training`}
+                            className="underline underline-offset-2"
+                          >
+                            {formatBookingDateShort(glanceNextSlot.startsAt)} ·{" "}
+                            {glanceNextSlot.startTime}
+                          </Link>
+                        ) : (
+                          "None booked"
+                        )}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <dt className="text-muted-foreground">Board</dt>
+                      <dd className="font-medium">
+                        {boardPosts.length} {boardPosts.length === 1 ? "post" : "posts"}
+                      </dd>
+                    </div>
+                  </dl>
+                </CardContent>
+              </Card>
+            </div>
           </div>
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Members                                                          */}
+        {/* Squad — the roster, the paperwork, and what recruitment says     */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "members" && (
+        {tab === "squad" && (
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Members</CardTitle>
+                <CardTitle>Squad</CardTitle>
                 <p className="text-sm text-muted-foreground">
                   Everyone in this team for the current season, players included. Adding someone,
                   changing their role or ending their membership goes straight to{" "}
@@ -695,14 +745,105 @@ export default async function TeamPage({
                 </CardContent>
               </Card>
             )}
+
+            {/* Gap 10: what the public /recruitment page says about this team.
+                Written through the caller's own client, so `teams_staff_update`
+                lets a coach maintain it and the guard refuses anything else. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recruiting</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  What a parent looking for a team sees on the club&apos;s public recruitment page.
+                  The team&apos;s name and age group are a club administrator&apos;s to change;
+                  everything here belongs to the people who run the team.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <RecruitingPanel
+                  teamId={team.id}
+                  canEdit={canManageTeam}
+                  values={{
+                    recruiting: team.recruiting,
+                    gender: team.gender,
+                    join_type: team.join_type,
+                    join_instructions: team.join_instructions,
+                    session_details: team.session_details,
+                    contact_name: team.contact_name,
+                    contact_email: team.contact_email,
+                    contact_phone: team.contact_phone,
+                    show_coach_contact: team.show_coach_contact,
+                  }}
+                />
+              </CardContent>
+            </Card>
           </div>
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Fixtures                                                         */}
+        {/* Matchday — the next match up top, then every coming kick-off     */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "fixtures" && (
+        {tab === "matchday" && (
           <div className="space-y-6">
+            {fixtures[0] && (
+              <div className="theme-ink rounded-xl border border-border bg-background p-5 text-foreground">
+                <p className="font-display text-[10px] font-medium uppercase tracking-[0.16em] text-accent">
+                  Next match
+                </p>
+                <div className="mt-1 flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <p className="text-xl font-semibold leading-tight">
+                      {team.name} <span className="font-normal text-muted-foreground">v</span>{" "}
+                      {fixtures[0].opponent}
+                    </p>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {new Date(fixtures[0].kickoffAt).toLocaleString("en-GB", {
+                        timeZone: "Europe/London",
+                        weekday: "short",
+                        day: "numeric",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hourCycle: "h23",
+                      })}
+                      {" · "}
+                      {fixtures[0].isHome ? "Home" : "Away"}
+                      {fixtures[0].pitchName ? ` · ${fixtures[0].pitchName}` : ""}
+                      {!fixtures[0].pitchName && fixtures[0].venueText
+                        ? ` · ${fixtures[0].venueText}`
+                        : ""}
+                      {fixtures[0].competition ? ` · ${fixtures[0].competition}` : ""}
+                    </p>
+                    {(fixtures[0].pitchName || fixtures[0].venueText) && (
+                      <a
+                        href={googleMapsUrl(fixtures[0].pitchName ?? fixtures[0].venueText ?? "")}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 inline-block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                      >
+                        Open in Google Maps
+                      </a>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    {fixtures[0].headcount && (
+                      <>
+                        <p className="text-2xl font-semibold leading-none">
+                          {fixtures[0].headcount.going}/{fixtures[0].headcount.squad}
+                        </p>
+                        <p className="text-xs text-muted-foreground">available</p>
+                      </>
+                    )}
+                    <Link
+                      href={`/teams/${team.id}/fixtures/${fixtures[0].id}`}
+                      className={buttonVariants({ size: "sm" }) + " mt-2"}
+                    >
+                      Availability &amp; attendance
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle>Upcoming fixtures</CardTitle>
@@ -846,17 +987,17 @@ export default async function TeamPage({
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Bookings                                                         */}
+        {/* Training — the team's pitch diary, headcounts included           */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "bookings" && (
+        {tab === "training" && (
           <Card>
             <CardHeader>
-              <CardTitle>Pitch bookings</CardTitle>
+              <CardTitle>Training &amp; pitch slots</CardTitle>
               <p className="text-sm text-muted-foreground">
                 The next {PITCH_BOOKING_LIMIT} pitch slots for this team — its own training and
                 block bookings, plus any session another team is sharing with it. Coaches request a
                 slot and a club administrator confirms it; until then it reads as awaiting
-                confirmation.
+                confirmation. The headcount beside a session is the squad&apos;s availability.
               </p>
             </CardHeader>
             <CardContent>
@@ -866,6 +1007,98 @@ export default async function TeamPage({
                 canManage={canManageTeam}
                 headcounts={bookingCounts}
               />
+            </CardContent>
+          </Card>
+        )}
+
+        {/* ---------------------------------------------------------------- */}
+        {/* Subs — committee only: who is billed what, player by player      */}
+        {/* ---------------------------------------------------------------- */}
+        {tab === "subs" && committee && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Subs</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Each player&apos;s latest subscription. The club bills the payer — usually a parent
+                — so &ldquo;billed to&rdquo; names them. Payments themselves are handled on the
+                money screens; this is the team&apos;s view of where everyone stands.
+              </p>
+            </CardHeader>
+            <CardContent>
+              {subsRows.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No players on the roster yet.</p>
+              ) : (
+                <>
+                  <div className="mb-4 flex flex-wrap gap-4 text-sm">
+                    <p>
+                      <span className="text-2xl font-semibold">
+                        {subsRows.filter((row) => row.status === "active" || row.status === "completed").length}
+                      </span>{" "}
+                      <span className="text-muted-foreground">of {subsRows.length} covered</span>
+                    </p>
+                    {subsRows.some((row) => row.status === "past_due") && (
+                      <p className="text-amber-700">
+                        <span className="text-2xl font-semibold">
+                          {subsRows.filter((row) => row.status === "past_due").length}
+                        </span>{" "}
+                        owing
+                      </p>
+                    )}
+                    {subsRows.some((row) => row.status === null) && (
+                      <p className="text-muted-foreground">
+                        <span className="text-2xl font-semibold">
+                          {subsRows.filter((row) => row.status === null).length}
+                        </span>{" "}
+                        no subscription yet
+                      </p>
+                    )}
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead className="border-b text-xs text-muted-foreground">
+                        <tr>
+                          <th className="py-2 pr-3 font-medium">Player</th>
+                          <th className="py-2 pr-3 font-medium">Plan</th>
+                          <th className="py-2 pr-3 font-medium">Billed to</th>
+                          <th className="py-2 pr-3 font-medium">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y">
+                        {subsRows.map((row) => (
+                          <tr key={row.personId}>
+                            <td className="py-2 pr-3 font-medium">{row.name}</td>
+                            <td className="py-2 pr-3 text-muted-foreground">
+                              {row.planName ?? "—"}
+                            </td>
+                            <td className="py-2 pr-3 text-muted-foreground">
+                              {row.payerName ?? "—"}
+                            </td>
+                            <td className="py-2 pr-3">
+                              {row.status === null ? (
+                                <span className="text-muted-foreground">No subscription</span>
+                              ) : row.status === "past_due" ? (
+                                <Badge variant="warning">
+                                  {row.amountDuePence !== null
+                                    ? `£${(row.amountDuePence / 100).toFixed(2)} owing`
+                                    : "Owing"}
+                                </Badge>
+                              ) : row.status === "completed" ? (
+                                <Badge variant="success">Paid</Badge>
+                              ) : row.status === "active" ? (
+                                <Badge variant="success">On plan</Badge>
+                              ) : row.status === "cancelled" ? (
+                                <Badge variant="muted">Cancelled</Badge>
+                              ) : (
+                                <Badge variant="muted">Pending</Badge>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
             </CardContent>
           </Card>
         )}
