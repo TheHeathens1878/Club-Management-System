@@ -4,6 +4,7 @@ import { Contact, UsersRound } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -39,6 +40,14 @@ export default async function ConnectedAdultsPage() {
       <PageHeader
         title="Connected adults"
         subtitle="The adults the club connects to your account — your household, and your family membership"
+        action={
+          <Link
+            href="/my-registrations"
+            className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"}
+          >
+            Register a player
+          </Link>
+        }
       />
 
       <div className="space-y-6 p-4 lg:p-6">
