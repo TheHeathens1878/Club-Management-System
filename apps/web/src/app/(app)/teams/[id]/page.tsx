@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getCapabilities } from "@/lib/capabilities";
 import { isClubAdmin, isSafeguardingLead, nameOf, resolveNames } from "@/lib/person";
 import { personLabel } from "@/lib/people-display";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -89,12 +90,25 @@ export default async function TeamPage({
   // through the profiles → person_roles sync). A team's own child-facing
   // staff may read their roster and nothing else: `is_team_staff()` is the
   // same predicate `team_memberships_staff_read` uses, asked through the
-  // caller's own client so the database gives the answer.
+  // caller's own client so the database gives the answer. And — Adam,
+  // 2026-08-25: "if I select parent from the drop down, it should just go to
+  // the team page for that child" — a parent of a squad member, or an adult
+  // player on the team, gets the member view: Matchday, Communications and
+  // Training, with nothing staff-only computed on their behalf. The hats come
+  // from `my_capabilities()`, the same guardianship-aware answer the role
+  // switcher itself is built from.
   // --------------------------------------------------------------------
   const userClient = await createClient();
   const committee = isCommittee(session.profile?.role);
-  const { data: teamStaff } = await userClient.rpc("is_team_staff", { p_team_id: id });
-  if (!committee && teamStaff !== true) redirect("/room-bookings");
+  const [staffResult, capabilities] = await Promise.all([
+    userClient.rpc("is_team_staff", { p_team_id: id }),
+    getCapabilities(),
+  ]);
+  const teamStaff = staffResult.data;
+  const teamMember =
+    capabilities.parentTeams.some((teamRef) => teamRef.id === id) ||
+    capabilities.playerTeams.some((teamRef) => teamRef.id === id);
+  if (!committee && teamStaff !== true && !teamMember) redirect("/room-bookings");
   const canManageTeam = committee || teamStaff === true;
 
   const admin = createAdminClient();
@@ -149,7 +163,10 @@ export default async function TeamPage({
   const tabs: TeamTab[] = [
     { key: "matchday", label: "Matchday" },
     { key: "board", label: "Communications" },
-    { key: "squad", label: "Squad" },
+    // A parent or player gets the team's life, not its management: no roster
+    // page, no money, no settings ("Parents don't need to see pitch
+    // calendars" — the same instinct, applied to the tabs).
+    ...(canManageTeam ? [{ key: "squad", label: "Squad" } as TeamTab] : []),
     { key: "training", label: "Training" },
     ...(committee
       ? [
@@ -193,7 +210,9 @@ export default async function TeamPage({
         .limit(1)
         .maybeSingle(),
       userClient.rpc("team_board_posts", { p_team_id: id, p_limit: 20 }),
-      teamPlayerIds(userClient, id),
+      // The glance card is staff furniture; a parent's client would count
+      // only their own household as "the squad", so it is not asked.
+      canManageTeam ? teamPlayerIds(userClient, id) : Promise.resolve([]),
       loadTeamPitchBookings(id, 1),
     ]);
     if (roomResult.data) threadData = await loadThread(roomResult.data.id);
@@ -445,12 +464,15 @@ export default async function TeamPage({
       .limit(UPCOMING_LIMIT);
 
     fixturesFailed = !!fixturesResult.error;
-    const playerIds = await teamPlayerIds(userClient, id);
-    const fixtureCounts = await fixtureHeadcounts(
-      userClient,
-      (fixturesResult.data ?? []).map((row) => row.id),
-      playerIds,
-    );
+    // Staff only: a parent's client reads just their own household's
+    // availability rows, and a partial read shown as a squad count would lie.
+    const fixtureCounts = canManageTeam
+      ? await fixtureHeadcounts(
+          userClient,
+          (fixturesResult.data ?? []).map((row) => row.id),
+          await teamPlayerIds(userClient, id),
+        )
+      : new Map<string, Headcount>();
     fixtures = (fixturesResult.data ?? []).map((row) => ({
       id: row.id,
       bookingId: row.booking_id,
@@ -516,14 +538,16 @@ export default async function TeamPage({
   let pitchBookings: PitchBookingItem[] = [];
   if (tab === "training") {
     pitchBookings = await loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT);
-    const playerIds = await teamPlayerIds(userClient, id);
-    bookingCounts = Object.fromEntries(
-      await bookingHeadcounts(
-        userClient,
-        pitchBookings.map((booking) => booking.id),
-        playerIds,
-      ),
-    );
+    if (canManageTeam) {
+      const playerIds = await teamPlayerIds(userClient, id);
+      bookingCounts = Object.fromEntries(
+        await bookingHeadcounts(
+          userClient,
+          pitchBookings.map((booking) => booking.id),
+          playerIds,
+        ),
+      );
+    }
   }
 
   // --------------------------------------------------------------------
@@ -654,6 +678,7 @@ export default async function TeamPage({
                 </Card>
               )}
 
+              {canManageTeam && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Team at a glance</CardTitle>
@@ -691,6 +716,7 @@ export default async function TeamPage({
                   </dl>
                 </CardContent>
               </Card>
+              )}
             </div>
           </div>
         )}
@@ -698,7 +724,7 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {/* Squad — the roster, the paperwork, and what recruitment says     */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "squad" && (
+        {tab === "squad" && canManageTeam && (
           <div className="space-y-6">
             <Card>
               <CardHeader>

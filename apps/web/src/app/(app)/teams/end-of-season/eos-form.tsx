@@ -63,10 +63,13 @@ export function EndOfSeasonForm({
   currentSeasonName,
   targetSeasons,
   teams,
+  nextSeasonDefaults = null,
 }: {
   currentSeasonName: string;
   targetSeasons: EosSeasonOption[];
   teams: EosTeamRow[];
+  /** 1 July – 30 June after the current season, ready to accept as-is. */
+  nextSeasonDefaults?: { name: string; startsOn: string; endsOn: string } | null;
 }) {
   const [state, action, pending] = useActionState(runEndOfSeason, EMPTY);
   const [seasonState, seasonAction, seasonPending] = useActionState(createNextSeason, EMPTY);
@@ -137,15 +140,33 @@ export function EndOfSeasonForm({
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1">
               <Label htmlFor="eos-season-name">Name</Label>
-              <Input id="eos-season-name" name="name" placeholder="e.g. 2027/28" required />
+              <Input
+                id="eos-season-name"
+                name="name"
+                placeholder="e.g. 2027/28"
+                defaultValue={nextSeasonDefaults?.name ?? ""}
+                required
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="eos-season-start">Starts on</Label>
-              <Input id="eos-season-start" name="starts_on" type="date" required />
+              <Input
+                id="eos-season-start"
+                name="starts_on"
+                type="date"
+                defaultValue={nextSeasonDefaults?.startsOn ?? ""}
+                required
+              />
             </div>
             <div className="space-y-1">
               <Label htmlFor="eos-season-end">Ends on</Label>
-              <Input id="eos-season-end" name="ends_on" type="date" required />
+              <Input
+                id="eos-season-end"
+                name="ends_on"
+                type="date"
+                defaultValue={nextSeasonDefaults?.endsOn ?? ""}
+                required
+              />
             </div>
           </div>
           <Button type="submit" size="sm" disabled={seasonPending}>
