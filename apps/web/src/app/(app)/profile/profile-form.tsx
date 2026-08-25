@@ -10,8 +10,10 @@ import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { EmergencyContactsFields } from "@/components/emergency-contacts-fields";
+import type { EmergencyContact } from "@/lib/emergency-contacts";
 
-import { updateContactDetails, type ProfileActionState } from "./actions";
+import { updateContactDetails, updateEmergencyContacts, type ProfileActionState } from "./actions";
 
 export type ContactDetails = {
   preferredName: string;
@@ -113,6 +115,56 @@ export function ContactDetailsForm({ initial }: { initial: ContactDetails }) {
         className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
       >
         {pending ? "Saving…" : "Save changes"}
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * The caller's own emergency contacts (Adam, 2026-08-25). Nobody is "the lead
+ * contact" for themselves, so the tick-box is not offered; contact 1 is
+ * optional here — the registration is what insists on one.
+ */
+export function OwnEmergencyContactsForm({
+  initial,
+  personName,
+}: {
+  initial: EmergencyContact[];
+  personName: string;
+}) {
+  const [state, action, pending] = useActionState<ProfileActionState, FormData>(
+    updateEmergencyContacts,
+    {},
+  );
+
+  return (
+    <form action={action} className="space-y-4">
+      <EmergencyContactsFields
+        idPrefix="profile"
+        initial={initial}
+        lead={null}
+        personName={personName}
+        requireFirst={false}
+      />
+
+      {state.error && (
+        <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {state.error}
+        </p>
+      )}
+      {state.notice && (
+        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {state.notice}
+        </p>
+      )}
+
+      <Button
+        type="submit"
+        size="sm"
+        disabled={pending}
+        className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+      >
+        {pending ? "Saving…" : "Save contacts"}
       </Button>
     </form>
   );

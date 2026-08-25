@@ -11,10 +11,13 @@
  *     their own account", "the guardian's date of birth is unknown") arrive as
  *     P0001 and are shown VERBATIM — they are written for the parent reading
  *     them, and rewriting them would lose the reason.
- *   · Registering a child is a plain INSERT on `registrations`. The guardian
+ *   · Registering a child is a plain INSERT on `registrations` (through
+ *     `submitTeamRegistration`, the write /join makes too). The guardian
  *     policy admits it and `registrations_guard()` re-checks the guardianship,
  *     so a parent who is no longer an active guardian is refused by the
  *     database rather than by a check here.
+ *   · Emergency contacts are the child's own record (`set_emergency_contacts`,
+ *     Adam 2026-08-25) — up to two, replaced as a set, guardian or admin only.
  *   · Withdrawing is the single UPDATE the guardian and the subject may make
  *     (`registrations_guardian_withdraw` / `registrations_self_withdraw`, both
  *     WITH CHECK `status = 'withdrawn'`).
@@ -31,10 +34,10 @@ import { revalidatePath } from "next/cache";
 import type { Json } from "@club/db";
 
 import { createClient } from "@/lib/supabase/server";
-import {
-  REGISTRATION_FORM_VERSION,
-  registrationFormFromFormData,
-} from "@/lib/registration-form";
+import { emergencyContactsFromFormData, noEmergencyContacts } from "@/lib/emergency-contacts";
+import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
+import { registrationFormFromFormData } from "@/lib/registration-form";
+import { customQuestionsFrom, submitTeamRegistration } from "@/lib/registration-server";
 
 const PATH = "/family";
 
@@ -90,6 +93,7 @@ export async function registerForTeam(
   const seasonId = String(formData.get("season_id") ?? "").trim();
   const teamId = String(formData.get("team_id") ?? "").trim();
   const isSelf = String(formData.get("is_self") ?? "") === "yes";
+  const isMinor = String(formData.get("is_minor") ?? "") === "yes";
 
   if (!personId) return { error: "Missing the person being registered." };
   if (!seasonId) {
@@ -99,38 +103,61 @@ export async function registerForTeam(
 
   const built = registrationFormFromFormData(formData, {
     includePhotoPreferences: isSelf,
-    requireGdpr: true,
+    customQuestions: customQuestionsFrom(formData),
+    requireGdpr: formData.get("gdpr_asked") === "yes",
   });
   if ("error" in built) return { error: built.error };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("registrations").insert({
-    person_id: personId,
-    season_id: seasonId,
-    team_id: teamId,
-    form: built.form,
-    form_version: REGISTRATION_FORM_VERSION,
-  });
+  const { data: season } = await supabase
+    .from("seasons")
+    .select("id,ends_on")
+    .eq("id", seasonId)
+    .maybeSingle();
+  if (!season) return { error: "That season is not one the club recognises." };
 
-  if (error) {
-    if (error.code === "P0001") return { error: error.message };
-    if (error.code === "23505") {
-      return {
-        error:
-          "There is already a registration waiting or approved for this season. Withdraw it first if you need to change it.",
-      };
-    }
-    if (error.code === "42501") {
-      return {
-        error:
-          "The club's records do not show you as an active guardian of this player, so this registration was refused.",
-      };
-    }
-    return { error: error.message };
-  }
+  // The same write /join makes: the ID rule, the emergency-contact rule, the
+  // pending row, the uploads and the SG-5 consents, in that order.
+  const result = await submitTeamRegistration({
+    personId,
+    isSelf,
+    isMinor,
+    seasonId: season.id,
+    seasonEndsOn: season.ends_on,
+    teamId,
+    form: built.form,
+    formData,
+  });
+  if ("error" in result) return { error: result.error };
 
   revalidatePath(PATH);
   return { notice: "Registration sent. A club administrator will review it." };
+}
+
+/**
+ * A guardian sets their child's emergency contacts (Adam, 2026-08-25). The
+ * RPC is the authority — `can_act_for()` for a minor child, or club_admin —
+ * and "I am the first emergency contact" is resolved from the caller's own
+ * record in `saveEmergencyContacts`, never from the browser.
+ */
+export async function updateChildEmergencyContacts(
+  _prev: FamilyActionState,
+  formData: FormData,
+): Promise<FamilyActionState> {
+  const childId = String(formData.get("child_person_id") ?? "").trim();
+  if (!childId) return { error: "Missing the child these contacts belong to." };
+
+  const posted = emergencyContactsFromFormData(formData);
+  if ("error" in posted) return { error: posted.error };
+  if (noEmergencyContacts(posted)) {
+    return { error: "Name at least one emergency contact, or tick that you are the first one." };
+  }
+
+  const saved = await saveEmergencyContacts(childId, posted);
+  if (saved.error) return { error: saved.error };
+
+  revalidatePath(PATH);
+  return { notice: "Emergency contacts saved." };
 }
 
 /**

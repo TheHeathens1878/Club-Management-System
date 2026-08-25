@@ -25,7 +25,10 @@ import { createClient } from "@/lib/supabase/server";
 
 import { IdVerifiedForm } from "../../registrations/decision-forms";
 import { PersonForm } from "../person-form";
+import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
+
 import {
+  EmergencyContactsPanel,
   GuardianshipsPanel,
   PersonCertificationsPanel,
   RetirePanel,
@@ -194,6 +197,9 @@ export default async function PersonPage({
   // document ROWS come back to anyone the policy admits; the FILES are signed
   // only for a club administrator, which is the storage policy mirrored.
   const admin = await isClubAdmin();
+  // Emergency contacts (Adam, 2026-08-25): on the person, read under
+  // `emergency_contacts_admin_read` — club_admin and safeguarding_lead.
+  const emergencyContacts = (await loadEmergencyContacts([id])).get(id) ?? [];
   const photoUrl = await signPersonPhotoPath(person.photo_path);
   const { data: documentRows } = await supabase
     .from("identity_documents")
@@ -290,6 +296,25 @@ export default async function PersonPage({
                 address: addressToFields(person.address),
                 notes: person.notes ?? "",
               }}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Emergency contacts</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Up to two, kept on the person&apos;s record rather than on a registration form.
+              Only a club administrator can change them here; the person and their guardians
+              change them from their own screens.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <EmergencyContactsPanel
+              personId={person.id}
+              personName={name}
+              contacts={emergencyContacts}
+              canEdit={admin}
             />
           </CardContent>
         </Card>
