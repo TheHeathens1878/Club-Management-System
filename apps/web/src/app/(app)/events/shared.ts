@@ -52,6 +52,8 @@ export type EventPerson = {
   name: string;
   isSelf: boolean;
   response: "accepted" | "declined" | null;
+  /** The answer was given before the event's details last changed. */
+  stale: boolean;
 };
 
 /** `my_events().people` is jsonb built by the function; read it defensively. */
@@ -70,6 +72,7 @@ export function parseEventPeople(value: Json | null | undefined): EventPerson[] 
       name,
       isSelf: record["is_self"] === true,
       response: response === "accepted" || response === "declined" ? response : null,
+      stale: record["stale"] === true,
     });
   }
   return out;

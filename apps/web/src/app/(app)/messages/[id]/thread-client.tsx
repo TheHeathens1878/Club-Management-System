@@ -622,9 +622,12 @@ export function ThreadClient({
                       </span>
                     )}
 
-                    {files.map((file) => (
-                      <AttachmentImage key={file.id} attachment={file} />
-                    ))}
+                    {/* A deleted or redacted message keeps none of its
+                        pictures: the tombstone is the whole message. The
+                        policies refuse the file too, so this is the tidy
+                        rendering of a refusal, not the enforcement of it. */}
+                    {body.state === "ok" &&
+                      files.map((file) => <AttachmentImage key={file.id} attachment={file} />)}
 
                     <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
                       {body.state === "ok" ? (

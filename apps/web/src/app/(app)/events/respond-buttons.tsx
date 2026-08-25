@@ -49,6 +49,9 @@ export function RespondButtons({
             {person.isSelf ? `${person.name} (you)` : person.name}
           </span>
           <Badge variant={responseVariant(person.response)}>{responseLabel(person.response)}</Badge>
+          {person.stale ? (
+            <Badge variant="warning">Answered before the change — please check</Badge>
+          ) : null}
           {!disabled ? (
             <span className="ml-auto flex gap-2">
               <form action={action}>
