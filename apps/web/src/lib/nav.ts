@@ -161,6 +161,28 @@ export const NAV: readonly NavEntry[] = [
     views: ["player", "coach", "admin", "function_room"],
   },
 
+  // --- Referee (Adam, 2026-08-25: the referee's own view) ------------------
+  {
+    // The referees group, through the redirect that resolves it. The games are
+    // posted there as claimable cards, so it is the whole of the hat.
+    href: "/referee",
+    label: "Referees group",
+    icon: ClipboardList,
+    group: "Referee",
+    allowed: (c) => c.hasRefereeRole,
+    views: ["referee"],
+  },
+  {
+    // A referee's own diary: the games they have claimed appear as events on
+    // the team they are refereeing, and this is the same member-facing list.
+    href: "/messages",
+    label: "Messaging",
+    icon: MessageSquare,
+    group: "Referee",
+    allowed: () => true,
+    views: ["referee"],
+  },
+
   // --- Team (the parent and coach views' second section, Adam 2026-08-25) --
   {
     // One link: the team page. /my-team is a redirect that already knows the

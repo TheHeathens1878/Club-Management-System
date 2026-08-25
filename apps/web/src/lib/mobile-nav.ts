@@ -20,6 +20,7 @@
 import {
   Armchair,
   Baby,
+  ClipboardList,
   Beer,
   CalendarCheck,
   CalendarDays,
@@ -129,6 +130,15 @@ const BAR: MobileTabEntry = {
   allowed: (c) => c.isBarManager,
 };
 
+/** The referee's board: the group where games are posted and claimed. */
+const REFEREE_GROUP: MobileTabEntry = {
+  href: "/referee",
+  label: "Games",
+  icon: ClipboardList,
+  match: ["/referee"],
+  allowed: (c) => c.hasRefereeRole,
+};
+
 /** The unlinked sign-in's two truths (navForUnlinked), as tabs. */
 const REPORT: MobileTabEntry = {
   href: "/safeguarding/report",
@@ -163,6 +173,9 @@ export function mobileTabsFor(view: RoleView | null, c: Capabilities): MobileTab
         return [LOBBY, MESSAGES, MY_TEAMS, EVENTS];
       case "parent":
         return [LOBBY, MESSAGES, MY_TEAM, EVENTS];
+      case "referee":
+        // The referee's phone: the games board first (Adam, 2026-08-25).
+        return [REFEREE_GROUP, MESSAGES, LOBBY, EVENTS];
       case "me":
         return [LOBBY, MESSAGES, CHILDREN, EVENTS];
       case "function_room":

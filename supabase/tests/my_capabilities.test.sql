@@ -95,7 +95,8 @@ set local role authenticated;
 select is((select public.my_capabilities()), jsonb_build_object(
     'person_id', (select person_id::text from public.profiles where id = 'c8c8c8c8-5555-4111-8111-000000000004'),
     'is_club_admin', false, 'is_safeguarding_lead', false, 'has_waiting_list_access', false,
-    'has_coach_role', false, 'has_parent_role', false, 'is_team_staff', false,
+    'has_coach_role', false, 'has_parent_role', false, 'has_referee_role', false,
+    'is_team_staff', false,
     'has_player_membership', false, 'is_guardian', false,
     'staff_teams', '[]'::jsonb, 'player_teams', '[]'::jsonb, 'parent_teams', '[]'::jsonb),
   'an unlinked account holds nothing, and every key is still present');
