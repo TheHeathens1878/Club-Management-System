@@ -1474,6 +1474,50 @@ export type Database = {
         }
         Relationships: []
       }
+      emergency_contacts: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          person_id: string
+          phone: string
+          position: number
+          relationship: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          person_id: string
+          phone: string
+          position: number
+          relationship?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          person_id?: string
+          phone?: string
+          position?: number
+          relationship?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "emergency_contacts_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_responses: {
         Row: {
           created_at: string
@@ -6048,6 +6092,10 @@ export type Database = {
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       set_board_post_pinned: {
         Args: { p_pinned: boolean; p_post_id: string }
+        Returns: undefined
+      }
+      set_emergency_contacts: {
+        Args: { p_contacts: Json; p_person_id: string }
         Returns: undefined
       }
       set_fixture_stats: {
