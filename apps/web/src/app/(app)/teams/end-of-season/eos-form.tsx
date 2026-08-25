@@ -169,7 +169,12 @@ export function EndOfSeasonForm({
               />
             </div>
           </div>
-          <Button type="submit" size="sm" disabled={seasonPending}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={seasonPending}
+            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          >
             <CalendarPlus className="h-4 w-4" />
             {seasonPending ? "Creating…" : "Create the season"}
           </Button>
@@ -188,7 +193,68 @@ export function EndOfSeasonForm({
             </Select>
           </div>
 
-          <div className="overflow-x-auto rounded-lg border">
+          {/* One decision per team, one hidden input — the ticked state names
+              it. It sits outside both presentations because a `display:none`
+              control still submits, and the phone and the desktop table draw
+              the same rows. */}
+          {teams.map((team) => (
+            <input
+              key={team.id}
+              type="hidden"
+              name={retired.has(team.id) ? "retire" : "upgrade"}
+              value={team.id}
+            />
+          ))}
+
+          {/* The preview as cards on a phone: what the team becomes, its squad
+              underneath, and a 44px Retire toggle on the right. */}
+          <ul className="divide-y rounded-lg border lg:hidden">
+            {teams.map((team) => {
+              const isRetired = retired.has(team.id);
+              const nameChanges = team.proposedName !== team.name;
+              const ageChanges = (team.proposedAgeGroup ?? "") !== (team.ageGroup ?? "");
+              return (
+                <li
+                  key={team.id}
+                  className={
+                    "flex items-start justify-between gap-3 px-3 py-3" +
+                    (isRetired ? " bg-muted/40 text-muted-foreground" : "")
+                  }
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{team.name}</p>
+                    {isRetired ? (
+                      <p className="mt-1">
+                        <Badge variant="muted">retiring</Badge>
+                      </p>
+                    ) : (
+                      <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                        {nameChanges ? `→ ${team.proposedName} · ` : ""}
+                        {ageChanges
+                          ? `${team.ageGroup ?? "—"} → ${team.proposedAgeGroup}`
+                          : `${team.ageGroup ?? "—"} · unchanged`}
+                      </p>
+                    )}
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {team.players} players · {team.staff} staff
+                    </p>
+                  </div>
+                  <label className="flex min-h-[44px] shrink-0 items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      aria-label={`Retire ${team.name}`}
+                      checked={isRetired}
+                      onChange={() => toggleRetire(team.id)}
+                      className="h-5 w-5 accent-primary"
+                    />
+                    Retire
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+
+          <div className="hidden overflow-x-auto rounded-lg border lg:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
@@ -206,9 +272,6 @@ export function EndOfSeasonForm({
                   return (
                     <tr key={team.id} className={isRetired ? "bg-muted/40 text-muted-foreground" : ""}>
                       <td className="px-3 py-2">
-                        {/* The ticked state decides which hidden input this row
-                            submits — one decision, one name. */}
-                        <input type="hidden" name={isRetired ? "retire" : "upgrade"} value={team.id} />
                         <span className="font-medium">{team.name}</span>
                         {nameChanges && !isRetired && (
                           <span className="ml-1.5 inline-flex items-center gap-1 text-xs text-muted-foreground">
@@ -256,7 +319,11 @@ export function EndOfSeasonForm({
             </span>
           </label>
 
-          <Button type="submit" disabled={pending || teams.length === 0}>
+          <Button
+            type="submit"
+            disabled={pending || teams.length === 0}
+            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          >
             <Repeat className="h-4 w-4" />
             {pending ? "Rolling over…" : "Run the end of season"}
           </Button>

@@ -155,24 +155,51 @@ export default async function FixtureAttendancePage({
   const pitchName = venueResource?.name ?? null;
   const pitchAddress = venueResource?.address ?? null;
 
+  const whereLine = `${formatBookingDateShort(local.date)} · ${local.time} · ${
+    fixture.is_home ? (pitchName ?? "Home") : (fixture.venue_text ?? "Away")
+  }`;
+
   return (
     <>
-      <PageHeader
-        title={title}
-        subtitle={`${formatBookingDateShort(local.date)} · ${local.time} · ${
-          fixture.is_home ? (pitchName ?? "Home") : (fixture.venue_text ?? "Away")
-        }`}
-        action={
+      <div className="hidden lg:block">
+        <PageHeader
+          title={title}
+          subtitle={whereLine}
+          action={
+            <Link
+              href={`/teams/${teamId}?tab=matchday`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <ChevronLeft className="h-4 w-4" /> Back to fixtures
+            </Link>
+          }
+        />
+      </div>
+
+      {/* The phone's band (mobile design, "Availability" artboard): back, the
+          kick-off as an eyebrow, and what the screen is for. */}
+      <div className="theme-ink bg-background px-4 pb-4 pt-3 text-foreground lg:hidden">
+        <div className="flex items-center gap-2">
           <Link
             href={`/teams/${teamId}?tab=matchday`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            aria-label="Back to fixtures"
+            className="-ml-2 flex h-11 w-9 shrink-0 items-center justify-center text-accent"
           >
-            <ChevronLeft className="h-4 w-4" /> Back to fixtures
+            <ChevronLeft className="h-[22px] w-[22px]" />
           </Link>
-        }
-      />
+          <div className="min-w-0 flex-1">
+            <p className="font-display truncate text-[10.5px] uppercase tracking-[0.16em] text-foreground/55">
+              {whereLine}
+            </p>
+            <h1 className="font-display mt-1 truncate text-[19px] font-semibold uppercase leading-none tracking-wide">
+              Availability
+            </h1>
+            <p className="mt-1.5 truncate text-[12px] text-foreground/60">{title}</p>
+          </div>
+        </div>
+      </div>
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={fixtureStatusVariant(fixture.status)} className="capitalize">
             {fixture.status}
@@ -210,8 +237,15 @@ export default async function FixtureAttendancePage({
           )}
         </div>
 
-        <Card>
+        {/* The artboard's accent card: on a phone this is the one thing the
+            screen is asking for, so it wears the crest rim. */}
+        <Card className="border-accent/30 lg:border-border">
           <CardHeader>
+            {household.length > 0 && (
+              <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-primary lg:hidden">
+                Your reply is needed
+              </p>
+            )}
             <CardTitle className="text-base">Your household</CardTitle>
             <p className="text-sm text-muted-foreground">
               Who is coming to this {fixture.is_home ? "match" : "away match"}? Answer for yourself

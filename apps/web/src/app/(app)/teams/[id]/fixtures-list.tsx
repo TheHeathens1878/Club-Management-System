@@ -118,7 +118,56 @@ export function FixturesTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* The phone reads the same fixtures as a stack of cards — kick-off and
+          opponent, the detail line underneath, status and headcount right
+          (mobile design: a dense table becomes cards). */}
+      <ul className="divide-y lg:hidden">
+        {fixtures.map((fixture) => {
+          const local = instantToLocal(fixture.kickoffAt);
+          return (
+            <li
+              key={fixture.id}
+              onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
+              className="flex min-h-[44px] cursor-pointer items-start justify-between gap-3 py-3 first:pt-0"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {fixture.isHome ? "v" : "away to"} {fixture.opponent}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatBookingDateShort(local.date)} · {local.time}
+                  {fixture.pitchName
+                    ? ` · ${fixture.pitchName}`
+                    : fixture.isHome
+                      ? " · no pitch yet"
+                      : ""}
+                  {fixture.competition ? ` · ${fixture.competition}` : ""}
+                </p>
+                {fixture.venueText && (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {fixture.venueText}
+                  </p>
+                )}
+                <p className="mt-1 text-xs">
+                  <MapsLink fixture={fixture} />
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <Badge variant={fixtureStatusVariant(fixture.status)} className="capitalize">
+                  {fixture.status}
+                </Badge>
+                {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
+                {canManage && fixture.headcount && (
+                  <HeadcountChips headcount={fixture.headcount} />
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="hidden overflow-x-auto lg:block">
       <table className="w-full text-left text-sm">
         <thead className="border-b text-xs text-muted-foreground">
           <tr>
@@ -185,7 +234,8 @@ export function FixturesTable({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -214,7 +264,7 @@ export function FixturesSummary({
             <li
               key={fixture.id}
               onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
-              className="flex cursor-pointer flex-wrap items-start justify-between gap-2 rounded-md py-3 transition-colors first:pt-0 hover:bg-secondary/60"
+              className="flex min-h-[44px] cursor-pointer flex-wrap items-start justify-between gap-2 rounded-md py-3 transition-colors first:pt-0 hover:bg-secondary/60"
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium">

@@ -691,6 +691,27 @@ export default async function TeamPage({
   // Overview derivations: the FA rules strip, the availability tallies, and
   // the chat tail. All cheap, all from data already in hand.
   const formatRules = faFormatFor(team.age_group);
+  // The phone's next-match card (mobile artboard) says the same thing as the
+  // ink card, on one line under the opponent.
+  const nextMatch = fixtures[0] ?? null;
+  const nextMatchLine = nextMatch
+    ? [
+        new Date(nextMatch.kickoffAt).toLocaleString("en-GB", {
+          timeZone: "Europe/London",
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+          hourCycle: "h23",
+        }),
+        nextMatch.isHome ? "Home" : "Away",
+        nextMatch.pitchName ?? nextMatch.venueText,
+        nextMatch.competition,
+      ]
+        .filter(Boolean)
+        .join(" · ")
+    : "";
   const availTally = {
     available: availabilityList.filter((row) => row.status === "available").length,
     away: availabilityList.filter((row) => row.status === "unavailable").length,
@@ -726,16 +747,67 @@ export default async function TeamPage({
 
   return (
     <>
-      <PageHeader
-        title={team.name}
-        subtitle={team.age_group ?? "No age group"}
-        action={
-          <Link href="/teams" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            <ChevronLeft className="h-4 w-4" /> Back to teams
+      <div className="hidden lg:block">
+        <PageHeader
+          title={team.name}
+          subtitle={team.age_group ?? "No age group"}
+          action={
+            <Link href="/teams" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <ChevronLeft className="h-4 w-4" /> Back to teams
+            </Link>
+          }
+        />
+      </div>
+
+      {/* ------------------------------------------------------------------ */}
+      {/* The phone's team band (mobile design, "Team overview" artboard):    */}
+      {/* back, the age group and league as an eyebrow, the team's name, and  */}
+      {/* the tab strip scrolling inside the dark band.                       */}
+      {/* ------------------------------------------------------------------ */}
+      <div className="theme-ink bg-background px-4 pb-3 pt-3 text-foreground lg:hidden">
+        <div className="flex items-center gap-2">
+          <Link
+            href="/teams"
+            aria-label="Back to teams"
+            className="-ml-2 flex h-11 w-9 shrink-0 items-center justify-center text-accent"
+          >
+            <ChevronLeft className="h-[22px] w-[22px]" />
           </Link>
-        }
-      />
-      <div className="space-y-6 p-6">
+          <div className="min-w-0 flex-1">
+            <p className="font-display truncate text-[10.5px] uppercase tracking-[0.16em] text-foreground/55">
+              {[team.age_group, team.league].filter(Boolean).join(" · ") || "Team"}
+            </p>
+            <h1 className="font-display mt-1 truncate text-[21px] font-semibold uppercase leading-none tracking-wide">
+              {team.name}
+            </h1>
+          </div>
+        </div>
+        <div className="mt-3">
+          <TeamTabs teamId={team.id} tabs={tabs} active={tab} tone="ink" />
+        </div>
+      </div>
+
+      {/* The format strip the artboard puts under the tabs: the FA's rules for
+          this age group, derived from it and never stored. */}
+      {tab === "matchday" && formatRules && (
+        <div className="theme-ink grid grid-cols-4 gap-2 border-b border-border bg-card px-4 py-3 text-foreground lg:hidden">
+          {[
+            ["Format", formatRules.format],
+            ["Halves", formatRules.matchLength],
+            ["Pitch", formatRules.pitchSize],
+            ["Ball", formatRules.ball],
+          ].map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <p className="font-display text-[8px] font-medium uppercase tracking-[0.14em] text-foreground/50">
+                {label}
+              </p>
+              <p className="mt-1 truncate text-[12.5px] font-semibold">{value}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="space-y-6 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={team.active ? "success" : "muted"}>
             {team.active ? "Active" : "Inactive"}
@@ -750,7 +822,9 @@ export default async function TeamPage({
           )}
         </div>
 
-        <TeamTabs teamId={team.id} tabs={tabs} active={tab} />
+        <div className="hidden lg:block">
+          <TeamTabs teamId={team.id} tabs={tabs} active={tab} />
+        </div>
 
         {/* ---------------------------------------------------------------- */}
         {/* Communications — the bulletin board and the team chat (§2.4)     */}
@@ -915,8 +989,67 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {tab === "matchday" && (
           <div className="space-y-6">
+            {/* The artboard's next-match card: paper, accent rim, the kickoff
+                details, then the availability count against "Pick the team".
+                The ink card that follows is the lg+ view of the same fixture. */}
+            {nextMatch && (
+              <div className="overflow-hidden rounded-xl border border-accent/30 bg-card lg:hidden">
+                <div className="border-b px-4 py-3.5">
+                  <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-primary">
+                    Next match
+                  </p>
+                  <p className="mt-2 text-[17px] font-semibold leading-tight">
+                    v {nextMatch.opponent}
+                  </p>
+                  <p className="mt-1.5 text-[12.5px] leading-snug text-muted-foreground">
+                    {nextMatchLine}
+                  </p>
+                  {(nextMatch.pitchName || nextMatch.venueText) && (
+                    <a
+                      href={googleMapsUrl(
+                        (nextMatch.isHome ? nextMatch.pitchAddress : null) ??
+                          nextMatch.pitchName ??
+                          nextMatch.venueText ??
+                          "",
+                      )}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1.5 inline-flex min-h-[32px] items-center text-xs text-primary underline underline-offset-2"
+                    >
+                      Open in Google Maps
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center justify-between gap-3 px-4 py-3">
+                  {nextMatch.headcount ? (
+                    <div>
+                      <p className="text-[19px] font-semibold leading-none">
+                        {nextMatch.headcount.going}
+                        <span className="text-[13px] text-muted-foreground">
+                          /{nextMatch.headcount.squad}
+                        </span>
+                      </p>
+                      <p className="mt-1.5 text-[11.5px] text-muted-foreground">available</p>
+                    </div>
+                  ) : (
+                    <p className="text-[12.5px] text-muted-foreground">
+                      {nextMatch.isHome ? "At home" : "Away"}
+                    </p>
+                  )}
+                  <Link
+                    href={`/teams/${team.id}/fixtures/${nextMatch.id}`}
+                    className={
+                      buttonVariants({ size: "sm" }) + " min-h-[44px] shrink-0 px-4 text-[12.5px]"
+                    }
+                  >
+                    {canManageTeam ? "Pick the team" : "Availability"}
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {fixtures[0] && (
-              <div className="theme-ink rounded-xl border border-border bg-background p-5 text-foreground">
+              <div className="theme-ink hidden rounded-xl border border-border bg-background p-5 text-foreground lg:block">
                 <p className="font-display text-[10px] font-medium uppercase tracking-[0.16em] text-accent">
                   Next match
                 </p>
@@ -1008,8 +1141,11 @@ export default async function TeamPage({
             {/* The Overview grid: availability + jobs on the left, the board  */}
             {/* and chat previews on the right (design build, 2026-08-25).     */}
             {/* -------------------------------------------------------------- */}
+            {/* The phone stacks these the way the artboard does — the board and
+                the chat first, the availability summary underneath; on lg+ the
+                source order is the column order again. */}
             <div className="grid items-start gap-4 lg:grid-cols-2">
-              <div className="space-y-4">
+              <div className="order-2 space-y-4 lg:order-1">
                 {canManageTeam && fixtures[0] && availabilityList.length > 0 && (
                   <Card className="overflow-hidden">
                     <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-4">
@@ -1017,7 +1153,7 @@ export default async function TeamPage({
                       {availTally.noReply > 0 && (
                         <Link
                           href={`/teams/${team.id}/fixtures/${fixtures[0].id}`}
-                          className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-200"
+                          className="inline-flex min-h-[44px] items-center rounded-full bg-amber-100 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-200 lg:min-h-0 lg:py-1"
                         >
                           Chase the {availTally.noReply} no-
                           {availTally.noReply === 1 ? "reply" : "replies"}
@@ -1067,7 +1203,7 @@ export default async function TeamPage({
                         {availabilityList.slice(0, 5).map((row) => (
                           <li
                             key={row.personId}
-                            className="flex items-center gap-3 border-t px-4 py-2.5"
+                            className="flex min-h-[44px] items-center gap-3 border-t px-4 py-2.5"
                           >
                             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
                               {initialsOf(row.name)}
@@ -1098,7 +1234,7 @@ export default async function TeamPage({
                       </ul>
                       <Link
                         href={`/teams/${team.id}?tab=squad`}
-                        className="block border-t px-4 py-2.5 text-xs text-primary hover:underline"
+                        className="flex min-h-[44px] items-center border-t px-4 py-2.5 text-xs text-primary hover:underline lg:min-h-0 lg:block"
                       >
                         Show all {availabilityList.length} in the squad
                       </Link>
@@ -1107,13 +1243,13 @@ export default async function TeamPage({
                 )}
               </div>
 
-              <div className="space-y-4">
+              <div className="order-1 space-y-4 lg:order-2">
                 <Card className="overflow-hidden">
                   <CardHeader className="flex-row items-baseline justify-between space-y-0 border-b py-4">
                     <CardTitle className="text-base">Bulletin board</CardTitle>
                     <Link
                       href={`/teams/${team.id}?tab=board`}
-                      className="text-xs text-primary hover:underline"
+                      className="inline-flex min-h-[44px] items-center text-xs text-primary hover:underline lg:min-h-0"
                     >
                       All posts
                     </Link>
@@ -1222,7 +1358,7 @@ export default async function TeamPage({
                       )}
                       <Link
                         href={`/teams/${team.id}?tab=board`}
-                        className="block pt-1 text-xs text-primary hover:underline"
+                        className="flex min-h-[44px] items-center pt-1 text-xs text-primary hover:underline lg:block lg:min-h-0"
                       >
                         Open the chat
                       </Link>
@@ -1471,7 +1607,43 @@ export default async function TeamPage({
                       </p>
                     )}
                   </div>
-                  <div className="overflow-x-auto">
+                  {/* A phone reads the roster as cards; the table is lg+. */}
+                  <ul className="divide-y rounded-lg border lg:hidden">
+                    {subsRows.map((row) => (
+                      <li
+                        key={row.personId}
+                        className="flex min-h-[44px] items-start justify-between gap-3 px-3 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium">{row.name}</p>
+                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                            {row.planName ?? "No plan"}
+                            {row.payerName ? ` · billed to ${row.payerName}` : ""}
+                          </p>
+                        </div>
+                        <div className="shrink-0">
+                          {row.status === null ? (
+                            <span className="text-xs text-muted-foreground">No subscription</span>
+                          ) : row.status === "past_due" ? (
+                            <Badge variant="warning">
+                              {row.amountDuePence !== null
+                                ? `£${(row.amountDuePence / 100).toFixed(2)} owing`
+                                : "Owing"}
+                            </Badge>
+                          ) : row.status === "completed" ? (
+                            <Badge variant="success">Paid</Badge>
+                          ) : row.status === "active" ? (
+                            <Badge variant="success">On plan</Badge>
+                          ) : row.status === "cancelled" ? (
+                            <Badge variant="muted">Cancelled</Badge>
+                          ) : (
+                            <Badge variant="muted">Pending</Badge>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                  <div className="hidden overflow-x-auto lg:block">
                     <table className="w-full text-left text-sm">
                       <thead className="border-b text-xs text-muted-foreground">
                         <tr>
