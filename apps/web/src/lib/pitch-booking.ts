@@ -35,13 +35,20 @@ export type TeamRole = Database["public"]["Enums"]["team_role"];
  */
 export const STAFF_TEAM_ROLES: TeamRole[] = ["coach", "assistant_coach", "manager"];
 
-/** What a coach may create: `bookings_team_staff_insert` allows these two. */
-export type PitchBookingKind = Extract<BookingKind, "training" | "block">;
+/**
+ * What a coach may ask for: `bookings_team_staff_insert` allows these three.
+ * `fixture` is the club's word for a match (Adam, 2026-08-25: "in what is the
+ * pitch for, match should be an option") — the same enum value
+ * `allocate_fixture()` writes, so a requested match sits on the pitch diary
+ * beside an allocated one instead of pretending to be a training session.
+ */
+export type PitchBookingKind = Extract<BookingKind, "training" | "block" | "fixture">;
 
-export const PITCH_BOOKING_KINDS: PitchBookingKind[] = ["training", "block"];
+export const PITCH_BOOKING_KINDS: PitchBookingKind[] = ["training", "block", "fixture"];
 
 export const PITCH_BOOKING_KIND_LABELS: Record<PitchBookingKind, string> = {
   training: "Training",
+  fixture: "Match",
   block: "Other use",
 };
 
@@ -78,6 +85,12 @@ export type PitchBookingItem = {
   internalNotes: string | null;
   teamId: string | null;
   teamName: string | null;
+  /**
+   * Set only on the allocator's own slots (`allocate_fixture()`). A coach may
+   * not touch one — `bookings_team_guard()` refuses — so the lists use it to
+   * decide whether to offer Cancel at all.
+   */
+  fixtureId: string | null;
   bookerName: string | null;
   bookerEmail: string | null;
   recurrenceGroupId: string | null;
@@ -126,4 +139,54 @@ export function kindLabel(kind: BookingKind): string {
 /** Today's date in Europe/London — the earliest a booking form should allow. */
 export function todayLondon(): string {
   return instantToLocal(new Date()).date;
+}
+
+// ---------------------------------------------------------------------------
+// The match label (Adam, 2026-08-25: "the label should be pre-populated")
+// ---------------------------------------------------------------------------
+
+/** How a match's opposition was named on the form. */
+export type OppositionSide = "internal" | "external";
+
+export function isOppositionSide(value: string | null | undefined): value is OppositionSide {
+  return value === "internal" || value === "external";
+}
+
+/**
+ * "U14 Mavericks v Sale Sharks" — what the pitch diary shows for a match.
+ *
+ * Pure on purpose: it is the one part of the booking form worth a unit test,
+ * and both halves of the wire use it — the form pre-fills the Label box with
+ * it, and the server action falls back to it when the box arrives empty.
+ * Either name missing means there is nothing to suggest yet: an empty string,
+ * never "U14 Mavericks v " or " v Sale Sharks".
+ */
+export function matchLabel(
+  teamName: string | null | undefined,
+  opponentName: string | null | undefined,
+): string {
+  const home = (teamName ?? "").trim();
+  const away = (opponentName ?? "").trim();
+  if (!home || !away) return "";
+  return `${home} v ${away}`;
+}
+
+/**
+ * The Label box's value after something it is built from has changed.
+ *
+ * Adam asked for a label "pre-populated from this information", and that only
+ * works if a suggestion never eats a sentence somebody typed. So a suggestion
+ * takes the box only when the box is empty, or still holds the PREVIOUS
+ * suggestion untouched. The moment it holds anything else it is theirs, and
+ * this leaves it exactly as it is — including when there is no suggestion to
+ * make, which must not blank a label by hand either.
+ */
+export function nextSuggestedLabel(
+  current: string,
+  previousSuggestion: string,
+  suggestion: string,
+): string {
+  if (current.trim() === "") return suggestion;
+  if (current === previousSuggestion) return suggestion;
+  return current;
 }

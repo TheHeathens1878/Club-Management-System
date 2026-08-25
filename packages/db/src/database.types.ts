@@ -6246,6 +6246,23 @@ export type Database = {
         Args: { p_message_id: string; p_reason: string }
         Returns: string
       }
+      request_team_pitch_booking: {
+        Args: {
+          p_booker_email: string
+          p_booker_name: string
+          p_ends: string[]
+          p_kind: Database["public"]["Enums"]["booking_kind"]
+          p_notes?: string | null
+          p_occasion?: string | null
+          p_recurrence_group_id?: string | null
+          p_resource_id: string
+          p_starts: string[]
+          p_team_id: string
+        }
+        Returns: {
+          booking_id: string
+        }[]
+      }
       respond_to_event: {
         Args: {
           p_event_id: string

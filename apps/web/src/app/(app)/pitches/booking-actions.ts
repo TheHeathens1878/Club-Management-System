@@ -30,6 +30,8 @@
  */
 
 import { revalidatePath } from "next/cache";
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@club/db";
 
 import {
   addDays,
@@ -43,10 +45,15 @@ import { bookingPeriod, type BookingInsert } from "@/lib/booking-types";
 import { friendlyDbError } from "@/lib/people-display";
 import {
   formatInstantSlot,
+  isOppositionSide,
+  matchLabel,
   MAX_REPEAT_WEEKS,
   PITCH_BOOKING_KINDS,
+  type OppositionSide,
   type PitchBookingKind,
 } from "@/lib/pitch-booking";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { getSessionProfile } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -66,6 +73,37 @@ const NOT_ALLOWED =
 
 const NO_PERSON =
   "Your sign-in is not linked to a member record yet, so the club cannot record who is booking. Ask a club administrator to link it.";
+
+/**
+ * Nothing changed and the database did not say why.
+ *
+ * An UPDATE policy's USING clause is a ROW FILTER: a caller the policy does not
+ * admit updates zero rows and gets `error: null`, which reads exactly like a
+ * success. `endMembership` and `changeMemberRole` handle it the same way — ask
+ * for the rows back and treat "none" as the refusal it is.
+ */
+const CANCEL_REFUSED =
+  "Nothing changed. Either that booking has already been cancelled, or it is not yours to cancel — a booking allocated to a fixture is unallocated by a club administrator on Pitches.";
+
+/**
+ * Is this person acting as a club administrator RIGHT NOW?
+ *
+ * Two questions, and both have to say yes. `is_club_admin()` is the database's
+ * answer to what they may do; the role view is the hat they chose to wear, and
+ * Adam, 2026-08-25: "I can still book a pitch as confirmed using my coach login
+ * … remove this functionality." His sign-in is committee, which maps to
+ * club_admin, so ROLE alone confirmed his bookings however he was signed in.
+ *
+ * Read here, in the action, and never taken from the form: the cookie is the
+ * same one `/pitches/book` renders from, so the screen and the write cannot
+ * disagree, and a hand-made POST carrying `status=confirmed` gets the hat this
+ * browser is actually wearing rather than the one it claims.
+ */
+async function actingAsClubAdmin(): Promise<boolean> {
+  const capabilities = await getCapabilities();
+  if (!capabilities.isClubAdmin) return false;
+  return resolveRoleView(await getStoredRoleView(), capabilities) === "admin";
+}
 
 type Occurrence = { startsAt: string; endsAt: string; label: string };
 
@@ -126,6 +164,46 @@ function readOccurrences(
   return { occurrences };
 }
 
+/**
+ * The label the pitch diary will show, "U14 Mavericks v Sale Sharks" and all.
+ *
+ * Whatever was typed wins — Adam asked for a pre-filled label that is "still
+ * editable", and a server that quietly rewrites it is not that. The fallback is
+ * for the case the form's pre-fill never happened: no JavaScript, or a POST
+ * made by hand. Filing a match under nothing but the team name is worse than
+ * asking the database for two names.
+ */
+async function pitchBookingLabel(
+  supabase: SupabaseClient<Database>,
+  formData: FormData,
+  kind: PitchBookingKind,
+  teamId: string,
+): Promise<string | null> {
+  const typed = text(formData, "occasion", 120);
+  if (typed) return typed;
+  if (kind !== "fixture") return null;
+
+  const opponentTeamId = text(formData, "opponent_team_id", 40);
+  const opponentTyped = text(formData, "opponent_name", 80);
+  const sideRaw = text(formData, "opposition", 20);
+  const side: OppositionSide = isOppositionSide(sideRaw)
+    ? sideRaw
+    : opponentTeamId
+      ? "internal"
+      : "external";
+
+  // An internal opponent is named by the club, not by the form: the id is what
+  // was posted, and the name comes from `teams` (readable by any member —
+  // `teams_read`). A club from outside has no row anywhere, so what was typed
+  // is all there is.
+  const wantedIds = side === "internal" && opponentTeamId ? [teamId, opponentTeamId] : [teamId];
+  const { data } = await supabase.from("teams").select("id,name").in("id", wantedIds);
+  const nameById = new Map((data ?? []).map((row) => [row.id, row.name]));
+  const opponent =
+    side === "internal" ? (nameById.get(opponentTeamId) ?? null) : opponentTyped;
+  return matchLabel(nameById.get(teamId) ?? null, opponent) || null;
+}
+
 /** Every occurrence `booking_has_conflict()` says is already taken. */
 async function findClashes(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -174,9 +252,10 @@ export async function createPitchBooking(
   const { occurrences } = window;
 
   const supabase = await createClient();
-  const [personResult, adminResult] = await Promise.all([
+  const [personResult, adminResult, asAdmin] = await Promise.all([
     supabase.rpc("current_person_id"),
     supabase.rpc("is_club_admin"),
+    actingAsClubAdmin(),
   ]);
   const personId = personResult.data ?? null;
   if (!personId) return { error: NO_PERSON };
@@ -191,10 +270,13 @@ export async function createPitchBooking(
     }
   }
 
-  // Only a club administrator may ask for a confirmed booking; for anyone else
-  // `bookings_team_guard()` pins status to 'pending' regardless of what was
-  // posted, so this line is a courtesy to the form, not the rule.
-  const wantsConfirmed = isAdmin && text(formData, "status", 20) === "confirmed";
+  // Which PATH this booking takes, and it is the hat that decides — not the
+  // role. Acting as a coach means `request_team_pitch_booking()`, which has no
+  // status parameter at all and so cannot produce a confirmed booking for
+  // anybody; acting as an administrator means the direct insert, where the
+  // form's Save-as choice applies. `status` below is only what this action
+  // then reports — the database has already had the final word either way.
+  const wantsConfirmed = asAdmin && text(formData, "status", 20) === "confirmed";
   const status = wantsConfirmed ? "confirmed" : "pending";
 
   const clashes = await findClashes(supabase, resourceId, occurrences);
@@ -215,24 +297,59 @@ export async function createPitchBooking(
   }
 
   const recurrenceGroupId = occurrences.length > 1 ? crypto.randomUUID() : null;
-  const rows: BookingInsert[] = occurrences.map((occurrence) => ({
-    resource_id: resourceId,
-    team_id: teamId,
-    kind,
-    status,
-    ...bookingPeriod(occurrence.startsAt, occurrence.endsAt),
-    booker_person_id: personId,
-    booker_profile_id: session.userId,
-    booker_name: bookerName,
-    booker_email: bookerEmail,
-    occasion: text(formData, "occasion", 120) || null,
-    notes: text(formData, "notes") || null,
-    recurrence_group_id: recurrenceGroupId,
-  }));
+  const occasion = await pitchBookingLabel(supabase, formData, kind, teamId);
+  const notes = text(formData, "notes") || null;
 
-  // One multi-row INSERT: atomic, so a clashing week cannot leave half a
-  // series behind.
-  const { data: created, error } = await supabase.from("bookings").insert(rows).select("id");
+  // Two paths, one for each hat, and the difference is which of them the
+  // database will let confirm anything.
+  //
+  //   · Acting as a coach — `request_team_pitch_booking()`. One INSERT inside
+  //     a function with no status parameter, so the row is pending whatever
+  //     this file, this browser or a hand-made API call wants. RLS still runs
+  //     (the function is `security invoker`), so a coach still only gets their
+  //     own team's pitch.
+  //   · Acting as a club administrator — the direct multi-row INSERT that
+  //     screen has always used, carrying the Save-as choice.
+  //
+  // Both are a single statement: atomic, so a clashing week cannot leave half
+  // a series behind, and the desk gets one notification for a whole repeat.
+  let created: { id: string }[] | null = null;
+  let error: PostgrestError | null = null;
+
+  if (asAdmin) {
+    const rows: BookingInsert[] = occurrences.map((occurrence) => ({
+      resource_id: resourceId,
+      team_id: teamId,
+      kind,
+      status,
+      ...bookingPeriod(occurrence.startsAt, occurrence.endsAt),
+      booker_person_id: personId,
+      booker_profile_id: session.userId,
+      booker_name: bookerName,
+      booker_email: bookerEmail,
+      occasion,
+      notes,
+      recurrence_group_id: recurrenceGroupId,
+    }));
+    const result = await supabase.from("bookings").insert(rows).select("id");
+    created = result.data;
+    error = result.error;
+  } else {
+    const result = await supabase.rpc("request_team_pitch_booking", {
+      p_team_id: teamId,
+      p_resource_id: resourceId,
+      p_kind: kind,
+      p_starts: occurrences.map((occurrence) => occurrence.startsAt),
+      p_ends: occurrences.map((occurrence) => occurrence.endsAt),
+      p_booker_name: bookerName,
+      p_booker_email: bookerEmail,
+      p_occasion: occasion,
+      p_notes: notes,
+      p_recurrence_group_id: recurrenceGroupId,
+    });
+    created = (result.data ?? []).map((row) => ({ id: row.booking_id }));
+    error = result.error;
+  }
 
   if (error) {
     if (isSlotConflict(error)) {
@@ -276,10 +393,15 @@ export async function createPitchBooking(
 
   const what =
     occurrences.length === 1 ? "Pitch booking" : `${occurrences.length} weekly pitch sessions`;
+  // Said the way it actually happened. A coach — an administrator wearing the
+  // Coach hat included — has made a REQUEST, and telling them it is "confirmed"
+  // when the row says `pending` is the bug Adam reported.
   const outcome =
     status === "confirmed"
       ? `${what} confirmed.`
-      : `${what} requested. It has gone to a club administrator for approval — the slot is held for you and you will be told when it is decided.`;
+      : asAdmin
+        ? `${what} saved as pending. It is on the requests desk for a decision.`
+        : `${what} requested. It has gone to a club administrator for approval — the slot is held for you and you will be told when it is decided.`;
 
   return { notice: `${outcome}${sharingWarning}`, teamId };
 }
@@ -291,7 +413,15 @@ export async function createPitchBooking(
 /**
  * Cancelling is a status change, never a delete: the row is the history the
  * calendar and the audit trail read. `bookings_team_guard()` lets a coach make
- * exactly this change on their own team's booking.
+ * exactly this change on their own team's booking — pending or confirmed —
+ * which is Adam's "allow coaches to cancel bookings", 2026-08-25.
+ *
+ * The refusal is passed through verbatim when the trigger raises one (a
+ * fixture's allocated slot, an already-cancelled row), because the trigger's
+ * sentence names what to do next and this file's would not. When RLS refuses
+ * instead there IS no sentence — the USING clause filters the row out, the
+ * update touches nothing and comes back clean — so the rows are asked for and
+ * "none" is reported as the refusal it is.
  */
 export async function cancelPitchBooking(
   _prev: PitchBookingActionState,
@@ -302,11 +432,14 @@ export async function cancelPitchBooking(
   const teamId = text(formData, "team_id", 40) || null;
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("bookings")
     .update({ status: "cancelled" })
-    .eq("id", bookingId);
+    .eq("id", bookingId)
+    .neq("status", "cancelled")
+    .select("id");
   if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
+  if (!data || data.length === 0) return { error: CANCEL_REFUSED };
 
   revalidatePitchPaths(teamId);
   return { notice: "Booking cancelled. The pitch is free again." };
@@ -322,16 +455,28 @@ export async function cancelPitchBookingSeries(
   const teamId = text(formData, "team_id", 40) || null;
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("bookings")
     .update({ status: "cancelled" })
     .eq("recurrence_group_id", groupId)
     .gte("ends_at", new Date().toISOString())
-    .neq("status", "cancelled");
+    .neq("status", "cancelled")
+    .select("id");
   if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
+  if (!data || data.length === 0) {
+    return {
+      error:
+        "Nothing changed. Either the rest of that series has already been cancelled, or it is not yours to cancel.",
+    };
+  }
 
   revalidatePitchPaths(teamId);
-  return { notice: "The remaining sessions in that series are cancelled." };
+  return {
+    notice:
+      data.length === 1
+        ? "The remaining session in that series is cancelled."
+        : `The remaining ${data.length} sessions in that series are cancelled.`,
+  };
 }
 
 // ---------------------------------------------------------------------------
