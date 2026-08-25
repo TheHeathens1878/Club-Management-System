@@ -63,6 +63,8 @@ export type MemberRow = {
   safeguarding: string | null;
   /** Short-lived signed URL from `signPeoplePhotos`; null falls back to initials. */
   photoUrl: string | null;
+  /** "Mary · 07700 900001 · Mother" lines — only what the reader's policies returned. */
+  emergencyContacts: string[];
 };
 
 /**
@@ -228,6 +230,11 @@ export function MembersPanel({
                       >
                         {member.name}
                       </Link>
+                      {member.emergencyContacts.length > 0 && (
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          Emergency: {member.emergencyContacts.join(" · ")}
+                        </p>
+                      )}
                       <p className="mt-0.5 text-xs text-muted-foreground">
                         {ROLE_LABELS[member.role]}
                         {member.shirtNumber !== null ? ` · #${member.shirtNumber}` : ""}
@@ -346,6 +353,11 @@ export function MembersPanel({
                           >
                             {member.name}
                           </Link>
+                          {member.emergencyContacts.length > 0 && (
+                            <span className="block text-xs text-muted-foreground">
+                              Emergency: {member.emergencyContacts.join(" · ")}
+                            </span>
+                          )}
                           {member.isMinor && (
                             <Badge variant="warning" className="ml-2">
                               Minor

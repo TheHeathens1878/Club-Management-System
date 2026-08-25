@@ -4,6 +4,8 @@ import { ChevronLeft } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
+import { emergencyContactLine } from "@/lib/emergency-contacts";
+import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { isClubAdmin, isSafeguardingLead, nameOf, resolveNames } from "@/lib/person";
 import { resolveRoleView } from "@/lib/role-view";
@@ -346,10 +348,9 @@ export default async function TeamPage({
       // The face by the name (Adam, 2026-08-25). Read through the CALLER'S own
       // client, which is the whole safety of `signPeoplePhotos`: it only ever
       // signs `photo_path` values that reader's own `people` row returned.
-      // `people` has committee/admin, self and guardian read policies and no
-      // team-staff one, so a committee sign-in sees the photos and a coach —
-      // who reads the roster through `display_name()`, not `people` — gets
-      // initials. Initials are the correct answer there, not a broken image.
+      // `people_staff_read` (20260825280000, Adam: "I want coaches to … see
+      // photos") lets a team's staff read their live members' rows, so a
+      // coach sees faces too; anyone the policies refuse gets initials.
       const memberPersonIds = Array.from(
         new Set((membershipRows ?? []).map((row) => row.person_id)),
       );
@@ -357,6 +358,11 @@ export default async function TeamPage({
         ? await userClient.from("people").select("id,photo_path").in("id", memberPersonIds)
         : { data: [] as { id: string; photo_path: string | null }[] };
       const memberPhotos = await signPeoplePhotos(memberPhotoRows ?? []);
+      // Emergency contacts beside the player (Adam, 2026-08-25: "I want
+      // coaches to read emergency contacts"): `emergency_contacts_staff_read`
+      // admits the team's staff for its live members; a reader the policies
+      // refuse simply gets none. Read through the caller's client.
+      const memberContacts = await loadEmergencyContacts(memberPersonIds);
 
       // What is already on the administrator's desk, so a row that has been
       // reported says so instead of offering the button again.
@@ -404,6 +410,7 @@ export default async function TeamPage({
             dbs: dbs.data ?? (childFacing ? "missing" : null),
             safeguarding: safeguarding.data ?? (childFacing ? "missing" : null),
             photoUrl: memberPhotos.get(row.person_id) ?? null,
+            emergencyContacts: (memberContacts.get(row.person_id) ?? []).map(emergencyContactLine),
           } satisfies MemberRow;
         }),
       );
@@ -967,13 +974,15 @@ export default async function TeamPage({
               <CardHeader>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle>Squad</CardTitle>
-                  {/* Club administrators only, and the route says so again. */}
-                  {clubAdmin && (
+                  {/* Club administrators only, wearing the admin hat (Adam,
+                      2026-08-25: "coaches should not be able to download photos
+                      in a zip file") — and the route refuses anyone else again. */}
+                  {clubAdmin && (view === "admin" || view === null) && (
                     <a
                       href={`/teams/${team.id}/photos.zip`}
                       className={`${buttonVariants({ variant: "outline", size: "sm" })} min-h-11 sm:min-h-0`}
                     >
-                      Download photos (zip)
+                      Export photos for FA Clubs Portal
                     </a>
                   )}
                 </div>
