@@ -258,7 +258,7 @@ export default async function WaitingListDeskPage({
         }
       />
 
-      <div className="max-w-5xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         {admin && (
           <Card>
             <CardHeader>

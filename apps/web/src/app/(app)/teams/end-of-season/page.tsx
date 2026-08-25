@@ -67,7 +67,7 @@ export default async function EndOfSeasonPage() {
             : "Set a current season first — the rollover closes one season into the next"
         }
       />
-      <div className="max-w-4xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         <Link
           href="/teams"
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:underline"

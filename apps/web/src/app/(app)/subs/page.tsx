@@ -75,7 +75,7 @@ export default async function SubsPage() {
     <>
       <PageHeader title="Subs" subtitle="Plans, subscriptions and what is outstanding" />
 
-      <div className="p-6 space-y-6 max-w-4xl">
+      <div className="p-6 space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Plans</CardTitle>

@@ -104,7 +104,7 @@ export default async function GroupsPage() {
         }
       />
 
-      <div className="p-6 space-y-4 max-w-4xl">
+      <div className="p-6 space-y-4">
         {listError && (
           <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {listError.message}

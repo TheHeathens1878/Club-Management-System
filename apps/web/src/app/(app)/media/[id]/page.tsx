@@ -103,7 +103,7 @@ export default async function AlbumPage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="p-6 space-y-6 max-w-4xl">
+      <div className="p-6 space-y-6">
         {galleryError && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {galleryError.message}

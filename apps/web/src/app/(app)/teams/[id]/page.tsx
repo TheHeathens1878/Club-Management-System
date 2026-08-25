@@ -606,7 +606,7 @@ export default async function TeamPage({
           </Link>
         }
       />
-      <div className="max-w-4xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={team.active ? "success" : "muted"}>
             {team.active ? "Active" : "Inactive"}

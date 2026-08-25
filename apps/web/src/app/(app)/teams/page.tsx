@@ -392,7 +392,7 @@ export default async function TeamsPage({
             : "The teams you help run — open one to see its members, fixtures and pitches"
         }
       />
-      <div className="max-w-5xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         {saved && (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 className="h-4 w-4 shrink-0" />

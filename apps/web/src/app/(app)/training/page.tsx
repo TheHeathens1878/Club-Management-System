@@ -57,7 +57,7 @@ export default async function TrainingPage() {
         }
       />
 
-      <div className="grid max-w-6xl gap-6 p-6 lg:grid-cols-[3fr_2fr]">
+      <div className="grid gap-6 p-6 lg:grid-cols-[3fr_2fr]">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Sessions this week</CardTitle>

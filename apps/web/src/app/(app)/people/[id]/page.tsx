@@ -199,7 +199,7 @@ export default async function PersonPage({
           </Link>
         }
       />
-      <div className="max-w-4xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         <div className="flex flex-wrap items-center gap-2">
           {person.deleted_at && <Badge variant="destructive">Retired</Badge>}
           {isMinorDob(person.dob) && (
