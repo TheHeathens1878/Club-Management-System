@@ -52,11 +52,18 @@ insert into public.team_memberships (person_id, team_id, season_id, role) values
   ('b6b6b6b6-4444-4111-8111-00000000000a', '8f8f8f8f-4444-4111-8111-000000000001', '6f6f6f6f-4444-4111-8111-000000000001', 'player');
 
 -- A. one-off event books the pitch --------------------------------------------
+-- The slot is anchored to 10:00 London on day+7 rather than `now() + 7 days`.
+-- Section B's series runs 19:00-20:00 on days 7, 14, 21 and 28 and expects
+-- exactly ONE clashing week (the hire planted on day 21); a `now()`-relative
+-- hour on day 7 collides with it whenever the suite happens to run between
+-- 18:00 and 20:00 London, which made B fail on the clock rather than on the
+-- code. Nothing else in the file depends on this one being "an hour from now".
 set local request.jwt.claims to '{"sub":"b6b6b6b6-4444-4111-8111-000000000001","role":"authenticated"}';
 set local role authenticated;
 select set_config('br.ev1', public.create_team_event(
   '8f8f8f8f-4444-4111-8111-000000000001', 'practice', 'Tuesday practice',
-  now() + interval '7 days', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)::text, true);
+  ((now() at time zone 'Europe/London' + interval '7 days')::date + time '10:00') at time zone 'Europe/London',
+  60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)::text, true);
 
 select isnt((select booking_id from public.events where id = current_setting('br.ev1')::uuid), null,
   'a coach''s practice reserves the pitch');
@@ -68,7 +75,8 @@ select is((select count(*) from public.events where booking_id is not null), 1::
 
 select throws_like($$
   select public.create_team_event('8f8f8f8f-4444-4111-8111-000000000001', 'practice', 'Clashing practice',
-    now() + interval '7 days', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)
+    ((now() at time zone 'Europe/London' + interval '7 days')::date + time '10:00') at time zone 'Europe/London',
+    60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)
 $$, '%already booked%', 'a clashing slot refuses');
 select is((select count(*) from public.events where title = 'Clashing practice'), 0::bigint,
   'nothing is written when the pitch is taken');
