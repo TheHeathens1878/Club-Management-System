@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { RespondButtons } from "./respond-buttons";
@@ -43,14 +44,23 @@ export default async function EventsPage() {
   const [supabase, capabilities] = await Promise.all([createClient(), getCapabilities()]);
   const { data, error } = await supabase.rpc("my_events", { p_horizon_days: HORIZON_DAYS });
 
-  const events = data ?? [];
+  // "Viewing as Coach – U14 Mavericks" narrows the list to that team; the
+  // scope is the validated cookie, so a stale team silently widens back.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const scope = await getTeamScope(view, capabilities);
+
+  const events = (data ?? []).filter((event) => !scope || event.team_id === scope.id);
   const canCreate = capabilities.isTeamStaff || capabilities.isClubAdmin;
 
   return (
     <>
       <PageHeader
         title="Events"
-        subtitle="Matches, practices and socials for your teams — accept or decline"
+        subtitle={
+          scope
+            ? `Matches, practices and socials for ${scope.name} — accept or decline`
+            : "Matches, practices and socials for your teams — accept or decline"
+        }
         action={
           canCreate ? (
             <Link href="/events/new" className={buttonVariants({ size: "sm" })}>

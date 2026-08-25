@@ -11,7 +11,15 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 
 import { getSessionProfile, isBarManager, isCommittee, isStaff, isSuperUser } from "@/lib/auth";
-import { ROLE_VIEW_COOKIE, isRoleView, type Capabilities, type RoleView } from "@/lib/role-view";
+import {
+  ROLE_VIEW_COOKIE,
+  TEAM_SCOPE_COOKIE,
+  isRoleView,
+  teamsForView,
+  type Capabilities,
+  type RoleView,
+  type TeamRef,
+} from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 import type { UserRole } from "@/lib/types";
 
@@ -22,9 +30,40 @@ export async function getStoredRoleView(): Promise<RoleView | null> {
   return isRoleView(value) ? value : null;
 }
 
+/**
+ * The team the current view is narrowed to — VALIDATED, not just read: the
+ * cookie only counts when it names a team the resolved view actually holds
+ * (a coach's staffed team, a parent's child's team, a player's own). A stale
+ * value — child moved on, role ended — silently widens back to the whole view
+ * rather than filtering everything down to nothing.
+ */
+export async function getTeamScope(view: RoleView | null, c: Capabilities): Promise<TeamRef | null> {
+  if (!view) return null;
+  const store = await cookies();
+  const value = store.get(TEAM_SCOPE_COOKIE)?.value;
+  if (!value) return null;
+  return teamsForView(view, c).find((team) => team.id === value) ?? null;
+}
+
 /** `my_capabilities()` returns exactly these keys; read it defensively anyway. */
 function flag(row: Record<string, unknown> | null, key: string): boolean {
   return row?.[key] === true;
+}
+
+function teams(row: Record<string, unknown> | null, key: string): TeamRef[] {
+  const value = row?.[key];
+  if (!Array.isArray(value)) return [];
+  const out: TeamRef[] = [];
+  for (const entry of value) {
+    if (!entry || typeof entry !== "object") continue;
+    const record = entry as Record<string, unknown>;
+    if (typeof record["id"] !== "string" || typeof record["name"] !== "string") continue;
+    const children = Array.isArray(record["children"])
+      ? (record["children"] as unknown[]).filter((name): name is string => typeof name === "string")
+      : undefined;
+    out.push({ id: record["id"], name: record["name"], ...(children ? { children } : {}) });
+  }
+  return out;
 }
 
 /**
@@ -67,5 +106,8 @@ export const getCapabilities = cache(async function getCapabilities(): Promise<C
     hasPlayerMembership: flag(row, "has_player_membership"),
     isGuardian: flag(row, "is_guardian"),
     hasWaitingListAccess: flag(row, "has_waiting_list_access"),
+    staffTeams: teams(row, "staff_teams"),
+    playerTeams: teams(row, "player_teams"),
+    parentTeams: teams(row, "parent_teams"),
   };
 });

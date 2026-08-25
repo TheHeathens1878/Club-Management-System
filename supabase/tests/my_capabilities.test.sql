@@ -9,7 +9,7 @@
 
 begin;
 
-select plan(14);
+select plan(18);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('c8c8c8c8-5555-4111-8111-000000000001', 'mc-coach@test.invalid',  '{"full_name": "Mo Coach", "dob": "1981-01-01"}'::jsonb),
@@ -36,7 +36,8 @@ insert into public.seasons (id, name, starts_on, ends_on, is_current)
 insert into public.teams (id, name) values ('8b8b8b8b-5555-4111-8111-000000000001', 'MC Town');
 insert into public.team_memberships (person_id, team_id, season_id, role) values
   (current_setting('mc.coach')::uuid,  '8b8b8b8b-5555-4111-8111-000000000001', '5c5c5c5c-5555-4111-8111-000000000001', 'coach'),
-  (current_setting('mc.parent')::uuid, '8b8b8b8b-5555-4111-8111-000000000001', '5c5c5c5c-5555-4111-8111-000000000001', 'player');
+  (current_setting('mc.parent')::uuid, '8b8b8b8b-5555-4111-8111-000000000001', '5c5c5c5c-5555-4111-8111-000000000001', 'player'),
+  ('c8c8c8c8-5555-4111-8111-00000000000a', '8b8b8b8b-5555-4111-8111-000000000001', '5c5c5c5c-5555-4111-8111-000000000001', 'player');
 insert into public.waiting_list_access (person_id, age_group) values (current_setting('mc.coach')::uuid, 'U10');
 
 -- The coach ---------------------------------------------------------------------
@@ -58,6 +59,15 @@ select is((select (public.my_capabilities() ->> 'is_safeguarding_lead')::boolean
   'is_safeguarding_lead agrees with the accessor');
 reset role;
 
+-- The team arrays (20260824380000): names for the role-switcher ------------------
+set local request.jwt.claims to '{"sub":"c8c8c8c8-5555-4111-8111-000000000001","role":"authenticated"}';
+set local role authenticated;
+select is((select public.my_capabilities() -> 'staff_teams' -> 0 ->> 'name'), 'MC Town',
+  'staff_teams names the coached team');
+select is((select jsonb_array_length(public.my_capabilities() -> 'player_teams')), 0,
+  'a pure coach has no player_teams — and the key is an empty array, not null');
+reset role;
+
 -- The parent --------------------------------------------------------------------
 set local request.jwt.claims to '{"sub":"c8c8c8c8-5555-4111-8111-000000000002","role":"authenticated"}';
 set local role authenticated;
@@ -65,6 +75,10 @@ select is((select (public.my_capabilities() ->> 'is_guardian')::boolean), true, 
 select is((select (public.my_capabilities() ->> 'has_player_membership')::boolean), true,
   'a parent who also plays holds a player membership');
 select is((select (public.my_capabilities() ->> 'is_team_staff')::boolean), false, 'playing is not staffing');
+select is((select public.my_capabilities() -> 'parent_teams' -> 0 ->> 'name'), 'MC Town',
+  'parent_teams names the child''s team');
+select is((select public.my_capabilities() -> 'parent_teams' -> 0 -> 'children' ->> 0), 'Kit Kid',
+  'and says which child the hat is for');
 reset role;
 
 -- The admin ---------------------------------------------------------------------
@@ -82,7 +96,8 @@ select is((select public.my_capabilities()), jsonb_build_object(
     'person_id', (select person_id::text from public.profiles where id = 'c8c8c8c8-5555-4111-8111-000000000004'),
     'is_club_admin', false, 'is_safeguarding_lead', false, 'has_waiting_list_access', false,
     'has_coach_role', false, 'has_parent_role', false, 'is_team_staff', false,
-    'has_player_membership', false, 'is_guardian', false),
+    'has_player_membership', false, 'is_guardian', false,
+    'staff_teams', '[]'::jsonb, 'player_teams', '[]'::jsonb, 'parent_teams', '[]'::jsonb),
   'an unlinked account holds nothing, and every key is still present');
 reset role;
 

@@ -27,8 +27,11 @@ import {
   ROLE_VIEW_COOKIE,
   ROLE_VIEW_HOME,
   ROLE_VIEW_PROMPTED_COOKIE,
+  TEAM_SCOPE_COOKIE,
   isRoleView,
+  parseViewOption,
   qualifiesForView,
+  teamsForView,
   type RoleView,
 } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
@@ -41,10 +44,15 @@ const ONE_YEAR = 60 * 60 * 24 * 365;
  * A view the database does not back is refused outright — this is the only
  * writer of the cookie, so an unqualified value can never get into it.
  */
-export async function setRoleView(view: RoleView): Promise<void> {
+export async function setRoleView(view: RoleView, teamId?: string): Promise<void> {
   if (!isRoleView(view)) return;
   const capabilities = await getCapabilities();
   if (!qualifiesForView(view, capabilities)) return;
+
+  // A team narrows the view only when that view actually holds it — a made-up
+  // id is dropped rather than stored, so the scope cookie can never name a
+  // team the switcher would not have offered.
+  const team = teamId ? teamsForView(view, capabilities).find((t) => t.id === teamId) : undefined;
 
   const store = await cookies();
   store.set(ROLE_VIEW_COOKIE, view, {
@@ -53,6 +61,16 @@ export async function setRoleView(view: RoleView): Promise<void> {
     sameSite: "lax",
     httpOnly: false,
   });
+  if (team) {
+    store.set(TEAM_SCOPE_COOKIE, team.id, {
+      path: "/",
+      maxAge: ONE_YEAR,
+      sameSite: "lax",
+      httpOnly: false,
+    });
+  } else {
+    store.delete(TEAM_SCOPE_COOKIE);
+  }
   // Once they have chosen, the first-visit nudge has done its job.
   store.set(ROLE_VIEW_PROMPTED_COOKIE, "1", {
     path: "/",
@@ -63,6 +81,18 @@ export async function setRoleView(view: RoleView): Promise<void> {
 
   revalidatePath("/", "layout");
   redirect(ROLE_VIEW_HOME[view]);
+}
+
+/**
+ * The "Viewing as" dropdown's writer: one serialized option ("admin",
+ * "coach:<teamId>", …) straight from `roleViewOptions()`. Everything is
+ * re-validated in `setRoleView` — the dropdown is the convenience, not the
+ * authority.
+ */
+export async function switchRoleView(value: string): Promise<void> {
+  const parsed = parseViewOption(value);
+  if (!parsed) return;
+  await setRoleView(parsed.view, parsed.teamId ?? undefined);
 }
 
 export type RequestState = { error?: string; notice?: string };

@@ -27,6 +27,14 @@ import type { UserRole } from "@/lib/types";
 export const ROLE_VIEW_COOKIE = "club.role_view";
 /** Set once by the middleware so the first-visit nudge to /welcome happens once. */
 export const ROLE_VIEW_PROMPTED_COOKIE = "club.role_view_prompted";
+/**
+ * The optional team a coach/parent/player view is narrowed to (Adam,
+ * 2026-08-25: "Coach – U14 Mavericks", "Parent – U18 Cobras"). Meaningless for
+ * admin and function_room, and cleared whenever the view changes to one of
+ * those. A separate cookie so `club.role_view` keeps its shape and everything
+ * that reads it — the middleware included — is untouched.
+ */
+export const TEAM_SCOPE_COOKIE = "club.team_scope";
 
 /** The five kinds of user the club recognises, in tile order. */
 export const ROLE_VIEWS = ["player", "parent", "coach", "admin", "function_room"] as const;
@@ -64,6 +72,14 @@ export function isRoleView(value: string | null | undefined): value is RoleView 
   return !!value && (ROLE_VIEWS as readonly string[]).includes(value);
 }
 
+/** A team one of the caller's hats applies to, as `my_capabilities()` names it. */
+export type TeamRef = {
+  id: string;
+  name: string;
+  /** parent_teams only: which of the caller's children the hat is for. */
+  children?: string[];
+};
+
 export type Capabilities = {
   personId: string | null;
   /** `profiles.role` — the legacy app role the existing pages are gated on. */
@@ -84,6 +100,10 @@ export type Capabilities = {
   /** A live guardianship over at least one child. */
   isGuardian: boolean;
   hasWaitingListAccess: boolean;
+  /** The teams behind each hat, for the role-switcher's team-scoped options. */
+  staffTeams: TeamRef[];
+  playerTeams: TeamRef[];
+  parentTeams: TeamRef[];
 };
 
 /**
@@ -137,4 +157,99 @@ export function defaultRoleView(c: Capabilities): RoleView | null {
 export function resolveRoleView(stored: RoleView | null, c: Capabilities): RoleView | null {
   if (stored && qualifiesForView(stored, c)) return stored;
   return defaultRoleView(c);
+}
+
+// ---------------------------------------------------------------------------
+// The "Viewing as" dropdown — role–team combinations (Adam, 2026-08-25)
+// ---------------------------------------------------------------------------
+
+/** One line of the dropdown. `value` round-trips through the switcher action. */
+export type RoleViewOption = {
+  view: RoleView;
+  teamId: string | null;
+  label: string;
+  value: string;
+};
+
+export function serializeViewOption(view: RoleView, teamId: string | null): string {
+  return teamId ? `${view}:${teamId}` : view;
+}
+
+export function parseViewOption(value: string): { view: RoleView; teamId: string | null } | null {
+  const [view, teamId] = value.split(":", 2);
+  if (!isRoleView(view)) return null;
+  return { view, teamId: teamId || null };
+}
+
+/** The team list a view's scope must come from. Empty for admin/function_room. */
+export function teamsForView(view: RoleView, c: Capabilities): TeamRef[] {
+  switch (view) {
+    case "coach":
+      return c.staffTeams;
+    case "parent":
+      return c.parentTeams;
+    case "player":
+      return c.playerTeams;
+    default:
+      return [];
+  }
+}
+
+/**
+ * Every line of the dropdown, in the order Adam described: the club-wide hats
+ * first, then the team-scoped ones grouped BY TEAM (Coach – Mavericks,
+ * Parent – Mavericks, Coach – Cobras, Parent – Cobras), so a person thinks
+ * "which team am I dealing with" rather than "which of my roles". A hat whose
+ * view is qualified but has no team yet falls back to its plain label.
+ */
+export function roleViewOptions(c: Capabilities): RoleViewOption[] {
+  const options: RoleViewOption[] = [];
+  const add = (view: RoleView, team: TeamRef | null, label: string) =>
+    options.push({ view, teamId: team?.id ?? null, label, value: serializeViewOption(view, team?.id ?? null) });
+
+  if (qualifiesForView("admin", c)) add("admin", null, "Club Admin");
+  if (qualifiesForView("function_room", c)) add("function_room", null, "Function Room");
+
+  // Group by team: every team any hat touches, alphabetically, with the hats
+  // for that team in coach → parent → player order.
+  const teamNames = new Map<string, string>();
+  for (const team of [...c.staffTeams, ...c.parentTeams, ...c.playerTeams]) {
+    teamNames.set(team.id, team.name);
+  }
+  const byName = Array.from(teamNames.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  const staffIds = new Set(c.staffTeams.map((team) => team.id));
+  const parentIds = new Set(c.parentTeams.map((team) => team.id));
+  const playerIds = new Set(c.playerTeams.map((team) => team.id));
+
+  for (const [id, name] of byName) {
+    if (qualifiesForView("coach", c) && staffIds.has(id)) add("coach", { id, name }, `Coach – ${name}`);
+    if (qualifiesForView("parent", c) && parentIds.has(id)) add("parent", { id, name }, `Parent – ${name}`);
+    if (qualifiesForView("player", c) && playerIds.has(id)) add("player", { id, name }, `Player – ${name}`);
+  }
+
+  // Qualified hats with no team to pin to yet keep their coarse entry.
+  if (qualifiesForView("coach", c) && c.staffTeams.length === 0) add("coach", null, ROLE_VIEW_LABELS.coach);
+  if (qualifiesForView("parent", c) && c.parentTeams.length === 0) add("parent", null, ROLE_VIEW_LABELS.parent);
+  if (qualifiesForView("player", c) && c.playerTeams.length === 0) add("player", null, ROLE_VIEW_LABELS.player);
+
+  return options;
+}
+
+/**
+ * The props the sidebar hands to `<RoleSwitcher/>`, computed in one place so
+ * the layout stays a consumer. `current` falls back to the plain view when the
+ * stored team no longer matches a held option (child moved teams, coach role
+ * ended) — never to an option the person does not hold.
+ */
+export function roleSwitcherProps(
+  c: Capabilities,
+  view: RoleView,
+  teamScope: string | null,
+): { options: { value: string; label: string }[]; current: string } {
+  const options = roleViewOptions(c);
+  const scoped = serializeViewOption(view, teamScope);
+  const current = options.some((option) => option.value === scoped)
+    ? scoped
+    : options.find((option) => option.view === view)?.value ?? serializeViewOption(view, null);
+  return { options: options.map(({ value, label }) => ({ value, label })), current };
 }
