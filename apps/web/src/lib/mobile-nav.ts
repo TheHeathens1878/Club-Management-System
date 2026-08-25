@@ -1,8 +1,10 @@
 /**
  * The five-slot tab bar (Club CRM mobile design): on a phone the sidebar
  * becomes a five-item tab bar with everything else behind More. The design
- * draws the admin bar (Lobby · Messages · Teams · Diary · More) and the parent
- * bar (Lobby · Messages · Children · Events · More); the other views follow the
+ * draws the admin bar (Lobby · Messages · Teams · Diary · More) and the Me bar
+ * (Lobby · Messages · Children · Events · More); the parent bar swaps Children
+ * for Team (Adam, 2026-08-25 evening: the parent menu is the child's team, and
+ * the person-level items live in the Me view); the other views follow the
  * same rule — the view's own front doors, More always last.
  *
  * Both of nav.ts's gates apply here too: the view names the slots, and each
@@ -94,6 +96,15 @@ const CHILDREN: MobileTabEntry = {
   allowed: (c) => c.isGuardian || c.hasParentRole,
 };
 
+/** The parent view's slot 3: the sidebar's "Team page", via the same redirect. */
+const MY_TEAM: MobileTabEntry = {
+  href: "/my-team",
+  label: "Team",
+  icon: Shirt,
+  match: ["/my-team", "/teams"],
+  allowed: (c) => c.isGuardian || c.hasParentRole,
+};
+
 const ROOM_DIARY: MobileTabEntry = {
   href: "/room-bookings",
   label: "Bookings",
@@ -151,6 +162,7 @@ export function mobileTabsFor(view: RoleView | null, c: Capabilities): MobileTab
       case "player":
         return [LOBBY, MESSAGES, MY_TEAMS, EVENTS];
       case "parent":
+        return [LOBBY, MESSAGES, MY_TEAM, EVENTS];
       case "me":
         return [LOBBY, MESSAGES, CHILDREN, EVENTS];
       case "function_room":
