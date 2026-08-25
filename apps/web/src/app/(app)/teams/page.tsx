@@ -68,8 +68,8 @@ type TeamCard = {
   league: string | null;
   division: string | null;
   players: number;
-  managerName: string | null;
-  assistantCount: number;
+  /** Every staff member by name, the manager (else head coach) first. */
+  staffNames: string[];
   nextOut: NextOut | null;
   /** null = no subscriptions set up for this squad, shown as an em-dash. */
   subsOwing: number | null;
@@ -443,6 +443,15 @@ export default async function TeamsPage({
       const lead = managerBy.get(team.id) ?? coachBy.get(team.id) ?? null;
       const fixture = nextFixture.get(team.id) ?? null;
       const squadSubscribed = Array.from(players).some((id) => subscribedPeople.has(id));
+      // Every staff member by name, the lead first (Adam, 2026-08-25: "All
+      // staff should be shown on the + 2 assistants").
+      const staffNames = [
+        ...(lead ? [personName.get(lead) ?? "Club member"] : []),
+        ...Array.from(staff)
+          .filter((personId) => personId !== lead)
+          .map((personId) => personName.get(personId) ?? "Club member")
+          .sort((a, b) => a.localeCompare(b, "en-GB")),
+      ];
       return {
         id: team.id,
         name: team.name,
@@ -453,8 +462,7 @@ export default async function TeamsPage({
         league: team.league,
         division: team.division,
         players: players.size,
-        managerName: lead ? personName.get(lead) ?? null : null,
-        assistantCount: Math.max(0, staff.size - (lead ? 1 : 0)),
+        staffNames,
         nextOut: fixture
           ? {
               when: kickoffShort(fixture.kickoff_at),
@@ -571,7 +579,7 @@ export default async function TeamsPage({
                   clubWidgetUrls.length > 0,
                 )
               : null;
-            const needsStaff = team.managerName === null;
+            const needsStaff = team.staffNames.length === 0;
             return {
               key: team.id,
               haystack: `${team.name} ${team.ageGroup ?? ""} ${team.league ?? ""} ${
@@ -614,15 +622,14 @@ export default async function TeamsPage({
                     )}
                   </td>
                   <td className="px-4 py-3 align-top">
-                    {team.managerName ? (
+                    {team.staffNames.length > 0 ? (
                       <>
-                        <p>{team.managerName}</p>
-                        {team.assistantCount > 0 && (
-                          <p className="text-xs text-muted-foreground">
-                            + {team.assistantCount}{" "}
-                            {team.assistantCount === 1 ? "assistant" : "assistants"}
+                        <p>{team.staffNames[0]}</p>
+                        {team.staffNames.slice(1).map((name) => (
+                          <p key={name} className="text-xs text-muted-foreground">
+                            {name}
                           </p>
-                        )}
+                        ))}
                       </>
                     ) : (
                       <p className="font-medium text-primary">No staff</p>
