@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ClipboardList, MapPin } from "lucide-react";
+import { ChevronLeft, ClipboardList, LayoutGrid, MapPin } from "lucide-react";
 
 import type { Database } from "@club/db";
 
@@ -235,6 +235,12 @@ export default async function FixtureAttendancePage({
               Event &amp; RSVP
             </Link>
           )}
+          <Link
+            href={`/teams/${teamId}/fixtures/${fixture.id}/lineup`}
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            <LayoutGrid className="h-4 w-4" /> {canManage ? "Pick the lineup" : "Lineup"}
+          </Link>
         </div>
 
         {/* The artboard's accent card: on a phone this is the one thing the
