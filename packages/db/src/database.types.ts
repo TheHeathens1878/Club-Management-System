@@ -5780,6 +5780,8 @@ export type Database = {
         Args: { p_role: Database["public"]["Enums"]["team_role"] }
         Returns: boolean
       }
+      hire_only_person_ids: { Args: never; Returns: string[] }
+      is_club_person: { Args: { p_person_id: string }; Returns: boolean }
       is_club_admin: { Args: never; Returns: boolean }
       is_committee: { Args: never; Returns: boolean }
       is_household_member_of: {
