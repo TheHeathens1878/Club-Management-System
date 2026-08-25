@@ -8,6 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ChevronLeft } from "lucide-react";
 import { createInternalBooking } from "../actions";
+import { ContactPicker } from "./contact-picker";
 import { DateTimingFields } from "./recurrence-fields";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
 
@@ -23,12 +24,19 @@ export default async function NewInternalBookingPage() {
   if (!isStaff(session.profile?.role)) redirect("/room-bookings");
 
   const admin = createAdminClient();
-  const { data: rooms } = await admin
-    .from("resources")
-    .select("id,name")
-    .eq("type", FUNCTION_ROOM)
-    .eq("active", true)
-    .order("sort_order");
+  const [{ data: rooms }, { data: contacts }] = await Promise.all([
+    admin
+      .from("resources")
+      .select("id,name")
+      .eq("type", FUNCTION_ROOM)
+      .eq("active", true)
+      .order("sort_order"),
+    admin
+      .from("booking_contacts")
+      .select("id,name,email,phone")
+      .order("updated_at", { ascending: false })
+      .limit(200),
+  ]);
 
   return (
     <>
@@ -62,6 +70,7 @@ export default async function NewInternalBookingPage() {
           <Card>
             <CardHeader><CardTitle>Customer details</CardTitle></CardHeader>
             <CardContent className="space-y-4">
+              <ContactPicker contacts={contacts ?? []} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="booker_name">Name *</Label>

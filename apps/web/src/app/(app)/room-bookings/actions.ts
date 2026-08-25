@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionProfile, isCommittee, isStaff, isSuperUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
+import { upsertBookingContact } from "@/lib/booking-contacts";
 import { sendEmail } from "@/lib/email";
 import { renderEmailTemplate } from "@/lib/template-engine";
 import { getEmailBrandColor, getSettings, getRecipientEmails } from "@/lib/settings";
@@ -326,11 +327,21 @@ export async function updateBooking(
     return { error: SLOT_TAKEN_MESSAGE };
   }
 
+  // Keep the room's contacts book in step with the edited snapshot.
+  const contactId = await upsertBookingContact({
+    name: fields.booker_name,
+    firstName: fields.booker_first_name,
+    lastName: fields.booker_last_name,
+    email: fields.booker_email,
+    phone: fields.booker_phone,
+  }).catch(() => null);
+
   const { error } = await admin
     .from("bookings")
     .update({
       resource_id: fields.resource_id,
       ...bookingPeriod(startsAt, endsAt),
+      ...(contactId ? { contact_id: contactId } : {}),
       booker_first_name: fields.booker_first_name,
       booker_last_name: fields.booker_last_name,
       booker_name: fields.booker_name,
@@ -849,11 +860,20 @@ export async function createInternalBooking(
   const clashes = await findConflictingDates(admin, roomId, [date, ...extraDates], startTime, endTime);
   if (clashes.length > 0) return { error: conflictListMessage(clashes) };
 
+  // The room's contacts book, not the members database: an emailed customer
+  // gets (or refreshes) a contact; an email-less one stays snapshot-only.
+  const contactId = await upsertBookingContact({
+    name: bookerName,
+    email: bookerEmail,
+    phone: bookerPhone,
+  }).catch(() => null);
+
   function rowFor(d: string): BookingInsert {
     const { startsAt, endsAt } = legacyWindowToInstants(d, startTime, endTime);
     return {
       resource_id: roomId,
       ...bookingPeriod(startsAt, endsAt),
+      contact_id: contactId,
       booker_name: bookerName,
       booker_email: bookerEmail || "—",
       booker_phone: bookerPhone,

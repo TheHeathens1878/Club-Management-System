@@ -360,6 +360,16 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin", "function_room"],
   },
   {
+    // The room's own contacts book (Adam, 2026-08-25) — hire contacts kept
+    // out of the members database, so this is where the desk finds them.
+    href: "/room-bookings/contacts",
+    label: "Hire contacts",
+    icon: Contact,
+    group: "Function room",
+    allowed: (c) => c.isStaff,
+    views: ["admin", "function_room"],
+  },
+  {
     href: "/bar",
     label: "Bar",
     icon: Beer,
