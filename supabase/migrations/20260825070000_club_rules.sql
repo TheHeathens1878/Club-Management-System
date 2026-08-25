@@ -361,3 +361,58 @@ $$;
 
 notify pgrst, 'reload schema';
 
+
+-- 5. The parent view tells the truth about a squad child (Adam, 2026-08-25:
+--    "The registrations are not showing in my parent view even though my
+--    children have been approved and attached to the team"). A household
+--    player on a CURRENT-season squad with no live registration row — a child
+--    an admin attached directly, or an import — now appears in
+--    my_registrations() as pseudo-status ACTIVE, keyed by the membership id.
+--    Body otherwise verbatim from 20260824470000.
+create or replace function public.my_registrations()
+  returns table (
+    registration_id uuid, person_id uuid, person_name text, is_self boolean,
+    team_name text, season_name text, status text,
+    submitted_at timestamptz, decided_at timestamptz
+  )
+  language sql
+  stable
+  security definer
+  set search_path = public
+as $$
+  with me as (select public.current_person_id() as pid),
+  mine as (
+    select pid as person_id from me where pid is not null
+    union
+    select g.child_person_id from public.guardianships g, me
+    where g.guardian_person_id = me.pid and g.ended_at is null
+    union
+    select p.id from public.people p, me
+    where p.created_by = auth.uid() and p.deleted_at is null
+      and not exists (select 1 from public.profiles pr where pr.person_id = p.id)
+  )
+  select r.id, r.person_id, p.first_name || ' ' || p.last_name,
+         r.person_id = (select pid from me),
+         t.name, s.name, r.status::text,
+         r.created_at, r.decided_at
+  from public.registrations r
+  join mine on mine.person_id = r.person_id
+  join public.people p on p.id = r.person_id
+  join public.seasons s on s.id = r.season_id
+  left join public.teams t on t.id = r.team_id
+  union all
+  select m.id, m.person_id, p.first_name || ' ' || p.last_name,
+         m.person_id = (select pid from me),
+         t.name, s.name, 'active',
+         m.created_at, m.created_at
+  from public.team_memberships m
+  join mine on mine.person_id = m.person_id
+  join public.people p on p.id = m.person_id
+  join public.seasons s on s.id = m.season_id and s.is_current
+  join public.teams t on t.id = m.team_id
+  where m.left_at is null and m.role = 'player'
+    and not exists (select 1 from public.registrations r
+                     where r.person_id = m.person_id and r.season_id = m.season_id
+                       and r.status in ('pending', 'approved'))
+  order by 8 desc;
+$$;

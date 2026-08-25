@@ -198,13 +198,20 @@ export function hasMedicalDetail(form: RegistrationForm): boolean {
   return Boolean(form.medical.conditions || form.medical.medication || form.medical.allergies);
 }
 
-export type RegistrationStatusValue = "pending" | "approved" | "rejected" | "withdrawn";
+/**
+ * "active" is not a `registration_status`: it is the pseudo-status
+ * `my_registrations()` reports for a household player on a current-season
+ * squad with no live registration row (children attached by an admin, or
+ * imported) — so the parent's list tells the truth about them.
+ */
+export type RegistrationStatusValue = "pending" | "approved" | "rejected" | "withdrawn" | "active";
 
 export const REGISTRATION_STATUS_LABELS: Record<RegistrationStatusValue, string> = {
   pending: "Pending",
   approved: "Approved",
   rejected: "Rejected",
   withdrawn: "Withdrawn",
+  active: "On the squad",
 };
 
 export function registrationStatusVariant(
@@ -214,6 +221,7 @@ export function registrationStatusVariant(
     case "pending":
       return "warning";
     case "approved":
+    case "active":
       return "success";
     case "rejected":
       return "destructive";
