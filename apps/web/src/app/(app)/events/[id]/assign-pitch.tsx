@@ -18,11 +18,17 @@ const EMPTY: EventActionState = {};
 export function AssignPitch({
   eventId,
   pitches,
+  homeResourceId = null,
 }: {
   eventId: string;
   pitches: { id: string; name: string }[];
+  /** `teams.home_resource_id` — where the select opens; any pitch stays pickable. */
+  homeResourceId?: string | null;
 }) {
   const [state, action, saving] = useActionState(assignEventPitch, EMPTY);
+  // An inactive or deleted home pitch is not in the list, so it cannot be the
+  // starting value.
+  const home = pitches.some((pitch) => pitch.id === homeResourceId) ? homeResourceId : null;
 
   return (
     <form action={action} className="space-y-2">
@@ -41,7 +47,7 @@ export function AssignPitch({
         <select
           name="resource_id"
           required
-          defaultValue=""
+          defaultValue={home ?? ""}
           className="h-9 min-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm"
         >
           <option value="" disabled>
@@ -50,6 +56,7 @@ export function AssignPitch({
           {pitches.map((pitch) => (
             <option key={pitch.id} value={pitch.id}>
               {pitch.name}
+              {pitch.id === home ? " (home)" : ""}
             </option>
           ))}
         </select>
