@@ -700,7 +700,7 @@ export default async function TeamPage({
                             href={`/teams/${team.id}?tab=training`}
                             className="underline underline-offset-2"
                           >
-                            {formatBookingDateShort(glanceNextSlot.startsAt)} ·{" "}
+                            {formatBookingDateShort(glanceNextSlot.date)} ·{" "}
                             {glanceNextSlot.startTime}
                           </Link>
                         ) : (
