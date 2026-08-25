@@ -116,7 +116,7 @@ export default async function TeamPage({
   const teamMember =
     capabilities.parentTeams.some((teamRef) => teamRef.id === id) ||
     capabilities.playerTeams.some((teamRef) => teamRef.id === id);
-  if (!committee && teamStaff !== true && !teamMember) redirect("/room-bookings");
+  if (!committee && teamStaff !== true && !teamMember) redirect("/lobby");
   const canManageTeam = committee || teamStaff === true;
   // The hat being worn (Adam, 2026-08-25: "Pick the team on parent view
   // shouldn't be available"): a coach who is also a parent looks at the team

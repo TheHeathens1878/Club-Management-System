@@ -26,7 +26,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const session = await getSessionProfile();
-  if (!session || !isSuperUser(session.profile?.role)) redirect("/room-bookings");
+  if (!session || !isSuperUser(session.profile?.role)) redirect("/lobby");
 
   const sp = await searchParams;
   const tab: Tab = VALID_TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "general";

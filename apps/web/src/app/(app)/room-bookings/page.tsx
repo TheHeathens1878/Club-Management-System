@@ -22,7 +22,9 @@ export default async function RoomBookingsPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isStaff(session.profile?.role)) redirect("/login");
+  // Signed in but not staff: the club lobby, not /login — sending somebody who
+  // IS signed in back to the sign-in page is the loop Adam hit.
+  if (!isStaff(session.profile?.role)) redirect("/lobby");
 
   const { status: statusFilter, room: roomFilter, period: periodFilter, view } = await searchParams;
   const canDelete = isSuperUser(session.profile?.role);

@@ -10,7 +10,7 @@ import { TemplateEditor } from "./template-editor";
 export default async function EditTemplatePage({ params }: { params: Promise<{ key: string }> }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { key } = await params;
   if (!(key in TEMPLATE_DEFINITIONS)) notFound();

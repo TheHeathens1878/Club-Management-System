@@ -44,7 +44,7 @@ export default async function PitchRequestsPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
   if (!(await isClubAdmin())) redirect("/pitches");
 
   const { status } = await searchParams;

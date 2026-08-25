@@ -93,7 +93,7 @@ export default async function PersonPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { id } = await params;
   const { from } = await searchParams;

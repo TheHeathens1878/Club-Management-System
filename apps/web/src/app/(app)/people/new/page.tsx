@@ -13,7 +13,7 @@ import { PersonForm } from "../person-form";
 export default async function NewPersonPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   return (
     <>

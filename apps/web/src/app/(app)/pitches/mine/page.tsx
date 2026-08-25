@@ -31,7 +31,7 @@ export default async function MyPitchBookingsPage() {
   const coachView = (await getStoredRoleView()) === "coach";
   const asAdmin = access.isAdmin && !coachView;
   if (!access.isAdmin && !committee && access.staffTeamIds.length === 0) {
-    redirect("/room-bookings");
+    redirect("/lobby");
   }
 
   const { items, error } = await loadPitchBookings({

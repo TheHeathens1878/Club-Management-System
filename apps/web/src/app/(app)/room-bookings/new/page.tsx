@@ -21,7 +21,7 @@ async function submitAction(formData: FormData): Promise<void> {
 export default async function NewInternalBookingPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isStaff(session.profile?.role)) redirect("/room-bookings");
+  if (!isStaff(session.profile?.role)) redirect("/lobby");
 
   const admin = createAdminClient();
   const [{ data: rooms }, { data: contacts }] = await Promise.all([

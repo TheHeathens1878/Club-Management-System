@@ -54,7 +54,7 @@ export default async function BookPitchPage({
   const committee = isCommittee(session.profile?.role);
 
   if (!access.isAdmin && !committee && access.staffTeamIds.length === 0) {
-    redirect("/room-bookings");
+    redirect("/lobby");
   }
 
   const defaultTeamId =

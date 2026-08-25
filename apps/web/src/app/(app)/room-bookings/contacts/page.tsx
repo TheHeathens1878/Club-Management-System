@@ -33,7 +33,7 @@ export default async function BookingContactsPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isStaff(session.profile?.role)) redirect("/room-bookings");
+  if (!isStaff(session.profile?.role)) redirect("/lobby");
 
   const { q } = await searchParams;
   const term = (q ?? "").trim();

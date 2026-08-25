@@ -18,7 +18,7 @@ export default async function RoomsSettingsPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { saved, error: errorParam } = await searchParams;
 

@@ -148,7 +148,7 @@ export default async function PeoplePage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
 
   const params = await searchParams;
   const term = sanitiseSearch(params.q ?? "");

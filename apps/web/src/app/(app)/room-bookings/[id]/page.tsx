@@ -30,7 +30,7 @@ export default async function RoomBookingDetailPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isStaff(session.profile?.role)) redirect("/room-bookings");
+  if (!isStaff(session.profile?.role)) redirect("/lobby");
 
   const { id } = await params;
   const admin = createAdminClient();
