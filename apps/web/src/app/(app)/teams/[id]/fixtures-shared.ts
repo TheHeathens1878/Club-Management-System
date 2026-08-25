@@ -16,6 +16,17 @@ export function fixtureHref(teamId: string, fixture: { id: string; eventId: stri
   return fixture.eventId ? `/events/${fixture.eventId}` : `/teams/${teamId}/fixtures/${fixture.id}`;
 }
 
+/**
+ * "Pick the team" (Adam, 2026-08-25: it "should be a tab (line-up) in there"):
+ * the Line-up tab of the Event & RSVP page, or the fixture's own lineup page
+ * when no event mirrors it yet.
+ */
+export function lineupHref(teamId: string, fixture: { id: string; eventId: string | null }): string {
+  return fixture.eventId
+    ? `/events/${fixture.eventId}?tab=lineup`
+    : `/teams/${teamId}/fixtures/${fixture.id}/lineup`;
+}
+
 export function fixtureStatusVariant(
   status: string,
 ): "success" | "muted" | "destructive" | "warning" | "default" {
