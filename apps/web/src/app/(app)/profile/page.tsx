@@ -67,7 +67,7 @@ export default async function ProfilePage() {
     <>
       <PageHeader title="My profile" subtitle="What the club holds about you, and the parts you can change yourself" />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         {error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error.message}
@@ -84,7 +84,7 @@ export default async function ProfilePage() {
         ) : (
           <>
             <Card>
-              <CardHeader>
+              <CardHeader className="p-4 lg:p-6">
                 <CardTitle className="flex items-center gap-2 text-base">
                   <UserCircle className="h-4 w-4" /> {personLabel(person)}
                 </CardTitle>
@@ -93,7 +93,7 @@ export default async function ProfilePage() {
                   administrator and they will change the record. Your email address is your login.
                 </p>
               </CardHeader>
-              <CardContent>
+              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
                 <dl className="grid gap-4 text-sm sm:grid-cols-3">
                   <div>
                     <dt className="text-xs uppercase text-muted-foreground">Name</dt>
@@ -114,13 +114,15 @@ export default async function ProfilePage() {
             </Card>
 
             <Card>
-              <CardHeader>
+              <CardHeader className="p-4 lg:p-6">
                 <CardTitle className="text-base">Contact details</CardTitle>
                 <p className="text-sm text-muted-foreground">
                   These are yours to keep current — the club uses them to reach you.
                 </p>
               </CardHeader>
-              <CardContent>{initial && <ContactDetailsForm initial={initial} />}</CardContent>
+              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+                {initial && <ContactDetailsForm initial={initial} />}
+              </CardContent>
             </Card>
           </>
         )}

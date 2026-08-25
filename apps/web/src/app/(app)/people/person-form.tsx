@@ -125,8 +125,8 @@ export function PersonForm({
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={pending}>
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:flex-wrap lg:items-center">
+        <Button type="submit" disabled={pending} className="min-h-[44px] lg:min-h-0">
           {pending ? "Saving…" : mode === "create" ? "Create person" : "Save changes"}
         </Button>
         {state.error && (

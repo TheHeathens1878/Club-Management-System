@@ -130,13 +130,18 @@ export default async function ApprovalsPage({
         title="Approvals"
         subtitle="People who have signed up and told us what they are. Approving a coach or a player writes the team membership; approving a parent grants the parent role."
         action={
-          <Link href="/people" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/people"
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
+          >
             People
           </Link>
         }
       />
 
-      <div className="space-y-6 p-8">
+      <div className="space-y-6 p-4 lg:p-8">
         {registrationCount > 0 ? (
           <Card className="border-primary/30 bg-primary/5">
             <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -158,23 +163,35 @@ export default async function ApprovalsPage({
                   writes the player&apos;s team membership for the season.
                 </span>
               </p>
-              <Link href="/registrations" className={buttonVariants({ size: "sm" })}>
+              <Link
+                href="/registrations"
+                className={
+                  buttonVariants({ size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+                }
+              >
                 Review registrations
               </Link>
             </CardContent>
           </Card>
         ) : null}
 
-        <div className="flex gap-2">
+        {/* The tab strip scrolls in its own lane on a phone. */}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 lg:mx-0 lg:overflow-visible lg:px-0">
           <Link
             href="/approvals"
-            className={buttonVariants({ variant: decided ? "ghost" : "secondary", size: "sm" })}
+            className={
+              buttonVariants({ variant: decided ? "ghost" : "secondary", size: "sm" }) +
+              " min-h-[44px] shrink-0 lg:min-h-0"
+            }
           >
             Waiting
           </Link>
           <Link
             href="/approvals?tab=decided"
-            className={buttonVariants({ variant: decided ? "secondary" : "ghost", size: "sm" })}
+            className={
+              buttonVariants({ variant: decided ? "secondary" : "ghost", size: "sm" }) +
+              " min-h-[44px] shrink-0 lg:min-h-0"
+            }
           >
             Decided
           </Link>
@@ -210,7 +227,7 @@ export default async function ApprovalsPage({
               return (
                 <li key={request.id}>
                   <Card>
-                    <CardHeader className="pb-3">
+                    <CardHeader className="p-4 pb-3 lg:p-6 lg:pb-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <CardTitle className="text-base">
@@ -235,8 +252,8 @@ export default async function ApprovalsPage({
                       </div>
                     </CardHeader>
 
-                    <CardContent className="space-y-4">
-                      <dl className="grid gap-4 text-sm sm:grid-cols-3">
+                    <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+                      <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
                         <div>
                           <dt className="text-xs uppercase text-muted-foreground">Date of birth</dt>
                           <dd className="mt-0.5">

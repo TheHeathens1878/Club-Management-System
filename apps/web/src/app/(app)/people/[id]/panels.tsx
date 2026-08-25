@@ -133,7 +133,7 @@ export function RolesPanel({ personId, roles }: { personId: string; roles: RoleR
               <form action={revokeAction}>
                 <input type="hidden" name="person_id" value={personId} />
                 <input type="hidden" name="role_id" value={role.id} />
-                <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
+                <Button type="submit" size="sm" variant="outline" className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0">
                   Revoke
                 </Button>
               </form>
@@ -166,7 +166,12 @@ export function RolesPanel({ personId, roles }: { personId: string; roles: RoleR
             <Input id="grant-notes" name="notes" placeholder="e.g. Elected at the 2026 AGM" />
           </div>
         </div>
-        <Button type="submit" size="sm" disabled={granting}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={granting}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {granting ? "Granting…" : "Grant role"}
         </Button>
         <Feedback state={grantState} />
@@ -221,7 +226,7 @@ export function GuardianshipsPanel({
               <form action={endAction}>
                 <input type="hidden" name="person_id" value={personId} />
                 <input type="hidden" name="guardianship_id" value={link.id} />
-                <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
+                <Button type="submit" size="sm" variant="outline" className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0">
                   End
                 </Button>
               </form>
@@ -295,7 +300,12 @@ export function GuardianshipsPanel({
             far more widely than the concern record.
           </p>
         </div>
-        <Button type="submit" size="sm" disabled={adding}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={adding}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {adding ? "Saving…" : "Add guardianship"}
         </Button>
         <Feedback state={addState} />
@@ -361,7 +371,7 @@ export function PersonCertificationsPanel({
                               type="submit"
                               size="sm"
                               variant="outline"
-                              className="h-8 px-2 text-xs"
+                              className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0"
                             >
                               Verify
                             </Button>
@@ -374,7 +384,7 @@ export function PersonCertificationsPanel({
                             type="submit"
                             size="sm"
                             variant="outline"
-                            className="h-8 px-2 text-xs"
+                            className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0"
                           >
                             Revoke
                           </Button>
@@ -418,7 +428,12 @@ export function PersonCertificationsPanel({
             <Input id="cert-expires" name="expires_on" type="date" />
           </div>
         </div>
-        <Button type="submit" size="sm" disabled={adding}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={adding}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {adding ? "Saving…" : "Record certification"}
         </Button>
         <Feedback state={addState} />
@@ -450,7 +465,13 @@ export function RetirePanel({
         </p>
         <form action={restoreAction}>
           <input type="hidden" name="person_id" value={personId} />
-          <Button type="submit" size="sm" variant="outline" disabled={restoring}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            disabled={restoring}
+            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          >
             {restoring ? "Restoring…" : "Restore"}
           </Button>
         </form>
@@ -476,7 +497,13 @@ export function RetirePanel({
         }}
       >
         <input type="hidden" name="person_id" value={personId} />
-        <Button type="submit" size="sm" variant="destructive" disabled={deleting}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="destructive"
+          disabled={deleting}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {deleting ? "Retiring…" : "Retire this person"}
         </Button>
       </form>

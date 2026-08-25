@@ -41,7 +41,7 @@ export default async function ConnectedAdultsPage() {
         subtitle="The adults the club connects to your account — your household, and your family membership"
       />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         {error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error.message}
@@ -49,7 +49,7 @@ export default async function ConnectedAdultsPage() {
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2 text-base">
               <UsersRound className="h-4 w-4" /> Connect an adult
             </CardTitle>
@@ -64,7 +64,7 @@ export default async function ConnectedAdultsPage() {
               , they stay connected here — the membership keeps the tie.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <AddAdultForm />
           </CardContent>
         </Card>
@@ -78,7 +78,7 @@ export default async function ConnectedAdultsPage() {
         ) : (
           adults.map((adult) => (
             <Card key={adult.person_id}>
-              <CardHeader>
+              <CardHeader className="p-4 lg:p-6">
                 <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                   <Contact className="h-4 w-4" />
                   {adult.first_name} {adult.last_name}
@@ -111,8 +111,8 @@ export default async function ConnectedAdultsPage() {
                   )}
                 </p>
               </CardHeader>
-              <CardContent>
-                <dl className="grid gap-4 text-sm sm:grid-cols-2">
+              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+                <dl className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <dt className="text-xs uppercase text-muted-foreground">Email</dt>
                     <dd className="mt-0.5">{adult.email ?? "Not recorded"}</dd>

@@ -233,24 +233,33 @@ export default async function WaitingListDeskPage({
               : "Players waiting for a place"
         }
         action={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
             <a
               href={exportHref}
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+              className={
+                buttonVariants({ variant: "outline", size: "sm" }) +
+                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+              }
             >
               <Download className="h-4 w-4" /> Export CSV
             </a>
             {admin && (
               <Link
                 href="/waiting-list/manage/access"
-                className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+                className={
+                  buttonVariants({ variant: "outline", size: "sm" }) +
+                  " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+                }
               >
                 <KeyRound className="h-4 w-4" /> Access
               </Link>
             )}
             <Link
               href="/waiting-list"
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+              className={
+                buttonVariants({ variant: "outline", size: "sm" }) +
+                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+              }
             >
               <ExternalLink className="h-4 w-4" /> Public form
             </Link>
@@ -258,24 +267,24 @@ export default async function WaitingListDeskPage({
         }
       />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         {admin && (
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle className="text-base">Age group availability</CardTitle>
               <p className="text-sm text-muted-foreground">
                 A group that is not open is not offered on the public form, and a submission for it
                 is refused. Closing a group does not affect the people already waiting.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <AgeGroupsPanel settings={ageGroupSettings} />
             </CardContent>
           </Card>
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2 text-base">
               <ClipboardList className="h-4 w-4" /> Entries
             </CardTitle>
@@ -284,13 +293,16 @@ export default async function WaitingListDeskPage({
               have been given access to; a club administrator sees them all.
             </p>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <form method="GET" className="flex flex-wrap items-end gap-2">
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+            <form
+              method="GET"
+              className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-end"
+            >
               <Select
                 name="status"
                 defaultValue={statusFilter ?? ""}
                 aria-label="Status"
-                className="h-9 w-auto min-w-48"
+                className="min-h-[44px] lg:h-9 lg:w-auto lg:min-h-0 lg:min-w-48"
               >
                 <option value="">
                   {showAll ? "All statuses" : "Active (pending, contacted, trialling)"}
@@ -305,7 +317,7 @@ export default async function WaitingListDeskPage({
                 name="age_group"
                 defaultValue={ageGroupFilter ?? ""}
                 aria-label="Age group"
-                className="h-9 w-auto min-w-36"
+                className="min-h-[44px] lg:h-9 lg:w-auto lg:min-h-0 lg:min-w-36"
               >
                 <option value="">All age groups</option>
                 {filterAgeGroups.map((group) => (
@@ -314,7 +326,7 @@ export default async function WaitingListDeskPage({
                   </option>
                 ))}
               </Select>
-              <label className="flex h-9 cursor-pointer items-center gap-2 rounded-md border border-input bg-card px-3 text-sm">
+              <label className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-input bg-card px-3 text-sm lg:h-9 lg:min-h-0">
                 <input
                   type="checkbox"
                   name="coaching"
@@ -325,13 +337,20 @@ export default async function WaitingListDeskPage({
                 Willing to coach
               </label>
               {showAll && <input type="hidden" name="show_all" value="1" />}
-              <Button type="submit" size="sm" variant="outline">
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                className="min-h-[44px] lg:min-h-0"
+              >
                 Filter
               </Button>
               {filtered && (
                 <Link
                   href={`/waiting-list/manage${showAll ? "?show_all=1" : ""}`}
-                  className={buttonVariants({ variant: "ghost", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "ghost", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+                  }
                 >
                   Clear
                 </Link>
@@ -399,13 +418,15 @@ export default async function WaitingListDeskPage({
               const entryNotes = notesByEntry.get(entry.id) ?? [];
               return (
                 <details key={entry.id} className="group rounded-lg border bg-card">
-                  <summary className="flex cursor-pointer select-none flex-wrap items-center gap-2 px-4 py-3 text-sm hover:bg-secondary/40">
+                  <summary className="flex min-h-[44px] cursor-pointer select-none flex-wrap items-center gap-2 px-4 py-3 text-sm hover:bg-secondary/40">
                     {entry.priority !== null && (
                       <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
                         {entry.priority}
                       </span>
                     )}
-                    <span className="font-medium">{entry.player_name}</span>
+                    {/* Grows to fill the phone's first line, so the badges wrap
+                        onto their own rather than trailing off the edge. */}
+                    <span className="flex-1 font-medium lg:flex-none">{entry.player_name}</span>
                     <Badge variant="outline">{entry.age_group}</Badge>
                     <Badge variant={statusVariant(entry.status)}>
                       {STATUS_LABELS[entry.status]}
@@ -415,7 +436,7 @@ export default async function WaitingListDeskPage({
                         <HeartHandshake className="h-3 w-3" /> Can coach
                       </Badge>
                     )}
-                    <span className="ml-auto flex items-center gap-3 text-xs text-muted-foreground">
+                    <span className="flex w-full items-center gap-3 text-xs text-muted-foreground lg:ml-auto lg:w-auto">
                       <span>
                         {entryNotes.length} {entryNotes.length === 1 ? "note" : "notes"}
                       </span>

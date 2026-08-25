@@ -72,14 +72,16 @@ export default async function WaitingListAccessPage() {
         action={
           <Link
             href="/waiting-list/manage"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
           >
             <ChevronLeft className="h-4 w-4" /> Back to the desk
           </Link>
         }
       />
 
-      <div className="max-w-3xl space-y-6 p-6">
+      <div className="max-w-3xl space-y-6 p-4 lg:p-6">
         {error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {error.message}
@@ -87,7 +89,7 @@ export default async function WaitingListAccessPage() {
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2 text-base">
               <KeyRound className="h-4 w-4" /> Grant access
             </CardTitle>
@@ -98,20 +100,20 @@ export default async function WaitingListAccessPage() {
               needs for the group they run. They are told in the app as soon as you do.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <GrantForm ageGroups={ageGroups} />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Current access</CardTitle>
             <p className="text-sm text-muted-foreground">
               Club administrators are not listed here — they reach the whole list through their
               role, not through a grant.
             </p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
             {people.length === 0 && (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 Nobody outside the club administrators can see the waiting list.
@@ -136,10 +138,10 @@ export default async function WaitingListAccessPage() {
                         {!openGroups.has(grant.age_group) && (
                           <Badge variant="muted">Group closed</Badge>
                         )}
-                        <span className="text-xs text-muted-foreground">
+                        <span className="flex-1 text-xs text-muted-foreground lg:flex-none">
                           since {formatStamp(grant.created_at)}
                         </span>
-                        <span className="ml-auto">
+                        <span className="lg:ml-auto">
                           <RevokeForm personId={grant.person_id} ageGroup={grant.age_group} />
                         </span>
                       </li>

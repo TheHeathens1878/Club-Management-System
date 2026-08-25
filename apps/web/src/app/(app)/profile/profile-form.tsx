@@ -106,7 +106,12 @@ export function ContactDetailsForm({ initial }: { initial: ContactDetails }) {
         </p>
       )}
 
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button
+        type="submit"
+        size="sm"
+        disabled={pending}
+        className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+      >
         {pending ? "Saving…" : "Save changes"}
       </Button>
     </form>

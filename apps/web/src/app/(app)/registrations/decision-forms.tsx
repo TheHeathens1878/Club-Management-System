@@ -60,10 +60,13 @@ export function DecisionPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <form action={approve} className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-end">
+        <form
+          action={approve}
+          className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-end"
+        >
           <input type="hidden" name="registration_id" value={registrationId} />
-          <div className="min-w-56 space-y-1">
+          <div className="space-y-1 lg:min-w-56">
             <Label
               htmlFor={`team-${registrationId}`}
               className="text-xs text-muted-foreground"
@@ -74,7 +77,7 @@ export function DecisionPanel({
               id={`team-${registrationId}`}
               name="team_id"
               defaultValue={requestedTeamId ?? ""}
-              className="h-9"
+              className="min-h-[44px] lg:h-9 lg:min-h-0"
             >
               <option value="">Choose a team</option>
               {teams.map((team) => (
@@ -85,7 +88,12 @@ export function DecisionPanel({
               ))}
             </Select>
           </div>
-          <Button type="submit" size="sm" disabled={approving}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={approving}
+            className="min-h-[44px] lg:min-h-0"
+          >
             <Check className="h-4 w-4" />
             {approving ? "Approving…" : "Approve"}
           </Button>
@@ -96,15 +104,19 @@ export function DecisionPanel({
           size="sm"
           variant="outline"
           onClick={() => setShowReject((open) => !open)}
+          className="min-h-[44px] lg:min-h-0"
         >
           <X className="h-4 w-4" /> Reject
         </Button>
       </div>
 
       {showReject && (
-        <form action={reject} className="flex flex-wrap items-end gap-2">
+        <form
+          action={reject}
+          className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-end"
+        >
           <input type="hidden" name="registration_id" value={registrationId} />
-          <div className="min-w-64 space-y-1">
+          <div className="space-y-1 lg:min-w-64">
             <Label htmlFor={`note-${registrationId}`} className="text-xs text-muted-foreground">
               Why (the family sees this)
             </Label>
@@ -115,7 +127,13 @@ export function DecisionPanel({
               placeholder="No space in that age group this season"
             />
           </div>
-          <Button type="submit" size="sm" variant="destructive" disabled={rejecting}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="destructive"
+            disabled={rejecting}
+            className="min-h-[44px] lg:min-h-0"
+          >
             {rejecting ? "Rejecting…" : "Confirm rejection"}
           </Button>
         </form>

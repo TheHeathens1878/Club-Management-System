@@ -61,7 +61,13 @@ export function AddChildForm() {
     return (
       <div className="space-y-3">
         <Feedback state={state} />
-        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           <UserPlus className="h-4 w-4" /> Add a child
         </Button>
       </div>
@@ -110,11 +116,17 @@ export function AddChildForm() {
 
       <Feedback state={state} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
           {pending ? "Adding…" : "Add child"}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          className="min-h-[44px] lg:min-h-0"
+        >
           Cancel
         </Button>
       </div>
@@ -152,7 +164,13 @@ export function RegisterForm({
     return (
       <div className="space-y-3">
         <Feedback state={state} />
-        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           <Plus className="h-4 w-4" /> Register for a team
         </Button>
       </div>
@@ -313,11 +331,17 @@ export function RegisterForm({
 
       <Feedback state={state} />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
           {pending ? "Sending…" : "Send registration"}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          className="min-h-[44px] lg:min-h-0"
+        >
           Cancel
         </Button>
       </div>
@@ -334,7 +358,13 @@ export function WithdrawForm({ registrationId }: { registrationId: string }) {
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="registration_id" value={registrationId} />
-      <Button type="submit" size="sm" variant="outline" disabled={pending}>
+      <Button
+        type="submit"
+        size="sm"
+        variant="outline"
+        disabled={pending}
+        className="min-h-[44px] lg:min-h-0"
+      >
         {pending ? "Withdrawing…" : "Withdraw"}
       </Button>
       {state.error && <span className="text-sm text-destructive">{state.error}</span>}
@@ -387,9 +417,15 @@ export function AppAccessForm({
           <span className="text-xs text-muted-foreground">
             Recorded {formatStamp(consent.grantedAt)}
           </span>
-          <form action={revokeAction}>
+          <form action={revokeAction} className="w-full lg:w-auto">
             <input type="hidden" name="consent_id" value={consent.id} />
-            <Button type="submit" size="sm" variant="outline" disabled={revoking}>
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              disabled={revoking}
+              className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+            >
               {revoking ? "Withdrawing…" : "Withdraw"}
             </Button>
           </form>
@@ -397,9 +433,15 @@ export function AppAccessForm({
       ) : (
         <div className="flex flex-wrap items-center gap-3">
           <Badge variant="muted">No app access</Badge>
-          <form action={grantAction}>
+          <form action={grantAction} className="w-full lg:w-auto">
             <input type="hidden" name="child_person_id" value={childPersonId} />
-            <Button type="submit" size="sm" variant="outline" disabled={granting}>
+            <Button
+              type="submit"
+              size="sm"
+              variant="outline"
+              disabled={granting}
+              className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+            >
               {granting ? "Recording…" : "Allow app access"}
             </Button>
           </form>

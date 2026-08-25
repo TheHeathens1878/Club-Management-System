@@ -90,9 +90,9 @@ function GroupOrder({ group }: { group: PriorityGroup }) {
               max={order.length}
               value={index + 1}
               onChange={(event) => setPosition(index, event.target.value)}
-              className="h-8 w-16 rounded-md border border-input bg-card px-2 text-sm"
+              className="min-h-[44px] w-16 rounded-md border border-input bg-card px-2 text-sm lg:h-8 lg:min-h-0"
             />
-            <span className="font-medium">{entry.playerName}</span>
+            <span className="flex-1 font-medium lg:flex-none">{entry.playerName}</span>
             <Badge variant={statusVariant(entry.status)}>{STATUS_LABELS[entry.status]}</Badge>
             {entry.priority !== null && entry.priority !== index + 1 && (
               <span className="text-xs text-muted-foreground">was {entry.priority}</span>
@@ -105,6 +105,7 @@ function GroupOrder({ group }: { group: PriorityGroup }) {
                 onClick={() => move(index, -1)}
                 disabled={index === 0}
                 aria-label={`Move ${entry.playerName} up`}
+                className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"
               >
                 <ArrowUp className="h-3.5 w-3.5" />
               </Button>
@@ -115,6 +116,7 @@ function GroupOrder({ group }: { group: PriorityGroup }) {
                 onClick={() => move(index, 1)}
                 disabled={index === order.length - 1}
                 aria-label={`Move ${entry.playerName} down`}
+                className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"
               >
                 <ArrowDown className="h-3.5 w-3.5" />
               </Button>
@@ -124,7 +126,12 @@ function GroupOrder({ group }: { group: PriorityGroup }) {
       </ol>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={pending}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {pending ? "Saving…" : "Save order"}
         </Button>
         {state.error && <span className="text-sm text-destructive">{state.error}</span>}
