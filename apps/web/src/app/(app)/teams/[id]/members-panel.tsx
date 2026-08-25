@@ -191,6 +191,27 @@ export function MembersPanel({
   const [endState, endAction] = useActionState(endMembership, EMPTY);
 
   const alreadyIn = members.map((m) => m.personId);
+  // Adam, 2026-08-25: "Managers and coaches should be split from players in
+  // the squad screen." One list becomes two, in the order a team sheet is
+  // read: the people running it, then the people playing. Everything else —
+  // the cards on a phone, the table on the desk, the controls — is the same
+  // component rendered twice.
+  const staffMembers = members.filter((m) => m.role !== "player");
+  const playerMembers = members.filter((m) => m.role === "player");
+  const groups: { key: string; heading: string; rows: MemberRow[]; empty: string }[] = [
+    {
+      key: "staff",
+      heading: "Coaches and managers",
+      rows: staffMembers,
+      empty: "No coaches or managers recorded for this team.",
+    },
+    {
+      key: "players",
+      heading: "Players",
+      rows: playerMembers,
+      empty: "No players recorded for this team.",
+    },
+  ];
   const roleValues = Object.keys(ROLE_LABELS) as TeamRoleValue[];
   const leavePending = new Set(squadLeave.pendingMembershipIds);
 
@@ -213,10 +234,19 @@ export function MembersPanel({
           </p>
         ) : (
           <>
+          {groups.map((group) => (
+            <div key={group.key} className="mt-4 first:mt-2">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {group.heading}
+              </p>
+              {group.rows.length === 0 ? (
+                <p className="py-3 text-sm text-muted-foreground">{group.empty}</p>
+              ) : (
+                <>
           {/* The phone reads the roster as cards, one member each, with the
               same four edits stacked underneath (mobile design). */}
           <ul className="mt-2 divide-y rounded-lg border lg:hidden">
-            {members.map((member) => (
+            {group.rows.map((member) => (
               <li key={member.id} className="space-y-2.5 px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex min-w-0 items-center gap-2.5">
@@ -334,7 +364,7 @@ export function MembersPanel({
                 </tr>
               </thead>
               <tbody>
-                {members.map((member) => (
+                {group.rows.map((member) => (
                   <tr key={member.id} className="border-b align-top last:border-0">
                     <td className="py-2 pr-3">
                       <div className="flex items-center gap-2.5">
@@ -456,6 +486,10 @@ export function MembersPanel({
               </tbody>
             </table>
           </div>
+                </>
+              )}
+            </div>
+          ))}
           </>
         )}
         <div className="mt-2 space-y-2">
