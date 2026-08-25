@@ -88,14 +88,17 @@ export default async function CommsSettingsPage() {
         subtitle="How the club contacts you, and who it must not contact"
         action={
           committee ? (
-            <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+            <Link
+              href="/settings"
+              className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
+            >
               <ChevronLeft className="h-4 w-4" /> Settings
             </Link>
           ) : undefined
         }
       />
 
-      <div className="p-6 space-y-6 max-w-3xl">
+      <div className="max-w-3xl space-y-6 p-4 lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Your channels</CardTitle>

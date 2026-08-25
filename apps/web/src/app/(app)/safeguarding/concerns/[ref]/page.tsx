@@ -47,7 +47,7 @@ export default async function ConcernPage({ params }: { params: Promise<{ ref: s
       return (
         <>
           <PageHeader title={concernRef} subtitle="Safeguarding concern" />
-          <div className="p-6 max-w-2xl">
+          <div className="max-w-2xl p-4 lg:p-6">
             <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
               {error.message}
             </p>
@@ -75,13 +75,16 @@ export default async function ConcernPage({ params }: { params: Promise<{ ref: s
         title={concern.ref}
         subtitle="Safeguarding concern"
         action={
-          <Link href="/safeguarding" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+          <Link
+            href="/safeguarding"
+            className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
+          >
             <ChevronLeft className="h-4 w-4" /> All concerns
           </Link>
         }
       />
 
-      <div className="p-6 space-y-6 max-w-3xl">
+      <div className="max-w-3xl space-y-6 p-4 lg:p-6">
         <Card>
           <CardHeader>
             <div className="flex flex-wrap items-center gap-2">

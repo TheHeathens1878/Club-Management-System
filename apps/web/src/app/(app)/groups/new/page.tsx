@@ -35,14 +35,14 @@ export default async function NewGroupPage() {
         action={
           <Link
             href="/groups"
-            className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+            className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
           >
             <ChevronLeft className="h-4 w-4" /> All groups
           </Link>
         }
       />
 
-      <div className="p-6 max-w-2xl">
+      <div className="max-w-2xl p-4 lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Set up a group</CardTitle>

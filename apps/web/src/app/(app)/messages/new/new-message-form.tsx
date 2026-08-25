@@ -40,7 +40,7 @@ export function NewMessageForm({ people }: { people: PersonOption[] }) {
           name="type"
           value={type}
           onChange={(e) => setType(e.target.value === "group" ? "group" : "dm")}
-          className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+          className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm lg:h-10"
         >
           <option value="dm">Direct message (one person)</option>
           <option value="group">Group (two or more people)</option>
@@ -62,7 +62,7 @@ export function NewMessageForm({ people }: { people: PersonOption[] }) {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search the people you can message"
         />
-        <div className="max-h-64 space-y-1 overflow-y-auto rounded-md border p-2">
+        <div className="max-h-72 space-y-1 overflow-y-auto rounded-md border p-2 lg:max-h-64">
           {filtered.length === 0 && (
             <p className="p-2 text-sm text-muted-foreground">
               Nobody to show. Members can normally message the people on their teams and, as a
@@ -70,7 +70,10 @@ export function NewMessageForm({ people }: { people: PersonOption[] }) {
             </p>
           )}
           {filtered.map((person) => (
-            <label key={person.id} className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-secondary">
+            <label
+              key={person.id}
+              className="flex min-h-[44px] items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-secondary lg:min-h-0"
+            >
               <input
                 type={type === "dm" ? "radio" : "checkbox"}
                 name="person_id"
@@ -92,7 +95,7 @@ export function NewMessageForm({ people }: { people: PersonOption[] }) {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-2"
       >
         <MessageSquarePlus className="h-4 w-4" /> Start conversation
       </button>

@@ -103,11 +103,11 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                 : "Direct message"
         }
         action={
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center gap-x-4">
             {data.canManageGroup && (
               <Link
                 href={`/groups/${data.conversation.id}`}
-                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+                className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
               >
                 <Settings className="h-4 w-4" /> Group settings
               </Link>
@@ -115,14 +115,14 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
             {teamHref && (
               <Link
                 href={teamHref}
-                className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+                className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
               >
                 Team page
               </Link>
             )}
             <Link
               href="/messages"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
             >
               <ChevronLeft className="h-4 w-4" /> All messages
             </Link>
@@ -130,7 +130,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
         }
       />
 
-      <div className="max-w-3xl p-6">
+      <div className="max-w-3xl p-4 lg:p-6">
         <ThreadPanel data={data} postFixtures={postFixtures} />
       </div>
     </>

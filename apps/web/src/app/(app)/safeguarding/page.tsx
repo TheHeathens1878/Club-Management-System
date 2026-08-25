@@ -114,13 +114,18 @@ export default async function SafeguardingPage({
         title="Safeguarding"
         subtitle="Concerns, oversight and compliance"
         action={
-          <Link href="/safeguarding/report" className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}>
+          <Link
+            href="/safeguarding/report"
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] gap-2 lg:min-h-0"
+            }
+          >
             <FileWarning className="h-4 w-4" /> Report a concern
           </Link>
         }
       />
 
-      <div className="p-6 space-y-6">
+      <div className="space-y-6 p-4 lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">Safeguarding lead</CardTitle>
@@ -146,10 +151,14 @@ export default async function SafeguardingPage({
             </p>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex flex-wrap gap-2">
+            {/* The status filters scroll in their own strip on a phone. */}
+            <div className="-mx-6 flex gap-2 overflow-x-auto whitespace-nowrap px-6 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
               <Link
                 href="/safeguarding"
-                className={buttonVariants({ variant: filter ? "outline" : "secondary", size: "sm" })}
+                className={
+                  buttonVariants({ variant: filter ? "outline" : "secondary", size: "sm" }) +
+                  " min-h-[44px] flex-none lg:min-h-0"
+                }
               >
                 All
               </Link>
@@ -157,7 +166,10 @@ export default async function SafeguardingPage({
                 <Link
                   key={s}
                   href={`/safeguarding?status=${s}`}
-                  className={buttonVariants({ variant: filter === s ? "secondary" : "outline", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: filter === s ? "secondary" : "outline", size: "sm" }) +
+                    " min-h-[44px] flex-none lg:min-h-0"
+                  }
                 >
                   {s.replace("_", " ")}
                 </Link>
@@ -230,7 +242,38 @@ export default async function SafeguardingPage({
                 Everyone in a child-facing role is compliant.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Phone: a card per person, the two certification states as
+                  pills. The desk keeps the six-column table below. */}
+              <div className="space-y-3 lg:hidden">
+                {(compliance ?? []).map((row) => (
+                  <div
+                    key={`card-${row.team_id}-${row.person_id}`}
+                    className="rounded-xl border bg-card p-4"
+                  >
+                    <p className="text-[15px] font-semibold leading-tight">{row.person_name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      <Link href={`/teams/${row.team_id}`} className="hover:underline">
+                        {row.team_name}
+                      </Link>{" "}
+                      · {row.role}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <Badge variant={complianceVariant(row.dbs_status)}>
+                        DBS: {row.dbs_status}
+                      </Badge>
+                      <Badge variant={complianceVariant(row.safeguarding_status)}>
+                        Safeguarding: {row.safeguarding_status}
+                      </Badge>
+                      {row.exemption_expires_on && (
+                        <Badge variant="muted">Exempt until {row.exemption_expires_on}</Badge>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b text-left text-xs uppercase text-muted-foreground">
@@ -268,6 +311,7 @@ export default async function SafeguardingPage({
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </CardContent>
         </Card>

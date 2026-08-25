@@ -55,9 +55,14 @@ export function PreferencesForm({ preferences }: { preferences: PreferenceSet })
     <form action={action} className="space-y-3 rounded-lg border p-4">
       <input type="hidden" name="person_id" value={preferences.personId} />
       <p className="text-sm font-medium">{preferences.name}</p>
-      <div className="grid gap-2 sm:grid-cols-2">
+      {/* Each channel is a 44px row on a phone — a tick box on its own is a
+          10px target. Two columns from sm, as the desk has always had. */}
+      <div className="grid gap-1 sm:grid-cols-2 sm:gap-2">
         {Object.entries(CHANNEL_LABELS).map(([channel, label]) => (
-          <label key={channel} className="flex items-center gap-2 text-sm">
+          <label
+            key={channel}
+            className="flex min-h-[44px] items-center gap-2 text-sm sm:min-h-0"
+          >
             <input
               type="checkbox"
               name={`channel_${channel}`}
@@ -73,7 +78,7 @@ export function PreferencesForm({ preferences }: { preferences: PreferenceSet })
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-1.5"
       >
         Save
       </button>
@@ -106,7 +111,10 @@ export function SuppressionsPanel({ suppressions }: { suppressions: SuppressionR
             </div>
             <form action={removeAction}>
               <input type="hidden" name="suppression_id" value={row.id} />
-              <button type="submit" className="rounded border px-2 py-1 text-xs hover:bg-secondary">
+              <button
+                type="submit"
+                className="inline-flex min-h-[44px] items-center rounded border px-3 text-xs hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+              >
                 Remove
               </button>
             </form>
@@ -123,7 +131,7 @@ export function SuppressionsPanel({ suppressions }: { suppressions: SuppressionR
               id="suppress-channel"
               name="channel"
               defaultValue="email"
-              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm lg:h-10"
             >
               {Object.entries(CHANNEL_LABELS).map(([channel, label]) => (
                 <option key={channel} value={channel}>
@@ -134,18 +142,30 @@ export function SuppressionsPanel({ suppressions }: { suppressions: SuppressionR
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="suppress-address">Address</Label>
-            <Input id="suppress-address" name="address" placeholder="name@example.com" required />
+            <Input
+              id="suppress-address"
+              name="address"
+              placeholder="name@example.com"
+              required
+              className="h-11 lg:h-10"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="suppress-reason">Reason</Label>
-            <Input id="suppress-reason" name="reason" placeholder="hard bounce" required />
+            <Input
+              id="suppress-reason"
+              name="reason"
+              placeholder="hard bounce"
+              required
+              className="h-11 lg:h-10"
+            />
           </div>
         </div>
         <Feedback state={addState} />
         <button
           type="submit"
           disabled={adding}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-2"
         >
           Suppress address
         </button>

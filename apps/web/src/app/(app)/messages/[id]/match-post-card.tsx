@@ -90,7 +90,7 @@ export function MatchPostCard({ post, isReferee }: { post: MatchPostView; isRefe
             <button
               type="submit"
               disabled={claiming}
-              className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 lg:min-h-0 lg:py-1.5"
             >
               {claiming ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />

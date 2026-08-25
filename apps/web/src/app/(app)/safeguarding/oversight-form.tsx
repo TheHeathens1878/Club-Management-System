@@ -22,7 +22,13 @@ export function OversightForm() {
     <form action={action} className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="oversight-id">Conversation id</Label>
-        <Input id="oversight-id" name="conversation_id" placeholder="00000000-0000-0000-0000-000000000000" required />
+        <Input
+          id="oversight-id"
+          name="conversation_id"
+          placeholder="00000000-0000-0000-0000-000000000000"
+          required
+          className="h-11 lg:h-10"
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="oversight-reason">Reason *</Label>
@@ -42,7 +48,7 @@ export function OversightForm() {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-2"
       >
         <Eye className="h-4 w-4" /> Open conversation
       </button>
