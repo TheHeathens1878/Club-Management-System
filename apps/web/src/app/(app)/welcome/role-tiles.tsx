@@ -1,7 +1,16 @@
 "use client";
 
 import { useTransition } from "react";
-import { Baby, Building2, Megaphone, ShieldCheck, Shirt, UserCircle, type LucideIcon } from "lucide-react";
+import {
+  Baby,
+  Building2,
+  ClipboardList,
+  Megaphone,
+  ShieldCheck,
+  Shirt,
+  UserCircle,
+  type LucideIcon,
+} from "lucide-react";
 
 import { ROLE_VIEW_BLURBS, ROLE_VIEW_COOKIE, ROLE_VIEW_LABELS, type RoleView } from "@/lib/role-view";
 
@@ -20,6 +29,7 @@ const ICONS: Record<RoleView, LucideIcon> = {
   me: UserCircle,
   player: Shirt,
   parent: Baby,
+  referee: ClipboardList,
   coach: Megaphone,
   admin: ShieldCheck,
   function_room: Building2,

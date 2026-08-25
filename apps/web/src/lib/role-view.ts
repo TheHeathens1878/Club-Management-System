@@ -47,7 +47,15 @@ export const TEAM_SCOPE_COOKIE = "club.team_scope";
  * by anyone the club has linked to a person record, and it is the view a fresh
  * sign-in lands in.
  */
-export const ROLE_VIEWS = ["me", "player", "parent", "coach", "admin", "function_room"] as const;
+export const ROLE_VIEWS = [
+  "me",
+  "player",
+  "parent",
+  "coach",
+  "referee",
+  "admin",
+  "function_room",
+] as const;
 export type RoleView = (typeof ROLE_VIEWS)[number];
 
 export const ROLE_VIEW_LABELS: Record<RoleView, string> = {
@@ -55,6 +63,7 @@ export const ROLE_VIEW_LABELS: Record<RoleView, string> = {
   player: "Player",
   parent: "Parent or guardian",
   coach: "Coach or manager",
+  referee: "Referee",
   admin: "Club admin",
   function_room: "Function room",
 };
@@ -64,6 +73,7 @@ export const ROLE_VIEW_BLURBS: Record<RoleView, string> = {
   player: "Your teams and when you are playing.",
   parent: "Your children, their teams and their fixtures.",
   coach: "Your teams, pitch bookings and the waiting list.",
+  referee: "The games that need a referee, and the ones you have taken.",
   admin: "Running the club — people, teams, approvals and money.",
   function_room: "The function room diary, the bar and the rooms.",
 };
@@ -79,6 +89,9 @@ export const ROLE_VIEW_HOME: Record<RoleView, string> = {
   player: "/lobby",
   parent: "/lobby",
   coach: "/teams",
+  // The referees group IS the referee's screen (Adam, 2026-08-25) — the games
+  // are posted there and claimed there. /referee resolves it and goes.
+  referee: "/referee",
   admin: "/overview",
   function_room: "/room-bookings",
 };
@@ -108,6 +121,8 @@ export type Capabilities = {
   isSafeguardingLead: boolean;
   hasCoachRole: boolean;
   hasParentRole: boolean;
+  /** `person_roles.referee` — an approved referee, who may claim a game. */
+  hasRefereeRole: boolean;
   /** coach / assistant_coach / manager on any team. */
   isTeamStaff: boolean;
   /** A live `player` team membership. */
@@ -139,6 +154,8 @@ export function qualifiesForView(view: RoleView, c: Capabilities): boolean {
       return c.isGuardian || c.hasParentRole;
     case "coach":
       return c.isTeamStaff || c.hasCoachRole;
+    case "referee":
+      return c.hasRefereeRole;
     case "admin":
       return c.isClubAdmin || c.isCommittee;
     case "function_room":
@@ -155,7 +172,15 @@ export function qualifiesForView(view: RoleView, c: Capabilities): boolean {
  * the fallback when they hold no club hat. Distinct from {@link ROLE_VIEWS},
  * which is the order the tiles are drawn in.
  */
-const VIEW_PRECEDENCE = ["me", "parent", "player", "coach", "admin", "function_room"] as const;
+const VIEW_PRECEDENCE = [
+  "me",
+  "parent",
+  "player",
+  "coach",
+  "referee",
+  "admin",
+  "function_room",
+] as const;
 
 /** Every view this person holds, in tile order. */
 export function qualifiedViews(c: Capabilities): RoleView[] {
@@ -203,6 +228,7 @@ const ROLE_WORDS: Record<RoleView, string> = {
   player: "Player",
   parent: "Parent",
   coach: "Coach",
+  referee: "Referee",
   admin: "Club admin",
   function_room: "Function room",
 };
@@ -253,7 +279,9 @@ export function roleViewOptions(c: Capabilities): RoleViewOption[] {
           ? "The room and the bar"
           : view === "me"
             ? "Just you"
-            : "Whole club"),
+            : view === "referee"
+              ? "Games to referee"
+              : "Whole club"),
     });
 
   // The person themselves first — the default view, and the way back to it
@@ -261,6 +289,9 @@ export function roleViewOptions(c: Capabilities): RoleViewOption[] {
   // should always be at the bottom of the dropdown") — see the end.
   if (qualifiesForView("me", c)) add("me", null, "Me");
   if (qualifiesForView("admin", c)) add("admin", null, "Club Admin");
+  // The referee hat is club-wide and has no team scope: the games come to
+  // them in the group, from every team.
+  if (qualifiesForView("referee", c)) add("referee", null, "Referee");
 
   // Group by team: every team any hat touches, alphabetically, with the hats
   // for that team in coach → parent → player order.
