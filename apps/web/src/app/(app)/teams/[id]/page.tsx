@@ -1518,12 +1518,12 @@ export default async function TeamPage({
               </CardContent>
             </Card>
 
-            {allocationTools && (
             {/* The whole season in one go: every future home fixture onto one
                 pitch at one kick-off — or, for a central-venue team, every
                 fixture pointed at the league's venue and our pitches freed.
                 The RPCs are club_admin-only; committee holds that through the
                 profiles → person_roles sync. */}
+            {allocationTools && (
             <Card>
               <CardHeader>
                 <CardTitle>
