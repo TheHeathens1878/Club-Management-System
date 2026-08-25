@@ -20,6 +20,7 @@ import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/field";
 import { STAFF_TEAM_ROLES } from "@/lib/pitch-booking";
 import { formatBookingDateShort } from "@/lib/booking-time";
+import { widgetUrl } from "@club/fulltime";
 
 import { createSeason, createTeam, setCurrentSeason, setTeamActive } from "./actions";
 import { ClubWidgetsPanel } from "./club-widgets-panel";
@@ -33,6 +34,17 @@ type FullTimeLinkSummary = {
   last_import_at: string | null;
   last_import_count: number | null;
   last_error: string | null;
+};
+
+/** A club-feed team's latest import run — its only Full-Time record. */
+type ClubRunSummary = {
+  team_id: string;
+  status: string;
+  created_at: string;
+  inserted: number;
+  updated: number;
+  unchanged: number;
+  error: string | null;
 };
 
 type NextOut = {
@@ -96,41 +108,82 @@ function formatStamp(iso: string | null): string {
  * the same four columns the old list spread across three badges and two
  * paragraphs. Nothing is dropped: the timing, the count and the error text
  * all live in `detail`, and the team page still shows them in full.
+ *
+ * The label names the source ("which link is feeding this team?" — Adam,
+ * 2026-08-25): a team's own widget is a "Team FT link", a team matched by
+ * name out of the club-wide widgets is a "Club FT link". A club-feed team
+ * has no `team_fulltime_links` row, so its state is read from its latest
+ * club-widget import run instead.
  */
-function fullTimeState(link: FullTimeLinkSummary | undefined): {
+function fullTimeState(
+  link: FullTimeLinkSummary | undefined,
+  clubRun: ClubRunSummary | undefined,
+  clubConfigured: boolean,
+): {
   dot: string;
   label: string;
   detail: string;
 } {
-  if (!link) {
+  if (link) {
+    const when = `Last import ${formatStamp(link.last_import_at)}${
+      typeof link.last_import_count === "number" ? ` · ${link.last_import_count} fixtures` : ""
+    }`;
+    const detail = `This team's own Full-Time widget. ${when}`;
+
+    if (!link.enabled) {
+      return { dot: "bg-muted-foreground/60", label: "Team FT link · paused", detail };
+    }
+    if (link.last_import_status === "ok") {
+      return { dot: "bg-emerald-500", label: "Team FT link", detail };
+    }
+    if (link.last_import_status === "error") {
+      return {
+        dot: "bg-destructive",
+        label: "Team FT link · import failed",
+        detail: link.last_error ? `${detail}\n${link.last_error}` : detail,
+      };
+    }
+    if (link.last_import_status === "challenge") {
+      return { dot: "bg-amber-500", label: "Team FT link · blocked by Cloudflare", detail };
+    }
+    return { dot: "bg-amber-500", label: "Team FT link · not imported yet", detail };
+  }
+
+  if (clubRun) {
+    const count = clubRun.inserted + clubRun.updated + clubRun.unchanged;
+    const detail = `Fed from the club-wide Full-Time widgets, matched by team name. Last import ${formatStamp(
+      clubRun.created_at,
+    )} · ${count} fixtures`;
+    if (clubRun.status === "ok") {
+      return { dot: "bg-emerald-500", label: "Club FT link", detail };
+    }
+    if (clubRun.status === "error") {
+      return {
+        dot: "bg-destructive",
+        label: "Club FT link · import failed",
+        detail: clubRun.error ? `${detail}\n${clubRun.error}` : detail,
+      };
+    }
+    if (clubRun.status === "challenge") {
+      return { dot: "bg-amber-500", label: "Club FT link · blocked by Cloudflare", detail };
+    }
+    return { dot: "bg-amber-500", label: `Club FT link · ${clubRun.status}`, detail };
+  }
+
+  if (clubConfigured) {
     return {
       dot: "bg-muted-foreground/40",
-      label: "No Full-Time link",
-      detail: "No Full-Time widget saved for this team yet.",
+      label: "Club FT link · nothing imported yet",
+      detail:
+        "The club-wide widgets are set up, but no fixtures have been imported for this team yet — its name has not been matched in the club feed, or the nightly run has not happened since it was added.",
     };
   }
 
-  const when = `Last import ${formatStamp(link.last_import_at)}${
-    typeof link.last_import_count === "number" ? ` · ${link.last_import_count} fixtures` : ""
-  }`;
-
-  if (!link.enabled) {
-    return { dot: "bg-muted-foreground/60", label: "Import paused", detail: when };
-  }
-  if (link.last_import_status === "ok") {
-    return { dot: "bg-emerald-500", label: "Full-Time linked", detail: when };
-  }
-  if (link.last_import_status === "error") {
-    return {
-      dot: "bg-destructive",
-      label: "Last import failed",
-      detail: link.last_error ? `${when}\n${link.last_error}` : when,
-    };
-  }
-  if (link.last_import_status === "challenge") {
-    return { dot: "bg-amber-500", label: "Blocked by Cloudflare", detail: when };
-  }
-  return { dot: "bg-amber-500", label: "Not imported yet", detail: when };
+  return {
+    dot: "bg-muted-foreground/40",
+    label: "No FT link",
+    detail: "No Full-Time widget saved for this team, and no club-wide widget feeds it.",
+  };
 }
 
 /**
@@ -306,6 +359,32 @@ export default async function TeamsPage({
   const pitchNames = new Map(pitches.map((row) => [row.id, row.name]));
   const linkByTeam = new Map(links.map((link) => [link.team_id, link]));
   const clubCodes = new Map(clubCodeRows.map((row) => [row.key, row.value]));
+
+  // Which teams the club-wide widgets are feeding. A club-feed team has no
+  // `team_fulltime_links` row — its record is `fixture_import_runs` rows whose
+  // source is a club widget URL, so the latest of those is its badge state.
+  // Codes are split from the settings exactly as `fulltime_club_codes()` does.
+  const clubWidgetUrls = Array.from(
+    new Set(
+      clubCodeRows
+        .flatMap((row) => (row.value ?? "").split(/[^0-9]+/))
+        .filter((code) => /^[0-9]{6,12}$/.test(code))
+        .map((code) => widgetUrl(code)),
+    ),
+  );
+  const clubRunByTeam = new Map<string, ClubRunSummary>();
+  if (adminClient && clubWidgetUrls.length > 0 && teamIds.length > 0) {
+    const { data: clubRuns } = await adminClient
+      .from("fixture_import_runs")
+      .select("team_id,status,created_at,inserted,updated,unchanged,error")
+      .in("team_id", teamIds)
+      .in("source_url", clubWidgetUrls)
+      .order("created_at", { ascending: false })
+      .limit(300);
+    for (const run of (clubRuns ?? []) as ClubRunSummary[]) {
+      if (!clubRunByTeam.has(run.team_id)) clubRunByTeam.set(run.team_id, run);
+    }
+  }
   const personName = new Map(
     staffPeople.map((person) => [
       person.id,
@@ -471,7 +550,13 @@ export default async function TeamsPage({
             </tr>
           }
           items={allTeams.map((team): TeamFilterItem => {
-            const ft = canAdmin ? fullTimeState(linkByTeam.get(team.id)) : null;
+            const ft = canAdmin
+              ? fullTimeState(
+                  linkByTeam.get(team.id),
+                  clubRunByTeam.get(team.id),
+                  clubWidgetUrls.length > 0,
+                )
+              : null;
             const needsStaff = team.managerName === null;
             return {
               key: team.id,
