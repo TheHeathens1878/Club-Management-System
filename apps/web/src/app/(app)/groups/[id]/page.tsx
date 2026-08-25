@@ -76,8 +76,14 @@ export default async function ManageGroupPage({
   }
 
   const clubAdmin = await isClubAdmin();
-  const isCreator = conversation.created_by_person_id === personId;
-  const canEdit = clubAdmin || isCreator;
+  // Adam, 2026-08-25: "make sure that coaches cannot edit the group settings
+  // or close the group." Settings and closing are the club's: a creator who
+  // is not an administrator keeps everything else — reading it, posting in it,
+  // adding and removing members — but the name, the attachment and the close
+  // button are the administrator's. The database says the same thing
+  // (`conversations_update`, 20260825320000), so this only stops offering a
+  // form the update would refuse.
+  const canEdit = clubAdmin;
   // Adam, 2026-08-25: "admins should be able to click on a member's name and
   // it takes you to their contact page". /people/[id] admits the committee and
   // nobody else, so the link is offered on exactly that answer — a group's
@@ -172,8 +178,9 @@ export default async function ManageGroupPage({
 
         {!canEdit && (
           <div className="rounded-lg border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
-            You are in this group but did not set it up, so it is shown here read-only. The person
-            who created it, or a club administrator, can change it.
+            The group&apos;s name, what it is attached to and whether it is closed are the club&apos;s
+            to set, so they are shown here read-only. You can still add and remove members below.
+            Ask a club administrator for anything else.
           </div>
         )}
 
