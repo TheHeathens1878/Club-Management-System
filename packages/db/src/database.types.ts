@@ -5982,6 +5982,16 @@ export type Database = {
       }
       unallocate_fixture: { Args: { p_fixture_id: string }; Returns: undefined }
       unread_notification_count: { Args: never; Returns: number }
+      update_child_details: {
+        Args: {
+          p_address?: Json
+          p_child_person_id: string
+          p_email?: string
+          p_phone?: string
+          p_preferred_name?: string
+        }
+        Returns: undefined
+      }
       update_concern: {
         Args: {
           p_legal_hold?: boolean
@@ -5993,6 +6003,20 @@ export type Database = {
       }
       update_own_contact: {
         Args: { p_address?: Json; p_phone?: string; p_preferred_name?: string }
+        Returns: undefined
+      }
+      update_team_event: {
+        Args: {
+          p_duration_minutes: number
+          p_event_id: string
+          p_meet_minutes_before?: number
+          p_notes?: string
+          p_starts_at: string
+          p_title: string
+          p_type: string
+          p_venue_resource_id?: string
+          p_venue_text?: string
+        }
         Returns: undefined
       }
       venue_label: {

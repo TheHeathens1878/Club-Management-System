@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, CalendarDays, CircleCheck, MapPin, Repeat, User } from "lucide-react";
+import { ArrowLeft, CalendarDays, CircleCheck, MapPin, Pencil, Repeat, User } from "lucide-react";
 
 import type { Json } from "@club/db";
 
@@ -193,18 +193,35 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
 
   const cancelled = detail.status === "cancelled";
 
+  // Editing (Adam, 2026-08-25): the team's staff and club admins, on a manual
+  // event that has not been cancelled and has not happened. A fixture-mirrored
+  // event is edited through its fixture — `update_team_event` says the same
+  // thing to anyone who reaches the form another way.
+  const canEdit =
+    (isStaff || capabilities.isClubAdmin) &&
+    !cancelled &&
+    !detail.fixtureId &&
+    new Date(detail.startsAt).getTime() > Date.now();
+
   return (
     <>
       <PageHeader
         title={detail.title}
         subtitle={`${detail.teamName} · ${eventTypeLabel(detail.type)}`}
         action={
-          <Link
-            href="/events"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <ArrowLeft className="h-4 w-4" /> All events
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            {canEdit ? (
+              <Link
+                href={`/events/${detail.id}/edit`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                <Pencil className="h-4 w-4" /> Edit
+              </Link>
+            ) : null}
+            <Link href="/events" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <ArrowLeft className="h-4 w-4" /> All events
+            </Link>
+          </div>
         }
       />
 

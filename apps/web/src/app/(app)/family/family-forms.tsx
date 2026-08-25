@@ -11,7 +11,7 @@
  */
 
 import { useActionState, useState } from "react";
-import { Plus, UserPlus } from "lucide-react";
+import { Pencil, Plus, UserPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,12 +28,26 @@ import {
   addChild,
   allowAppAccess,
   registerForTeam,
+  updateChildDetails,
   withdrawAppAccess,
   withdrawRegistration,
   type FamilyActionState,
 } from "./actions";
 
 export type TeamOption = { id: string; name: string; ageGroup: string | null };
+
+/** The contact half of a child's record — the only half a guardian may edit. */
+export type ChildDetails = {
+  preferredName: string;
+  email: string;
+  phone: string;
+  line1: string;
+  line2: string;
+  town: string;
+  postcode: string;
+  /** The child's address is the lead contact's, so the box starts ticked. */
+  sameAsLead: boolean;
+};
 
 function Feedback({ state }: { state: FamilyActionState }) {
   if (state.error) {
@@ -119,6 +133,182 @@ export function AddChildForm() {
       <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
         <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
           {pending ? "Adding…" : "Add child"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          className="min-h-[44px] lg:min-h-0"
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * Edit one child's details (Adam, 2026-08-25).
+ *
+ * Contact only, and the form says why: the name and the date of birth are not
+ * fields here because `update_child_details()` has no argument for them.
+ *
+ * The address is one control with two states. "Same address as lead contact"
+ * ticked hands the whole question to the server, which copies the signed-in
+ * guardian's own address; unticked reveals the four fields the join wizard
+ * uses, which is the case Adam named — separated parents, two households, one
+ * child, and neither address allowed to overwrite the other.
+ */
+export function ChildDetailsForm({
+  childPersonId,
+  childName,
+  initial,
+  leadAddressLine,
+}: {
+  childPersonId: string;
+  childName: string;
+  initial: ChildDetails;
+  /** The lead contact's address in one line, so the tick-box is not a guess. */
+  leadAddressLine: string | null;
+}) {
+  const [state, action, pending] = useActionState<FamilyActionState, FormData>(
+    updateChildDetails,
+    {},
+  );
+  const [open, setOpen] = useState(false);
+  const [sameAsLead, setSameAsLead] = useState(initial.sameAsLead && !!leadAddressLine);
+
+  if (!open) {
+    return (
+      <div className="space-y-3">
+        <Feedback state={state} />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
+          <Pencil className="h-4 w-4" /> Edit details
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-4 rounded-lg border bg-secondary/20 p-4">
+      <input type="hidden" name="child_person_id" value={childPersonId} />
+
+      <p className="text-sm text-muted-foreground">
+        {childName}&apos;s contact details. Their name and date of birth are the club&apos;s record
+        to correct — ask a club administrator.
+      </p>
+
+      <div className="space-y-1">
+        <Label htmlFor={`child-known-as-${childPersonId}`}>Known as</Label>
+        <Input
+          id={`child-known-as-${childPersonId}`}
+          name="preferred_name"
+          defaultValue={initial.preferredName}
+          placeholder="The name they are called at training"
+          autoComplete="off"
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label htmlFor={`child-email-${childPersonId}`}>Email</Label>
+          <Input
+            id={`child-email-${childPersonId}`}
+            name="email"
+            type="email"
+            defaultValue={initial.email}
+            autoComplete="off"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`child-phone-${childPersonId}`}>Phone</Label>
+          <Input
+            id={`child-phone-${childPersonId}`}
+            name="phone"
+            type="tel"
+            defaultValue={initial.phone}
+            autoComplete="off"
+          />
+        </div>
+      </div>
+
+      <fieldset className="space-y-3">
+        <legend className="text-sm font-semibold">Home address</legend>
+
+        <label className="flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            name="same_as_lead"
+            value="yes"
+            checked={sameAsLead}
+            onChange={(event) => setSameAsLead(event.target.checked)}
+            disabled={!leadAddressLine}
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span>
+            Same address as lead contact
+            <span className="block text-xs text-muted-foreground">
+              {leadAddressLine
+                ? leadAddressLine
+                : "Your own address is not on record yet — add it on My profile, or type your child's below."}
+            </span>
+          </span>
+        </label>
+
+        {!sameAsLead && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor={`child-line1-${childPersonId}`}>Address line 1</Label>
+              <Input
+                id={`child-line1-${childPersonId}`}
+                name="address_line1"
+                defaultValue={initial.line1}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor={`child-line2-${childPersonId}`}>Address line 2 (optional)</Label>
+              <Input
+                id={`child-line2-${childPersonId}`}
+                name="address_line2"
+                defaultValue={initial.line2}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`child-town-${childPersonId}`}>Town</Label>
+              <Input
+                id={`child-town-${childPersonId}`}
+                name="address_town"
+                defaultValue={initial.town}
+                autoComplete="off"
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor={`child-postcode-${childPersonId}`}>Postcode</Label>
+              <Input
+                id={`child-postcode-${childPersonId}`}
+                name="address_postcode"
+                defaultValue={initial.postcode}
+                autoComplete="off"
+              />
+            </div>
+          </div>
+        )}
+      </fieldset>
+
+      <Feedback state={state} />
+
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
+          {pending ? "Saving…" : "Save details"}
         </Button>
         <Button
           type="button"
