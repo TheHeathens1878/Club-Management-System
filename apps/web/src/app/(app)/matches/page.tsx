@@ -6,15 +6,19 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
+import { LinkRow } from "@/components/link-row";
 
 /**
  * Matches — the Matchday desk (spec §2). A coach sees their teams, an admin
- * the club; `matchday_fixtures()` does the scoping. Three period tabs, the
- * needs-attention chips, and every row links into the fixture's event where
- * the RSVP, remind and detail already live.
+ * the club; `matchday_fixtures()` does the scoping by identity, and the Coach
+ * view narrows an administrator-who-coaches to their own teams on top — the
+ * same "the active tile scopes the data" rule the Teams page follows (Adam,
+ * 2026-08-24: "Coaches should only be able to see their own games"). Three
+ * period tabs, the needs-attention chips, and the whole row links into the
+ * fixture's event where the RSVP, remind and detail already live.
  */
 
 export const dynamic = "force-dynamic";
@@ -53,12 +57,21 @@ export default async function MatchesPage({
   const { from, to } = periodWindow(period);
 
   const supabase = await createClient();
+  // The active tile scopes the data, not just the menu: in the Coach view an
+  // administrator-who-coaches sees only the teams they staff, exactly as on
+  // /teams. `my_capabilities()` already carries those teams — no extra read.
+  const roleView = await getStoredRoleView();
+  const coachTeamIds =
+    roleView === "coach" ? new Set(capabilities.staffTeams.map((team) => team.id)) : null;
+
   const { data, error } = await supabase.rpc("matchday_fixtures", {
     p_from: from.toISOString(),
     p_to: to.toISOString(),
   });
-  const fixtures = (data ?? []).filter((row) =>
-    period === "results" ? true : row.status === "scheduled",
+  const fixtures = (data ?? []).filter(
+    (row) =>
+      (period === "results" ? true : row.status === "scheduled") &&
+      (coachTeamIds === null || coachTeamIds.has(row.team_id)),
   );
 
   const needPitch = fixtures.filter(
@@ -149,7 +162,11 @@ export default async function MatchesPage({
                     {fixtures.map((row) => {
                       const short = row.squad > 0 && row.accepted * 2 < row.squad;
                       return (
-                        <tr key={row.fixture_id} className="border-b last:border-b-0 hover:bg-secondary/40">
+                        <LinkRow
+                          key={row.fixture_id}
+                          href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                          className="border-b last:border-b-0 hover:bg-secondary/40"
+                        >
                           <td className="px-4 py-3 align-top text-muted-foreground">
                             <span className="font-semibold">{formatEventDate(row.kickoff_at)}</span>
                             <br />
@@ -192,7 +209,7 @@ export default async function MatchesPage({
                               </span>
                             ) : null}
                           </td>
-                        </tr>
+                        </LinkRow>
                       );
                     })}
                   </tbody>

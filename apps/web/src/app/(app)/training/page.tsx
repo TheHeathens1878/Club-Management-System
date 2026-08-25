@@ -6,14 +6,17 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
+import { LinkRow } from "@/components/link-row";
 
 /**
  * Training — the week's sessions and the term's attendance (spec §2).
- * `training_sessions()` scopes exactly as Matches does; each row's register
- * is the booking's existing attendance sheet.
+ * `training_sessions()` scopes exactly as Matches does, and the Coach view
+ * narrows an administrator-who-coaches to their own teams on top ("their own
+ * games and training" — Adam, 2026-08-24); each row's register is the
+ * booking's existing attendance sheet, and the whole row opens the session.
  */
 
 export const dynamic = "force-dynamic";
@@ -37,8 +40,16 @@ export default async function TrainingPage() {
     }),
     supabase.rpc("training_attendance_term"),
   ]);
-  const sessions = sessionsResult.data ?? [];
-  const term = (termResult.data ?? []).filter((row) => row.marked > 0);
+  // The active tile scopes the data: in the Coach view even an administrator
+  // sees only the teams they staff — the /teams and /matches rule.
+  const roleView = await getStoredRoleView();
+  const coachTeamIds =
+    roleView === "coach" ? new Set(capabilities.staffTeams.map((team) => team.id)) : null;
+  const mine = <T extends { team_id: string }>(row: T) =>
+    coachTeamIds === null || coachTeamIds.has(row.team_id);
+
+  const sessions = (sessionsResult.data ?? []).filter(mine);
+  const term = (termResult.data ?? []).filter((row) => row.marked > 0 && mine(row));
 
   return (
     <>
@@ -87,7 +98,11 @@ export default async function TrainingPage() {
                   </thead>
                   <tbody>
                     {sessions.map((row) => (
-                      <tr key={row.booking_id} className="border-b last:border-b-0 hover:bg-secondary/40">
+                      <LinkRow
+                        key={row.booking_id}
+                        href={row.event_id ? `/events/${row.event_id}` : `/pitches/${row.booking_id}`}
+                        className="border-b last:border-b-0 hover:bg-secondary/40"
+                      >
                         <td className="px-4 py-3 align-top text-muted-foreground">
                           <span className="font-semibold">{formatEventDate(row.starts_at)}</span>
                           <br />
@@ -119,7 +134,7 @@ export default async function TrainingPage() {
                             <ClipboardCheck className="h-3.5 w-3.5" /> Register
                           </Link>
                         </td>
-                      </tr>
+                      </LinkRow>
                     ))}
                   </tbody>
                 </table>
