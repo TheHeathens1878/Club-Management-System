@@ -4599,6 +4599,15 @@ export type Database = {
         Args: { p_team_id: string }
         Returns: Json
       }
+      assign_event_pitch: {
+        Args: {
+          p_event_id: string
+          p_post_buffer_minutes?: number
+          p_pre_buffer_minutes?: number
+          p_resource_id: string
+        }
+        Returns: undefined
+      }
       apply_neon_pending: {
         Args: { p_person_id?: string }
         Returns: {

@@ -245,6 +245,44 @@ export async function createEvent(
 }
 
 // ---------------------------------------------------------------------------
+// Assign a pitch from the event (admin view — Adam, 2026-08-25). Fixture
+// events route through allocate_fixture; unbooked practices/socials book
+// directly. Clashes come back named, verbatim.
+// ---------------------------------------------------------------------------
+
+export async function assignEventPitch(
+  _prev: EventActionState,
+  formData: FormData,
+): Promise<EventActionState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in again to assign a pitch." };
+
+  const eventId = text(formData, "event_id", 40);
+  const resourceId = text(formData, "resource_id", 40);
+  if (!eventId) return { error: "No event given." };
+  if (!resourceId) return { error: "Choose a pitch." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("assign_event_pitch", {
+    p_event_id: eventId,
+    p_resource_id: resourceId,
+  });
+  if (error) {
+    return {
+      error: friendlyDbError(
+        error,
+        "The database refused that. Only a club administrator can assign a pitch from the event.",
+      ),
+    };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  revalidatePath("/pitches");
+  return { notice: "Pitch assigned." };
+}
+
+// ---------------------------------------------------------------------------
 // Cancel a one-off / series occurrence (staff). Fixture events are cancelled
 // by cancelling the fixture — the sync would only reinstate them.
 // ---------------------------------------------------------------------------
