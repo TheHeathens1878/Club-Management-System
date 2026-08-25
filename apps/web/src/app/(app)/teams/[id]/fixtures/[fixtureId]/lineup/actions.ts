@@ -12,12 +12,17 @@
  * The board is saved whole: the client sends the placements it has, and the
  * action replaces the lineup's slots with exactly that set. That is what makes
  * "change formation, keep who fits" a single save rather than a diff.
+ *
+ * The bench rides in the same map. A substitute is a slot row keyed "SUB1" to
+ * "SUB7" (`BENCH_SIZE`), so the table's unique keys — one row per (lineup,
+ * slot) and one per (lineup, person) — are already the bench's rules: one
+ * player per place, and nobody on the pitch and the bench at once.
  */
 
 import { revalidatePath } from "next/cache";
 
 import { getSessionProfile } from "@/lib/auth";
-import { formationsFor, playingFormatFor } from "@/lib/formations";
+import { formationsFor, isBenchKey, playingFormatFor } from "@/lib/formations";
 import { friendlyDbError } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
@@ -80,11 +85,18 @@ export async function saveFixtureLineup(
   const chosen = formationsFor(format).find((f) => f.name === formationName);
   if (!chosen) return { error: `A ${format} team cannot line up in ${formationName || "that shape"}.` };
 
+  // The pitch slots belong to the chosen shape; the bench keys belong to no
+  // shape at all, which is exactly why a substitute survives a change of
+  // formation. Both are rows in the same table.
   const allowedSlots = new Set(chosen.slots.map((slot) => slot.key));
   const seen = new Set<string>();
   for (const [slot, personId] of Object.entries(placements)) {
-    if (!allowedSlots.has(slot)) return { error: `${slot} is not a position in ${chosen.name}.` };
-    if (seen.has(personId)) return { error: "A player can only stand in one position." };
+    if (!allowedSlots.has(slot) && !isBenchKey(slot)) {
+      return { error: `${slot} is not a position in ${chosen.name}.` };
+    }
+    if (seen.has(personId)) {
+      return { error: "A player can only be named once — one position, or one place on the bench." };
+    }
     seen.add(personId);
   }
 
@@ -120,10 +132,13 @@ export async function saveFixtureLineup(
 
   revalidatePath(`/teams/${teamId}/fixtures/${fixtureId}/lineup`);
   revalidatePath(`/teams/${teamId}/fixtures/${fixtureId}`);
+  const subs = rows.filter((row) => isBenchKey(row.slot)).length;
+  const onPitch = rows.length - subs;
   return {
     notice:
       rows.length > 0
-        ? `Lineup saved — ${chosen.name}, ${rows.length} of ${chosen.slots.length} placed.`
+        ? `Lineup saved — ${chosen.name}, ${onPitch} of ${chosen.slots.length} placed` +
+          (subs > 0 ? `, ${subs} substitute${subs === 1 ? "" : "s"}.` : ".")
         : "Lineup saved — the pitch is empty.",
   };
 }
