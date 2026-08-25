@@ -1,5 +1,5 @@
 -- =============================================================================
--- @mentions (20260825300000) — the table, its read policy, and the one door
+-- @mentions (20260825330000) — the table, its read policy, and the one door
 -- =============================================================================
 -- What is asserted: a live participant can be mentioned; someone who has left
 -- and someone who was never in the room cannot; only the SENDER may record a
