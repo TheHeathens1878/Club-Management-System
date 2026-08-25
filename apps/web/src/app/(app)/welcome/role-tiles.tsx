@@ -48,7 +48,9 @@ export function RoleTiles({
   }
 
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    // Two up on a phone (mobile design: hats are icon tiles), three across a
+    // desk as before.
+    <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
       {views.map((view) => {
         const Icon = ICONS[view];
         const active = current === view;
@@ -60,15 +62,17 @@ export function RoleTiles({
             disabled={pending}
             aria-current={active ? "true" : undefined}
             className={
-              "rounded-xl border p-5 text-left transition disabled:opacity-60 " +
+              "min-h-[44px] rounded-xl border p-4 text-left transition disabled:opacity-60 lg:p-5 " +
               (active
                 ? "border-primary bg-primary/5 shadow-sm"
                 : "bg-card hover:border-primary/40 hover:bg-secondary")
             }
           >
             <Icon className={"h-6 w-6 " + (active ? "text-primary" : "text-muted-foreground")} />
-            <p className="mt-3 font-semibold">{ROLE_VIEW_LABELS[view]}</p>
-            <p className="mt-1 text-xs text-muted-foreground">{ROLE_VIEW_BLURBS[view]}</p>
+            <p className="mt-3 font-semibold leading-tight">{ROLE_VIEW_LABELS[view]}</p>
+            <p className="mt-1 text-xs leading-snug text-muted-foreground">
+              {ROLE_VIEW_BLURBS[view]}
+            </p>
             {active ? (
               <p className="mt-2 text-xs font-medium text-primary">Currently showing</p>
             ) : null}

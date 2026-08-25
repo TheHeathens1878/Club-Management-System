@@ -19,11 +19,15 @@ export function CompleteProfileForm() {
           name="dob"
           required
           max={today}
-          className="block w-full rounded-md border bg-background px-3 py-2"
+          className="block min-h-[44px] w-full rounded-md border bg-background px-3 py-2 lg:min-h-0"
         />
       </label>
       {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
-      <button type="submit" disabled={pending} className={buttonVariants()}>
+      <button
+        type="submit"
+        disabled={pending}
+        className={buttonVariants() + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"}
+      >
         {pending ? "Saving…" : "Save and continue"}
       </button>
     </form>
