@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useActionState } from "react";
-import { ArrowLeft, Loader2, ShieldCheck, UserPlus } from "lucide-react";
+import { ArrowLeft, Loader2, MailCheck, ShieldCheck, UserPlus } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +35,62 @@ export function RegisterForm({
       <ShieldCheck className="h-7 w-7" />
     </div>
   );
+
+  // Adam, 2026-08-25: "the check your email for a confirmation link should be
+  // more prominent." A green line under a form somebody has stopped reading is
+  // the wrong place for the one instruction that decides whether the account
+  // ever gets used — so the form gives way to it entirely. There is nothing
+  // else to do on this page until they open that email.
+  if (state.confirmEmail) {
+    return (
+      <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+        <div className="absolute inset-0 -z-10 bg-gradient-to-br from-primary/10 via-background to-accent/10" />
+
+        <Card className="w-full max-w-md">
+          <CardHeader className="text-center">
+            {logo}
+            <div className="mx-auto mb-1 inline-flex rounded-full bg-emerald-100 p-3 text-emerald-700">
+              <MailCheck className="h-7 w-7" />
+            </div>
+            <CardTitle className="text-2xl">Check your email</CardTitle>
+            <CardDescription>
+              Your account is created. Before you can sign in, open the confirmation link we have
+              just sent.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
+              We sent it to
+              <span className="mt-1 block break-words text-base font-semibold">
+                {state.confirmEmail}
+              </span>
+            </p>
+            <ol className="space-y-2 text-sm text-muted-foreground">
+              <li>1. Open the email from {clubName} and click the confirmation link.</li>
+              <li>
+                2. Nothing there? Look in your spam or junk folder — it usually arrives within a
+                minute.
+              </li>
+              <li>3. Come back and sign in.</li>
+            </ol>
+            <Link
+              href="/login"
+              className="flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+            >
+              Go to sign in
+            </Link>
+            <p className="text-center text-xs text-muted-foreground">
+              Wrong address, or the email never arrives?{" "}
+              <a href="/contact" className="underline underline-offset-2">
+                Tell the club
+              </a>{" "}
+              and they will sort it out.
+            </p>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">

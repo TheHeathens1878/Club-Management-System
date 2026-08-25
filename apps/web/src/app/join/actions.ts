@@ -29,6 +29,7 @@ import {
   idDocumentOwed,
   submitTeamRegistration,
 } from "@/lib/registration-server";
+import { getSiteUrl } from "@/lib/utils";
 import { ageGroupFromDob, tidyRpcMessage } from "@/lib/waiting-list";
 
 import { MAX_HOUSEHOLD } from "./constants";
@@ -54,6 +55,8 @@ export type JoinTeamOption = { id: string; name: string; ageGroup: string | null
 
 export type StartState = {
   error?: string;
+  /** The account exists and the address has to be confirmed before signing in. */
+  confirmEmail?: string;
   /** Set on success: the registrant's person id and what step 3 will need. */
   registrant?: {
     personId: string;
@@ -192,7 +195,12 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName, dob, phone: phone || null, address } },
+    options: {
+      data: { full_name: fullName, dob, phone: phone || null, address },
+      // The club's own domain, named here rather than left to the project's
+      // Site URL (Adam, 2026-08-25: the link pointed at the old Vercel host).
+      emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+    },
   });
   if (error) {
     // The database's SG-10 message is the explanation; keep it whole.
@@ -203,10 +211,10 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     return { error: `The account could not be created: ${error.message}` };
   }
   if (!data.session) {
-    return {
-      error:
-        "Your account was created but needs email confirmation. Confirm it, sign in, and come back to /join to finish.",
-    };
+    // Not an error — the account exists. The wizard shows this as its own
+    // "check your email" screen (Adam, 2026-08-25), because a line of red
+    // text under a form reads as a failure when it is a next step.
+    return { confirmEmail: email };
   }
 
   const { data: personId } = await supabase.rpc("current_person_id");
