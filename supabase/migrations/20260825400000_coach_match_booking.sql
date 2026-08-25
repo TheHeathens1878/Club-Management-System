@@ -273,7 +273,7 @@ comment on function public.request_team_pitch_booking(
 -- 4. Audit the schema change itself -------------------------------------------
 insert into public.audit_log (actor_email, action, entity, detail)
 values ('migration', 'migration.schema', 'bookings',
-        jsonb_build_object('migration', '20260825380000_coach_match_booking',
+        jsonb_build_object('migration', '20260825400000_coach_match_booking',
                            'changes', array['request_team_pitch_booking() always writes pending',
                                             'bookings_team_staff_insert allows kind = fixture',
                                             'bookings_team_guard fences fixture_id off from the coach path']));

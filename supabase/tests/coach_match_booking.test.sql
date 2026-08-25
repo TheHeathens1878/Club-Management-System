@@ -1,5 +1,5 @@
 -- =============================================================================
--- The team path is a request desk, and a coach may ask for a match (20260825380000)
+-- The team path is a request desk, and a coach may ask for a match (20260825400000)
 -- =============================================================================
 -- Adam, 2026-08-25, on /pitches/book while wearing the Coach hat:
 --   "I can still book a pitch as confirmed using my coach login … remove this
