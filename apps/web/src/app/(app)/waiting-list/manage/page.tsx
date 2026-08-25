@@ -26,6 +26,8 @@ import {
   WAITING_LIST_STATUSES,
   ageGroupSortKey,
   isWaitingListStatus,
+  openAgeGroupsSummary,
+  sortedOpenAgeGroups,
   statusVariant,
   type WaitingListStatus,
 } from "@/lib/waiting-list";
@@ -39,11 +41,13 @@ import { PrioritiesPanel, type PriorityGroup } from "./priorities-panel";
  * list screens, rebuilt on this platform's RLS.
  *
  * User-scoped client throughout. A club administrator sees every entry; a
- * coach sees only the age groups they hold a `waiting_list_access` row for,
- * because that is what the policy returns — the page does no filtering of its
- * own to achieve it. The admin-only controls (status, age group availability)
- * are hidden when `is_club_admin()` says no, and refused by the database
- * anyway if they are somehow posted.
+ * coach sees their own age group and the one below and nothing else (Adam,
+ * 2026-08-25), because that is what the policy returns — the page does no
+ * filtering of its own to achieve it. The admin-only controls (status, age
+ * group availability) are hidden when `is_club_admin()` says no, and refused
+ * by the database anyway if they are somehow posted: since 20260825290000 the
+ * settings have exactly one write path, `set_waiting_list_age_group()`, and it
+ * is club_admin or nothing.
  */
 
 type Entry = Database["public"]["Tables"]["waiting_list_entries"]["Row"];
@@ -132,24 +136,33 @@ export default async function WaitingListDeskPage({
   if (ageGroupFilter) query = query.eq("age_group", ageGroupFilter);
   if (coachingOnly) query = query.eq("coaching_interest", true);
 
-  const [{ data: entryRows, error: entriesError }, { data: settingRows }, { data: accessRows }, admin] =
-    await Promise.all([
-      query
-        .order("status")
-        .order("priority", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: true }),
-      supabase
-        .from("waiting_list_age_groups")
-        .select("age_group, is_open, is_publicly_advertised"),
-      supabase.from("waiting_list_access").select("age_group"),
-      isClubAdmin(),
-    ]);
+  const [
+    { data: entryRows, error: entriesError },
+    { data: settingRows },
+    { data: mineRows },
+    { data: openRows },
+    admin,
+  ] = await Promise.all([
+    query
+      .order("status")
+      .order("priority", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true }),
+    supabase.from("waiting_list_age_groups").select("age_group, is_open, is_publicly_advertised"),
+    // The bands the caller may read — their own U band and the one below for a
+    // coach, every configured group for an administrator. A coach reaches the
+    // list through the rule, not through a `waiting_list_access` row, so the
+    // grant table is no longer what this screen counts.
+    supabase.rpc("my_waiting_list_age_groups"),
+    supabase.rpc("waiting_list_open_age_groups"),
+    isClubAdmin(),
+  ]);
 
   const entries: Entry[] = entryRows ?? [];
   const ageGroupSettings: AgeGroupSetting[] = (settingRows ?? [])
     .slice()
     .sort((a, b) => ageGroupSortKey(a.age_group).localeCompare(ageGroupSortKey(b.age_group)));
-  const myAgeGroups = (accessRows ?? []).map((row) => row.age_group);
+  const myAgeGroups = (mineRows ?? []) as string[];
+  const openAgeGroups = sortedOpenAgeGroups(openRows);
 
   // Notes come back under the same policies as the entries, so anything the
   // caller may not read simply is not here.
@@ -274,8 +287,10 @@ export default async function WaitingListDeskPage({
               <CardTitle className="text-base">Age group availability</CardTitle>
               <p className="text-sm text-muted-foreground">
                 A group that is not open is not offered on the public form, and a submission for it
-                is refused. Closing a group does not affect the people already waiting.
+                is refused. Closing a group does not affect the people already waiting. Only a club
+                administrator can change these.
               </p>
+              <p className="mt-1 text-sm font-medium">{openAgeGroupsSummary(openAgeGroups)}</p>
             </CardHeader>
             <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <AgeGroupsPanel settings={ageGroupSettings} />
@@ -289,8 +304,8 @@ export default async function WaitingListDeskPage({
               <ClipboardList className="h-4 w-4" /> Entries
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Pending first, then by priority and the date they applied. You see the age groups you
-              have been given access to; a club administrator sees them all.
+              Pending first, then by priority and the date they applied. A coach sees their own age
+              group and the one below; a club administrator sees them all.
             </p>
           </CardHeader>
           <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
@@ -400,8 +415,8 @@ export default async function WaitingListDeskPage({
 
             {noAccess && (
               <p className="rounded-lg border bg-secondary/40 px-3 py-2 text-sm text-muted-foreground">
-                You have not been given access to any age group&apos;s waiting list. A club
-                administrator can grant it.
+                You have no waiting list to see. A coach sees their own age group and the one
+                below; anyone else needs a club administrator to grant them an age group.
               </p>
             )}
 

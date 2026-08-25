@@ -5961,6 +5961,8 @@ export type Database = {
           team_name: string
         }[]
       }
+      my_waiting_list_age_groups: { Args: never; Returns: string[] }
+      my_waiting_list_coach_bands: { Args: never; Returns: number[] }
       needs_dob_completion: { Args: never; Returns: boolean }
       needs_id_document: { Args: { p_person_id: string }; Returns: boolean }
       neon_auth_import_candidates: {
@@ -6242,6 +6244,15 @@ export type Database = {
       set_registration_question_order: {
         Args: { p_ids: string[] }
         Returns: number
+      }
+      set_waiting_list_age_group: {
+        Args: {
+          p_age_group: string
+          p_is_open: boolean
+          p_is_publicly_advertised?: boolean
+          p_show_coach_contact?: boolean
+        }
+        Returns: undefined
       }
       sg1_nightly_check: {
         Args: never

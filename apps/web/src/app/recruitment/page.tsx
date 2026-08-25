@@ -3,7 +3,11 @@ import { CalendarClock, Mail, MapPin, Phone, Users } from "lucide-react";
 
 import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
-import { ageGroupSortKey } from "@/lib/waiting-list";
+import {
+  NO_WAITING_LIST_MESSAGE,
+  ageGroupSortKey,
+  sortedOpenAgeGroups,
+} from "@/lib/waiting-list";
 
 /**
  * The public recruitment page (gap 10) — the pitch-booking site's
@@ -19,6 +23,11 @@ import { ageGroupSortKey } from "@/lib/waiting-list";
  *
  * "Join the waiting list" carries the age group into the public form, which
  * prefills it. The form still only accepts age groups the club has opened.
+ *
+ * When the club has no age group ticked "open for new entries", there is no
+ * waiting list to send anyone to, so this page stops offering one and says so
+ * once, plainly (Adam, 2026-08-25). `waiting_list_open_age_groups()` is the
+ * only thing asked — there is no separate flag for "we run a waiting list".
  */
 
 export const dynamic = "force-dynamic";
@@ -43,10 +52,13 @@ const GENDER_LABELS: Record<string, string> = {
 
 export default async function RecruitmentPage() {
   const supabase = await createClient();
-  const [{ data: teamRows }, settings] = await Promise.all([
+  const [{ data: teamRows }, { data: openRows }, settings] = await Promise.all([
     supabase.rpc("recruiting_teams"),
+    supabase.rpc("waiting_list_open_age_groups"),
     getSettings(),
   ]);
+
+  const waitingListOpen = sortedOpenAgeGroups(openRows).length > 0;
 
   const teams = (teamRows ?? []).slice().sort((a, b) => {
     const byAge = ageGroupSortKey(a.age_group ?? "").localeCompare(ageGroupSortKey(b.age_group ?? ""));
@@ -84,16 +96,24 @@ export default async function RecruitmentPage() {
         {teams.length === 0 ? (
           <div className="rounded-xl border bg-card px-6 py-10 text-center">
             <h2 className="text-lg font-semibold">No teams are recruiting right now</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-              Put your child&apos;s name down anyway — we contact the waiting list first when a
-              space opens or a new team starts.
-            </p>
-            <Link
-              href="/waiting-list"
-              className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-            >
-              Join the waiting list
-            </Link>
+            {waitingListOpen ? (
+              <>
+                <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                  Put your child&apos;s name down anyway — we contact the waiting list first when a
+                  space opens or a new team starts.
+                </p>
+                <Link
+                  href="/waiting-list"
+                  className="mt-5 inline-flex h-10 items-center justify-center rounded-md bg-primary px-5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                >
+                  Join the waiting list
+                </Link>
+              </>
+            ) : (
+              <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+                {NO_WAITING_LIST_MESSAGE}
+              </p>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -164,33 +184,45 @@ export default async function RecruitmentPage() {
                     </div>
                   )}
 
-                  <Link
-                    href={
-                      team.age_group
-                        ? `/waiting-list?age_group=${encodeURIComponent(team.age_group)}`
-                        : "/waiting-list"
-                    }
-                    className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-                  >
-                    Join the waiting list
-                  </Link>
+                  {waitingListOpen && (
+                    <Link
+                      href={
+                        team.age_group
+                          ? `/waiting-list?age_group=${encodeURIComponent(team.age_group)}`
+                          : "/waiting-list"
+                      }
+                      className="mt-4 inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+                    >
+                      Join the waiting list
+                    </Link>
+                  )}
                 </article>
               );
             })}
           </div>
         )}
 
-        <p className="mt-8 text-center text-xs text-muted-foreground">
-          Not sure which team fits?{" "}
-          <Link href="/waiting-list" className="text-primary hover:underline">
-            Put your child on the waiting list
-          </Link>{" "}
-          and we will point you to the right one — or contact us at{" "}
-          <a href={`mailto:${settings.contact_email}`} className="text-primary hover:underline">
-            {settings.contact_email}
-          </a>
-          .
-        </p>
+        {waitingListOpen ? (
+          <p className="mt-8 text-center text-xs text-muted-foreground">
+            Not sure which team fits?{" "}
+            <Link href="/waiting-list" className="text-primary hover:underline">
+              Put your child on the waiting list
+            </Link>{" "}
+            and we will point you to the right one — or contact us at{" "}
+            <a href={`mailto:${settings.contact_email}`} className="text-primary hover:underline">
+              {settings.contact_email}
+            </a>
+            .
+          </p>
+        ) : (
+          <p className="mt-8 text-center text-xs text-muted-foreground">
+            {NO_WAITING_LIST_MESSAGE} Not sure which team fits? Contact us at{" "}
+            <a href={`mailto:${settings.contact_email}`} className="text-primary hover:underline">
+              {settings.contact_email}
+            </a>
+            .
+          </p>
+        )}
       </div>
     </main>
   );
