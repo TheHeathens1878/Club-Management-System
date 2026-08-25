@@ -106,9 +106,9 @@ export function RegisterForm({
               <Input id="dob" name="dob" type="date" required max={today} defaultValue={v?.dob ?? ""} />
               <p className="text-xs text-muted-foreground">
                 Required. The club&apos;s safeguarding rules depend on knowing who is an adult and
-                who is a young person: there is a minimum age for holding an account at all, and a
-                young person needs a parent or guardian&apos;s consent on file first. Your date of
-                birth is visible only to club administrators.
+                who is a young person: players aged 16 or over can sign themselves up, and a
+                younger person needs a parent or guardian&apos;s consent on file first. Your date
+                of birth is visible only to club administrators.
               </p>
             </div>
 

@@ -43,6 +43,7 @@ export const APP_ROLE_LABELS: Record<string, string> = {
   member: "Member",
   parent: "Parent",
   hirer: "Hirer",
+  referee: "Referee",
 };
 
 export const RELATIONSHIP_LABELS: Record<string, string> = {

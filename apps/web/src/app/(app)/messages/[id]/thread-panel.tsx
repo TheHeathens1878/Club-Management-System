@@ -3,6 +3,7 @@ import { Eye } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 import { LeaveButton } from "./leave-button";
+import { MatchPostComposer, type FixtureOption } from "./match-post-composer";
 import { ThreadClient } from "./thread-client";
 import { MESSAGE_LIMIT, type ThreadData } from "./thread-data";
 
@@ -19,10 +20,14 @@ export function ThreadPanel({
   data,
   showParticipants = true,
   showLeave = true,
+  postFixtures,
 }: {
   data: ThreadData;
   showParticipants?: boolean;
   showLeave?: boolean;
+  /** Referees group only: offer the "Post a game" composer, with these
+      fixtures ready to auto-complete. */
+  postFixtures?: FixtureOption[];
 }) {
   const { conversation, participants, personId, myLive } = data;
 
@@ -56,6 +61,10 @@ export function ThreadPanel({
         </div>
       )}
 
+      {data.isRefereesGroup && myLive && !conversation.closed_at && (
+        <MatchPostComposer conversationId={conversation.id} fixtures={postFixtures ?? []} />
+      )}
+
       <ThreadClient
         conversationId={conversation.id}
         conversationType={conversation.type}
@@ -71,6 +80,8 @@ export function ThreadPanel({
         canPost={!!myLive && !conversation.closed_at && !data.announcementReadOnly}
         canReact={!!myLive && !conversation.closed_at && conversation.type !== "announcement"}
         readOnlyNotice={data.readOnlyNotice}
+        matchPosts={data.matchPosts}
+        isReferee={data.isReferee}
       />
 
       {showLeave && myLive && !conversation.closed_at && (

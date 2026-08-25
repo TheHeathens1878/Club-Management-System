@@ -52,6 +52,8 @@ import {
   type ActionState,
 } from "../actions";
 import { clockLabel, dayKey, dayLabel, sameRun, visibleBody } from "./format";
+import { MatchPostCard } from "./match-post-card";
+import type { MatchPostView } from "./thread-data";
 
 export type ThreadMessage = {
   id: string;
@@ -97,6 +99,8 @@ export function ThreadClient({
   canPost,
   canReact,
   readOnlyNotice,
+  matchPosts = {},
+  isReferee = false,
 }: {
   conversationId: string;
   conversationType: string;
@@ -112,6 +116,9 @@ export function ThreadClient({
   canPost: boolean;
   canReact: boolean;
   readOnlyNotice: string | null;
+  /** The Referees group's game cards, keyed by message id. */
+  matchPosts?: Record<string, MatchPostView>;
+  isReferee?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -629,13 +636,21 @@ export function ThreadClient({
                     {body.state === "ok" &&
                       files.map((file) => <AttachmentImage key={file.id} attachment={file} />)}
 
-                    <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
-                      {body.state === "ok" ? (
-                        body.text
-                      ) : (
-                        <span className="italic text-muted-foreground">{body.text}</span>
-                      )}
-                    </p>
+                    {/* A referee game card replaces the body it fell back to —
+                        same tombstone rule as the attachments above. */}
+                    {body.state === "ok" && matchPosts[message.id] !== undefined ? (
+                      <span id={`msg-${message.id}`} className="block">
+                        <MatchPostCard post={matchPosts[message.id]!} isReferee={isReferee} />
+                      </span>
+                    ) : (
+                      <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
+                        {body.state === "ok" ? (
+                          body.text
+                        ) : (
+                          <span className="italic text-muted-foreground">{body.text}</span>
+                        )}
+                      </p>
+                    )}
 
                     <span className="float-right ml-2 mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
                       {clockLabel(message.created_at)}

@@ -116,9 +116,11 @@ select throws_ok($$insert into public.messages (conversation_id, sender_person_i
 select is((select count(*) from public.sg1_nightly_check() where conversation_id = 'e1e1e1e1-2222-4111-8111-000000000009'), 1::bigint, 'nightly check reports the non-compliant conversation');
 update public.conversations set closed_at = now() where id = 'e1e1e1e1-2222-4111-8111-000000000009';
 
--- SG-1.2 dob_correction_blocked_when_it_creates_1to1: adult+adult dm, then correct one to 16
+-- SG-1.2 dob_correction_blocked_when_it_creates_1to1: adult+adult dm, then
+-- correct one to 15 (2026-08-25: 16 is now self-account age, so a correction
+-- to 16 leaves the 1:1 compliant under SG-1.10 — 15 still trips the guard).
 select set_config('g.claims0', '{}', true);
-select throws_ok($$update public.people set dob = current_date - interval '16 years' where id = current_setting('g.member')::uuid$$,
+select throws_ok($$update public.people set dob = current_date - interval '15 years' where id = current_setting('g.member')::uuid$$,
   'P0001', null, 'dob_correction_blocked_when_it_creates_1to1');
 -- minor_turning_18_does_not_break_existing_conversation
 select lives_ok($$select pg_temp.conv('dm', 'e1e1e1e1-2222-4111-8111-000000000010', current_setting('g.other')::uuid, 'd9d9d9d9-2222-4111-8111-000000000004')$$,

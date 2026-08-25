@@ -62,6 +62,7 @@ const ROLES: Enums<"app_role">[] = [
   "member",
   "parent",
   "hirer",
+  "referee",
 ];
 
 const ROLE_LABELS: Record<Enums<"app_role">, string> = {
@@ -72,6 +73,7 @@ const ROLE_LABELS: Record<Enums<"app_role">, string> = {
   member: "Member",
   parent: "Parent",
   hirer: "Hirer",
+  referee: "Referee",
 };
 
 /** The staff half of `team_role` — everything that is not a player. */
