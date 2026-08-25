@@ -182,6 +182,19 @@ export const NAV: readonly NavEntry[] = [
     child: true,
   },
   {
+    // Adam, 2026-08-25 evening: "On the coaches menu, there should be a link
+    // to groups, just below messages." /groups is the admin directory (its
+    // page bounces anyone else), so the coach gets the member-facing view —
+    // their own groups in the messages list, the same door the Me menu opens.
+    href: "/messages?filter=groups",
+    label: "Groups",
+    icon: UsersRound,
+    group: "Club",
+    allowed: () => true,
+    views: ["coach"],
+    child: true,
+  },
+  {
     // A player's own screen: their teams, and when those teams are next out.
     href: "/my-teams",
     label: "My teams",
