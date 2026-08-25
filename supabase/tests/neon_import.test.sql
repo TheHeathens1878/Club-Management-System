@@ -192,8 +192,11 @@ select is((select count(*) from public.neon_import_pending where kind = 'guardia
 select is((select count(*) from public.team_memberships m join public.people p on p.id = m.person_id
             where p.legacy_neon_user_id in ('u-child', 'u-player', 'u-eve') and m.left_at is null), 3::bigint,
   'known-DOB people are on their teams straight away');
+-- 20260825340000 relaxes this for staff ONLY while SG-6 enforcement is off.
+-- This suite runs with it ON (line 24 sets it), so the
+-- unknown-DOB coach still waits — which is the point of the switch.
 select ok((select last_error like '%date of birth unknown%' from public.neon_import_pending q join public.people p on p.id = q.person_id
-            where p.legacy_neon_user_id = 'u-coach1' and q.kind = 'membership'), 'unknown-DOB coach waits for the DOB gate (SG-0)');
+            where p.legacy_neon_user_id = 'u-coach1' and q.kind = 'membership'), 'unknown-DOB coach waits for the DOB gate while SG-6 enforcement is on');
 select ok((select last_error like '%date of birth must be known%' from public.neon_import_pending where kind = 'guardianship'), 'unknown-DOB guardian waits (SG-4)');
 
 -- the parent signs in (auth import) and hits the gate
