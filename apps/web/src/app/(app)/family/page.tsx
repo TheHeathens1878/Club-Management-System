@@ -331,6 +331,7 @@ export default async function FamilyPage() {
     (childContactResult.data ?? []).map((row) => {
       const line1 = addressField(row.address, "line1");
       const town = addressField(row.address, "town");
+      const county = addressField(row.address, "county");
       const postcode = addressField(row.address, "postcode");
       const line2 = addressField(row.address, "line2");
       const hasOwn = !!(line1 || line2 || town || postcode);
@@ -341,6 +342,7 @@ export default async function FamilyPage() {
         line1,
         line2,
         town,
+        county,
         postcode,
         // Ticked when the child's address IS the lead contact's, and for a
         // child with no address of their own — the common case, and the one
@@ -484,6 +486,7 @@ export default async function FamilyPage() {
                           line1: "",
                           line2: "",
                           town: "",
+                          county: "",
                           postcode: "",
                           sameAsLead: !!leadAddressLine,
                         }

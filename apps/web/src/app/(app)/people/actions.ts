@@ -25,6 +25,7 @@ import type { Json } from "@club/db";
 
 import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
+import { countyForTown } from "@/lib/address";
 import {
   ADDRESS_KEYS,
   addressFromFields,
@@ -75,6 +76,9 @@ function readPerson(formData: FormData): PersonInput | { error: string } {
 
   const fields = {} as AddressFields;
   for (const key of ADDRESS_KEYS) fields[key] = text(formData, `address_${key}`);
+  // The town settles the county where the club knows the place (Adam,
+  // 2026-08-25), re-derived so a posted form cannot store "Sale, Cheshire".
+  fields.county = countyForTown(fields.town) ?? fields.county;
 
   return {
     first_name: firstName,

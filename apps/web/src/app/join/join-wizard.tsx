@@ -2,12 +2,13 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ChevronLeft, UserPlus, Users } from "lucide-react";
+import { Check, ChevronLeft, MailCheck, UserPlus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { EmergencyContactsFields, type LeadContact } from "@/components/emergency-contacts-fields";
+import { TownCountyFields } from "@/components/town-county-fields";
 import {
   QuestionBlock,
   customQuestionsPayload,
@@ -59,6 +60,8 @@ export function JoinWizard({ signedIn, defaults }: {
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [startError, setStartError] = useState<string | null>(null);
+  /** Set when the sign-up needs the email confirmed before anything else. */
+  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
   const [registrant, setRegistrant] = useState<StartState["registrant"] | null>(null);
   const [teams, setTeams] = useState<JoinTeamOption[]>([]);
   const [openAgeGroups, setOpenAgeGroups] = useState<string[]>([]);
@@ -83,6 +86,10 @@ export function JoinWizard({ signedIn, defaults }: {
   function submitStart(formData: FormData) {
     startTransition(async () => {
       const result = await joinStart({}, formData);
+      if (result.confirmEmail) {
+        setConfirmEmail(result.confirmEmail);
+        return;
+      }
       if (result.error || !result.registrant) {
         setStartError(result.error ?? "Something went wrong.");
         return;
@@ -174,6 +181,39 @@ export function JoinWizard({ signedIn, defaults }: {
   // -------------------------------------------------------------------------
   const steps = ["About you", "Your people", "Player details", "Membership"];
 
+  // The account exists but the address is unconfirmed: that instruction is the
+  // whole screen (Adam, 2026-08-25), because nothing else on this page can be
+  // done until the link in that email is opened.
+  if (confirmEmail) {
+    return (
+      <Card className="mx-auto max-w-2xl">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-1 inline-flex rounded-full bg-emerald-100 p-3 text-emerald-700">
+            <MailCheck className="h-7 w-7" />
+          </div>
+          <CardTitle>Check your email</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
+            Your account is created. Open the confirmation link we have just sent to
+            <span className="mt-1 block break-words text-base font-semibold">{confirmEmail}</span>
+          </p>
+          <ol className="space-y-2 text-sm text-muted-foreground">
+            <li>1. Open the email and click the confirmation link.</li>
+            <li>2. Nothing there? Look in your spam or junk folder.</li>
+            <li>3. Sign in, then come back here to finish joining.</li>
+          </ol>
+          <Link
+            href="/login"
+            className="flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          >
+            Go to sign in
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <ol className="flex flex-wrap gap-2 text-xs">
@@ -248,7 +288,7 @@ export function JoinWizard({ signedIn, defaults }: {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Input name="address_line1" placeholder="Address line 1" required className="sm:col-span-2" />
                   <Input name="address_line2" placeholder="Address line 2 (optional)" className="sm:col-span-2" />
-                  <Input name="address_town" placeholder="Town" required />
+                  <TownCountyFields idPrefix="join-address" required />
                   <Input name="address_postcode" placeholder="Postcode" required />
                 </div>
               </fieldset>

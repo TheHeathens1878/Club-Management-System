@@ -18,6 +18,7 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/field";
 import { EmergencyContactsFields, type LeadContact } from "@/components/emergency-contacts-fields";
+import { TownCountyFields } from "@/components/town-county-fields";
 import {
   QuestionBlock,
   customQuestionsPayload,
@@ -48,6 +49,8 @@ export type ChildDetails = {
   line1: string;
   line2: string;
   town: string;
+  /** Settled by the town where the club knows it (see lib/address). */
+  county: string;
   postcode: string;
   /** The child's address is the lead contact's, so the box starts ticked. */
   sameAsLead: boolean;
@@ -302,15 +305,11 @@ export function ChildDetailsForm({
                 autoComplete="off"
               />
             </div>
-            <div className="space-y-1">
-              <Label htmlFor={`child-town-${childPersonId}`}>Town</Label>
-              <Input
-                id={`child-town-${childPersonId}`}
-                name="address_town"
-                defaultValue={initial.town}
-                autoComplete="off"
-              />
-            </div>
+            <TownCountyFields
+              idPrefix={`child-address-${childPersonId}`}
+              defaultTown={initial.town}
+              defaultCounty={initial.county}
+            />
             <div className="space-y-1">
               <Label htmlFor={`child-postcode-${childPersonId}`}>Postcode</Label>
               <Input

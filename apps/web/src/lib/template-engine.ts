@@ -199,7 +199,12 @@ export function substituteVars(template: string, vars: Record<string, string>): 
   return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
 }
 
-function emailLayout(body: string, brandColor: string, clubName: string): string {
+/**
+ * The club's email chrome — header bar, white card, footer. Exported and pure
+ * so the Send Email hook (`@/lib/auth-email-hook`) can dress a confirmation or
+ * a reset link in the same clothes without a second copy of it.
+ */
+export function emailLayout(body: string, brandColor: string, clubName: string): string {
   return `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>

@@ -1,14 +1,27 @@
 "use client";
 
 /**
- * Everyone in the team this season — players included — with the paperwork
- * badge for the child-facing roles and, for a club administrator, the four
- * edits the club actually needs: add, change role, change shirt number, end.
+ * The squad as a grid of cards (design: "Club CRM — Sidebar build", Squad
+ * tab): a chip strip that filters, then one card per person — face, name, the
+ * two or three facts that matter this week, and the guardian to ring at the
+ * foot of it.
  *
- * A refusal from the database is shown as it arrived. The SG-6 trigger's
- * message names the person and the certification that is missing, which is
- * exactly the sentence the administrator needs; rewriting it would throw that
- * away.
+ * Two groups, in the order a team sheet is read: the people running the team,
+ * then the people playing (Adam, 2026-08-25). Each keeps its own grid under
+ * its own heading.
+ *
+ * EVERY VALUE ON A CARD IS SOMETHING THE CLUB HOLDS. The design shows an
+ * attendance percentage, a playing position and an age in years; the club
+ * records none of those, so they are not here. What is here is the role, the
+ * shirt, the age group, the minor flag, the next match's answer, the newest
+ * subscription (committee only — the page does not load it for anyone else)
+ * and the emergency contact.
+ *
+ * The club administrator's four edits are folded into a "Manage" disclosure
+ * inside the card, so the grid stays a grid. A refusal from the database is
+ * shown as it arrived: the SG-6 trigger's message names the person and the
+ * certification that is missing, which is exactly the sentence the
+ * administrator needs.
  *
  * Dates of birth are deliberately absent. The server sends a minor flag (from
  * `is_minor()`, which returns a boolean and nothing else); the date itself
@@ -16,7 +29,7 @@
  */
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState, type ReactNode } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 
 import { Avatar } from "@/components/avatar";
@@ -26,6 +39,18 @@ import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/field";
 import { PersonPicker } from "@/components/person-picker";
 import { formatStamp, todayIso } from "@/lib/people-display";
+import {
+  availabilityCell,
+  matchesFilter,
+  squadCounts,
+  subsCell,
+  type AvailabilityStatus,
+  type SquadCardFacts,
+  type SquadCell,
+  type SquadFilter,
+  type SquadSub,
+  type SquadTone,
+} from "@/lib/squad-cards";
 
 import {
   addTeamMember,
@@ -68,13 +93,37 @@ export type MemberRow = {
 };
 
 /**
+ * The next match and what each player said about it.
+ *
+ * Staff and administrators only, and the page enforces that: a parent's client
+ * returns only their own household's `availability` rows, and a partial read
+ * shown as a squad status would lie. Null here means "no fixture ahead" or
+ * "not this reader's to see", and the card simply omits the row.
+ */
+export type SquadAvailability = {
+  /** "Sat 29 Aug, 09:30" — printed once, above the grid. */
+  fixtureLabel: string;
+  /** "Saturday" — the row label on each card. */
+  dayLabel: string;
+  /** person_id → the answer, or null where nobody has answered. */
+  statusByPerson: Record<string, AvailabilityStatus>;
+};
+
+/**
+ * The newest subscription per player. Loaded ONLY for a committee reader (the
+ * same admin-client read the Subs tab does); null for everyone else, and the
+ * row is then not rendered at all rather than rendered empty.
+ */
+export type SquadSubs = { byPerson: Record<string, SquadSub> };
+
+/**
  * "This player has left" (Adam, 2026-08-25) — the coach's half of the squad
  * edit, and the only half they have.
  *
  * `canRequest` is the team's staff who are NOT a club administrator: an admin
  * has End, which does the thing immediately, so offering them the queue as
  * well would only be a slower End. `pendingMembershipIds` are the rows already
- * on the administrator's desk, which is what the row says instead of offering
+ * on the administrator's desk, which is what the card says instead of offering
  * the button a second time.
  */
 export type SquadLeave = {
@@ -93,12 +142,23 @@ export type PendingRow = {
   lastError: string | null;
 };
 
-function complianceVariant(status: string): "success" | "warning" | "destructive" | "muted" {
-  if (status === "valid") return "success";
-  if (status === "expiring") return "warning";
-  if (status === "expired") return "destructive";
-  return "muted";
+/** How many cards a group shows before "Show the other N". */
+const CARD_LIMIT = 11;
+
+/** `person_compliance_status()` in the design's three colours. */
+function complianceTone(status: string | null): SquadTone {
+  if (status === "valid") return "good";
+  if (status === "expiring") return "warn";
+  return "bad";
 }
+
+/** The design's colour-coded values, in the app's own palette. */
+const TONE_CLASS: Record<SquadTone, string> = {
+  good: "text-emerald-700",
+  warn: "text-amber-700",
+  bad: "text-destructive",
+  plain: "text-foreground",
+};
 
 function Feedback({ state }: { state: MembershipActionState }) {
   if (state.error) {
@@ -119,9 +179,10 @@ function Feedback({ state }: { state: MembershipActionState }) {
 }
 
 /**
- * One row's "this player has left": a button that opens a small confirm form
- * with an optional note, and nothing else. Its own component so each row keeps
- * its own action state — a refusal on one player must not appear under another.
+ * One card's "this player has left": a button that opens a small confirm form
+ * with an optional note, and nothing else. Its own component so each card
+ * keeps its own action state — a refusal on one player must not appear under
+ * another.
  */
 function LeaveRequestForm({
   teamId,
@@ -170,6 +231,246 @@ function LeavePendingBadge() {
   return <Badge variant="warning">Leaving — awaiting admin</Badge>;
 }
 
+/** One label/value line inside a card. */
+function CardRow({ label, cell }: { label: string; cell: SquadCell }) {
+  return (
+    <div className="flex items-baseline justify-between gap-3">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={`truncate font-semibold ${TONE_CLASS[cell.tone]}`}>{cell.label}</dd>
+    </div>
+  );
+}
+
+/** The filter chips: a count you can click, keyboard-reachable and 44px tall. */
+function FilterChip({
+  active,
+  tone,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  tone: "neutral" | "warn";
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  const resting =
+    tone === "warn" ? "bg-amber-100 text-amber-800 hover:bg-amber-200" : "bg-muted hover:bg-muted/70";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`inline-flex min-h-[44px] items-center rounded-full px-3.5 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 lg:min-h-0 lg:py-1.5 ${
+        active ? "bg-foreground text-background" : resting
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function MemberCard({
+  member,
+  teamId,
+  canEdit,
+  roleValues,
+  roleAction,
+  shirtAction,
+  endAction,
+  leavePending,
+  canRequestLeave,
+  availability,
+  dayLabel,
+  sub,
+  showSubs,
+  ageGroup,
+}: {
+  member: MemberRow;
+  teamId: string;
+  canEdit: boolean;
+  roleValues: TeamRoleValue[];
+  roleAction: (formData: FormData) => void;
+  shirtAction: (formData: FormData) => void;
+  endAction: (formData: FormData) => void;
+  leavePending: boolean;
+  canRequestLeave: boolean;
+  availability: AvailabilityStatus | undefined;
+  dayLabel: string | null;
+  sub: SquadSub | undefined;
+  showSubs: boolean;
+  ageGroup: string | null;
+}) {
+  const isPlayer = member.role === "player";
+  const noContact = isPlayer && member.emergencyContacts.length === 0;
+  const silent = availability === null;
+  // The design tints the border of a card that needs something. Nobody to ring
+  // is the graver of the two, so it takes the red; an unanswered match is amber.
+  const border = noContact
+    ? "border-destructive/30"
+    : silent
+      ? "border-amber-400/60"
+      : "border-border";
+  const ring = noContact
+    ? "ring-2 ring-destructive/20"
+    : silent
+      ? "ring-2 ring-amber-300"
+      : "";
+
+  // "Under 18 · #7 · U12" — the role, and only facts the club actually holds.
+  const meta = [
+    ROLE_LABELS[member.role],
+    member.shirtNumber !== null ? `#${member.shirtNumber}` : null,
+    isPlayer ? ageGroup : null,
+    member.isMinor ? "Under 18" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <li className={`flex flex-col rounded-lg border ${border} bg-card p-3.5`}>
+      <div className="flex items-center gap-2.5">
+        <Avatar name={member.name} photoUrl={member.photoUrl} size="md" className={ring} />
+        <div className="min-w-0">
+          <Link
+            href={`/people/${member.personId}`}
+            className="block truncate text-sm font-semibold underline-offset-2 hover:underline"
+          >
+            {member.name}
+          </Link>
+          <p className="mt-0.5 truncate text-xs text-muted-foreground">{meta}</p>
+        </div>
+      </div>
+
+      <dl className="mt-3 space-y-1.5 text-xs">
+        {availability !== undefined && dayLabel ? (
+          <CardRow label={dayLabel} cell={availabilityCell(availability)} />
+        ) : null}
+        {showSubs && isPlayer ? <CardRow label="Subs" cell={subsCell(sub)} /> : null}
+        {member.childFacing ? (
+          <>
+            <CardRow
+              label="DBS"
+              cell={{ label: member.dbs ?? "missing", tone: complianceTone(member.dbs) }}
+            />
+            <CardRow
+              label="Safeguarding"
+              cell={{
+                label: member.safeguarding ?? "missing",
+                tone: complianceTone(member.safeguarding),
+              }}
+            />
+          </>
+        ) : isPlayer ? null : (
+          <CardRow label="Safeguarding" cell={{ label: "Not child-facing", tone: "plain" }} />
+        )}
+        <CardRow label="Joined" cell={{ label: formatStamp(member.joinedAt), tone: "plain" }} />
+      </dl>
+
+      <div className="mt-3 border-t pt-2.5 text-xs">
+        {member.emergencyContacts.length > 0 ? (
+          <p className="text-muted-foreground">{member.emergencyContacts.join(" · ")}</p>
+        ) : noContact ? (
+          <p className="font-medium text-amber-700">No emergency contact on record</p>
+        ) : (
+          <p className="text-muted-foreground">No emergency contact recorded</p>
+        )}
+        {leavePending ? (
+          <div className="mt-2">
+            <LeavePendingBadge />
+          </div>
+        ) : null}
+      </div>
+
+      {canEdit || (canRequestLeave && !leavePending) ? (
+        <details className="mt-1">
+          <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center text-xs font-medium text-muted-foreground underline underline-offset-2 lg:min-h-0 lg:py-1">
+            Manage
+          </summary>
+          <div className="mt-2 space-y-2">
+            {canEdit ? (
+              <>
+                <form action={roleAction} className="flex items-center gap-2">
+                  <input type="hidden" name="team_id" value={teamId} />
+                  <input type="hidden" name="membership_id" value={member.id} />
+                  <Select
+                    name="role"
+                    defaultValue={member.role}
+                    aria-label={`Role for ${member.name}`}
+                    className="h-11 flex-1 text-xs lg:h-9"
+                  >
+                    {roleValues.map((role) => (
+                      <option key={role} value={role}>
+                        {ROLE_LABELS[role]}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    variant="outline"
+                    className="h-11 px-3 text-xs lg:h-9"
+                  >
+                    Save
+                  </Button>
+                </form>
+                <div className="flex items-center gap-2">
+                  <form action={shirtAction} className="flex flex-1 items-center gap-2">
+                    <input type="hidden" name="team_id" value={teamId} />
+                    <input type="hidden" name="membership_id" value={member.id} />
+                    <Input
+                      name="shirt_number"
+                      type="number"
+                      min={0}
+                      max={99}
+                      defaultValue={member.shirtNumber ?? ""}
+                      aria-label={`Shirt number for ${member.name}`}
+                      placeholder="Shirt"
+                      className="h-11 w-20 px-2 text-xs lg:h-9"
+                    />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="outline"
+                      className="h-11 px-3 text-xs lg:h-9"
+                    >
+                      Save
+                    </Button>
+                  </form>
+                  {/* End is immediate and club_admin's alone. Everyone else on
+                      the team's staff asks instead. */}
+                  <form
+                    action={endAction}
+                    onSubmit={(event) => {
+                      const ok = window.confirm(
+                        `End the membership of ${member.name}? The record is kept, not deleted.`,
+                      );
+                      if (!ok) event.preventDefault();
+                    }}
+                  >
+                    <input type="hidden" name="team_id" value={teamId} />
+                    <input type="hidden" name="membership_id" value={member.id} />
+                    <Button
+                      type="submit"
+                      size="sm"
+                      variant="outline"
+                      className="h-11 px-3 text-xs lg:h-9"
+                    >
+                      End
+                    </Button>
+                  </form>
+                </div>
+              </>
+            ) : null}
+            {canRequestLeave && !leavePending ? (
+              <LeaveRequestForm teamId={teamId} membershipId={member.id} name={member.name} />
+            ) : null}
+          </div>
+        </details>
+      ) : null}
+    </li>
+  );
+}
+
 export function MembersPanel({
   teamId,
   seasonId,
@@ -178,6 +479,9 @@ export function MembersPanel({
   pending,
   canEdit,
   squadLeave,
+  availability,
+  subs,
+  ageGroup,
 }: {
   teamId: string;
   seasonId: string | null;
@@ -186,18 +490,21 @@ export function MembersPanel({
   pending: PendingRow[];
   canEdit: boolean;
   squadLeave: SquadLeave;
+  availability: SquadAvailability | null;
+  subs: SquadSubs | null;
+  ageGroup: string | null;
 }) {
   const [addState, addAction, adding] = useActionState(addTeamMember, EMPTY);
   const [roleState, roleAction] = useActionState(changeMemberRole, EMPTY);
   const [shirtState, shirtAction] = useActionState(setShirtNumber, EMPTY);
   const [endState, endAction] = useActionState(endMembership, EMPTY);
+  const [filter, setFilter] = useState<SquadFilter>("all");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const alreadyIn = members.map((m) => m.personId);
   // Adam, 2026-08-25: "Managers and coaches should be split from players in
   // the squad screen." One list becomes two, in the order a team sheet is
-  // read: the people running it, then the people playing. Everything else —
-  // the cards on a phone, the table on the desk, the controls — is the same
-  // component rendered twice.
+  // read: the people running it, then the people playing.
   const staffMembers = members.filter((m) => m.role !== "player");
   const playerMembers = members.filter((m) => m.role === "player");
   const groups: { key: string; heading: string; rows: MemberRow[]; empty: string }[] = [
@@ -216,6 +523,31 @@ export function MembersPanel({
   ];
   const roleValues = Object.keys(ROLE_LABELS) as TeamRoleValue[];
   const leavePending = new Set(squadLeave.pendingMembershipIds);
+
+  // The chips count the squad — the players. A coach does not answer a
+  // fixture and is not the person the club rings about a child, so counting
+  // them would only make both numbers wrong.
+  const facts = new Map<string, SquadCardFacts>(
+    playerMembers.map((member) => [
+      member.id,
+      {
+        personId: member.personId,
+        hasEmergencyContact: member.emergencyContacts.length > 0,
+        // undefined where the question was never asked (no fixture ahead).
+        availability: availability
+          ? (availability.statusByPerson[member.personId] ?? null)
+          : undefined,
+      } satisfies SquadCardFacts,
+    ]),
+  );
+  const counts = squadCounts(Array.from(facts.values()));
+  const visibleRows = (rows: MemberRow[]): MemberRow[] => {
+    if (filter === "all") return rows;
+    return rows.filter((member) => {
+      const fact = facts.get(member.id);
+      return fact ? matchesFilter(fact, filter) : false;
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -236,272 +568,101 @@ export function MembersPanel({
           </p>
         ) : (
           <>
-          {groups.map((group) => (
-            <div key={group.key} className="mt-4 first:mt-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {group.heading}
-              </p>
-              {group.rows.length === 0 ? (
-                <p className="py-3 text-sm text-muted-foreground">{group.empty}</p>
-              ) : (
-                <>
-          {/* The phone reads the roster as cards, one member each, with the
-              same four edits stacked underneath (mobile design). */}
-          <ul className="mt-2 divide-y rounded-lg border lg:hidden">
-            {group.rows.map((member) => (
-              <li key={member.id} className="space-y-2.5 px-3 py-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <Avatar name={member.name} photoUrl={member.photoUrl} size="md" />
-                    <div className="min-w-0">
-                      <Link
-                        href={`/people/${member.personId}`}
-                        className="block truncate font-medium underline underline-offset-2"
-                      >
-                        {member.name}
-                      </Link>
-                      {member.emergencyContacts.length > 0 && (
-                        <p className="mt-0.5 text-xs text-muted-foreground">
-                          Emergency: {member.emergencyContacts.join(" · ")}
-                        </p>
-                      )}
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {ROLE_LABELS[member.role]}
-                        {member.shirtNumber !== null ? ` · #${member.shirtNumber}` : ""}
-                        {` · joined ${formatStamp(member.joinedAt)}`}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-none flex-col items-end gap-1">
-                    {member.isMinor && <Badge variant="warning">Minor</Badge>}
-                    {leavePending.has(member.id) ? <LeavePendingBadge /> : null}
-                  </div>
-                </div>
-
-                {member.childFacing ? (
-                  <div className="flex flex-wrap gap-1">
-                    <Badge variant={complianceVariant(member.dbs ?? "missing")}>
-                      DBS: {member.dbs ?? "missing"}
-                    </Badge>
-                    <Badge variant={complianceVariant(member.safeguarding ?? "missing")}>
-                      Safeguarding: {member.safeguarding ?? "missing"}
-                    </Badge>
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">Not child-facing</p>
-                )}
-
-                {canEdit && (
-                  <div className="space-y-2">
-                    <form action={roleAction} className="flex items-center gap-2">
-                      <input type="hidden" name="team_id" value={teamId} />
-                      <input type="hidden" name="membership_id" value={member.id} />
-                      <Select
-                        name="role"
-                        defaultValue={member.role}
-                        aria-label={`Role for ${member.name}`}
-                        className="h-11 flex-1 text-xs"
-                      >
-                        {roleValues.map((role) => (
-                          <option key={role} value={role}>
-                            {ROLE_LABELS[role]}
-                          </option>
-                        ))}
-                      </Select>
-                      <Button type="submit" size="sm" variant="outline" className="h-11 px-3 text-xs">
-                        Save
-                      </Button>
-                    </form>
-                    <div className="flex items-center gap-2">
-                      <form action={shirtAction} className="flex flex-1 items-center gap-2">
-                        <input type="hidden" name="team_id" value={teamId} />
-                        <input type="hidden" name="membership_id" value={member.id} />
-                        <Input
-                          name="shirt_number"
-                          type="number"
-                          min={0}
-                          max={99}
-                          defaultValue={member.shirtNumber ?? ""}
-                          aria-label={`Shirt number for ${member.name}`}
-                          placeholder="Shirt"
-                          className="h-11 w-20 px-2 text-xs"
-                        />
-                        <Button type="submit" size="sm" variant="outline" className="h-11 px-3 text-xs">
-                          Save
-                        </Button>
-                      </form>
-                      <form
-                        action={endAction}
-                        onSubmit={(event) => {
-                          const ok = window.confirm(
-                            `End the membership of ${member.name}? The record is kept, not deleted.`,
-                          );
-                          if (!ok) event.preventDefault();
-                        }}
-                      >
-                        <input type="hidden" name="team_id" value={teamId} />
-                        <input type="hidden" name="membership_id" value={member.id} />
-                        <Button type="submit" size="sm" variant="outline" className="h-11 px-3 text-xs">
-                          End
-                        </Button>
-                      </form>
-                    </div>
-                  </div>
-                )}
-
-                {squadLeave.canRequest && !leavePending.has(member.id) ? (
-                  <LeaveRequestForm teamId={teamId} membershipId={member.id} name={member.name} />
-                ) : null}
-              </li>
-            ))}
-          </ul>
-
-          <div className="mt-2 hidden overflow-x-auto lg:block">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b text-xs text-muted-foreground">
-                <tr>
-                  <th className="py-2 pr-3 font-medium">Member</th>
-                  <th className="py-2 pr-3 font-medium">Role</th>
-                  <th className="py-2 pr-3 font-medium">Shirt</th>
-                  <th className="py-2 pr-3 font-medium">Joined</th>
-                  <th className="py-2 pr-3 font-medium">Safeguarding</th>
-                  {canEdit || squadLeave.canRequest ? (
-                    <th className="py-2 font-medium">Actions</th>
-                  ) : null}
-                </tr>
-              </thead>
-              <tbody>
-                {group.rows.map((member) => (
-                  <tr key={member.id} className="border-b align-top last:border-0">
-                    <td className="py-2 pr-3">
-                      <div className="flex items-center gap-2.5">
-                        <Avatar name={member.name} photoUrl={member.photoUrl} size="sm" />
-                        <div className="min-w-0">
-                          <Link
-                            href={`/people/${member.personId}`}
-                            className="font-medium underline underline-offset-2"
-                          >
-                            {member.name}
-                          </Link>
-                          {member.emergencyContacts.length > 0 && (
-                            <span className="block text-xs text-muted-foreground">
-                              Emergency: {member.emergencyContacts.join(" · ")}
-                            </span>
-                          )}
-                          {member.isMinor && (
-                            <Badge variant="warning" className="ml-2">
-                              Minor
-                            </Badge>
-                          )}
-                          {leavePending.has(member.id) ? (
-                            <div className="mt-1">
-                              <LeavePendingBadge />
-                            </div>
-                          ) : null}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-2 pr-3">
-                      {canEdit ? (
-                        <form action={roleAction} className="flex items-center gap-1">
-                          <input type="hidden" name="team_id" value={teamId} />
-                          <input type="hidden" name="membership_id" value={member.id} />
-                          <Select
-                            name="role"
-                            defaultValue={member.role}
-                            aria-label={`Role for ${member.name}`}
-                            className="h-8 w-40 text-xs"
-                          >
-                            {roleValues.map((role) => (
-                              <option key={role} value={role}>
-                                {ROLE_LABELS[role]}
-                              </option>
-                            ))}
-                          </Select>
-                          <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
-                            Save
-                          </Button>
-                        </form>
-                      ) : (
-                        ROLE_LABELS[member.role]
-                      )}
-                    </td>
-                    <td className="py-2 pr-3">
-                      {canEdit ? (
-                        <form action={shirtAction} className="flex items-center gap-1">
-                          <input type="hidden" name="team_id" value={teamId} />
-                          <input type="hidden" name="membership_id" value={member.id} />
-                          <Input
-                            name="shirt_number"
-                            type="number"
-                            min={0}
-                            max={99}
-                            defaultValue={member.shirtNumber ?? ""}
-                            aria-label={`Shirt number for ${member.name}`}
-                            className="h-8 w-16 px-2 text-xs"
-                          />
-                          <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
-                            Save
-                          </Button>
-                        </form>
-                      ) : (
-                        (member.shirtNumber ?? "—")
-                      )}
-                    </td>
-                    <td className="whitespace-nowrap py-2 pr-3">{formatStamp(member.joinedAt)}</td>
-                    <td className="py-2 pr-3">
-                      {member.childFacing ? (
-                        <div className="flex flex-wrap gap-1">
-                          <Badge variant={complianceVariant(member.dbs ?? "missing")}>
-                            DBS: {member.dbs ?? "missing"}
-                          </Badge>
-                          <Badge variant={complianceVariant(member.safeguarding ?? "missing")}>
-                            Safeguarding: {member.safeguarding ?? "missing"}
-                          </Badge>
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">Not child-facing</span>
-                      )}
-                    </td>
-                    {canEdit || squadLeave.canRequest ? (
-                      <td className="py-2">
-                        {/* End is immediate and club_admin's alone. Everyone
-                            else on the team's staff asks instead. */}
-                        {canEdit ? (
-                          <form
-                            action={endAction}
-                            onSubmit={(event) => {
-                              const ok = window.confirm(
-                                `End the membership of ${member.name}? The record is kept, not deleted.`,
-                              );
-                              if (!ok) event.preventDefault();
-                            }}
-                          >
-                            <input type="hidden" name="team_id" value={teamId} />
-                            <input type="hidden" name="membership_id" value={member.id} />
-                            <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
-                              End
-                            </Button>
-                          </form>
-                        ) : null}
-                        {squadLeave.canRequest && !leavePending.has(member.id) ? (
-                          <LeaveRequestForm
-                            teamId={teamId}
-                            membershipId={member.id}
-                            name={member.name}
-                          />
-                        ) : null}
-                      </td>
-                    ) : null}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-                </>
-              )}
+            {/* The chip strip: three counts you can click, and the date the
+                availability column is speaking about. */}
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <FilterChip active={filter === "all"} tone="neutral" onClick={() => setFilter("all")}>
+                All {counts.all} {counts.all === 1 ? "player" : "players"}
+              </FilterChip>
+              <FilterChip
+                active={filter === "chasing"}
+                tone="warn"
+                onClick={() => setFilter(filter === "chasing" ? "all" : "chasing")}
+              >
+                Needs chasing {counts.chasing}
+              </FilterChip>
+              <FilterChip
+                active={filter === "no-contact"}
+                tone="neutral"
+                onClick={() => setFilter(filter === "no-contact" ? "all" : "no-contact")}
+              >
+                No emergency contact {counts.noContact}
+              </FilterChip>
+              {availability ? (
+                <span className="text-xs text-muted-foreground sm:ml-auto">
+                  Availability shown for {availability.fixtureLabel}
+                </span>
+              ) : null}
             </div>
-          ))}
+
+            {groups.map((group) => {
+              const rows = visibleRows(group.rows);
+              // The design's last cell is a dashed "Show the other N". A group
+              // only one card over the limit is drawn whole instead — hiding a
+              // single card behind a button would be sillier than showing it.
+              const open = expanded[group.key] === true;
+              const capped = !open && rows.length > CARD_LIMIT + 1;
+              const shown = capped ? rows.slice(0, CARD_LIMIT) : rows;
+              const hidden = rows.length - shown.length;
+              return (
+                <div key={group.key} className="mt-5">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {group.heading}
+                  </p>
+                  {group.rows.length === 0 ? (
+                    <p className="py-3 text-sm text-muted-foreground">{group.empty}</p>
+                  ) : rows.length === 0 ? (
+                    <p className="py-3 text-sm text-muted-foreground">
+                      Nobody in this group matches that filter.
+                    </p>
+                  ) : (
+                    <ul className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                      {shown.map((member) => (
+                        <MemberCard
+                          key={member.id}
+                          member={member}
+                          teamId={teamId}
+                          canEdit={canEdit}
+                          roleValues={roleValues}
+                          roleAction={roleAction}
+                          shirtAction={shirtAction}
+                          endAction={endAction}
+                          leavePending={leavePending.has(member.id)}
+                          canRequestLeave={squadLeave.canRequest}
+                          availability={
+                            availability && member.role === "player"
+                              ? (availability.statusByPerson[member.personId] ?? null)
+                              : undefined
+                          }
+                          dayLabel={availability?.dayLabel ?? null}
+                          sub={subs?.byPerson[member.personId]}
+                          showSubs={subs !== null}
+                          ageGroup={ageGroup}
+                        />
+                      ))}
+                      {hidden > 0 ? (
+                        <li>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setExpanded((prev) => ({ ...prev, [group.key]: true }))
+                            }
+                            className="flex h-full min-h-[96px] w-full flex-col items-center justify-center gap-1 rounded-lg border border-dashed p-3.5 text-center transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          >
+                            <span className="text-sm font-semibold text-primary">
+                              Show the other {hidden}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {rows.length} in {group.heading.toLowerCase()}
+                            </span>
+                          </button>
+                        </li>
+                      ) : null}
+                    </ul>
+                  )}
+                </div>
+              );
+            })}
           </>
         )}
         <div className="mt-2 space-y-2">

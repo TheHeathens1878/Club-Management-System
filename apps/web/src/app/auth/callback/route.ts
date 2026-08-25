@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
+import { safeRelativePath } from "@/lib/auth-email-hook";
 import { isBookerRole } from "@/lib/types";
 
 export async function GET(request: Request) {
@@ -9,6 +10,10 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
+  // Where the link asked us to land afterwards. Only ever a path on this site —
+  // `safeRelativePath` refuses anything else, because an open redirect on a
+  // link that has just signed somebody in is how accounts get taken.
+  const next = safeRelativePath(searchParams.get("next"));
 
   const supabase = await createClient();
 
@@ -27,6 +32,12 @@ export async function GET(request: Request) {
 
   if (needsPassword) {
     return NextResponse.redirect(`${origin}/auth/set-password`);
+  }
+
+  // A link that named its own destination gets it; everything else falls
+  // through to the role-based default below, exactly as before.
+  if (next) {
+    return NextResponse.redirect(`${origin}${next}`);
   }
 
   // Send hirers to their portal and everyone else to the club lobby (Adam,

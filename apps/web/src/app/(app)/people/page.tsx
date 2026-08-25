@@ -16,7 +16,6 @@ import { signPeoplePhotos } from "@/lib/avatars";
 import { isClubAdmin } from "@/lib/person";
 import { isMinorDob, personLabel, sanitiseSearch } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
-import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 
 /**
  * The club's contacts database (gap 2).
@@ -267,18 +266,15 @@ export default async function PeoplePage({
 
   const impossible = restricted !== null && restricted.length === 0;
 
-  // Hirers are NOT members (Adam, 2026-08-25): a function-room customer's
-  // portal login mints a person row as P0.4 lift-and-shift debt, but their
-  // contact record lives in booking_contacts and this list must not show
-  // them. A `booker` profile is the one durable marker of that debt — read
-  // through the legacy client because 'booker' is outside the user_role enum.
-  const { data: bookerProfiles } = await createLegacyAdminClient()
-    .from("profiles")
-    .select("person_id")
-    .eq("role", "booker");
-  const hirerPersonIds = ((bookerProfiles ?? []) as { person_id: string | null }[])
-    .map((row) => row.person_id)
-    .filter((id): id is string => !!id);
+  // Hirers are NOT members (Adam, 2026-08-25). This used to look for a
+  // `booker` profile — a marker that does not exist in this database, so it
+  // matched nothing and 27 room customers sat in the club's contact list.
+  // `hire_only_person_ids()` (20260825360000) asks the question the screen
+  // means instead: no team, no registration, no guardianship, no membership,
+  // no role, no staff login, no account request — and a matching hire contact
+  // or booking. Nobody is re-roled; they are simply somebody else's list.
+  const { data: hirerIds } = await supabase.rpc("hire_only_person_ids");
+  const hirerPersonIds = (hirerIds ?? []) as string[];
 
   let query = supabase
     .from("people")

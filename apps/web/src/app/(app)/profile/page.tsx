@@ -66,6 +66,7 @@ export default async function ProfilePage() {
         line1: addressField(person.address, "line1"),
         line2: addressField(person.address, "line2"),
         town: addressField(person.address, "town"),
+        county: addressField(person.address, "county"),
         postcode: addressField(person.address, "postcode"),
       }
     : null;
