@@ -136,17 +136,17 @@ select lives_ok(
       where id = '90570000-aaaa-4111-8111-000000000001' $$,
   'an approved referee claims the game');
 select throws_ok(
-  $ update public.referee_match_posts
+  $$ update public.referee_match_posts
         set claimed_by_person_id = current_setting('rp.teen')::uuid
-      where id = '90570000-aaaa-4111-8111-000000000001' $,
+      where id = '90570000-aaaa-4111-8111-000000000001' $$,
   'P0001', null,
   'a claimed game cannot be re-claimed');
 
 -- --- E: releases (20260825180000) — the referee, the poster, or an admin ------
 select lives_ok(
-  $ update public.referee_match_posts
+  $$ update public.referee_match_posts
         set claimed_by_person_id = null, claimed_at = null
-      where id = '90570000-aaaa-4111-8111-000000000001' $,
+      where id = '90570000-aaaa-4111-8111-000000000001' $$,
   'the referee holding a game hands it back');
 select is((select claimed_by_person_id from public.referee_match_posts
             where id = '90570000-aaaa-4111-8111-000000000001'), null,
@@ -172,18 +172,18 @@ values
 set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000003","role":"authenticated"}';
 set local role authenticated;
 select lives_ok(
-  $ update public.referee_match_posts
+  $$ update public.referee_match_posts
         set claimed_by_person_id = current_setting('rp.adult')::uuid, claimed_at = now()
-      where id = '90570000-aaaa-4111-8111-000000000002' $,
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
   'the referee claims the coach''s game');
 reset role;
 
 set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000005","role":"authenticated"}';
 set local role authenticated;
 select lives_ok(
-  $ update public.referee_match_posts
+  $$ update public.referee_match_posts
         set claimed_by_person_id = null, claimed_at = null
-      where id = '90570000-aaaa-4111-8111-000000000002' $,
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
   'the coach who posted the game releases the referee');
 select is((select claimed_by_person_id from public.referee_match_posts
             where id = '90570000-aaaa-4111-8111-000000000002'), null,
@@ -193,18 +193,18 @@ reset role;
 set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000003","role":"authenticated"}';
 set local role authenticated;
 select lives_ok(
-  $ update public.referee_match_posts
+  $$ update public.referee_match_posts
         set claimed_by_person_id = current_setting('rp.adult')::uuid, claimed_at = now()
-      where id = '90570000-aaaa-4111-8111-000000000002' $,
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
   'a released game can be claimed again');
 reset role;
 
 set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000004","role":"authenticated"}';
 set local role authenticated;
 select lives_ok(
-  $ update public.referee_match_posts
+  $$ update public.referee_match_posts
         set claimed_by_person_id = null, claimed_at = null
-      where id = '90570000-aaaa-4111-8111-000000000002' $,
+      where id = '90570000-aaaa-4111-8111-000000000002' $$,
   'a club admin, neither poster nor referee, can still release a game');
 reset role;
 
