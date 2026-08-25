@@ -10,7 +10,7 @@
  * it.
  */
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { Pencil, Plus, UserPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -179,6 +179,22 @@ export function ChildDetailsForm({
   const [open, setOpen] = useState(false);
   const [sameAsLead, setSameAsLead] = useState(initial.sameAsLead && !!leadAddressLine);
 
+  // A save closes the form (Adam, 2026-08-25: the tick "re-adds" itself after
+  // saving). React 19 resets a form once its action completes, and a reset
+  // snaps a checkbox back to the state it was MOUNTED with — ticked — while
+  // the address fields React had opened stayed open, so the screen showed
+  // the lead's address chosen over the one just typed. Closing on success
+  // means the reset lands on nothing, and reopening derives the tick from
+  // what the server now holds rather than from a stale mount.
+  useEffect(() => {
+    if (state.notice) setOpen(false);
+  }, [state]);
+
+  function openForm() {
+    setSameAsLead(initial.sameAsLead && !!leadAddressLine);
+    setOpen(true);
+  }
+
   if (!open) {
     return (
       <div className="space-y-3">
@@ -187,7 +203,7 @@ export function ChildDetailsForm({
           type="button"
           variant="outline"
           size="sm"
-          onClick={() => setOpen(true)}
+          onClick={openForm}
           className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
         >
           <Pencil className="h-4 w-4" /> Edit details
