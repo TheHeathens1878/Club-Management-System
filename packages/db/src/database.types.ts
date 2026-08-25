@@ -1867,11 +1867,74 @@ export type Database = {
           },
         ]
       }
+      fixture_player_stats: {
+        Row: {
+          assists: number
+          captain: boolean
+          created_at: string
+          fixture_id: string
+          goals: number
+          id: string
+          person_id: string
+          player_of_match: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          assists?: number
+          captain?: boolean
+          created_at?: string
+          fixture_id: string
+          goals?: number
+          id?: string
+          person_id: string
+          player_of_match?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          assists?: number
+          captain?: boolean
+          created_at?: string
+          fixture_id?: string
+          goals?: number
+          id?: string
+          person_id?: string
+          player_of_match?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixture_player_stats_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixture_player_stats_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: false
+            referencedRelation: "unallocated_home_fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixture_player_stats_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fixtures: {
         Row: {
           allocation_conflict: boolean
           away_score: number | null
           booking_id: string | null
+          coach_away_score: number | null
+          coach_home_score: number | null
           competition: string | null
           created_at: string
           created_by: string | null
@@ -1897,6 +1960,8 @@ export type Database = {
           allocation_conflict?: boolean
           away_score?: number | null
           booking_id?: string | null
+          coach_away_score?: number | null
+          coach_home_score?: number | null
           competition?: string | null
           created_at?: string
           created_by?: string | null
@@ -1922,6 +1987,8 @@ export type Database = {
           allocation_conflict?: boolean
           away_score?: number | null
           booking_id?: string | null
+          coach_away_score?: number | null
+          coach_home_score?: number | null
           competition?: string | null
           created_at?: string
           created_by?: string | null
@@ -5981,6 +6048,10 @@ export type Database = {
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       set_board_post_pinned: {
         Args: { p_pinned: boolean; p_post_id: string }
+        Returns: undefined
+      }
+      set_fixture_stats: {
+        Args: { p_fixture_id: string; p_stats: Json }
         Returns: undefined
       }
       set_id_verified: {
