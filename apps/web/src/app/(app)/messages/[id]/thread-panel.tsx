@@ -26,7 +26,21 @@ export function ThreadPanel({
       fixtures ready to auto-complete. */
   postFixtures?: FixtureOption[];
 }) {
-  const { conversation, personId, myLive } = data;
+  const { conversation, participants, personId, myLive } = data;
+
+  // Who `@` may name: the people actually in the room now, minus yourself, and
+  // minus anyone whose name this reader is not entitled to see ("Club member"
+  // is not something to offer as a mention). Deduplicated by person, because
+  // someone who left and rejoined has more than one participant row. The
+  // server resolves the typed names against the same live set — this list only
+  // saves the typing.
+  const mentionables = Array.from(
+    new Map(
+      participants
+        .filter((p) => p.left_at === null && p.person_id !== personId)
+        .map((p) => [p.person_id, { person_id: p.person_id, name: data.nameMap[p.person_id] ?? "" }]),
+    ).values(),
+  ).filter((c) => c.name !== "" && c.name !== data.unnamedLabel);
 
   return (
     <div className="space-y-4">
@@ -69,6 +83,7 @@ export function ThreadPanel({
         canPost={!!myLive && !conversation.closed_at && !data.announcementReadOnly}
         canReact={!!myLive && !conversation.closed_at && conversation.type !== "announcement"}
         readOnlyNotice={data.readOnlyNotice}
+        mentionables={mentionables}
         matchPosts={data.matchPosts}
         isReferee={data.isReferee}
         isRefereesGroup={data.isRefereesGroup}
