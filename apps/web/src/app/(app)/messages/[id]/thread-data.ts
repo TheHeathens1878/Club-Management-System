@@ -60,6 +60,8 @@ export type ThreadData = {
   isReferee: boolean;
   /** This is the seeded Referees group, where games are posted. */
   isRefereesGroup: boolean;
+  /** The caller is a club admin — may release any claimed game. */
+  isClubAdmin: boolean;
 };
 
 /** One "game needs a referee" card, serialisable for the client thread. */
@@ -73,6 +75,9 @@ export type MatchPostView = {
   kickoffAt: string | null;
   feeText: string | null;
   claimedByName: string | null;
+  /** For the Release button: the guard admits the claimer, the poster, or an admin. */
+  claimedByPersonId: string | null;
+  postedByPersonId: string;
 };
 
 export async function loadThread(conversationId: string): Promise<ThreadData | null> {
@@ -129,7 +134,7 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
         ? supabase
             .from("referee_match_posts")
             .select(
-              "id,message_id,fixture_text,duration_text,format_text,location_text,surface,kickoff_at,fee_text,claimed_by_person_id",
+              "id,message_id,fixture_text,duration_text,format_text,location_text,surface,kickoff_at,fee_text,claimed_by_person_id,posted_by_person_id",
             )
             .in("message_id", messageIds)
         : Promise.resolve({ data: [] }),
@@ -215,10 +220,13 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
           claimedByName: row.claimed_by_person_id
             ? nameOf(names, row.claimed_by_person_id)
             : null,
+          claimedByPersonId: row.claimed_by_person_id,
+          postedByPersonId: row.posted_by_person_id,
         },
       ]),
     ),
     isReferee: !!refereeRole.data,
     isRefereesGroup,
+    isClubAdmin: await isClubAdmin(),
   };
 }

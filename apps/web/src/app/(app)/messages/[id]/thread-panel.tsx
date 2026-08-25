@@ -82,6 +82,8 @@ export function ThreadPanel({
         readOnlyNotice={data.readOnlyNotice}
         matchPosts={data.matchPosts}
         isReferee={data.isReferee}
+        isRefereesGroup={data.isRefereesGroup}
+        isAdmin={data.isClubAdmin}
       />
 
       {showLeave && myLive && !conversation.closed_at && (

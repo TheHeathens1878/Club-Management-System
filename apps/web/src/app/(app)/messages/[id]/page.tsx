@@ -49,7 +49,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
       const [{ data: fixtureRows }, { data: teamRows }] = await Promise.all([
         supabase
           .from("fixtures")
-          .select("id,team_id,opponent,is_home,kickoff_at,duration_minutes,teams(name,age_group,home_resource_id,central_venue_name)")
+          .select("id,team_id,opponent,is_home,kickoff_at,duration_minutes,teams(name,age_group,home_resource_id,central_venue_name,match_halves,half_length_minutes)")
           .in("team_id", teamIds)
           .eq("status", "scheduled")
           .gte("kickoff_at", new Date().toISOString())
@@ -74,10 +74,22 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
         const rules = faFormatFor(team?.age_group ?? null);
         const pitch = team?.home_resource_id ? pitchById.get(team.home_resource_id) : undefined;
         const local = instantToLocal(fixture.kickoff_at);
+        // Length of game is PLAYING time (Adam, 2026-08-25: "just playing time
+        // and not half time"): the team's halves × half length when the club
+        // has set them, else the FA table's "N mins each way" doubled. The
+        // fixture's duration_minutes includes the interval and is the last
+        // resort only.
+        const halves = team?.match_halves ?? 2;
+        const eachWay =
+          team?.half_length_minutes ??
+          (rules ? Number(/^(\d+)\s*mins each way/.exec(rules.matchLength)?.[1]) : NaN);
+        const playing = Number.isFinite(eachWay) && eachWay ? halves * eachWay : null;
         return {
           id: fixture.id,
           label: `${team?.name ?? "Team"} v ${fixture.opponent} (${team?.age_group ?? "age group?"})`,
-          durationText: `${fixture.duration_minutes} mins`,
+          durationText: playing
+            ? `${playing} mins (${halves} × ${eachWay})`
+            : `${fixture.duration_minutes} mins`,
           formatText: rules?.format ?? "",
           locationText: fixture.is_home
             ? pitch?.address ?? pitch?.name ?? team?.central_venue_name ?? ""

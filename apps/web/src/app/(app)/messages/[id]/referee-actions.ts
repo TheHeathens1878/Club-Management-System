@@ -165,3 +165,79 @@ export async function claimMatchGame(
   revalidatePath(`/messages/${claimed.conversation_id}`);
   return { notice: "Game claimed — the poster has your contact details." };
 }
+
+/**
+ * A claimed game handed back (Adam, 2026-08-25: "refs and coaches can remove
+ * their claim to a game and it reopens it"). The update runs as the caller and
+ * the guard trigger decides — the referee holding it, the poster, or a club
+ * admin — then the group hears the game is open again and whoever was on the
+ * other side of the claim is told directly: the poster when the referee pulls
+ * out, the referee when the coach (or an admin) releases them.
+ */
+export async function releaseMatchGame(
+  _prev: RefereeActionState,
+  formData: FormData,
+): Promise<RefereeActionState> {
+  const personId = await getCurrentPersonId();
+  if (!personId) return { error: "Your sign-in is not linked to a member record." };
+
+  const postId = String(formData.get("post_id") ?? "").trim();
+  if (!postId) return { error: "Missing game." };
+
+  const supabase = await createClient();
+  const { data: before } = await supabase
+    .from("referee_match_posts")
+    .select("id,conversation_id,fixture_text,posted_by_person_id,claimed_by_person_id")
+    .eq("id", postId)
+    .maybeSingle();
+  if (!before) return { error: "That game could not be found." };
+  if (!before.claimed_by_person_id) return { error: "That game is not claimed." };
+
+  const { data: releasedRows, error } = await supabase
+    .from("referee_match_posts")
+    .update({ claimed_by_person_id: null, claimed_at: null })
+    .eq("id", postId)
+    .eq("claimed_by_person_id", before.claimed_by_person_id)
+    .select("id");
+  if (error) {
+    // P0001 is the guard's own sentence — the reader is who it was written for.
+    return { error: error.message.replace(/^referee_match_posts: /, "") };
+  }
+  if (!releasedRows?.[0]) return { error: "That game has changed hands — refresh and try again." };
+
+  const admin = createAdminClient();
+  const { data: me } = await admin
+    .from("people")
+    .select("first_name,last_name,preferred_name")
+    .eq("id", personId)
+    .maybeSingle();
+  const myName = me ? `${me.preferred_name || me.first_name} ${me.last_name}`.trim() : "Someone";
+  const byReferee = personId === before.claimed_by_person_id;
+
+  await supabase.from("messages").insert({
+    conversation_id: before.conversation_id,
+    sender_person_id: personId,
+    body: byReferee
+      ? `Referee needed again — ${myName} can no longer take ${before.fixture_text}`
+      : `Referee needed again — ${myName} released ${before.fixture_text}`,
+  });
+
+  const tell = byReferee ? before.posted_by_person_id : before.claimed_by_person_id;
+  if (tell && tell !== personId) {
+    await admin.rpc("notify", {
+      p_person_id: tell,
+      p_subject: byReferee
+        ? `Referee pulled out: ${before.fixture_text}`
+        : `Game released: ${before.fixture_text}`,
+      p_body: byReferee
+        ? `${myName} can no longer referee this game. It is open again in the Referees group.`
+        : `${myName} has released you from this game — it is open again in the Referees group.`,
+      p_link: `/messages/${before.conversation_id}`,
+      p_entity: "referee_match_posts",
+      p_entity_id: before.id,
+    });
+  }
+
+  revalidatePath(`/messages/${before.conversation_id}`);
+  return { notice: "The game is open again." };
+}
