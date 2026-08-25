@@ -91,8 +91,9 @@ export function FixtureAvailabilityPanel({
           <input type="hidden" name="team_id" value={teamId} />
           <input type="hidden" name="person_id" value={subject.personId} />
 
+          {/* Name left, the answer hard right — the artboard's squad row. */}
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium">
+            <span className="min-w-0 flex-1 text-sm font-medium lg:flex-none">
               {subject.isSelf ? `${subject.name} (you)` : subject.name}
               {subject.shirtNumber !== null && (
                 <span className="ml-1 text-xs text-muted-foreground">#{subject.shirtNumber}</span>
@@ -107,16 +108,22 @@ export function FixtureAvailabilityPanel({
             </Badge>
           </div>
 
-          <fieldset className="flex flex-wrap gap-4">
+          {/* Three answers across the card on a phone, 44px tall, the way the
+              mobile artboard draws them; plain radios again on lg+. */}
+          <fieldset className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap lg:gap-4">
             <legend className="sr-only">Availability for {subject.name}</legend>
             {CHOICES.map((choice) => (
-              <label key={choice.value} className="flex items-center gap-2 text-sm">
+              <label
+                key={choice.value}
+                className="flex min-h-[44px] cursor-pointer items-center justify-center gap-2 rounded-lg border px-2 text-center text-sm has-[:checked]:border-primary has-[:checked]:bg-primary/5 lg:min-h-0 lg:cursor-auto lg:justify-start lg:rounded-none lg:border-0 lg:px-0 lg:text-left lg:has-[:checked]:bg-transparent"
+              >
                 <input
                   type="radio"
                   name="status"
                   value={choice.value}
                   defaultChecked={subject.status === choice.value}
                   required
+                  className="accent-primary"
                 />
                 {choice.label}
               </label>
@@ -124,7 +131,7 @@ export function FixtureAvailabilityPanel({
           </fieldset>
 
           <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-[16rem] flex-1 space-y-1.5">
+            <div className="w-full space-y-1.5 lg:min-w-[16rem] lg:flex-1">
               <label
                 htmlFor={`fixture-availability-note-${subject.personId}`}
                 className="text-xs text-muted-foreground"
@@ -139,7 +146,12 @@ export function FixtureAvailabilityPanel({
                 placeholder="e.g. Can only make the first half"
               />
             </div>
-            <Button type="submit" size="sm" disabled={saving}>
+            <Button
+              type="submit"
+              size="sm"
+              disabled={saving}
+              className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+            >
               {saving ? "Saving…" : "Save"}
             </Button>
           </div>

@@ -138,7 +138,104 @@ export function MembersPanel({
             Nobody is recorded in this team for the current season.
           </p>
         ) : (
-          <div className="mt-2 overflow-x-auto">
+          <>
+          {/* The phone reads the roster as cards, one member each, with the
+              same four edits stacked underneath (mobile design). */}
+          <ul className="mt-2 divide-y rounded-lg border lg:hidden">
+            {members.map((member) => (
+              <li key={member.id} className="space-y-2.5 px-3 py-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link
+                      href={`/people/${member.personId}`}
+                      className="block truncate font-medium underline underline-offset-2"
+                    >
+                      {member.name}
+                    </Link>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {ROLE_LABELS[member.role]}
+                      {member.shirtNumber !== null ? ` · #${member.shirtNumber}` : ""}
+                      {` · joined ${formatStamp(member.joinedAt)}`}
+                    </p>
+                  </div>
+                  {member.isMinor && <Badge variant="warning">Minor</Badge>}
+                </div>
+
+                {member.childFacing ? (
+                  <div className="flex flex-wrap gap-1">
+                    <Badge variant={complianceVariant(member.dbs ?? "missing")}>
+                      DBS: {member.dbs ?? "missing"}
+                    </Badge>
+                    <Badge variant={complianceVariant(member.safeguarding ?? "missing")}>
+                      Safeguarding: {member.safeguarding ?? "missing"}
+                    </Badge>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">Not child-facing</p>
+                )}
+
+                {canEdit && (
+                  <div className="space-y-2">
+                    <form action={roleAction} className="flex items-center gap-2">
+                      <input type="hidden" name="team_id" value={teamId} />
+                      <input type="hidden" name="membership_id" value={member.id} />
+                      <Select
+                        name="role"
+                        defaultValue={member.role}
+                        aria-label={`Role for ${member.name}`}
+                        className="h-11 flex-1 text-xs"
+                      >
+                        {roleValues.map((role) => (
+                          <option key={role} value={role}>
+                            {ROLE_LABELS[role]}
+                          </option>
+                        ))}
+                      </Select>
+                      <Button type="submit" size="sm" variant="outline" className="h-11 px-3 text-xs">
+                        Save
+                      </Button>
+                    </form>
+                    <div className="flex items-center gap-2">
+                      <form action={shirtAction} className="flex flex-1 items-center gap-2">
+                        <input type="hidden" name="team_id" value={teamId} />
+                        <input type="hidden" name="membership_id" value={member.id} />
+                        <Input
+                          name="shirt_number"
+                          type="number"
+                          min={0}
+                          max={99}
+                          defaultValue={member.shirtNumber ?? ""}
+                          aria-label={`Shirt number for ${member.name}`}
+                          placeholder="Shirt"
+                          className="h-11 w-20 px-2 text-xs"
+                        />
+                        <Button type="submit" size="sm" variant="outline" className="h-11 px-3 text-xs">
+                          Save
+                        </Button>
+                      </form>
+                      <form
+                        action={endAction}
+                        onSubmit={(event) => {
+                          const ok = window.confirm(
+                            `End the membership of ${member.name}? The record is kept, not deleted.`,
+                          );
+                          if (!ok) event.preventDefault();
+                        }}
+                      >
+                        <input type="hidden" name="team_id" value={teamId} />
+                        <input type="hidden" name="membership_id" value={member.id} />
+                        <Button type="submit" size="sm" variant="outline" className="h-11 px-3 text-xs">
+                          End
+                        </Button>
+                      </form>
+                    </div>
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+
+          <div className="mt-2 hidden overflow-x-auto lg:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b text-xs text-muted-foreground">
                 <tr>
@@ -252,6 +349,7 @@ export function MembersPanel({
               </tbody>
             </table>
           </div>
+          </>
         )}
         <div className="mt-2 space-y-2">
           <Feedback state={roleState} />

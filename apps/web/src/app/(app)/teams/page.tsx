@@ -536,9 +536,10 @@ export default async function TeamsPage({
             : "The teams you help run — open one to see its members, fixtures and pitches"
         }
       />
-      <div className="space-y-6 p-6">
-        {/* The design's two sub-tabs: the list, and the FA formats reference. */}
-        <div className="flex gap-6 border-b">
+      <div className="space-y-6 p-4 lg:p-6">
+        {/* The design's two sub-tabs: the list, and the FA formats reference.
+            They scroll rather than wrap on a phone (mobile design). */}
+        <div className="-mx-4 flex gap-6 overflow-x-auto whitespace-nowrap border-b px-4 lg:mx-0 lg:px-0">
           {[
             { href: "/teams", label: "All teams", active: !formatsTab },
             { href: "/teams?tab=formats", label: "Formats & rules", active: formatsTab },
@@ -547,7 +548,7 @@ export default async function TeamsPage({
               key={item.href}
               href={item.href}
               className={
-                "-mb-px border-b-2 pb-2.5 text-sm transition-colors " +
+                "-mb-px flex min-h-[44px] shrink-0 items-center border-b-2 pb-2.5 text-sm transition-colors lg:block lg:min-h-0 " +
                 (item.active
                   ? "border-primary font-semibold text-foreground"
                   : "border-transparent text-muted-foreground hover:text-foreground")
@@ -603,7 +604,7 @@ export default async function TeamsPage({
           actions={
             canAdmin ? (
               <details className="group">
-                <summary className="inline-flex cursor-pointer list-none [&::-webkit-details-marker]:hidden items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90">
+                <summary className="flex min-h-[44px] w-full cursor-pointer list-none [&::-webkit-details-marker]:hidden items-center justify-center gap-2 whitespace-nowrap rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 lg:inline-flex lg:min-h-0 lg:w-auto">
                   <Plus className="h-4 w-4" /> New team
                 </summary>
                 <Card className="mt-3 w-full sm:w-96">
@@ -762,6 +763,85 @@ export default async function TeamsPage({
                   )}
                 </tr>
               ),
+              // The same team on a phone: name and chevron, the format line
+              // underneath, staff and squad, then next out and the pills
+              // (mobile design — a dense table becomes a stack of cards).
+              card: (
+                <Link
+                  href={`/teams/${team.id}`}
+                  className={
+                    "flex min-h-[44px] items-start gap-3 px-4 py-3.5" +
+                    (team.active ? "" : " opacity-60")
+                  }
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold leading-tight">{team.name}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {team.ageGroup ?? "No age group"}
+                      {team.gender ? ` · ${GENDER_LABELS[team.gender] ?? team.gender}` : ""}
+                      {rules ? ` · ${rules.format}` : ""}
+                      {team.league
+                        ? ` · ${team.league}${team.division ? `, ${team.division}` : ""}`
+                        : ""}
+                    </span>
+                    <span className="mt-1.5 block text-xs">
+                      {team.lead !== null ? (
+                        <span>{team.lead}</span>
+                      ) : (
+                        <span className="font-medium text-primary">
+                          {team.others > 0 ? "No manager" : "No staff"}
+                        </span>
+                      )}
+                      {team.others > 0 && (
+                        <span className="text-muted-foreground">
+                          {team.lead !== null ? " + " : " · "}
+                          {team.others} {team.othersWord}
+                          {team.others === 1 ? "" : team.othersWord === "coach" ? "es" : "s"}
+                        </span>
+                      )}
+                      <span className="text-muted-foreground">
+                        {" · "}
+                        {team.players} {team.players === 1 ? "player" : "players"}
+                      </span>
+                    </span>
+                    {team.nextOut && (
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">{team.nextOut.when}</span>
+                        {` · v ${team.nextOut.opponent}`}
+                        {team.nextOut.unallocated ? (
+                          <span className="ml-1 font-medium text-amber-700">no pitch yet</span>
+                        ) : team.nextOut.home && team.nextOut.pitch ? (
+                          ` · ${team.nextOut.pitch}`
+                        ) : team.nextOut.home ? null : (
+                          " · away"
+                        )}
+                      </span>
+                    )}
+                    <span className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {!team.active && <Badge variant="muted">Inactive</Badge>}
+                      {canAdmin && team.subsOwing !== null && (
+                        team.subsOwing === 0 ? (
+                          <Badge variant="success">All paid</Badge>
+                        ) : team.subsOwing >= 5 ? (
+                          <Badge variant="destructive">{team.subsOwing} owing</Badge>
+                        ) : (
+                          <Badge variant="warning">{team.subsOwing} owing</Badge>
+                        )
+                      )}
+                      {ft && (
+                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                          <span
+                            className={`h-1.5 w-1.5 shrink-0 rounded-full ${ft.dot}`}
+                            aria-hidden
+                          />
+                          {ft.label}
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                  <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                </Link>
+              ),
             };
           })}
         />
@@ -810,12 +890,12 @@ export default async function TeamsPage({
                 )}
                 <Link
                   href="/teams/end-of-season"
-                  className="ml-auto text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  className="ml-auto inline-flex min-h-[44px] items-center text-sm font-medium text-primary underline-offset-4 hover:underline lg:min-h-0"
                 >
                   End of season…
                 </Link>
                 <details>
-                  <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-sm font-medium text-primary underline-offset-4 hover:underline">
+                  <summary className="flex min-h-[44px] cursor-pointer list-none [&::-webkit-details-marker]:hidden items-center text-sm font-medium text-primary underline-offset-4 hover:underline lg:min-h-0">
                     Add a season
                   </summary>
                   <form action={createSeason} className="mt-4 space-y-4">

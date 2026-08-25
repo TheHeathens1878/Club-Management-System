@@ -75,7 +75,9 @@ export function TeamPitchBookings({
                   reads as the caller and 404s if they may not see it. */}
               <Link
                 href={`/pitches/${item.id}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+                className={
+                  buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+                }
               >
                 Details
               </Link>
@@ -87,7 +89,9 @@ export function TeamPitchBookings({
               {canManage && (
                 <Link
                   href={`/pitches/${item.id}#attendance`}
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+                  }
                 >
                   Attendance
                 </Link>
@@ -101,7 +105,13 @@ export function TeamPitchBookings({
                 <form action={action}>
                   <input type="hidden" name="booking_id" value={item.id} />
                   <input type="hidden" name="team_id" value={teamId} />
-                  <Button type="submit" variant="outline" size="sm" disabled={pending}>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    className="min-h-[44px] lg:min-h-0"
+                  >
                     Cancel
                   </Button>
                 </form>
@@ -114,7 +124,10 @@ export function TeamPitchBookings({
 
       <Link
         href={`/pitches/book?team=${teamId}`}
-        className={buttonVariants({ variant: "outline", size: "sm" })}
+        className={
+          buttonVariants({ variant: "outline", size: "sm" }) +
+          " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        }
       >
         Book a pitch for this team
       </Link>

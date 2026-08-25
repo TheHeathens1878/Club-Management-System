@@ -11,6 +11,10 @@
  * on every keystroke, plus the two design chips (all / needs staff) and the
  * active-only select. The query is mirrored into the URL with `replaceState`
  * so a filtered view still shares, without a server round trip per letter.
+ *
+ * Each item arrives twice: as a table row for lg+, and as a card for the phone
+ * (mobile design — "every dense table becomes a stack of cards"). Filtering is
+ * one list either way, so the two presentations can never disagree.
  */
 
 import { Fragment, useMemo, useState, type ReactNode } from "react";
@@ -28,6 +32,8 @@ export type TeamFilterItem = {
   /** No manager or coach on the books — the design's "Needs staff" chip. */
   needsStaff: boolean;
   row: ReactNode;
+  /** The same team as a phone card; the table row is hidden below lg. */
+  card: ReactNode;
 };
 
 function syncUrl(query: string, showAll: boolean) {
@@ -54,7 +60,8 @@ function Chip({
       type="button"
       onClick={onClick}
       className={
-        "rounded-full border px-3 py-1 text-xs font-medium transition-colors " +
+        // 44px on a phone (mobile design), the design build's compact chip on lg+.
+        "inline-flex min-h-[44px] shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-xs font-medium transition-colors lg:min-h-0 lg:py-1 " +
         (active
           ? "border-primary bg-primary text-primary-foreground"
           : "border-input text-muted-foreground hover:bg-secondary")
@@ -114,8 +121,8 @@ export function TeamFilterGrid({
 
   return (
     <>
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between">
+        <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end">
           <div className="space-y-1.5">
             <Label htmlFor="team-search" className="sr-only">
               Search teams
@@ -135,7 +142,9 @@ export function TeamFilterGrid({
               />
             </div>
           </div>
-          <div className="flex items-center gap-1.5 pb-0.5">
+          {/* The chips and the Show select scroll sideways on a phone rather
+              than stacking into three rows (mobile design §filter chips). */}
+          <div className="-mx-4 flex items-center gap-1.5 overflow-x-auto px-4 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] lg:mx-0 lg:px-0 [&::-webkit-scrollbar]:hidden">
             <Chip active={!needsStaffOnly} onClick={() => setNeedsStaffOnly(false)}>
               All teams
             </Chip>
@@ -155,7 +164,7 @@ export function TeamFilterGrid({
                 setShowAll(all);
                 syncUrl(query, all);
               }}
-              className="w-auto"
+              className="w-auto shrink-0"
             >
               <option value="active">Active only</option>
               <option value="all">All teams</option>
@@ -172,17 +181,25 @@ export function TeamFilterGrid({
           </CardContent>
         </Card>
       ) : (
-        <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b bg-secondary/40 text-xs text-muted-foreground">
-              {head}
-            </thead>
-            <tbody className="divide-y">
-              {shown.map((item) => (
-                <Fragment key={item.key}>{item.row}</Fragment>
-              ))}
-            </tbody>
-          </table>
+        <div className="rounded-xl border bg-card shadow-sm">
+          {/* The phone reads the same teams as a stack of cards. */}
+          <ul className="divide-y lg:hidden">
+            {shown.map((item) => (
+              <li key={item.key}>{item.card}</li>
+            ))}
+          </ul>
+          <div className="hidden overflow-x-auto lg:block">
+            <table className="w-full text-left text-sm">
+              <thead className="border-b bg-secondary/40 text-xs text-muted-foreground">
+                {head}
+              </thead>
+              <tbody className="divide-y">
+                {shown.map((item) => (
+                  <Fragment key={item.key}>{item.row}</Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
           {(hiddenInactive > 0 || footerNote) && (
             <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-xs">
               {hiddenInactive > 0 ? (

@@ -92,7 +92,13 @@ function ReplyForm({ teamId, postId }: { teamId: string; postId: string }) {
           placeholder="Reply…"
           className="min-h-9 flex-1 text-sm"
         />
-        <Button type="submit" size="sm" variant="outline" disabled={pending}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          className="min-h-[44px] lg:min-h-0"
+        >
           <Send className="h-3.5 w-3.5" />
           {pending ? "…" : "Reply"}
         </Button>
@@ -161,7 +167,12 @@ export function BoardPanel({
             <Feedback state={state} />
           </form>
         ) : (
-          <Button size="sm" variant="outline" onClick={() => setComposing(true)}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setComposing(true)}
+            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          >
             <MessageSquareText className="h-4 w-4" /> Post to board
           </Button>
         ))}
