@@ -457,7 +457,13 @@ export default async function TeamsPage({
                     </Button>
                   </form>
                 )}
-                <details className="ml-auto">
+                <Link
+                  href="/teams/end-of-season"
+                  className="ml-auto text-sm font-medium text-primary underline-offset-4 hover:underline"
+                >
+                  End of season…
+                </Link>
+                <details>
                   <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden text-sm font-medium text-primary underline-offset-4 hover:underline">
                     Add a season
                   </summary>
