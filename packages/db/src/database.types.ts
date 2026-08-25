@@ -2243,6 +2243,57 @@ export type Database = {
         }
         Relationships: []
       }
+      identity_documents: {
+        Row: {
+          created_at: string
+          id: string
+          kind: string
+          person_id: string
+          purge_after: string
+          purged_at: string | null
+          registration_id: string | null
+          storage_path: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kind: string
+          person_id: string
+          purge_after?: string
+          purged_at?: string | null
+          registration_id?: string | null
+          storage_path?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kind?: string
+          person_id?: string
+          purge_after?: string
+          purged_at?: string | null
+          registration_id?: string | null
+          storage_path?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "identity_documents_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "identity_documents_registration_id_fkey"
+            columns: ["registration_id"]
+            isOneToOne: false
+            referencedRelation: "registrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       media_albums: {
         Row: {
           created_at: string
@@ -2900,11 +2951,15 @@ export type Database = {
           email: string | null
           first_name: string
           id: string
+          id_verified: boolean
+          id_verified_at: string | null
+          id_verified_by: string | null
           last_name: string
           legacy_neon_user_id: string | null
           legal_hold: boolean
           notes: string | null
           phone: string | null
+          photo_path: string | null
           preferred_name: string | null
           pseudonymised_at: string | null
           updated_at: string
@@ -2919,11 +2974,15 @@ export type Database = {
           email?: string | null
           first_name: string
           id?: string
+          id_verified?: boolean
+          id_verified_at?: string | null
+          id_verified_by?: string | null
           last_name: string
           legacy_neon_user_id?: string | null
           legal_hold?: boolean
           notes?: string | null
           phone?: string | null
+          photo_path?: string | null
           preferred_name?: string | null
           pseudonymised_at?: string | null
           updated_at?: string
@@ -2938,11 +2997,15 @@ export type Database = {
           email?: string | null
           first_name?: string
           id?: string
+          id_verified?: boolean
+          id_verified_at?: string | null
+          id_verified_by?: string | null
           last_name?: string
           legacy_neon_user_id?: string | null
           legal_hold?: boolean
           notes?: string | null
           phone?: string | null
+          photo_path?: string | null
           preferred_name?: string | null
           pseudonymised_at?: string | null
           updated_at?: string
@@ -3168,6 +3231,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      registration_questions: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          help_text: string | null
+          id: string
+          label: string
+          locked: boolean
+          options: Json
+          position: number
+          qkey: string
+          qtype: string
+          required: boolean
+          system: boolean
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          help_text?: string | null
+          id?: string
+          label: string
+          locked?: boolean
+          options?: Json
+          position: number
+          qkey: string
+          qtype: string
+          required?: boolean
+          system?: boolean
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          help_text?: string | null
+          id?: string
+          label?: string
+          locked?: boolean
+          options?: Json
+          position?: number
+          qkey?: string
+          qtype?: string
+          required?: boolean
+          system?: boolean
+          updated_at?: string
+        }
+        Relationships: []
       }
       registrations: {
         Row: {
@@ -5344,6 +5455,15 @@ export type Database = {
         Args: { p_role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
       }
+      identity_document_purged: { Args: { p_id: string }; Returns: undefined }
+      identity_documents_due_purge: {
+        Args: never
+        Returns: {
+          id: string
+          person_id: string
+          storage_path: string
+        }[]
+      }
       import_fixtures: {
         Args: {
           p_fixtures: Json
@@ -5602,6 +5722,7 @@ export type Database = {
         }[]
       }
       needs_dob_completion: { Args: never; Returns: boolean }
+      needs_id_document: { Args: { p_person_id: string }; Returns: boolean }
       neon_auth_import_candidates: {
         Args: never
         Returns: {
@@ -5861,6 +5982,18 @@ export type Database = {
       set_board_post_pinned: {
         Args: { p_pinned: boolean; p_post_id: string }
         Returns: undefined
+      }
+      set_id_verified: {
+        Args: { p_person_id: string; p_verified: boolean }
+        Returns: undefined
+      }
+      set_person_photo: {
+        Args: { p_path: string; p_person_id: string }
+        Returns: undefined
+      }
+      set_registration_question_order: {
+        Args: { p_ids: string[] }
+        Returns: number
       }
       sg1_nightly_check: {
         Args: never

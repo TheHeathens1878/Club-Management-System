@@ -32,6 +32,7 @@ House rules, all inherited from `fulltime-import`:
 | `media-quarantine` | `true` | cron `*/10 * * * *` | P4.5. Moves flagged objects to `quarantine/…` so live signed URLs break. |
 | `media-signed-url` | `true` | the app, as a member | P4.5. Consent-filtered signed URLs, TTL ≤ 900s. |
 | `push-fanout` | **`false`** | Database Webhook on `messages` INSERT | P5.5. One push per active, unmuted participant; body withheld when the conversation has a minor. |
+| `id-docs-purge` | `true` | cron `20 5 * * *` | Destroys identity documents three years after upload: removes the object, then stamps `purged_at` and nulls the path. The row survives. |
 
 `verify_jwt = false` is only for the two callers that cannot present a Supabase
 JWT: Stripe (proved by `stripe-signature`) and the Database Webhook (proved by

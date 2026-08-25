@@ -10,7 +10,7 @@
  */
 
 import { useActionState, useState } from "react";
-import { AlertTriangle, Check, X } from "lucide-react";
+import { AlertTriangle, Check, ShieldCheck, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -19,6 +19,7 @@ import { Select } from "@/components/ui/field";
 import {
   approveRegistration,
   rejectRegistration,
+  setPersonIdVerified,
   type RegistrationDecisionState,
 } from "./actions";
 
@@ -142,5 +143,62 @@ export function DecisionPanel({
       <Outcome state={approveState} />
       <Outcome state={rejectState} />
     </div>
+  );
+}
+
+/**
+ * "ID seen — verified": the administrator's tick.
+ *
+ * Adam: the ID upload is "mandatory if we haven't certified that we have
+ * previously seen it (tick box by admin)". This is that box, and it is the
+ * only control on the queue that changes what a FAMILY is asked for next time
+ * — which is why it is a deliberate submit rather than a checkbox that saves
+ * itself, and why undoing it is offered in the same place.
+ */
+export function IdVerifiedForm({
+  personId,
+  verified,
+  verifiedAt,
+}: {
+  personId: string;
+  verified: boolean;
+  verifiedAt?: string | null;
+}) {
+  const [state, action, pending] = useActionState(setPersonIdVerified, {});
+
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="person_id" value={personId} />
+      <input type="hidden" name="verified" value={verified ? "no" : "yes"} />
+      {verified ? (
+        <>
+          <span className="flex items-center gap-1.5 text-sm text-emerald-700">
+            <ShieldCheck className="h-4 w-4" /> ID seen and verified
+            {verifiedAt ? ` · ${new Date(verifiedAt).toLocaleDateString("en-GB")}` : ""}
+          </span>
+          <Button
+            type="submit"
+            size="sm"
+            variant="ghost"
+            disabled={pending}
+            className="min-h-[44px] lg:min-h-0"
+          >
+            {pending ? "Saving…" : "Undo"}
+          </Button>
+        </>
+      ) : (
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          className="min-h-[44px] lg:min-h-0"
+        >
+          <ShieldCheck className="mr-1 h-4 w-4" />
+          {pending ? "Saving…" : "ID seen — verified"}
+        </Button>
+      )}
+      <Outcome state={state} />
+    </form>
   );
 }

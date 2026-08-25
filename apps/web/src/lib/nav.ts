@@ -226,6 +226,16 @@ export const NAV: readonly NavEntry[] = [
     allowed: (c) => c.isClubAdmin,
     views: ["admin"],
   },
+  {
+    // The form itself, as a shortcut under the queue that uses it.
+    href: "/registrations/form",
+    label: "Registration form",
+    icon: ClipboardList,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+    child: true,
+  },
 
   // --- Matchday (the design's own section) ---------------------------------
   {

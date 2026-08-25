@@ -4,6 +4,7 @@ import { Plus, Search } from "lucide-react";
 
 import type { Enums } from "@club/db";
 
+import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -11,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { Select } from "@/components/ui/field";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { signPeoplePhotos } from "@/lib/avatars";
 import { isClubAdmin } from "@/lib/person";
 import { isMinorDob, personLabel, sanitiseSearch } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
@@ -97,17 +99,6 @@ const TYPE_BADGE_VARIANT: Record<ContactType, "default" | "success" | "muted"> =
 /** Teams are listed in full up to this many, then counted. */
 const TEAMS_SHOWN = 2;
 
-/** The card stack's avatar (mobile design): up to two initials, never empty. */
-function initialsOf(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("") || "?"
-  );
-}
 
 type SearchParams = {
   q?: string;
@@ -289,7 +280,7 @@ export default async function PeoplePage({
 
   let query = supabase
     .from("people")
-    .select("id,first_name,last_name,preferred_name,dob,email,phone", { count: "exact" })
+    .select("id,first_name,last_name,preferred_name,dob,email,phone,photo_path", { count: "exact" })
     .is("deleted_at", null);
   if (hirerPersonIds.length > 0) {
     query = query.not("id", "in", `(${hirerPersonIds.join(",")})`);
@@ -330,6 +321,8 @@ export default async function PeoplePage({
   const people = rows ?? [];
   const ids = people.map((p) => p.id);
   const total = count ?? 0;
+  // One signing call for the whole page, not one per row.
+  const photoUrls = await signPeoplePhotos(people);
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Enrichment for the page's rows only — four bulk reads, not four per row.
@@ -686,11 +679,8 @@ export default async function PeoplePage({
                           href={href}
                           className="flex min-h-[44px] items-start gap-3 rounded-xl border bg-card p-3 lg:hidden"
                         >
-                          <span
-                            aria-hidden="true"
-                            className="relative inline-flex h-9 w-9 flex-none items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-foreground/70"
-                          >
-                            {initialsOf(name)}
+                          <span className="relative inline-flex flex-none">
+                            <Avatar name={name} photoUrl={photoUrls.get(person.id)} />
                             <span
                               className={
                                 "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card " +

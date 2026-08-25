@@ -3,10 +3,12 @@ import { Baby, Contact, ShieldCheck, Users } from "lucide-react";
 
 import type { Database, Json } from "@club/db";
 
+import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { signPeoplePhotos } from "@/lib/avatars";
 import { getCurrentPersonId } from "@/lib/person";
 import { formatStamp, personLabel } from "@/lib/people-display";
 import {
@@ -212,6 +214,15 @@ export default async function FamilyPage() {
   // the database validates it (P1.7 §6).
   // ------------------------------------------------------------------
   const childIds = children.map((child) => child.person_id);
+
+  // The photo the club holds for each child — `people_guardian_read` is what
+  // lets a parent see the row at all, so an unentitled reader gets initials.
+  const { data: childPhotoRows } =
+    childIds.length > 0
+      ? await supabase.from("people").select("id,photo_path").in("id", childIds)
+      : { data: [] as { id: string; photo_path: string | null }[] };
+  const childPhotoUrls = await signPeoplePhotos(childPhotoRows ?? []);
+
   const [consentsResult, minAgeResult] = await Promise.all([
     childIds.length > 0
       ? supabase
@@ -353,6 +364,7 @@ export default async function FamilyPage() {
               <Card key={child.person_id}>
                 <CardHeader className="p-4 lg:p-6">
                   <CardTitle className="flex flex-wrap items-center gap-2 text-base">
+                    <Avatar name={name} photoUrl={childPhotoUrls.get(child.person_id)} size="sm" />
                     {name}
                     <Badge variant="outline">{ageGroupHint(child.dob)}</Badge>
                     {child.is_minor && <Badge variant="warning">Under 18</Badge>}
