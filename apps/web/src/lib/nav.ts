@@ -9,7 +9,7 @@
  * (2026-08-25, second pass — this supersedes the morning's "Club Lobby, Team,
  * My Groups" shape; the third pass makes the same menu the ME view, the
  * default for every sign-in): Club Lobby, My groups, Messaging, Events,
- * Registrations. From there they part (Adam, 2026-08-25, evening): the ME view
+ * Register a player. From there they part (Adam, 2026-08-25, evening): the ME view
  * is the person — Me (My Profile, Connected Adults, My Children), Finance (My
  * Subs), Settings (Comms preferences) — and the PARENT view is the child's
  * team: a Team section whose one entry, "Team page", goes through /my-team to
@@ -112,7 +112,7 @@ export const NAV: readonly NavEntry[] = [
   },
   {
     // The me/parent copy of the messages entries sits first so that menu
-    // reads Lobby → My groups → Messaging → Events → Registrations in order.
+    // reads Lobby → My groups → Messaging → Events → Register a player.
     href: "/messages?filter=groups",
     label: "My groups",
     icon: UsersRound,
@@ -141,10 +141,12 @@ export const NAV: readonly NavEntry[] = [
     views: ME_VIEWS,
   },
   {
-    // The household's registration statuses — not the admin queue at
-    // /registrations, which keeps its own entry below.
+    // Registering somebody, and where the household's registrations stand —
+    // not the admin queue at /registrations, which keeps its own entry below.
+    // Adam, 2026-08-25: "change the name of registrations to register a
+    // player", because that is the thing a member comes here to do.
     href: "/my-registrations",
-    label: "Registrations",
+    label: "Register a player",
     icon: ClipboardCheck,
     group: "Club",
     allowed: () => true,

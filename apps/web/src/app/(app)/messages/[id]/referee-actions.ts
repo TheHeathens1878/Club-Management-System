@@ -222,16 +222,25 @@ export async function releaseMatchGame(
       : `Referee needed again — ${myName} released ${before.fixture_text}`,
   });
 
-  const tell = byReferee ? before.posted_by_person_id : before.claimed_by_person_id;
-  if (tell && tell !== personId) {
+  // Both sides of the claim hear about it, minus whoever pressed the button
+  // (Adam, 2026-08-25: "if a referee says they can't do the game after
+  // initially confirming it, it needs to send a notification to the coach").
+  // The referee pulling out tells the coach; the coach releasing tells the
+  // referee; a club administrator doing it tells them both, which is the case
+  // that used to leave the coach to find out from the group.
+  const audience = [before.posted_by_person_id, before.claimed_by_person_id].filter(
+    (id): id is string => !!id && id !== personId,
+  );
+  for (const tell of Array.from(new Set(audience))) {
+    const toReferee = tell === before.claimed_by_person_id;
     await admin.rpc("notify", {
       p_person_id: tell,
-      p_subject: byReferee
-        ? `Referee pulled out: ${before.fixture_text}`
-        : `Game released: ${before.fixture_text}`,
-      p_body: byReferee
-        ? `${myName} can no longer referee this game. It is open again in the Referees group.`
-        : `${myName} has released you from this game — it is open again in the Referees group.`,
+      p_subject: toReferee
+        ? `Game released: ${before.fixture_text}`
+        : `Referee pulled out: ${before.fixture_text}`,
+      p_body: toReferee
+        ? `${myName} has released you from this game — it is open again in the Referees group.`
+        : `${myName} can no longer referee this game, so ${before.fixture_text} needs another referee. It is open again in the Referees group.`,
       p_link: `/messages/${before.conversation_id}`,
       p_entity: "referee_match_posts",
       p_entity_id: before.id,
