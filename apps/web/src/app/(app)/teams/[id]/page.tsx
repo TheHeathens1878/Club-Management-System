@@ -33,7 +33,9 @@ import {
   MembersPanel,
   type MemberRow,
   type PendingRow,
+  type SquadAvailability,
   type SquadLeave,
+  type SquadSubs,
   type TeamRoleValue,
 } from "./members-panel";
 import { MatchDayPanel, type MatchDayPitch } from "./matchday-panel";
@@ -46,6 +48,7 @@ import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
 import { formatBookingDateShort } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
+import { fixtureDayLabel, fixtureWhenLabel, type AvailabilityStatus } from "@/lib/squad-cards";
 import { setTeamActive } from "../actions";
 import { loadThread } from "../../messages/[id]/thread-data";
 import { ThreadPanel } from "../../messages/[id]/thread-panel";
@@ -287,6 +290,10 @@ export default async function TeamPage({
   let members: MemberRow[] = [];
   let pending: PendingRow[] = [];
   let squadLeave: SquadLeave = { canRequest: false, pendingMembershipIds: [] };
+  // The two extra columns on a squad card. Both stay null unless the reader is
+  // entitled to the whole answer — see where they are filled in below.
+  let squadAvailability: SquadAvailability | null = null;
+  let squadSubs: SquadSubs | null = null;
   let clubAdmin = false;
   let memberSeason: { id: string; name: string } | null = null;
   let staff: StaffMember[] = [];
@@ -420,6 +427,78 @@ export default async function TeamPage({
           } satisfies MemberRow;
         }),
       );
+
+      const squadPlayerIds = members
+        .filter((member) => member.role === "player")
+        .map((member) => member.personId);
+
+      // ----------------------------------------------------------------
+      // The card's "Saturday" row, and the line above the grid.
+      //
+      // Exactly what the Overview tab does: the next fixture, then the
+      // `availability` rows against it. STAFF AND ADMINISTRATORS ONLY —
+      // which the Squad tab already is (`canManageTeam` gates the tab and
+      // its render) — because a parent's client returns only their own
+      // household's availability rows, and a partial read shown as a squad
+      // status would lie.
+      // ----------------------------------------------------------------
+      if (canManageTeam && squadPlayerIds.length > 0) {
+        const { data: nextFixture } = await userClient
+          .from("fixtures")
+          .select("id,kickoff_at")
+          .eq("team_id", id)
+          .gte("kickoff_at", nowIso)
+          .order("kickoff_at")
+          .limit(1)
+          .maybeSingle();
+        if (nextFixture) {
+          const { data: availRows } = await userClient
+            .from("availability")
+            .select("person_id,status")
+            .eq("fixture_id", nextFixture.id);
+          // Everyone starts silent; an answer overwrites it. A player with no
+          // row has not replied, which is the thing worth chasing.
+          const statusByPerson: Record<string, AvailabilityStatus> = {};
+          for (const personId of squadPlayerIds) statusByPerson[personId] = null;
+          for (const row of availRows ?? []) {
+            if (row.person_id in statusByPerson) {
+              statusByPerson[row.person_id] = row.status as AvailabilityStatus;
+            }
+          }
+          squadAvailability = {
+            fixtureLabel: fixtureWhenLabel(nextFixture.kickoff_at),
+            dayLabel: fixtureDayLabel(nextFixture.kickoff_at),
+            statusByPerson,
+          };
+        }
+      }
+
+      // ----------------------------------------------------------------
+      // The card's "Subs" row — COMMITTEE ONLY, and the row is not rendered
+      // at all for anyone else (`subs` stays null). Same read as the Subs
+      // tab: the newest `subscriptions` row per player through the admin
+      // client, which is where money already lives on this page. No policy
+      // is widened; a reader who is not committee simply never asks.
+      // ----------------------------------------------------------------
+      if (committee && squadPlayerIds.length > 0) {
+        const { data: subRows } = await admin
+          .from("subscriptions")
+          .select("person_id,status,amount_due_pence,created_at")
+          .in("person_id", squadPlayerIds)
+          .order("created_at", { ascending: false });
+        const byPerson: Record<string, { status: string | null; amountDuePence: number | null }> =
+          {};
+        for (const row of subRows ?? []) {
+          // Newest first, so the first row seen per player is the current one.
+          if (!(row.person_id in byPerson)) {
+            byPerson[row.person_id] = {
+              status: row.status,
+              amountDuePence: row.amount_due_pence,
+            };
+          }
+        }
+        squadSubs = { byPerson };
+      }
     }
 
     pending = (pendingResult.data ?? [])
@@ -993,8 +1072,10 @@ export default async function TeamPage({
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  Everyone in this team for the current season, players included. Adding someone,
-                  changing their role or ending their membership goes straight to{" "}
+                  Everyone in this team for the current season, players included — a card each,
+                  with the next match&apos;s answer and the person to ring. Adding someone,
+                  changing their role or ending their membership (under <strong>Manage</strong> on
+                  the card) goes straight to{" "}
                   <code>team_memberships</code> as you — so the SG-6 guard runs, and if it refuses
                   it tells you exactly which certification is missing. Memberships end; they are
                   never deleted.
@@ -1009,6 +1090,9 @@ export default async function TeamPage({
                   pending={pending}
                   canEdit={clubAdmin}
                   squadLeave={squadLeave}
+                  availability={squadAvailability}
+                  subs={squadSubs}
+                  ageGroup={team.age_group}
                 />
               </CardContent>
             </Card>
