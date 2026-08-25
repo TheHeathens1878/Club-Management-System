@@ -291,14 +291,19 @@ export function LineupBuilder({
                   className="flex min-h-[44px] items-center gap-3 px-3 py-2"
                 >
                   {/* The shirt is the grip: only it takes the pointer, so the
-                      rest of the row still scrolls the page under a finger. */}
+                      rest of the row still scrolls the page under a finger.
+                      The token is drawn at 36px but the grip around it is a
+                      full 44px, which is what a thumb actually needs. */}
                   <span
                     style={handle?.style}
                     onPointerDown={handle?.onPointerDown}
                     onPointerMove={handle?.onPointerMove}
                     onPointerUp={handle?.onPointerUp}
                     onPointerCancel={handle?.onPointerCancel}
-                    className={canManage ? "flex-none cursor-grab" : "flex-none"}
+                    className={cn(
+                      "-my-1 -ml-1 flex h-11 w-11 flex-none items-center justify-center",
+                      canManage && "cursor-grab",
+                    )}
                   >
                     <PlayerToken
                       name={player.name}
