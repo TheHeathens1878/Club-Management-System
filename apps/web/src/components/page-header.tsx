@@ -8,7 +8,7 @@ export function PageHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4 border-b bg-card px-8 py-6">
+    <div className="flex flex-wrap items-end justify-between gap-3 border-b bg-card px-4 py-4 lg:px-8 lg:py-6">
       <div>
         {/* Crest display type: Oswald condensed caps, as the design's page titles. */}
         <h1 className="font-display text-2xl font-semibold uppercase tracking-wide">{title}</h1>
