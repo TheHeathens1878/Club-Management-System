@@ -208,7 +208,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="grid gap-6 p-6 lg:grid-cols-[1fr_20rem]">
+      <div className="grid gap-4 p-4 lg:grid-cols-[1fr_20rem] lg:gap-6 lg:p-6">
         {/* ------------------------------------------------ the event itself */}
         <div className="space-y-4">
           {cancelled ? (

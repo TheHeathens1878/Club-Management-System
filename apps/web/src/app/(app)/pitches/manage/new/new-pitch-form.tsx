@@ -39,12 +39,20 @@ export function NewPitchForm() {
       <PitchAdminFeedback state={state} />
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" disabled={pending}>
+        <Button
+          type="submit"
+          size="sm"
+          className="h-11 w-full sm:h-9 sm:w-auto"
+          disabled={pending}
+        >
           {pending ? "Adding…" : "Add pitch"}
         </Button>
         <Link
           href="/pitches/manage"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
+          className={
+            buttonVariants({ variant: "outline", size: "sm" }) +
+            " h-11 w-full sm:h-9 sm:w-auto"
+          }
         >
           {state.createdId ? "Back to the pitch list" : "Cancel"}
         </Link>

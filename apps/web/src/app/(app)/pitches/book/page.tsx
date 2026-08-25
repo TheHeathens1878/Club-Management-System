@@ -85,9 +85,9 @@ export default async function BookPitchPage({
           </Link>
         }
       />
-      <div className="max-w-3xl space-y-6 p-6">
+      <div className="max-w-3xl space-y-6 p-4 lg:p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>New pitch booking</CardTitle>
             <p className="text-sm text-muted-foreground">
               The slot is checked against everything already on that pitch — fixtures, other
@@ -100,7 +100,7 @@ export default async function BookPitchPage({
               .
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {access.teams.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 You are not listed as coach, assistant coach or manager of any team, so there is

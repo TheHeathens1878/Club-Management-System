@@ -164,8 +164,10 @@ function DayTable({
   return (
     <div>
       <p className="mb-2 text-sm font-medium">{day.label}</p>
+      {/* An admin grid stays a grid on a phone: it scrolls sideways inside
+          this box (mobile design) rather than squashing to unreadable. */}
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-xs">
+        <table className="w-full min-w-[36rem] border-collapse text-xs">
           <thead>
             <tr className="text-muted-foreground">
               <th className="w-14 border-b px-1 py-1.5 text-left font-medium">Time</th>

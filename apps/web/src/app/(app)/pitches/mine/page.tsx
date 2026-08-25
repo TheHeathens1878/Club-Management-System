@@ -56,9 +56,9 @@ export default async function MyPitchBookingsPage() {
           </Link>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>Upcoming</CardTitle>
             <p className="text-sm text-muted-foreground">
               Anything still to come, pending or confirmed. Pending bookings can be moved; a
@@ -70,7 +70,7 @@ export default async function MyPitchBookingsPage() {
               .
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {error ? (
               <p className="text-sm text-destructive">Could not load your pitch bookings: {error}</p>
             ) : (

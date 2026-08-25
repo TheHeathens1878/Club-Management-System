@@ -250,7 +250,7 @@ export default async function BookingDetailPage({
           </Link>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
           <Badge variant="muted">{kindLabel(booking.kind)}</Badge>
@@ -269,10 +269,10 @@ export default async function BookingDetailPage({
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">The session</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
+          <CardContent className="space-y-2 p-4 pt-0 text-sm lg:p-6 lg:pt-0">
             <p>
               <span className="text-muted-foreground">When:</span> {formatSlot(booking)}
             </p>
@@ -300,7 +300,7 @@ export default async function BookingDetailPage({
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Availability</CardTitle>
             <p className="text-sm text-muted-foreground">
               {fixture
@@ -308,7 +308,7 @@ export default async function BookingDetailPage({
                 : "Whether you can make it. A parent or guardian can answer for each of their children who is in one of the teams on this session."}
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <AvailabilityPanel
               bookingId={booking.id}
               fixtureId={fixture?.id ?? null}
@@ -321,7 +321,7 @@ export default async function BookingDetailPage({
           /* The team page links here as `#attendance`, so the sheet is what a
              coach lands on rather than the top of the booking. */
           <Card id="attendance" className="scroll-mt-6">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle className="text-base">Roster and attendance</CardTitle>
               <p className="text-sm text-muted-foreground">
                 Everyone still in the teams on this session, what they said, and who turned up.
@@ -329,7 +329,7 @@ export default async function BookingDetailPage({
                 read their own row, and nobody else&apos;s.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <AttendancePanel bookingId={booking.id} rows={roster} />
             </CardContent>
           </Card>

@@ -194,7 +194,7 @@ export default async function PitchesPage({
           </div>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         {loadError && (
           <div className="flex items-start gap-2 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -206,7 +206,7 @@ export default async function PitchesPage({
         {/* a. Unallocated home fixtures                                     */}
         {/* ---------------------------------------------------------------- */}
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>Home fixtures with no pitch</CardTitle>
             <p className="text-sm text-muted-foreground">
               Every upcoming home fixture that has no slot yet, plus any whose slot could not be
@@ -214,17 +214,21 @@ export default async function PitchesPage({
               and all, and runs the same conflict check as a hire.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {unallocated.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 Every upcoming home fixture has a pitch.
               </p>
             ) : (
-              <ul className="divide-y">
+              /* Phone: one card per fixture; lg keeps the divided list. */
+              <ul className="space-y-3 lg:space-y-0 lg:divide-y">
                 {unallocated.map((fixture) => {
                   const conflict = latestConflict.get(fixture.id);
                   return (
-                    <li key={fixture.id} className="space-y-2 py-4 first:pt-0 last:pb-0">
+                    <li
+                      key={fixture.id}
+                      className="space-y-2 rounded-xl border bg-card p-4 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:py-4 lg:first:pt-0 lg:last:pb-0"
+                    >
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-sm font-medium">
                           {fixture.team_name ?? "Team"} v {fixture.opponent ?? "—"}
@@ -267,7 +271,7 @@ export default async function PitchesPage({
         {/* b. The weekend grid                                              */}
         {/* ---------------------------------------------------------------- */}
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <CardTitle>Weekend pitch grid</CardTitle>
@@ -300,7 +304,7 @@ export default async function PitchesPage({
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <WeekendPitchGrid
               days={days}
               pitches={pitches}
@@ -315,7 +319,7 @@ export default async function PitchesPage({
         {/* c. Flagged by a reschedule                                       */}
         {/* ---------------------------------------------------------------- */}
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>Flagged by a reschedule</CardTitle>
             <p className="text-sm text-muted-foreground">
               When a Full-Time reschedule moves a kick-off into an hour the pitch is already taken,
@@ -323,17 +327,20 @@ export default async function PitchesPage({
               another pitch, or unallocate and re-do it once the clash is resolved.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {flagged.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 Nothing flagged. Every linked booking matches its fixture.
               </p>
             ) : (
-              <ul className="divide-y">
+              <ul className="space-y-3 lg:space-y-0 lg:divide-y">
                 {flagged.map((fixture) => {
                   const conflict = latestConflict.get(fixture.id);
                   return (
-                    <li key={fixture.id} className="space-y-2 py-4 first:pt-0 last:pb-0">
+                    <li
+                      key={fixture.id}
+                      className="space-y-2 rounded-xl border bg-card p-4 lg:rounded-none lg:border-0 lg:bg-transparent lg:p-0 lg:py-4 lg:first:pt-0 lg:last:pb-0"
+                    >
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-sm font-medium">
                           {fixture.teams?.name ?? "Team"} v {fixture.opponent}

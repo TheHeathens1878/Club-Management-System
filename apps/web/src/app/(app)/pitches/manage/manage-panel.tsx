@@ -85,7 +85,7 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
         const editing = editingId === pitch.id;
         return (
           <Card key={pitch.id} className={pitch.active ? undefined : "border-dashed opacity-90"}>
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="space-y-1">
                   <CardTitle className="flex flex-wrap items-center gap-2 text-base">
@@ -116,7 +116,8 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                   </p>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-1.5">
+                {/* 44px targets on a phone; the same compact row on lg. */}
+                <div className="flex w-full flex-wrap items-center gap-1.5 lg:w-auto">
                   <form action={moveAction}>
                     <input type="hidden" name="id" value={pitch.id} />
                     <input type="hidden" name="direction" value="up" />
@@ -124,6 +125,7 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                       type="submit"
                       variant="outline"
                       size="sm"
+                      className="h-11 w-11 lg:h-9 lg:w-auto"
                       disabled={moving || index === 0}
                       aria-label={`Move ${pitch.name} up`}
                     >
@@ -137,6 +139,7 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                       type="submit"
                       variant="outline"
                       size="sm"
+                      className="h-11 w-11 lg:h-9 lg:w-auto"
                       disabled={moving || index === pitches.length - 1}
                       aria-label={`Move ${pitch.name} down`}
                     >
@@ -148,6 +151,7 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                     type="button"
                     variant="outline"
                     size="sm"
+                    className="h-11 lg:h-9"
                     onClick={() => setEditingId(editing ? null : pitch.id)}
                   >
                     {editing ? (
@@ -175,7 +179,13 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                   >
                     <input type="hidden" name="id" value={pitch.id} />
                     <input type="hidden" name="active" value={pitch.active ? "false" : "true"} />
-                    <Button type="submit" variant="outline" size="sm" disabled={togglingActive}>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      className="h-11 lg:h-9"
+                      disabled={togglingActive}
+                    >
                       {pitch.active ? "Take out of use" : "Bring back"}
                     </Button>
                   </form>
@@ -184,7 +194,7 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
             </CardHeader>
 
             {editing && (
-              <CardContent>
+              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
                 <form action={editAction} className="space-y-4">
                   <input type="hidden" name="id" value={pitch.id} />
                   <PitchFields
@@ -200,13 +210,19 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                     }}
                   />
                   <div className="flex items-center gap-2">
-                    <Button type="submit" size="sm" disabled={saving}>
+                    <Button
+                      type="submit"
+                      size="sm"
+                      className="h-11 flex-1 lg:h-9 lg:flex-none"
+                      disabled={saving}
+                    >
                       {saving ? "Saving…" : "Save changes"}
                     </Button>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
+                      className="h-11 flex-1 lg:h-9 lg:flex-none"
                       onClick={() => setEditingId(null)}
                     >
                       Cancel
@@ -217,7 +233,7 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
             )}
 
             {!editing && pitch.information && (
-              <CardContent>
+              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
                 <p className="whitespace-pre-line rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
                   {pitch.information}
                 </p>
