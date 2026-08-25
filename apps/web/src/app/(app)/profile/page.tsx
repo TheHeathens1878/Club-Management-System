@@ -10,7 +10,9 @@ import { getCurrentPersonId } from "@/lib/person";
 import { personLabel } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
-import { ContactDetailsForm, type ContactDetails } from "./profile-form";
+import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
+
+import { ContactDetailsForm, OwnEmergencyContactsForm, type ContactDetails } from "./profile-form";
 
 /**
  * My Profile (Adam's parent menu, 2026-08-25) — the caller's own record.
@@ -51,6 +53,11 @@ export default async function ProfilePage() {
         .eq("id", personId)
         .maybeSingle()
     : { data: null, error: null };
+
+  // Emergency contacts (Adam, 2026-08-25): the person's own, up to two.
+  const emergencyContacts = personId
+    ? ((await loadEmergencyContacts([personId])).get(personId) ?? [])
+    : [];
 
   const initial: ContactDetails | null = person
     ? {
@@ -122,6 +129,22 @@ export default async function ProfilePage() {
               </CardHeader>
               <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
                 {initial && <ContactDetailsForm initial={initial} />}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="p-4 lg:p-6">
+                <CardTitle className="text-base">Emergency contacts</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Up to two people the club can ring about you. Kept on your record, so they are
+                  asked for once rather than on every registration form.
+                </p>
+              </CardHeader>
+              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+                <OwnEmergencyContactsForm
+                  initial={emergencyContacts}
+                  personName={person.preferred_name || person.first_name}
+                />
               </CardContent>
             </Card>
           </>

@@ -16,6 +16,8 @@
 import { revalidatePath } from "next/cache";
 
 import { createClient } from "@/lib/supabase/server";
+import { emergencyContactsFromFormData } from "@/lib/emergency-contacts";
+import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
 
 export type ProfileActionState = { error?: string; notice?: string };
 
@@ -56,4 +58,33 @@ export async function updateContactDetails(
 
   revalidatePath("/profile");
   return { notice: "Saved." };
+}
+
+/**
+ * The caller's own emergency contacts (Adam, 2026-08-25) — up to two, through
+ * `set_emergency_contacts()`, which checks `can_act_for(self)` itself. An
+ * empty list is allowed here: clearing your own contacts is your call, and
+ * the registration is what insists on one.
+ */
+export async function updateEmergencyContacts(
+  _prev: ProfileActionState,
+  formData: FormData,
+): Promise<ProfileActionState> {
+  const supabase = await createClient();
+  const { data: personId } = await supabase.rpc("current_person_id");
+  if (!personId) {
+    return {
+      error:
+        "Your sign-in is not linked to a member record yet, so there is nothing to update. Ask the club to link your account.",
+    };
+  }
+
+  const posted = emergencyContactsFromFormData(formData);
+  if ("error" in posted) return { error: posted.error };
+
+  const saved = await saveEmergencyContacts(personId, posted);
+  if (saved.error) return { error: saved.error };
+
+  revalidatePath("/profile");
+  return { notice: "Emergency contacts saved." };
 }

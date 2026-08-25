@@ -8,7 +8,8 @@
  * written down once here and shared by the screen that captures it and the
  * screen that reads it back. `form_version` says which promise was made.
  *
- * The form is SENSITIVE (emergency contact, medical). RLS lets the subject,
+ * The form is SENSITIVE (medical; the emergency contact too, on rows written
+ * before version 3). RLS lets the subject,
  * their active guardians, `club_admin` and `safeguarding_lead` read it and
  * nobody else — coaches included. Nothing here widens that; the parser simply
  * renders whatever the caller was allowed to select.
@@ -20,7 +21,7 @@
 import type { Json } from "@club/db";
 
 /** The shape below. Bump only alongside a new `RegistrationForm` type. */
-export const REGISTRATION_FORM_VERSION = "2";
+export const REGISTRATION_FORM_VERSION = "3";
 
 /** The wording the guardian ticked. Changing the terms means a new id. */
 export const REGISTRATION_TERMS_VERSION = "2026-1";
@@ -48,7 +49,13 @@ export type PhotoPreferences = {
 };
 
 export type RegistrationForm = {
-  emergency_contact: { name: string; phone: string; relationship: string };
+  /**
+   * Versions 1 and 2 only. Since version 3 the emergency contacts are the
+   * PERSON's — `emergency_contacts`, up to two, edited wherever the person is
+   * (Adam, 2026-08-25) — and a registration no longer carries one. Old rows
+   * keep theirs, which is why the queue still reads it when present.
+   */
+  emergency_contact?: { name: string; phone: string; relationship: string };
   medical: { conditions: string; medication: string; allergies: string };
   previous_club: string;
   preferred_position: string;
@@ -97,11 +104,13 @@ function checked(value: FormDataEntryValue | null): boolean {
 }
 
 /**
- * Build a version 1 form from a posted form, or say what is missing.
+ * Build a form from a posted form, or say what is missing.
  *
- * The emergency contact and the terms are required by this screen — not by the
- * database. A registration with neither would be accepted by Postgres and be
- * useless to the person who has to ring somebody on a Saturday morning.
+ * The terms are required by this screen — not by the database. The emergency
+ * contact used to be required here too; since version 3 it is a fact about
+ * the person (`emergency_contacts`) that `submitTeamRegistration` checks is on
+ * record, so the person who has to ring somebody on a Saturday morning finds
+ * a current number rather than the one typed on a form last August.
  */
 export function registrationFormFromFormData(
   formData: FormData,
@@ -118,10 +127,6 @@ export function registrationFormFromFormData(
     requireGdpr?: boolean;
   },
 ): { form: RegistrationForm } | { error: string } {
-  const name = text(formData.get("emergency_name"));
-  const phone = text(formData.get("emergency_phone"));
-  if (!name) return { error: "An emergency contact name is required." };
-  if (!phone) return { error: "An emergency contact phone number is required." };
   if (!checked(formData.get("terms_accepted"))) {
     return { error: "Please confirm the details are correct and accept the club's terms." };
   }
@@ -130,11 +135,6 @@ export function registrationFormFromFormData(
   }
 
   const form: RegistrationForm = {
-    emergency_contact: {
-      name,
-      phone,
-      relationship: text(formData.get("emergency_relationship")),
-    },
     medical: {
       conditions: text(formData.get("medical_conditions")),
       medication: text(formData.get("medical_medication")),
@@ -199,7 +199,6 @@ function readObject(
  */
 export function parseRegistrationForm(value: Json | null | undefined): RegistrationForm {
   const empty: RegistrationForm = {
-    emergency_contact: { name: "", phone: "", relationship: "" },
     medical: { conditions: "", medication: "", allergies: "" },
     previous_club: "",
     preferred_position: "",
@@ -213,11 +212,6 @@ export function parseRegistrationForm(value: Json | null | undefined): Registrat
   const contact = readObject(record, "emergency_contact");
   const medical = readObject(record, "medical");
   const parsed: RegistrationForm = {
-    emergency_contact: {
-      name: readString(contact, "name"),
-      phone: readString(contact, "phone"),
-      relationship: readString(contact, "relationship"),
-    },
     medical: {
       conditions: readString(medical, "conditions"),
       medication: readString(medical, "medication"),
@@ -229,6 +223,15 @@ export function parseRegistrationForm(value: Json | null | undefined): Registrat
     terms_accepted_at: readString(record, "terms_accepted_at"),
     terms_version: readString(record, "terms_version"),
   };
+
+  // Versions 1–2 carried the emergency contact inside the form.
+  if (readString(contact, "name") || readString(contact, "phone")) {
+    parsed.emergency_contact = {
+      name: readString(contact, "name"),
+      phone: readString(contact, "phone"),
+      relationship: readString(contact, "relationship"),
+    };
+  }
 
   const photo = record["photo_preferences"];
   if (photo && typeof photo === "object" && !Array.isArray(photo)) {

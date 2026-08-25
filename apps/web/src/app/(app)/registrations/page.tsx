@@ -22,6 +22,8 @@ import {
   type RegistrationStatusValue,
 } from "@/lib/registration-form";
 import { idDocumentKindLabel } from "@/lib/registration-questions";
+import type { EmergencyContact } from "@/lib/emergency-contacts";
+import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { createClient } from "@/lib/supabase/server";
 
 import { DecisionPanel, IdVerifiedForm, type TeamChoice } from "./decision-forms";
@@ -52,6 +54,55 @@ function Detail({ label, children }: { label: string; children: React.ReactNode 
       <dt className="text-xs uppercase text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 whitespace-pre-wrap">{children}</dd>
     </div>
+  );
+}
+
+/**
+ * The person's emergency contacts (Adam, 2026-08-25: on the person, not the
+ * form). A row written before form version 3 carries its own inside the form;
+ * it is shown, marked, only when the person has none on record — the record
+ * is current, the form is what was true last August.
+ */
+function EmergencyContactsCell({
+  contacts,
+  legacy,
+}: {
+  contacts: EmergencyContact[];
+  legacy: { name: string; phone: string; relationship: string } | null;
+}) {
+  if (contacts.length === 0) {
+    if (!legacy) return <>None on record</>;
+    return (
+      <>
+        {legacy.name}
+        {legacy.relationship ? ` (${legacy.relationship})` : ""}
+        {legacy.phone ? (
+          <>
+            {" · "}
+            <a href={`tel:${legacy.phone}`} className="text-primary hover:underline">
+              {legacy.phone}
+            </a>
+          </>
+        ) : null}
+        <span className="block text-xs text-muted-foreground">
+          From the registration form — nothing on the person&apos;s record yet.
+        </span>
+      </>
+    );
+  }
+  return (
+    <ul className="space-y-0.5">
+      {contacts.map((contact) => (
+        <li key={contact.position}>
+          {contact.name}
+          {contact.relationship ? ` (${contact.relationship})` : ""}
+          {" · "}
+          <a href={`tel:${contact.phone}`} className="text-primary hover:underline">
+            {contact.phone}
+          </a>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -133,6 +184,8 @@ export default async function RegistrationsPage({
   ]);
 
   const peopleById = new Map((peopleRows ?? []).map((row) => [row.id, row] as const));
+  // Emergency contacts come off the person now, under `emergency_contacts_admin_read`.
+  const contactsByPerson = await loadEmergencyContacts(personIds);
   const photoUrls = await signPeoplePhotos(peopleRows ?? []);
 
   type IdentityDocumentRow = NonNullable<typeof documentRows>[number];
@@ -261,24 +314,14 @@ export default async function RegistrationsPage({
                           : guardians.map((id) => nameOf(names, id)).join(", ")}
                       </Detail>
                       <Detail label="Form version">{registration.form_version}</Detail>
-                      <Detail label="Emergency contact">
-                        {form.emergency_contact.name || "—"}
-                        {form.emergency_contact.relationship
-                          ? ` (${form.emergency_contact.relationship})`
-                          : ""}
-                      </Detail>
-                      <Detail label="Emergency phone">
-                        {form.emergency_contact.phone ? (
-                          <a
-                            href={`tel:${form.emergency_contact.phone}`}
-                            className="text-primary hover:underline"
-                          >
-                            {form.emergency_contact.phone}
-                          </a>
-                        ) : (
-                          "—"
-                        )}
-                      </Detail>
+                      <div className="sm:col-span-2">
+                        <Detail label="Emergency contacts">
+                          <EmergencyContactsCell
+                            contacts={contactsByPerson.get(registration.person_id) ?? []}
+                            legacy={form.emergency_contact ?? null}
+                          />
+                        </Detail>
+                      </div>
                       {form.previous_club && (
                         <Detail label="Previous club">{form.previous_club}</Detail>
                       )}

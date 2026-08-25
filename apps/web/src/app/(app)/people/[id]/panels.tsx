@@ -18,6 +18,8 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select, Textarea } from "@/components/ui/field";
 import { PersonPicker } from "@/components/person-picker";
+import { EmergencyContactsFields } from "@/components/emergency-contacts-fields";
+import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
 import { formatDate, formatStamp } from "@/lib/people-display";
 
 import { softDeletePerson, restorePerson, type PersonActionState } from "../actions";
@@ -28,6 +30,7 @@ import {
   grantRole,
   revokePersonCertification,
   revokeRole,
+  setPersonEmergencyContacts,
   verifyPersonCertification,
   type PersonDetailState,
 } from "./actions";
@@ -508,6 +511,85 @@ export function RetirePanel({
         </Button>
       </form>
       <Feedback state={deleteState} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Emergency contacts (Adam, 2026-08-25) — on the person, up to two
+// ---------------------------------------------------------------------------
+
+export function EmergencyContactsPanel({
+  personId,
+  personName,
+  contacts,
+  canEdit,
+}: {
+  personId: string;
+  personName: string;
+  contacts: EmergencyContact[];
+  canEdit: boolean;
+}) {
+  const [state, action, pending] = useActionState<PersonDetailState, FormData>(
+    setPersonEmergencyContacts,
+    EMPTY,
+  );
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="space-y-3">
+      {contacts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">None on record.</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {contacts.map((contact) => (
+            <li key={contact.position} className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">{contact.position}.</span>
+              <span className="font-medium">{contact.name}</span>
+              <a href={`tel:${contact.phone}`} className="text-primary hover:underline">
+                {contact.phone}
+              </a>
+              {contact.relationship && (
+                <span className="text-xs text-muted-foreground">{contact.relationship}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {canEdit && !open && (
+        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+          {contacts.length === 0 ? "Add emergency contacts" : "Edit emergency contacts"}
+        </Button>
+      )}
+
+      {canEdit && open && (
+        <form action={action} className="space-y-4 rounded-lg border bg-secondary/20 p-4">
+          <input type="hidden" name="person_id" value={personId} />
+          <EmergencyContactsFields
+            idPrefix={`person-${personId}`}
+            initial={contacts}
+            lead={null}
+            personName={personName}
+            requireFirst={false}
+          />
+          <Feedback state={state} />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" disabled={pending}>
+              {pending ? "Saving…" : "Save contacts"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+      {!open && <Feedback state={state} />}
+      {contacts.length > 0 && !canEdit && (
+        <p className="text-xs text-muted-foreground">
+          {emergencyContactLine(contacts[0]!)} is who the club rings first.
+        </p>
+      )}
     </div>
   );
 }

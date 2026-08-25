@@ -25,6 +25,8 @@ import { redirect } from "next/navigation";
 import type { Database } from "@club/db";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { emergencyContactsFromFormData } from "@/lib/emergency-contacts";
+import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { friendlyDbError } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
@@ -292,4 +294,33 @@ export async function revokePersonCertification(
 
   revalidatePath(personPath(personId));
   return { notice: "Revoked." };
+}
+
+// ---------------------------------------------------------------------------
+// Emergency contacts (Adam, 2026-08-25)
+// ---------------------------------------------------------------------------
+
+/**
+ * A club administrator sets a person's emergency contacts. The RPC decides:
+ * `set_emergency_contacts()` admits club_admin (and the person or their
+ * guardian from their own screens) and refuses everyone else with 42501, which
+ * `saveEmergencyContacts` turns into a sentence — a safeguarding lead can read
+ * the list but is told they cannot change it here.
+ */
+export async function setPersonEmergencyContacts(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+  const personId = text(formData, "person_id");
+  if (!personId) return { error: "Missing person." };
+
+  const posted = emergencyContactsFromFormData(formData);
+  if ("error" in posted) return { error: posted.error };
+
+  const saved = await saveEmergencyContacts(personId, posted);
+  if (saved.error) return { error: saved.error };
+
+  revalidatePath(personPath(personId));
+  return { notice: "Emergency contacts saved." };
 }
