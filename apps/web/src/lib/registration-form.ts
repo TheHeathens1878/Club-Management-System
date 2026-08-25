@@ -20,10 +20,20 @@
 import type { Json } from "@club/db";
 
 /** The shape below. Bump only alongside a new `RegistrationForm` type. */
-export const REGISTRATION_FORM_VERSION = "1";
+export const REGISTRATION_FORM_VERSION = "2";
 
 /** The wording the guardian ticked. Changing the terms means a new id. */
 export const REGISTRATION_TERMS_VERSION = "2026-1";
+
+/**
+ * The photo-permissions wording shown beside the four SG-5 checkboxes. It is
+ * written to `guardian_consents.notice_version` so what the guardian was told
+ * can be reconstructed later; changing the wording means a new id.
+ */
+export const PHOTO_NOTICE_VERSION = "photo-2026-1";
+
+/** The data-protection notice the registrant accepted. Same rule. */
+export const GDPR_NOTICE_VERSION = "gdpr-2026-1";
 
 /**
  * An adult's own photo preferences are informational only (spec §3): SG-5
@@ -47,6 +57,16 @@ export type RegistrationForm = {
   terms_version: string;
   /** Adults registering themselves only. Absent for a child. */
   photo_preferences?: PhotoPreferences;
+  /**
+   * Version 2. Answers to questions a club administrator added in the form
+   * builder, keyed by `registration_questions.qkey`. A string per answer — a
+   * checkbox is "yes" or "" — because the queue renders them beside the
+   * question's own label and nothing here should need a schema to read.
+   */
+  custom?: Record<string, string>;
+  /** Version 2. The GDPR tick the locked `gdpr_consent` question captures. */
+  gdpr_accepted_at?: string;
+  gdpr_notice_version?: string;
 };
 
 export const PHOTO_PREFERENCE_LABELS: Record<keyof PhotoPreferences, string> = {
@@ -85,7 +105,18 @@ function checked(value: FormDataEntryValue | null): boolean {
  */
 export function registrationFormFromFormData(
   formData: FormData,
-  options: { includePhotoPreferences: boolean },
+  options: {
+    includePhotoPreferences: boolean;
+    /**
+     * Questions a club administrator added in the builder. Their answers go to
+     * `form.custom.<qkey>`; a required one that is blank stops the submission
+     * with the administrator's own wording, so the DB never has to know the
+     * question exists.
+     */
+    customQuestions?: readonly { qkey: string; label: string; qtype: string; required: boolean }[];
+    /** The locked `gdpr_consent` question is on the form. */
+    requireGdpr?: boolean;
+  },
 ): { form: RegistrationForm } | { error: string } {
   const name = text(formData.get("emergency_name"));
   const phone = text(formData.get("emergency_phone"));
@@ -93,6 +124,9 @@ export function registrationFormFromFormData(
   if (!phone) return { error: "An emergency contact phone number is required." };
   if (!checked(formData.get("terms_accepted"))) {
     return { error: "Please confirm the details are correct and accept the club's terms." };
+  }
+  if (options.requireGdpr && !checked(formData.get("gdpr_accepted"))) {
+    return { error: "Please confirm you have read how the club uses this information." };
   }
 
   const form: RegistrationForm = {
@@ -121,6 +155,23 @@ export function registrationFormFromFormData(
       press: checked(formData.get("photo_press")),
     };
   }
+
+  if (options.requireGdpr) {
+    form.gdpr_accepted_at = new Date().toISOString();
+    form.gdpr_notice_version = GDPR_NOTICE_VERSION;
+  }
+
+  const custom: Record<string, string> = {};
+  for (const question of options.customQuestions ?? []) {
+    const field = formData.get(`custom_${question.qkey}`);
+    const value =
+      question.qtype === "checkbox" ? (checked(field) ? "yes" : "") : text(field);
+    if (question.required && !value) {
+      return { error: `${question.label} is required.` };
+    }
+    if (value) custom[question.qkey] = value;
+  }
+  if (Object.keys(custom).length > 0) form.custom = custom;
 
   return { form };
 }
@@ -188,6 +239,25 @@ export function parseRegistrationForm(value: Json | null | undefined): Registrat
       social_media: flags["social_media"] === true,
       press: flags["press"] === true,
     };
+  }
+
+  // Version 2. A version 1 row simply has neither, which is why both are read
+  // the same tolerant way as everything above rather than switched on
+  // `form_version`: the column says what was promised, not what is there.
+  const custom = record["custom"];
+  if (custom && typeof custom === "object" && !Array.isArray(custom)) {
+    const answers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(custom as Record<string, Json>)) {
+      if (typeof value === "string") answers[key] = value;
+      else if (typeof value === "number" || typeof value === "boolean") answers[key] = String(value);
+    }
+    if (Object.keys(answers).length > 0) parsed.custom = answers;
+  }
+
+  const gdprAt = readString(record, "gdpr_accepted_at");
+  if (gdprAt) {
+    parsed.gdpr_accepted_at = gdprAt;
+    parsed.gdpr_notice_version = readString(record, "gdpr_notice_version");
   }
 
   return parsed;

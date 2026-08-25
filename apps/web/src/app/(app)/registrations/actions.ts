@@ -95,3 +95,43 @@ export async function rejectRegistration(
   revalidatePath(PATH);
   return { notice: "Rejected." };
 }
+
+/**
+ * "We have seen this player's ID before" — the tick Adam asked for.
+ *
+ * `set_id_verified()` is club_admin only and stamps who ticked it and when,
+ * with an audit row; this action does none of that itself. What the tick
+ * CHANGES is `needs_id_document()`, which is what makes the upload mandatory
+ * on the join screen — so unticking it is a real act too, and is offered for
+ * the case where the box was ticked against the wrong person.
+ */
+export async function setPersonIdVerified(
+  _prev: RegistrationDecisionState,
+  formData: FormData,
+): Promise<RegistrationDecisionState> {
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const verified = formData.get("verified") === "yes";
+  if (!personId) return { error: "Missing the person." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_id_verified", {
+    p_person_id: personId,
+    p_verified: verified,
+  });
+
+  if (error) {
+    if (error.code === "P0001") return { blocked: error.message };
+    if (error.code === "42501") {
+      return { error: "Only a club administrator can confirm the club has seen an identity document." };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath(PATH);
+  revalidatePath(`/people/${personId}`);
+  return {
+    notice: verified
+      ? "Recorded — the club has seen this player's ID."
+      : "Cleared — proof of identity will be asked for again.",
+  };
+}

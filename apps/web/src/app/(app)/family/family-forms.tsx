@@ -504,6 +504,24 @@ export function RegisterForm({
         </p>
       )}
 
+      {/* GDPR is a default on every registration (Adam, 2026-08-25), so it is
+          asked here as well as on /join — not only where the form builder
+          renders it. */}
+      <label className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+        <input
+          type="checkbox"
+          name="gdpr_accepted"
+          value="yes"
+          required
+          className="mt-0.5 h-4 w-4 accent-primary"
+        />
+        <span>
+          <span className="font-medium">Data protection.</span> I have read how the club stores and
+          uses this information, and I know it can be corrected or removed on request.{" "}
+          <span className="text-destructive">*</span>
+        </span>
+      </label>
+
       <label className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
         <input
           type="checkbox"

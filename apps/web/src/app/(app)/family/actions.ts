@@ -97,7 +97,10 @@ export async function registerForTeam(
   }
   if (!teamId) return { error: "Choose a team." };
 
-  const built = registrationFormFromFormData(formData, { includePhotoPreferences: isSelf });
+  const built = registrationFormFromFormData(formData, {
+    includePhotoPreferences: isSelf,
+    requireGdpr: true,
+  });
   if ("error" in built) return { error: built.error };
 
   const supabase = await createClient();

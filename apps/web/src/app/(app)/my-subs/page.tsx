@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { signPeoplePhotos } from "@/lib/avatars";
 import { getCurrentPersonId, nameOf, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
@@ -36,16 +38,6 @@ function statusVariant(status: string): "success" | "warning" | "destructive" | 
   return "muted";
 }
 
-function initialsOf(name: string): string {
-  return (
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0]?.toLocaleUpperCase("en-GB") ?? "")
-      .join("") || "?"
-  );
-}
 
 export default async function MySubsPage() {
   const session = await getSessionProfile();
@@ -93,6 +85,14 @@ export default async function MySubsPage() {
   }
 
   const names = await resolveNames(subs.map((s) => s.person_id));
+
+  // The registration photo, where the reader is entitled to the person's row —
+  // themselves and their children, which is exactly who appears on this page.
+  const { data: photoRows } = await supabase
+    .from("people")
+    .select("id,photo_path")
+    .in("id", Array.from(new Set(subs.map((s) => s.person_id))));
+  const photoUrls = await signPeoplePhotos(photoRows ?? []);
 
   // One derivation, two layouts — so the phone and the desktop can never
   // disagree about what is owed.
@@ -194,9 +194,11 @@ export default async function MySubsPage() {
                 key={row.sub.id}
                 className="flex min-h-[44px] items-center gap-3 border-b px-4 py-3 last:border-b-0"
               >
-                <span className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-secondary text-[11px] font-semibold text-secondary-foreground">
-                  {initialsOf(nameOf(names, row.sub.person_id))}
-                </span>
+                <Avatar
+                  name={nameOf(names, row.sub.person_id)}
+                  photoUrl={photoUrls.get(row.sub.person_id)}
+                  size="sm"
+                />
                 <span className="min-w-0 flex-1">
                   <span className="block text-[13.5px] font-semibold leading-tight">{row.who}</span>
                   <span className="mt-1 block text-[11.5px] leading-tight text-muted-foreground">

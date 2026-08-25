@@ -4,12 +4,16 @@ import { ChevronLeft, Clock } from "lucide-react";
 
 import type { Json } from "@club/db";
 
+import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { resolveNames, nameOf } from "@/lib/person";
+import { signPersonPhotoPath } from "@/lib/avatars";
+import { signIdentityDocumentPaths } from "@/lib/identity-docs";
+import { isClubAdmin, resolveNames, nameOf } from "@/lib/person";
+import { idDocumentKindLabel } from "@/lib/registration-questions";
 import {
   addressToFields,
   formatDate,
@@ -19,6 +23,7 @@ import {
 } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
+import { IdVerifiedForm } from "../../registrations/decision-forms";
 import { PersonForm } from "../person-form";
 import {
   GuardianshipsPanel,
@@ -185,6 +190,22 @@ export default async function PersonPage({
   const name = personLabel(person);
   const registrationAnswers = formEntries(registration?.form ?? null);
 
+  // The registration photo, and any identity document the club holds. The
+  // document ROWS come back to anyone the policy admits; the FILES are signed
+  // only for a club administrator, which is the storage policy mirrored.
+  const admin = await isClubAdmin();
+  const photoUrl = await signPersonPhotoPath(person.photo_path);
+  const { data: documentRows } = await supabase
+    .from("identity_documents")
+    .select("id,kind,storage_path,created_at,purge_after,purged_at")
+    .eq("person_id", id)
+    .is("purged_at", null)
+    .order("created_at", { ascending: false });
+  const documents = documentRows ?? [];
+  const documentUrls = admin
+    ? await signIdentityDocumentPaths(documents.map((row) => row.storage_path))
+    : new Map<string, string>();
+
   return (
     <>
       <PageHeader
@@ -202,7 +223,8 @@ export default async function PersonPage({
         }
       />
       <div className="space-y-6 p-4 lg:p-6">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <Avatar name={name} photoUrl={photoUrl} size="lg" />
           {person.deleted_at && <Badge variant="destructive">Retired</Badge>}
           {isMinorDob(person.dob) && (
             <Badge variant="warning">{person.dob ? "Minor" : "No date of birth — treated as a minor"}</Badge>
@@ -353,6 +375,56 @@ export default async function PersonPage({
                   </tbody>
                 </table>
               </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Proof of identity</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              A passport or birth certificate is asked for at registration unless a club
+              administrator has recorded that the club has already seen one. Documents are held for
+              three years and then destroyed automatically; the record that one was held survives.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {documents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nothing on file.</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {documents.map((document) => {
+                  const url = document.storage_path
+                    ? documentUrls.get(document.storage_path)
+                    : undefined;
+                  return (
+                    <li key={document.id} className="flex flex-wrap items-center gap-2">
+                      {url ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {idDocumentKindLabel(document.kind)}
+                        </a>
+                      ) : (
+                        <span className="font-medium">{idDocumentKindLabel(document.kind)}</span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        uploaded {formatStamp(document.created_at)} · destroyed {document.purge_after}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {admin && (
+              <IdVerifiedForm
+                personId={person.id}
+                verified={person.id_verified}
+                verifiedAt={person.id_verified_at}
+              />
             )}
           </CardContent>
         </Card>
