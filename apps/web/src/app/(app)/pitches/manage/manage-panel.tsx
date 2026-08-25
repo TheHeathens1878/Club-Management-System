@@ -31,6 +31,7 @@ export type PitchAdminRow = {
   id: string;
   name: string;
   description: string | null;
+  address: string | null;
   information: string | null;
   capacity: number | null;
   active: boolean;
@@ -100,6 +101,9 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                   </CardTitle>
                   {pitch.description && (
                     <p className="text-sm text-muted-foreground">{pitch.description}</p>
+                  )}
+                  {pitch.address && (
+                    <p className="text-xs text-muted-foreground">{pitch.address}</p>
                   )}
                   <p className="text-xs text-muted-foreground">
                     Buffers {pitch.defaultPreBufferMinutes}/{pitch.defaultPostBufferMinutes} min
@@ -188,6 +192,7 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                     values={{
                       name: pitch.name,
                       description: pitch.description,
+                      address: pitch.address,
                       information: pitch.information,
                       capacity: pitch.capacity,
                       defaultPreBufferMinutes: pitch.defaultPreBufferMinutes,

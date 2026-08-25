@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/field";
 export type PitchFieldValues = {
   name: string;
   description: string | null;
+  address: string | null;
   information: string | null;
   capacity: number | null;
   defaultPreBufferMinutes: number;
@@ -26,6 +27,7 @@ export type PitchFieldValues = {
 export const EMPTY_PITCH_FIELDS: PitchFieldValues = {
   name: "",
   description: null,
+  address: null,
   information: null,
   capacity: null,
   defaultPreBufferMinutes: 0,
@@ -68,6 +70,22 @@ export function PitchFields({
           maxLength={2000}
           defaultValue={values.description ?? ""}
           placeholder="e.g. Full-size grass pitch behind the clubhouse"
+        />
+      </div>
+
+      <div className="space-y-1.5 sm:col-span-2">
+        <Label htmlFor={`${idPrefix}-address`}>
+          Address{" "}
+          <span className="text-xs font-normal text-muted-foreground">
+            street and postcode — home fixtures use it for their maps link and event details
+          </span>
+        </Label>
+        <Input
+          id={`${idPrefix}-address`}
+          name="address"
+          defaultValue={values.address ?? ""}
+          placeholder="e.g. Banky Lane, Ashton on Mersey, Sale M33 5SL"
+          maxLength={300}
         />
       </div>
 
