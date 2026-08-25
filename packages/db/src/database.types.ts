@@ -4930,6 +4930,10 @@ export type Database = {
       can_read_board_post: { Args: { p_post_id: string }; Returns: boolean }
       can_view_album: { Args: { p_album_id: string }; Returns: boolean }
       can_view_pitch_calendar: { Args: never; Returns: boolean }
+      can_view_waiting_list_age_group: {
+        Args: { p_age_group: string }
+        Returns: boolean
+      }
       cancel_team_event: { Args: { p_event_id: string }; Returns: undefined }
       club_lobby_posts: {
         Args: { p_limit?: number }
@@ -5903,6 +5907,10 @@ export type Database = {
       venue_label: {
         Args: { p_resource_id: string; p_venue_text: string }
         Returns: string
+      }
+      waiting_list_age_number: {
+        Args: { p_age_group: string }
+        Returns: number
       }
       waiting_list_open_age_groups: {
         Args: never

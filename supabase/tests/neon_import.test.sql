@@ -275,7 +275,9 @@ select lives_ok($$update public.waiting_list_entries set status = 'contacted' wh
 reset role;
 set local request.jwt.claims to '{"sub":"a3a3a3a3-1111-4111-8111-000000000007","role":"authenticated"}';
 set local role authenticated;
-select is((select count(*) from public.waiting_list_entries), 1::bigint, 'coach with U07 access sees the U07 entry only');
+-- 20260825070000: the U07 grant plus the AUTOMATIC scope — this coach staffs
+-- U05 Lions by now, so the U05 team application shows too (own band + below).
+select is((select count(*) from public.waiting_list_entries), 2::bigint, 'coach sees the U07 grant plus his own U05 band');
 select is((select count(*) from public.waiting_list_entries where age_group = 'U09'), 0::bigint, '… not U09');
 select lives_ok($$insert into public.waiting_list_notes (entry_id, author_person_id, body)
   values ((select id from public.waiting_list_entries where legacy_neon_entry_id = 'w1'), public.current_person_id(), 'Trial Tuesday')$$,
