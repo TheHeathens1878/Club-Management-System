@@ -5,14 +5,15 @@
  * still needs (Manage pitches, Rooms, Groups, Media, Super users, My role)
  * keep their place in the nearest section rather than vanishing.
  *
- * The PARENT view has its own five sections, spelled out by Adam (2026-08-25,
- * second pass — this supersedes the morning's "Club Lobby, Team, My Groups"
- * shape): Club (Club Lobby, My groups, Messaging, Events, Registrations),
- * Me (My Profile, Connected Adults, My Children), Finance (My Subs),
- * Safeguarding (Report a concern), Settings (Comms preferences). The lobby
- * stays the parent's landing page. There is no Team entry any more — a
- * team-scoped pick in the switcher still goes to the team page, but the menu
- * reaches teams through My Children.
+ * The ME and PARENT views share the five member-facing sections, spelled out
+ * by Adam (2026-08-25, second pass — this supersedes the morning's "Club
+ * Lobby, Team, My Groups" shape; the third pass makes the same menu the ME
+ * view, the default for every sign-in): Club (Club Lobby, My groups,
+ * Messaging, Events, Registrations), Me (My Profile, Connected Adults, My
+ * Children), Finance (My Subs), Safeguarding (Report a concern), Settings
+ * (Comms preferences). The lobby stays the landing page for both. There is no
+ * Team entry any more — a team-scoped pick in the switcher still goes to the
+ * team page, but the menu reaches teams through My Children.
  *
  * Two independent gates decide whether a link is rendered:
  *
@@ -69,6 +70,7 @@ import {
 import type { Capabilities, RoleView } from "@/lib/role-view";
 
 const ALL_VIEWS = [
+  "me",
   "player",
   "parent",
   "coach",
@@ -76,8 +78,11 @@ const ALL_VIEWS = [
   "function_room",
 ] as const satisfies readonly RoleView[];
 
-/** The four views that belong to the football club rather than the room. */
-const CLUB_VIEWS = ["player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
+/** The five views that belong to the football club rather than the room. */
+const CLUB_VIEWS = ["me", "player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
+
+/** The member-as-a-person menu: the default ME view and the parent's twin. */
+const ME_VIEWS = ["me", "parent"] as const satisfies readonly RoleView[];
 
 export type NavEntry = {
   href: string;
@@ -104,14 +109,14 @@ export const NAV: readonly NavEntry[] = [
     views: CLUB_VIEWS,
   },
   {
-    // The parent's copy of the messages entries sits first so the parent menu
+    // The me/parent copy of the messages entries sits first so that menu
     // reads Lobby → My groups → Messaging → Events → Registrations in order.
     href: "/messages?filter=groups",
     label: "My groups",
     icon: UsersRound,
     group: "Club",
     allowed: () => true,
-    views: ["parent"],
+    views: ME_VIEWS,
   },
   {
     href: "/messages",
@@ -119,18 +124,19 @@ export const NAV: readonly NavEntry[] = [
     icon: MessageSquare,
     group: "Club",
     allowed: () => true,
-    views: ["parent"],
+    views: ME_VIEWS,
   },
   {
     // Adam's parent menu (2026-08-25, second pass): Events came back into the
     // parent's Club section after the morning's menu left it out. Same
-    // destination as Matchday's entry; the guard mirrors the page's admit.
+    // destination as Matchday's entry; the page admits any signed-in person
+    // and `my_events()` returns only their own diary, so no gate here either.
     href: "/events",
     label: "Events",
     icon: CalendarCheck,
     group: "Club",
-    allowed: (c) => c.isGuardian || c.hasParentRole,
-    views: ["parent"],
+    allowed: () => true,
+    views: ME_VIEWS,
   },
   {
     // The household's registration statuses — not the admin queue at
@@ -140,7 +146,7 @@ export const NAV: readonly NavEntry[] = [
     icon: ClipboardCheck,
     group: "Club",
     allowed: () => true,
-    views: ["parent"],
+    views: ME_VIEWS,
   },
   {
     href: "/messages",
@@ -369,14 +375,14 @@ export const NAV: readonly NavEntry[] = [
     views: ["player", "coach", "admin"],
   },
 
-  // --- Me (Adam's parent menu, 2026-08-25 second pass) ---------------------
+  // --- Me (Adam's parent menu, 2026-08-25 second pass; now also the ME view)
   {
     href: "/profile",
     label: "My Profile",
     icon: UserCircle,
     group: "Me",
     allowed: () => true,
-    views: ["parent"],
+    views: ME_VIEWS,
   },
   {
     // The adults in the caller's household without a login of their own —
@@ -386,7 +392,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Contact,
     group: "Me",
     allowed: () => true,
-    views: ["parent"],
+    views: ME_VIEWS,
   },
   {
     href: "/family",
@@ -394,17 +400,17 @@ export const NAV: readonly NavEntry[] = [
     icon: Baby,
     group: "Me",
     allowed: (c) => c.isGuardian || c.hasParentRole,
-    views: ["parent"],
+    views: ME_VIEWS,
   },
 
-  // --- Finance (the parent menu's name for their own money) ----------------
+  // --- Finance (the me/parent menu's name for their own money) -------------
   {
     href: "/my-subs",
     label: "My Subs",
     icon: Wallet,
     group: "Finance",
     allowed: () => true,
-    views: ["parent"],
+    views: ME_VIEWS,
   },
 
   // --- Safeguarding --------------------------------------------------------
@@ -462,14 +468,14 @@ export const NAV: readonly NavEntry[] = [
     icon: Mail,
     group: "Settings",
     allowed: () => true,
-    views: ["player", "parent", "coach", "admin"],
+    views: ["me", "player", "parent", "coach", "admin"],
   },
 
   // --- You -----------------------------------------------------------------
   {
-    // Parents switch hats in the sidebar dropdown; the tiles page stays for
-    // everyone else. SG-3's "Report a concern" above remains in EVERY view,
-    // the parent's included — that entry never thins.
+    // The me and parent views switch hats in the sidebar dropdown; the tiles
+    // page stays for everyone else. SG-3's "Report a concern" above remains in
+    // EVERY view, me and parent included — that entry never thins.
     href: "/welcome",
     label: "My role",
     icon: UserCircle,
