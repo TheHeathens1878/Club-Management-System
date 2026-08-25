@@ -80,7 +80,7 @@ export function ClosePitchForm({
         </div>
       </div>
 
-      <Button type="submit" disabled={pending}>
+      <Button type="submit" className="h-11 w-full sm:w-auto" disabled={pending}>
         <CalendarX2 className="h-4 w-4" /> Close the pitch
       </Button>
     </form>

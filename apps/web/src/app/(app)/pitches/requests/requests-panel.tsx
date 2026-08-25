@@ -74,7 +74,13 @@ function DeclineForm({
 
   if (!open) {
     return (
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-11 flex-1 lg:h-9 lg:flex-none"
+        onClick={() => setOpen(true)}
+      >
         Decline
       </Button>
     );
@@ -91,10 +97,22 @@ function DeclineForm({
         placeholder="Why is this being declined? The coach is told this."
       />
       <div className="flex gap-2">
-        <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+        <Button
+          type="submit"
+          variant="destructive"
+          size="sm"
+          className="h-11 flex-1 lg:h-9 lg:flex-none"
+          disabled={pending}
+        >
           {pending ? "Declining…" : "Decline request"}
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-11 flex-1 lg:h-9 lg:flex-none"
+          onClick={() => setOpen(false)}
+        >
           Keep it
         </Button>
       </div>
@@ -127,10 +145,15 @@ export function PendingRequests({ items }: { items: PitchBookingItem[] }) {
             <li key={item.id} className="space-y-2 py-4 first:pt-0 last:pb-0">
               <BookingSummary item={item} />
               <div className="flex flex-wrap items-start gap-2">
-                <form action={confirmAction}>
+                <form action={confirmAction} className="flex-1 lg:flex-none">
                   <input type="hidden" name="booking_id" value={item.id} />
                   <input type="hidden" name="team_id" value={item.teamId ?? ""} />
-                  <Button type="submit" size="sm" disabled={confirming}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="h-11 w-full lg:h-9 lg:w-auto"
+                    disabled={confirming}
+                  >
                     Confirm
                   </Button>
                 </form>
@@ -165,7 +188,10 @@ export function UpcomingBookings({ items }: { items: PitchBookingItem[] }) {
               {item.kind === "fixture" ? (
                 <Link
                   href="/pitches"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "outline", size: "sm" }) +
+                    " h-11 w-full lg:h-9 lg:w-auto"
+                  }
                 >
                   Unallocate on Pitches
                 </Link>
@@ -174,7 +200,13 @@ export function UpcomingBookings({ items }: { items: PitchBookingItem[] }) {
                   <form action={action}>
                     <input type="hidden" name="booking_id" value={item.id} />
                     <input type="hidden" name="team_id" value={item.teamId ?? ""} />
-                    <Button type="submit" variant="outline" size="sm" disabled={pending}>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      className="h-11 w-full lg:h-9 lg:w-auto"
+                      disabled={pending}
+                    >
                       Cancel
                     </Button>
                   </form>

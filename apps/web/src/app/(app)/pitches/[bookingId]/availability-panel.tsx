@@ -127,10 +127,15 @@ export function AvailabilityPanel({
             </Badge>
           </div>
 
-          <fieldset className="flex flex-wrap gap-4">
+          {/* Yes / Maybe / No as 44px choices on a phone (mobile design's
+              availability artboard); the same inline radios on lg. */}
+          <fieldset className="grid grid-cols-3 gap-2 lg:flex lg:flex-wrap lg:gap-4">
             <legend className="sr-only">Availability for {subject.name}</legend>
             {CHOICES.map((choice) => (
-              <label key={choice.value} className="flex items-center gap-2 text-sm">
+              <label
+                key={choice.value}
+                className="flex min-h-[44px] items-center justify-center gap-2 rounded-lg border px-2 text-center text-sm lg:min-h-0 lg:justify-start lg:rounded-none lg:border-0 lg:px-0 lg:text-left"
+              >
                 <input
                   type="radio"
                   name="status"
@@ -144,7 +149,7 @@ export function AvailabilityPanel({
           </fieldset>
 
           <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-[16rem] flex-1 space-y-1.5">
+            <div className="w-full min-w-[16rem] flex-1 space-y-1.5 lg:w-auto">
               <label
                 htmlFor={`availability-note-${subject.personId}`}
                 className="text-xs text-muted-foreground"
@@ -159,7 +164,12 @@ export function AvailabilityPanel({
                 placeholder="e.g. Arriving late — away at a match until 6"
               />
             </div>
-            <Button type="submit" size="sm" disabled={saving}>
+            <Button
+              type="submit"
+              size="sm"
+              className="h-11 w-full lg:h-9 lg:w-auto"
+              disabled={saving}
+            >
               {saving ? "Saving…" : "Save"}
             </Button>
           </div>

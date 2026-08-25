@@ -124,18 +124,21 @@ export default async function PitchClashesPage({
           </Link>
         }
       />
-      <div className="space-y-6 p-6">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
+        {/* The horizon chips scroll in their own strip on a phone. */}
+        <div className="-mx-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap px-4 [&>*]:flex-none lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
           <CalendarRange className="h-4 w-4 text-muted-foreground" />
           <span className="text-sm text-muted-foreground">Looking ahead</span>
           {HORIZONS.map((option) => (
             <Link
               key={option}
               href={`/pitches/clashes?days=${option}`}
-              className={buttonVariants({
-                variant: option === horizon ? "default" : "outline",
-                size: "sm",
-              })}
+              className={
+                buttonVariants({
+                  variant: option === horizon ? "default" : "outline",
+                  size: "sm",
+                }) + " h-11 lg:h-9"
+              }
             >
               {option} days
             </Link>
@@ -156,7 +159,7 @@ export default async function PitchClashesPage({
         ) : null}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2">
               <ShieldAlert className="h-4 w-4 text-amber-600" />
               Reschedules the diary refused{flagged.length > 0 ? ` (${flagged.length})` : ""}
@@ -167,7 +170,7 @@ export default async function PitchClashesPage({
               database recorded them; clear each one on the allocator.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {flagged.length === 0 ? (
               <p className="text-sm text-muted-foreground">None.</p>
             ) : (
@@ -197,7 +200,7 @@ export default async function PitchClashesPage({
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>
               One team, two places{overlaps.length > 0 ? ` (${overlaps.length})` : ""}
             </CardTitle>
@@ -207,7 +210,7 @@ export default async function PitchClashesPage({
               visible here.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {overlaps.length === 0 ? (
               <p className="text-sm text-muted-foreground">None.</p>
             ) : (
@@ -233,7 +236,7 @@ export default async function PitchClashesPage({
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>
               Out of step{outOfStep.length > 0 ? ` (${outOfStep.length})` : ""}
             </CardTitle>
@@ -242,7 +245,7 @@ export default async function PitchClashesPage({
               the fixture puts them back together.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {outOfStep.length === 0 ? (
               <p className="text-sm text-muted-foreground">None.</p>
             ) : (
@@ -280,7 +283,7 @@ export default async function PitchClashesPage({
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>
               Still waiting for a pitch{unallocated.length > 0 ? ` (${unallocated.length})` : ""}
             </CardTitle>
@@ -290,7 +293,7 @@ export default async function PitchClashesPage({
               pitch and kick-off.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {unallocated.length === 0 ? (
               <p className="text-sm text-muted-foreground">None.</p>
             ) : (

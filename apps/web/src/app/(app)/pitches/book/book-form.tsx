@@ -200,7 +200,10 @@ export function BookForm({
           <legend className="text-sm font-medium">Other teams sharing this session</legend>
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             {sharingCandidates.map((team) => (
-              <label key={team.id} className="flex items-center gap-2 text-sm">
+              <label
+                key={team.id}
+                className="flex min-h-[44px] items-center gap-2 text-sm sm:min-h-0"
+              >
                 <input
                   type="checkbox"
                   name="extra_team_ids"
@@ -220,7 +223,7 @@ export function BookForm({
 
       {kind === "training" && (
         <div className="space-y-2 rounded-lg border bg-secondary/40 p-3">
-          <label className="flex items-center gap-2 text-sm font-medium">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm font-medium sm:min-h-0">
             <input
               type="checkbox"
               checked={repeats}
@@ -290,8 +293,12 @@ export function BookForm({
         </div>
       )}
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={pending || teams.length === 0 || pitches.length === 0}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="submit"
+          className="h-11 w-full sm:w-auto"
+          disabled={pending || teams.length === 0 || pitches.length === 0}
+        >
           {pending ? "Checking the pitch…" : isAdmin ? "Save booking" : "Request pitch"}
         </Button>
         {!isAdmin && (

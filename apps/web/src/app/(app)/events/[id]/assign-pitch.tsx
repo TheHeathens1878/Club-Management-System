@@ -48,7 +48,7 @@ export function AssignPitch({
           name="resource_id"
           required
           defaultValue={home ?? ""}
-          className="h-9 min-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm"
+          className="h-11 w-full min-w-[14rem] rounded-md border border-input bg-transparent px-3 text-sm sm:h-9 sm:w-auto"
         >
           <option value="" disabled>
             Choose a pitch…
@@ -60,7 +60,12 @@ export function AssignPitch({
             </option>
           ))}
         </select>
-        <Button type="submit" size="sm" disabled={saving}>
+        <Button
+          type="submit"
+          size="sm"
+          className="h-11 w-full sm:h-9 sm:w-auto"
+          disabled={saving}
+        >
           <LandPlot className="h-4 w-4" /> {saving ? "Assigning…" : "Assign pitch"}
         </Button>
       </div>

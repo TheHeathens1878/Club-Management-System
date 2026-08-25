@@ -76,7 +76,7 @@ export default async function NewEventPage() {
           </Link>
         }
       />
-      <div className="p-6">
+      <div className="p-4 lg:p-6">
         {teams.length === 0 ? (
           <p className="max-w-xl rounded-lg border px-3 py-2 text-sm text-muted-foreground">
             You are not recorded as staff on any team, so there is no team to create an event

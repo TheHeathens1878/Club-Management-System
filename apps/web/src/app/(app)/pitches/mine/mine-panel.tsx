@@ -67,40 +67,58 @@ export function MyPitchBookings({ items }: { items: PitchBookingItem[] }) {
             </p>
             {item.notes && <p className="text-xs text-muted-foreground">{item.notes}</p>}
 
+            {/* Every control is a 44px target on a phone (mobile design). */}
             <div className="flex flex-wrap items-center gap-2">
               {/* Gap 8: availability and the attendance sheet for this session. */}
               <Link
                 href={`/pitches/${item.id}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+                className={
+                  buttonVariants({ variant: "outline", size: "sm" }) + " h-11 flex-1 lg:h-9 lg:flex-none"
+                }
               >
                 Details
               </Link>
               {item.status === "pending" && (
                 <Link
                   href={`/pitches/${item.id}/edit`}
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "outline", size: "sm" }) +
+                    " h-11 flex-1 lg:h-9 lg:flex-none"
+                  }
                 >
                   Edit
                 </Link>
               )}
               {item.status !== "cancelled" && (
-                <form action={cancelAction}>
+                <form action={cancelAction} className="flex-1 lg:flex-none">
                   <input type="hidden" name="booking_id" value={item.id} />
                   <input type="hidden" name="team_id" value={item.teamId ?? ""} />
-                  <Button type="submit" variant="outline" size="sm" disabled={cancelling}>
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="sm"
+                    className="h-11 w-full lg:h-9 lg:w-auto"
+                    disabled={cancelling}
+                  >
                     Cancel
                   </Button>
                 </form>
               )}
               {item.recurrenceGroupId && item.status !== "cancelled" && (
-                <form action={seriesAction}>
+                <form action={seriesAction} className="w-full lg:w-auto">
                   <input
                     type="hidden"
                     name="recurrence_group_id"
                     value={item.recurrenceGroupId}
                   />
                   <input type="hidden" name="team_id" value={item.teamId ?? ""} />
-                  <Button type="submit" variant="ghost" size="sm" disabled={cancellingSeries}>
+                  <Button
+                    type="submit"
+                    variant="ghost"
+                    size="sm"
+                    className="h-11 w-full lg:h-9 lg:w-auto"
+                    disabled={cancellingSeries}
+                  >
                     Cancel whole series
                   </Button>
                 </form>

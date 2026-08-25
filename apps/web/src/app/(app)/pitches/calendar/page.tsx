@@ -294,9 +294,9 @@ export default async function PitchCalendarPage({
           title="Pitch calendar"
           subtitle="Every match, training session and closure on the club's pitches"
         />
-        <div className="max-w-2xl p-6">
+        <div className="max-w-2xl p-4 lg:p-6">
           <Card>
-            <CardContent className="space-y-3 p-6">
+            <CardContent className="space-y-3 p-4 lg:p-6">
               <p className="text-sm text-muted-foreground">
                 You&apos;re not linked to a team yet, so there is no pitch calendar to show. Once
                 you — or a child you are guardian of — are in a team, every fixture, training
@@ -315,7 +315,7 @@ export default async function PitchCalendarPage({
   return (
     <>
       {header}
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         {calendar.error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Could not load the pitch calendar: {calendar.error}
@@ -323,7 +323,7 @@ export default async function PitchCalendarPage({
         )}
 
         <Card>
-          <CardHeader className="gap-4">
+          <CardHeader className="gap-4 p-4 lg:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <CardTitle>{heading}</CardTitle>
@@ -337,7 +337,9 @@ export default async function PitchCalendarPage({
                         : "Monday to Sunday, 08:00–22:00 Europe/London."}
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-2 print:hidden">
+              {/* The date controls scroll as one strip on a phone rather than
+                  stacking five rows deep above the calendar. */}
+              <div className="-mx-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap px-4 [&>*]:flex-none print:hidden lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
                 {view !== "month" && (
                   <Link
                     href={buildHref(withDate({ date: jumpBack }))}
@@ -389,8 +391,10 @@ export default async function PitchCalendarPage({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 print:hidden">
-              <div className="flex flex-wrap items-center gap-1">
+            {/* Filter chips and view tabs: one horizontally scrolling strip on
+                a phone (mobile design), the wrapping row it always was on lg. */}
+            <div className="-mx-4 flex items-center gap-x-4 gap-y-2 overflow-x-auto whitespace-nowrap px-4 [&>*]:flex-none print:hidden lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
+              <div className="flex items-center gap-1 lg:flex-wrap">
                 {CALENDAR_FILTERS.map((option) => (
                   <Link
                     key={option.value}
@@ -409,7 +413,7 @@ export default async function PitchCalendarPage({
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-1">
+              <div className="flex items-center gap-1 lg:flex-wrap">
                 {(
                   [
                     ["week", "Week"],
@@ -507,7 +511,7 @@ export default async function PitchCalendarPage({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-xs text-muted-foreground">
               {GROUP_ORDER.map((group) => (
                 <span key={group} className="flex items-center gap-1.5">
                   <span
@@ -533,7 +537,7 @@ export default async function PitchCalendarPage({
             </div>
           </CardHeader>
 
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {view === "month" ? (
               <MonthView
                 monthStart={monthStart}
@@ -569,7 +573,7 @@ export default async function PitchCalendarPage({
 
         {canAllocate && (
           <Card className="print:hidden">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle>Close a pitch</CardTitle>
               <p className="text-sm text-muted-foreground">
                 A closure is a booking like any other, so nothing can be booked over it and
@@ -578,7 +582,7 @@ export default async function PitchCalendarPage({
                 calendar and choose &ldquo;Re-open the pitch&rdquo;.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <ClosePitchForm pitches={calendar.pitches} defaultDate={anchor} />
             </CardContent>
           </Card>
@@ -607,15 +611,17 @@ function MonthView({
   const month = monthStart.slice(0, 7);
 
   return (
-    <div className="space-y-1">
-      <div className="grid grid-cols-7 gap-1 text-[11px] font-medium text-muted-foreground">
+    /* The month grid keeps its seven columns on a phone by scrolling inside
+       this box — the page itself never scrolls sideways. */
+    <div className="-mx-4 space-y-1 overflow-x-auto px-4 lg:mx-0 lg:overflow-visible lg:px-0">
+      <div className="grid min-w-[34rem] grid-cols-7 gap-1 text-[11px] font-medium text-muted-foreground lg:min-w-0">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((name) => (
           <div key={name} className="px-1">
             {name}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid min-w-[34rem] grid-cols-7 gap-1 lg:min-w-0">
         {days.map((day) => {
           const counts = countsByGroup(byDate.get(day) ?? []);
           const inMonth = day.slice(0, 7) === month;

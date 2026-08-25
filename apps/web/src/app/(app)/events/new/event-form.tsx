@@ -79,7 +79,7 @@ export function EventForm({
           id="event-team"
           name="team_id"
           required
-          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm sm:h-9"
           defaultValue={teams.length === 1 ? teams[0]?.id : ""}
         >
           <option value="" disabled>
@@ -101,7 +101,7 @@ export function EventForm({
           id="event-type"
           name="type"
           required
-          className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+          className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm sm:h-9"
           defaultValue="practice"
         >
           {EVENT_TYPES.map((type) => (
@@ -182,7 +182,7 @@ export function EventForm({
       <div className="space-y-1.5">
         <span className="text-sm font-medium">Venue</span>
         <div className="flex gap-4 text-sm">
-          <label className="flex items-center gap-2">
+          <label className="flex min-h-[44px] items-center gap-2 sm:min-h-0">
             <input
               type="radio"
               name="venue_mode"
@@ -191,7 +191,7 @@ export function EventForm({
             />
             A club venue
           </label>
-          <label className="flex items-center gap-2">
+          <label className="flex min-h-[44px] items-center gap-2 sm:min-h-0">
             <input
               type="radio"
               name="venue_mode"
@@ -204,7 +204,7 @@ export function EventForm({
         {venueMode === "resource" ? (
           <select
             name="venue_resource_id"
-            className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+            className="h-11 w-full rounded-md border border-input bg-transparent px-3 text-sm sm:h-9"
             value={venueId}
             onChange={(e) => setVenueId(e.target.value)}
           >
@@ -280,7 +280,7 @@ export function EventForm({
         />
       </div>
 
-      <Button type="submit" disabled={saving}>
+      <Button type="submit" className="h-11 w-full sm:w-auto" disabled={saving}>
         {saving ? "Creating…" : "Create event"}
       </Button>
       <p className="text-xs text-muted-foreground">

@@ -72,9 +72,9 @@ export default async function PitchRequestsPage({
           </Link>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>Waiting for a decision</CardTitle>
             <p className="text-sm text-muted-foreground">
               Training and block bookings a coach has requested. Confirming brings the slot under
@@ -83,7 +83,7 @@ export default async function PitchRequestsPage({
               reason on the record.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {pendingResult.error ? (
               <p className="text-sm text-destructive">
                 Could not load the requests: {pendingResult.error}
@@ -95,7 +95,7 @@ export default async function PitchRequestsPage({
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <CardTitle>Everything upcoming</CardTitle>
@@ -104,15 +104,18 @@ export default async function PitchRequestsPage({
                   clash can be found and cleared from one place.
                 </p>
               </div>
-              <div className="flex flex-wrap items-center gap-1">
+              {/* The status chips scroll in their own strip on a phone. */}
+              <div className="-mx-4 flex items-center gap-1 overflow-x-auto whitespace-nowrap px-4 [&>*]:flex-none lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0">
                 {FILTERS.map((option) => (
                   <Link
                     key={option.value}
                     href={`/pitches/requests?status=${option.value}`}
-                    className={buttonVariants({
-                      variant: option.value === filter ? "default" : "outline",
-                      size: "sm",
-                    })}
+                    className={
+                      buttonVariants({
+                        variant: option.value === filter ? "default" : "outline",
+                        size: "sm",
+                      }) + " h-11 lg:h-9"
+                    }
                   >
                     {option.label}
                   </Link>
@@ -120,7 +123,7 @@ export default async function PitchRequestsPage({
               </div>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {upcomingResult.error ? (
               <p className="text-sm text-destructive">
                 Could not load the pitch diary: {upcomingResult.error}

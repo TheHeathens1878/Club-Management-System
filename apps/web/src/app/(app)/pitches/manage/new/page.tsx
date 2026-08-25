@@ -35,9 +35,9 @@ export default async function NewPitchPage() {
           </Link>
         }
       />
-      <div className="max-w-3xl space-y-6 p-6">
+      <div className="max-w-3xl space-y-6 p-4 lg:p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Pitch details</CardTitle>
             <p className="text-sm text-muted-foreground">
               Only the name is required. Everything else can be filled in later from the pitch
@@ -45,7 +45,7 @@ export default async function NewPitchPage() {
               deleted, because bookings reference it.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <NewPitchForm />
           </CardContent>
         </Card>

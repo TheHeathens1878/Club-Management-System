@@ -53,27 +53,31 @@ export function RespondButtons({
             <Badge variant="warning">Answered before the change — please check</Badge>
           ) : null}
           {!disabled ? (
-            <span className="ml-auto flex gap-2">
-              <form action={action}>
+            /* On a phone the pair fills the row at 44px each — this is the
+               reply a parent gives standing at the side of a pitch. */
+            <span className="flex w-full gap-2 lg:ml-auto lg:w-auto">
+              <form action={action} className="flex-1 lg:flex-none">
                 <input type="hidden" name="event_id" value={eventId} />
                 <input type="hidden" name="person_id" value={person.personId} />
                 <input type="hidden" name="status" value="accepted" />
                 <Button
                   type="submit"
                   size="sm"
+                  className="h-11 w-full lg:h-9 lg:w-auto"
                   variant={person.response === "accepted" ? "secondary" : "default"}
                   disabled={saving}
                 >
                   <Check className="h-4 w-4" /> Accept
                 </Button>
               </form>
-              <form action={action}>
+              <form action={action} className="flex-1 lg:flex-none">
                 <input type="hidden" name="event_id" value={eventId} />
                 <input type="hidden" name="person_id" value={person.personId} />
                 <input type="hidden" name="status" value="declined" />
                 <Button
                   type="submit"
                   size="sm"
+                  className="h-11 w-full lg:h-9 lg:w-auto"
                   variant={person.response === "declined" ? "secondary" : "outline"}
                   disabled={saving}
                 >

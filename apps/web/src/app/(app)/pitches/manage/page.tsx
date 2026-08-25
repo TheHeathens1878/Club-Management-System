@@ -85,7 +85,7 @@ export default async function ManagePitchesPage() {
           </div>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         {error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Could not load the pitches: {error.message}
@@ -93,7 +93,7 @@ export default async function ManagePitchesPage() {
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">
               {pitches.length} {pitches.length === 1 ? "pitch" : "pitches"}
             </CardTitle>
@@ -104,7 +104,7 @@ export default async function ManagePitchesPage() {
               offered and leaves every booking already made against it exactly as it was.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <ManagePitchesPanel pitches={pitches} />
           </CardContent>
         </Card>
