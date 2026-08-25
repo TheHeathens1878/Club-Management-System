@@ -15,6 +15,15 @@ import { signIdentityDocumentPaths } from "@/lib/identity-docs";
 import { isClubAdmin, resolveNames, nameOf } from "@/lib/person";
 import { idDocumentKindLabel } from "@/lib/registration-questions";
 import {
+  RegistrationDetailsBody,
+  registrationDetailsCaption,
+} from "@/components/registration-details";
+import {
+  loadLivePhotoConsents,
+  loadRegistrationDetails,
+} from "@/lib/registration-details-server";
+import { resolveUserNames, verifierName } from "@/lib/registration-verifiers";
+import {
   addressToFields,
   formatDate,
   formatStamp,
@@ -60,20 +69,6 @@ function payloadField(payload: Json | null, key: string): string | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const value = (payload as Record<string, Json | undefined>)[key];
   return typeof value === "string" ? value : null;
-}
-
-/** The registration answers, flattened just enough to render. */
-function formEntries(form: Json | null): { key: string; value: string }[] {
-  if (!form || typeof form !== "object" || Array.isArray(form)) return [];
-  return Object.entries(form as Record<string, Json>).map(([key, value]) => ({
-    key: key.replace(/_/g, " "),
-    value:
-      typeof value === "string"
-        ? value
-        : value === null || value === undefined
-          ? "—"
-          : JSON.stringify(value),
-  }));
 }
 
 /**
@@ -139,7 +134,7 @@ export default async function PersonPage({
       .order("expires_on", { nullsFirst: false }),
     supabase
       .from("registrations")
-      .select("id,status,form,submitted_at,seasons(name)")
+      .select("id,status,submitted_at,seasons(name)")
       .eq("person_id", id)
       .order("submitted_at", { ascending: false })
       .limit(1)
@@ -191,7 +186,20 @@ export default async function PersonPage({
 
   const pending = pendingRows ?? [];
   const name = personLabel(person);
-  const registrationAnswers = formEntries(registration?.form ?? null);
+
+  // What the latest registration said about this person — the read-only copy
+  // on the contact record (20260825260000). It carries the `registrations`
+  // read policies, so a reader who is not entitled to the form gets nothing
+  // back and the card is not rendered. The SG-5 photo consents beside it are
+  // `guardian_consents` rows, read the same way.
+  const [snapshots, photoConsents, { data: questionRows }, verifierNames] = await Promise.all([
+    loadRegistrationDetails([id]),
+    isMinorDob(person.dob) ? loadLivePhotoConsents([id]) : Promise.resolve(new Map()),
+    supabase.from("registration_questions").select("qkey,label").order("position"),
+    resolveUserNames([person.id_verified_by]),
+  ]);
+  const snapshot = snapshots.get(id) ?? null;
+  const questionLabels = new Map((questionRows ?? []).map((row) => [row.qkey, row.label] as const));
 
   // The registration photo, and any identity document the club holds. The
   // document ROWS come back to anyone the policy admits; the FILES are signed
@@ -444,12 +452,24 @@ export default async function PersonPage({
                 })}
               </ul>
             )}
-            {admin && (
+            {admin ? (
               <IdVerifiedForm
                 personId={person.id}
                 verified={person.id_verified}
                 verifiedAt={person.id_verified_at}
+                verifiedByName={
+                  person.id_verified ? verifierName(verifierNames, person.id_verified_by) : null
+                }
               />
+            ) : (
+              person.id_verified && (
+                <p className="text-sm text-emerald-700">
+                  ID seen and verified by {verifierName(verifierNames, person.id_verified_by)}
+                  {person.id_verified_at
+                    ? ` · ${formatStamp(person.id_verified_at)}`
+                    : ""}
+                </p>
+              )
             )}
           </CardContent>
         </Card>
@@ -467,31 +487,24 @@ export default async function PersonPage({
           </CardContent>
         </Card>
 
-        {registration && (
+        {snapshot && (
           <Card>
             <CardHeader>
-              <CardTitle>Latest registration</CardTitle>
+              <CardTitle>From the latest registration</CardTitle>
               <p className="text-sm text-muted-foreground">
-                {registration.seasons?.name ? `${registration.seasons.name} · ` : ""}
-                {registration.status} · submitted {formatStamp(registration.submitted_at)}. Read-only
-                here: the answers are edited where they were given.
+                {registrationDetailsCaption(snapshot.seasonName, snapshot.updatedAt)}
+                {registration?.status ? ` · ${registration.status}` : ""}. Read-only here: each new
+                registration overwrites these answers, and they are changed by registering again.
               </p>
             </CardHeader>
             <CardContent>
-              {registrationAnswers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No answers were captured, or your role does not include them.
-                </p>
-              ) : (
-                <dl className="grid gap-3 sm:grid-cols-2">
-                  {registrationAnswers.map((entry) => (
-                    <div key={entry.key}>
-                      <dt className="text-xs uppercase text-muted-foreground">{entry.key}</dt>
-                      <dd className="text-sm">{entry.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+              <RegistrationDetailsBody
+                details={snapshot.details}
+                photoConsents={
+                  isMinorDob(person.dob) ? (photoConsents.get(id) ?? new Set<string>()) : undefined
+                }
+                questionLabels={questionLabels}
+              />
             </CardContent>
           </Card>
         )}

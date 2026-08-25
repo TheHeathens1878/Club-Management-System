@@ -965,7 +965,18 @@ export default async function TeamPage({
           <div className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Squad</CardTitle>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <CardTitle>Squad</CardTitle>
+                  {/* Club administrators only, and the route says so again. */}
+                  {clubAdmin && (
+                    <a
+                      href={`/teams/${team.id}/photos.zip`}
+                      className={`${buttonVariants({ variant: "outline", size: "sm" })} min-h-11 sm:min-h-0`}
+                    >
+                      Download photos (zip)
+                    </a>
+                  )}
+                </div>
                 <p className="text-sm text-muted-foreground">
                   Everyone in this team for the current season, players included. Adding someone,
                   changing their role or ending their membership goes straight to{" "}

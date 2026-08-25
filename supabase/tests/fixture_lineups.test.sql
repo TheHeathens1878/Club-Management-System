@@ -6,7 +6,7 @@
 
 begin;
 
-select plan(32);
+select plan(39);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a9a9a9a9-1111-4111-8111-000000000001', 'l-admin@test.invalid',  '{"full_name": "Ada Admin"}'::jsonb),
@@ -24,9 +24,11 @@ update public.people set dob = '1988-08-08'
  where id in (current_setting('l.admin')::uuid, current_setting('l.coach')::uuid, current_setting('l.player')::uuid,
               current_setting('l.parent')::uuid, current_setting('l.other')::uuid);
 insert into public.people (id, first_name, last_name, dob) values
-  ('c9c9c9c9-1111-4111-8111-000000000001', 'Kid', 'Keeper', current_date - interval '12 years');
-insert into public.guardianships (guardian_person_id, child_person_id, relationship)
-  values (current_setting('l.parent')::uuid, 'c9c9c9c9-1111-4111-8111-000000000001', 'parent');
+  ('c9c9c9c9-1111-4111-8111-000000000001', 'Kid', 'Keeper', current_date - interval '12 years'),
+  ('c9c9c9c9-1111-4111-8111-000000000002', 'Bex', 'Bench',  current_date - interval '12 years');
+insert into public.guardianships (guardian_person_id, child_person_id, relationship) values
+  (current_setting('l.parent')::uuid, 'c9c9c9c9-1111-4111-8111-000000000001', 'parent'),
+  (current_setting('l.parent')::uuid, 'c9c9c9c9-1111-4111-8111-000000000002', 'parent');
 insert into public.certifications (person_id, type, expires_on, verified_at) values
   (current_setting('l.coach')::uuid, 'fa_dbs', current_date + 300, now()),
   (current_setting('l.coach')::uuid, 'safeguarding_children', current_date + 300, now());
@@ -40,6 +42,7 @@ insert into public.team_memberships (person_id, team_id, season_id, role) values
   (current_setting('l.coach')::uuid,  '7b7b7b7b-1111-4111-8111-000000000001', '5b5b5b5b-1111-4111-8111-000000000001', 'coach'),
   (current_setting('l.player')::uuid, '7b7b7b7b-1111-4111-8111-000000000001', '5b5b5b5b-1111-4111-8111-000000000001', 'player'),
   ('c9c9c9c9-1111-4111-8111-000000000001', '7b7b7b7b-1111-4111-8111-000000000001', '5b5b5b5b-1111-4111-8111-000000000001', 'player'),
+  ('c9c9c9c9-1111-4111-8111-000000000002', '7b7b7b7b-1111-4111-8111-000000000001', '5b5b5b5b-1111-4111-8111-000000000001', 'player'),
   (current_setting('l.other')::uuid,  '7b7b7b7b-1111-4111-8111-000000000002', '5b5b5b5b-1111-4111-8111-000000000001', 'player');
 
 insert into public.fixtures (id, team_id, season_id, opponent, is_home, kickoff_at) values
@@ -165,7 +168,41 @@ select lives_ok(
   'club_admin unplaces a player');
 reset role;
 
--- E. the fixture owns the lineup
+-- E. the bench — a substitute is a slot row keyed SUB1..SUB7 and nothing else
+-- (Adam, 2026-08-25: "Should be able to drag and drop players on to the pitch
+-- and also substitutes"). No new table and no new constraint: the slot key's
+-- existing shape admits the key, and the two unique keys already say one
+-- player per bench place and nobody on the pitch and the bench at once. At
+-- this point the board holds one row — the player at CM.
+select throws_ok(
+  $$insert into public.fixture_lineup_slots (lineup_id, slot, person_id)
+    values ('11111111-1111-4111-8111-000000000001', 'SUB10', 'c9c9c9c9-1111-4111-8111-000000000002')$$,
+  '23514', null, 'a bench place is one digit, so the bench cannot run past SUB9');
+select lives_ok(
+  $$insert into public.fixture_lineup_slots (lineup_id, slot, person_id)
+    values ('11111111-1111-4111-8111-000000000001', 'SUB1', 'c9c9c9c9-1111-4111-8111-000000000002')$$,
+  'a substitute is named on the bench');
+select throws_ok(
+  $$insert into public.fixture_lineup_slots (lineup_id, slot, person_id)
+    values ('11111111-1111-4111-8111-000000000001', 'SUB1', 'c9c9c9c9-1111-4111-8111-000000000001')$$,
+  '23505', null, 'one player per bench place');
+select throws_ok(
+  $$insert into public.fixture_lineup_slots (lineup_id, slot, person_id)
+    values ('11111111-1111-4111-8111-000000000001', 'SUB2', current_setting('l.player')::uuid)$$,
+  '23505', null, 'nobody is on the pitch and on the bench at once');
+select throws_ok(
+  $$insert into public.fixture_lineup_slots (lineup_id, slot, person_id)
+    values ('11111111-1111-4111-8111-000000000001', 'SUB2', current_setting('l.other')::uuid)$$,
+  'P0001', null, 'a player from another team cannot be a substitute either');
+select lives_ok(
+  $$insert into public.fixture_lineup_slots (lineup_id, slot, person_id)
+    values ('11111111-1111-4111-8111-000000000001', 'SUB7', 'c9c9c9c9-1111-4111-8111-000000000001')$$,
+  'the bench runs to SUB7');
+select is((select count(*) from public.fixture_lineup_slots
+            where lineup_id = '11111111-1111-4111-8111-000000000001' and slot like 'SUB%'),
+  2::bigint, 'two substitutes named');
+
+-- F. the fixture owns the lineup
 delete from public.fixtures where id = 'f9f9f9f9-1111-4111-8111-000000000001';
 select is((select count(*) from public.fixture_lineups where fixture_id = 'f9f9f9f9-1111-4111-8111-000000000001'),
   0::bigint, 'deleting a fixture takes its lineup with it');

@@ -89,6 +89,12 @@ export default async function FixtureAttendancePage({
   const playerIds = memberships
     .filter((row) => row.role === "player")
     .map((row) => row.person_id);
+  // The organisers — coach, assistant, manager — answer too, and the staff
+  // view lists them FIRST (Adam, 2026-08-25: "it should show organisers and
+  // then players below"). They never count towards the headcount.
+  const staffIds = memberships
+    .filter((row) => row.role !== "player")
+    .map((row) => row.person_id);
 
   const { data: availabilityRows } = await supabase
     .from("availability")
@@ -101,7 +107,9 @@ export default async function FixtureAttendancePage({
     ]),
   );
 
-  const peopleIds = Array.from(new Set([...eligible.map((c) => c.personId), ...playerIds]));
+  const peopleIds = Array.from(
+    new Set([...eligible.map((c) => c.personId), ...staffIds, ...playerIds]),
+  );
   const [names, minorFlags] = await Promise.all([
     resolveNames(peopleIds),
     Promise.all(
@@ -129,6 +137,12 @@ export default async function FixtureAttendancePage({
 
   const household = eligible.map((c) => toSubject(c.personId, c.isSelf, c.relationship));
   const householdIds = new Set(household.map((s) => s.personId));
+  const organisers = canManage
+    ? staffIds
+        .filter((pid) => !householdIds.has(pid))
+        .map((pid) => toSubject(pid, pid === personId, null))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
   const squad = canManage
     ? playerIds
         .filter((pid) => !householdIds.has(pid))
@@ -277,13 +291,25 @@ export default async function FixtureAttendancePage({
                 when the answer arrives some other way (a message, a call at the school gate).
               </p>
             </CardHeader>
-            <CardContent>
-              <FixtureAvailabilityPanel
-                fixtureId={fixture.id}
-                teamId={teamId}
-                subjects={squad}
-                emptyText="No other players in the squad yet."
-              />
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase text-muted-foreground">Organisers</p>
+                <FixtureAvailabilityPanel
+                  fixtureId={fixture.id}
+                  teamId={teamId}
+                  subjects={organisers}
+                  emptyText="No other coaches or managers on this team."
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase text-muted-foreground">Players</p>
+                <FixtureAvailabilityPanel
+                  fixtureId={fixture.id}
+                  teamId={teamId}
+                  subjects={squad}
+                  emptyText="No other players in the squad yet."
+                />
+              </div>
             </CardContent>
           </Card>
         )}

@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Baby, Contact, ShieldCheck, Users } from "lucide-react";
+import { Baby, Contact, FileText, ShieldCheck, Users } from "lucide-react";
 
 import type { Database, Json } from "@club/db";
 
@@ -22,6 +22,14 @@ import { ageGroupFromDob } from "@/lib/waiting-list";
 import type { LeadContact } from "@/components/emergency-contacts-fields";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { questionFromRow, type RegistrationQuestion } from "@/lib/registration-questions";
+import {
+  RegistrationDetailsBody,
+  registrationDetailsCaption,
+} from "@/components/registration-details";
+import {
+  loadLivePhotoConsents,
+  loadRegistrationDetails,
+} from "@/lib/registration-details-server";
 
 import {
   AddChildForm,
@@ -147,10 +155,21 @@ function RegistrationList({
                 Club note: {registration.decision_note}
               </p>
             )}
-            {canWithdraw && (status === "pending" || status === "approved") && (
+            {/* Adam, 2026-08-25: "Parents can't withdraw registration after
+                it's been granted, only admin." The button is offered only
+                where the database would accept it — `registrations_guard()`
+                refuses a family's withdrawal once the club has approved it,
+                and says so. Once approved there is a squad place hanging off
+                this row, and undoing that is the club's job. */}
+            {canWithdraw && status === "pending" && (
               <div className="mt-2">
                 <WithdrawForm registrationId={registration.id} />
               </div>
+            )}
+            {status === "approved" && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Approved — ask a club administrator to withdraw.
+              </p>
             )}
           </li>
         );
@@ -332,6 +351,20 @@ export default async function FamilyPage() {
     }),
   );
 
+  // What the club holds from the last registration, per child, and the live
+  // SG-5 photo permissions beside it (Adam, 2026-08-25: "the registration form
+  // should update read-only information in the contact record"). Both are the
+  // caller's own reads — `person_registration_details` carries the
+  // `registrations` read policies, so a parent sees their own children's and
+  // nothing else, and nothing here is filtered by hand.
+  const [detailsByPerson, photoConsentsByChild] = await Promise.all([
+    loadRegistrationDetails(subjectIds),
+    loadLivePhotoConsents(childIds),
+  ]);
+  const questionLabels = new Map(
+    questions.map((question) => [question.qkey, question.label] as const),
+  );
+
   const consentByChild = new Map(
     (consentsResult.data ?? []).map(
       (row) => [row.child_person_id, { id: row.id, grantedAt: row.granted_at }] as const,
@@ -394,6 +427,7 @@ export default async function FamilyPage() {
           children.map((child) => {
             const childTeams = parseTeams(child.teams);
             const childRegistrations = byPerson.get(child.person_id) ?? [];
+            const snapshot = detailsByPerson.get(child.person_id) ?? null;
             const name = personLabel({
               first_name: child.first_name,
               last_name: child.last_name,
@@ -475,6 +509,26 @@ export default async function FamilyPage() {
                       minAccountAge={minAccountAge}
                     />
                   </div>
+
+                  {snapshot && (
+                    <details className="space-y-3 border-t pt-4">
+                      <summary className="flex min-h-[44px] cursor-pointer select-none items-center gap-2 text-xs uppercase text-muted-foreground">
+                        <FileText className="h-3.5 w-3.5" /> From the latest registration
+                      </summary>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {registrationDetailsCaption(snapshot.seasonName, snapshot.updatedAt)}.
+                        Read-only: registering {child.preferred_name || child.first_name} again
+                        replaces these answers.
+                      </p>
+                      <div className="mt-3">
+                        <RegistrationDetailsBody
+                          details={snapshot.details}
+                          photoConsents={photoConsentsByChild.get(child.person_id) ?? new Set()}
+                          questionLabels={questionLabels}
+                        />
+                      </div>
+                    </details>
+                  )}
 
                   <div className="space-y-3 border-t pt-4">
                     <p className="text-xs uppercase text-muted-foreground">Registrations</p>
