@@ -16,7 +16,9 @@ import type { Database } from "@club/db";
 
 import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import { formationByName, playingFormatFor, type PlayingFormat } from "@/lib/formations";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
+import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { LineupBuilder, type SquadPlayer } from "./lineup-builder";
@@ -78,7 +80,14 @@ export async function loadLineupSection(
       .is("left_at", null),
     supabase.from("availability").select("person_id,status").eq("fixture_id", fixtureId),
   ]);
-  const canManage = staff || admin;
+  // Adam, 2026-08-25: "parents cannot pick line ups, only coaches". The data
+  // gate stays the database's (the lineup write policies admit team staff and
+  // club admins); this is the HAT — a coach who is also a parent and is
+  // looking at the team as a parent gets the read-only board, the same rule
+  // as Pick the team on the team page.
+  const view = resolveRoleView(await getStoredRoleView(), await getCapabilities());
+  const coachHat = view === "coach" || view === "admin" || view === null;
+  const canManage = (staff || admin) && coachHat;
   const lineup = lineupResult.data ?? null;
 
   const { data: slotRows } = lineup
