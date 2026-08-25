@@ -1,5 +1,5 @@
 -- =============================================================================
--- Super-user purge — one narrow, audited door through SG-2 (20260825350000)
+-- Super-user purge — one narrow, audited door through SG-2 (20260825380000)
 -- =============================================================================
 -- Adam (club owner, the sole `profiles.role = 'super_user'`), 2026-08-25:
 -- "allow super users to hard delete users and messages." The two reasons are

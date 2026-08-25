@@ -474,7 +474,7 @@ messages"), and recorded here because §6.2 requires the weakening of an
 invariant to be written down with its reason. The two reasons are a UK GDPR
 Article 17 erasure request the club must be able to honour, and clearing out
 test accounts and mistakes the club made itself. Implemented by migration
-`20260825350000_super_user_purge.sql`.
+`20260825380000_super_user_purge.sql`.
 
 **What is permitted.** `public.purge_message(message_id, reason)` and
 `public.purge_person(person_id, reason)`, and nothing else. Both are

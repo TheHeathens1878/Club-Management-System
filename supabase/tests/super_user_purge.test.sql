@@ -1,5 +1,5 @@
 -- =============================================================================
--- Super-user purge (20260825350000) — the one audited door through SG-2
+-- Super-user purge (20260825380000) — the one audited door through SG-2
 -- =============================================================================
 -- What is asserted:
 --   A  shape and privileges: the three functions exist, anon holds no key
