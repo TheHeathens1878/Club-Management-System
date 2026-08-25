@@ -8,6 +8,16 @@
  * their claim to a game and it reopens it") offers Release to the referee who
  * holds it, to the coach who posted it, and to a club admin. Released, the
  * card is Referee needed again.
+ *
+ * NO SUCCESS NOTICES. Adam, 2026-08-25: after releasing a game the card said
+ * "Game claimed — the poster has your contact details", and when the next
+ * referee claimed it, "The game is open again". Both were true when they were
+ * written and stale by the time they were read: a `useActionState` notice
+ * outlives the action, and this card flips between its two branches as the
+ * game changes hands, so each branch was showing the OTHER action's old
+ * message. The card itself is the feedback — "Referee obtained — Rita Ref", or
+ * the Claim button coming back — so only refusals are rendered, and those are
+ * about the attempt in front of you.
  */
 
 import { useActionState } from "react";
@@ -129,9 +139,6 @@ export function MatchPostCard({
                 {releaseState.error && (
                   <p className="mt-1.5 text-xs text-destructive">{releaseState.error}</p>
                 )}
-                {releaseState.notice && (
-                  <p className="mt-1.5 text-xs text-emerald-700">{releaseState.notice}</p>
-                )}
               </form>
             )}
           </div>
@@ -151,7 +158,6 @@ export function MatchPostCard({
               Claim game
             </button>
             {state.error && <p className="mt-1.5 text-xs text-destructive">{state.error}</p>}
-            {state.notice && <p className="mt-1.5 text-xs text-emerald-700">{state.notice}</p>}
           </form>
         ) : (
           <p className="text-xs text-muted-foreground">Waiting for a referee to claim it.</p>
