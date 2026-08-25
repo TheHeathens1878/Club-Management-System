@@ -146,6 +146,15 @@ export default async function LobbyPage() {
   const pinnedPost = posts.find((post) => post.pinned);
   const unpinnedPosts = posts.filter((post) => post !== pinnedPost);
 
+  // The joining workflow (Adam, 2026-08-25): somebody who has just signed up
+  // lands here with nothing registered, and the club needs them to register
+  // whoever plays. The prompt shows only until the household has its first
+  // registration, and only in the member views — a coach or an admin looking
+  // at the lobby is not being asked to join.
+  const { data: myRegistrations } = await supabase.rpc("my_registrations");
+  const memberView = view === "me" || view === "parent" || view === "player" || view === null;
+  const showJoinPrompt = memberView && (myRegistrations ?? []).length === 0;
+
   return (
     <>
       <PageHeader
@@ -162,6 +171,26 @@ export default async function LobbyPage() {
           ) : undefined
         }
       />
+
+      {showJoinPrompt && (
+        <div className="px-4 pt-4 lg:px-6">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/40 bg-accent/5 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold">New to the club?</p>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Add your children and any connected adults, then register whoever plays — yourself
+                included.
+              </p>
+            </div>
+            <Link
+              href="/my-registrations"
+              className={buttonVariants({ size: "sm" }) + " min-h-[44px] shrink-0 lg:min-h-0"}
+            >
+              Register a player
+            </Link>
+          </div>
+        </div>
+      )}
 
       {/* ------------------------------------------------------- the phone */}
       <div className="flex flex-col gap-3 p-4 lg:hidden">

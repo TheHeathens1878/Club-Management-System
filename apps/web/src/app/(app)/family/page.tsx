@@ -538,6 +538,9 @@ export default async function FamilyPage() {
                       seasonNames={seasonNames}
                       canWithdraw
                     />
+                    {/* The same form the Register a player screen offers for
+                        every member of the household (Adam, 2026-08-25); it
+                        stays here too, beside the child it is about. */}
                     <RegisterForm
                       personId={child.person_id}
                       personName={name}

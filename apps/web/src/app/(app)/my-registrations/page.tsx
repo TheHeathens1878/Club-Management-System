@@ -1,55 +1,179 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ClipboardCheck } from "lucide-react";
+import { Baby, ClipboardCheck, Contact, UserCircle } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
-import { formatStamp } from "@/lib/people-display";
+import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
+import { formatStamp, personLabel } from "@/lib/people-display";
+import { getCurrentPersonId } from "@/lib/person";
 import {
   REGISTRATION_STATUS_LABELS,
   registrationStatusVariant,
   type RegistrationStatusValue,
 } from "@/lib/registration-form";
+import { questionFromRow, type RegistrationQuestion } from "@/lib/registration-questions";
 import { createClient } from "@/lib/supabase/server";
 
-import { WithdrawForm } from "../family/family-forms";
+import { RegisterForm, WithdrawForm, type TeamOption } from "../family/family-forms";
 
 /**
- * Registrations (Adam's parent menu, 2026-08-25) — the household's
- * registration statuses in one list: the caller's own, their guarded
- * children's, and their connected adults'.
+ * Register a player (Adam, 2026-08-25: "change the name of registrations to
+ * register a player. Should be able to register themselves, connected adults
+ * or children. Currently only allows it from My Children").
  *
- * `my_registrations()` (20260824470000) is the read, and it deliberately does
- * NOT return the form — the medical answers are not a status list's business.
- * This page is not the admin queue: that stays at /registrations under
- * `registrations_admin_read`.
+ * One screen, and the whole of the joining workflow it belongs to:
+ *
+ *   1. the household — the caller, the children they are guardian of, and the
+ *      connected adults on their account, with the two links that add more;
+ *   2. a registration form against ANY of them. The database already admitted
+ *      all three: `registrations_self_insert` for the caller,
+ *      `registrations_guardian_insert` for a guarded child, and the
+ *      household-adult branch of `registrations_guard()` +
+ *      `is_household_member_of()` (20260824280000) for a connected adult. The
+ *      screen was the only thing that offered it for children alone.
+ *   3. where every registration in the household stands.
+ *
+ * `my_registrations()` (20260824470000) is the status read, and it deliberately
+ * does NOT return the form — the medical answers are not a status list's
+ * business. This page is not the admin queue: that stays at /registrations
+ * under `registrations_admin_read`.
  *
  * Withdraw is offered only where the database would allow it — the subject or
  * an active guardian (`registrations_guard()`), and only while the
  * registration is still PENDING (Adam, 2026-08-25: once it has been granted
  * only an administrator withdraws it). A connected adult's registration is
- * read-only here, because the guard refuses a withdrawal from
- * someone who is neither the subject nor a guardian. New registrations start
- * from My Children (for a child) — the forms live beside the people they are
- * about.
+ * read-only here, because the guard refuses a withdrawal from someone who is
+ * neither the subject nor a guardian.
  */
 
 export const dynamic = "force-dynamic";
 
-export default async function MyRegistrationsPage() {
+type Registerable = {
+  personId: string;
+  /** "Alfie Wareing" — the card's heading. */
+  name: string;
+  /** "Alfie" — how the form talks about them. */
+  firstName: string;
+  kind: "self" | "child" | "adult";
+  minor: boolean;
+};
+
+const KIND_LABELS: Record<Registerable["kind"], string> = {
+  self: "You",
+  child: "Your child",
+  adult: "Connected adult",
+};
+
+export default async function RegisterPlayerPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
   const supabase = await createClient();
-  const [registrationsResult, childrenResult] = await Promise.all([
+  const personId = await getCurrentPersonId();
+
+  const [
+    registrationsResult,
+    childrenResult,
+    householdResult,
+    teamsResult,
+    seasonsResult,
+    questionsResult,
+    meResult,
+  ] = await Promise.all([
     supabase.rpc("my_registrations"),
     supabase.rpc("my_children"),
+    supabase.rpc("my_household"),
+    supabase
+      .from("teams")
+      .select("id,name,age_group,sort_order")
+      .eq("active", true)
+      .order("sort_order")
+      .order("name"),
+    supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
+    // The registration form as the club currently asks it — the same rows
+    // /join and the family screen render.
+    supabase
+      .from("registration_questions")
+      .select("id,qkey,label,help_text,qtype,options,required,system,locked,position,archived_at")
+      .is("archived_at", null)
+      .order("position"),
+    personId
+      ? supabase
+          .from("people")
+          .select("first_name,last_name,preferred_name")
+          .eq("id", personId)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
   ]);
 
   const registrations = registrationsResult.data ?? [];
-  const childIds = new Set((childrenResult.data ?? []).map((child) => child.person_id));
+  const children = childrenResult.data ?? [];
+  // Connected adults who have no login of their own are the ones this account
+  // acts for; an adult with their own sign-in registers themselves.
+  const household = (householdResult.data ?? []).filter(
+    (adult) => adult.is_adult && !adult.has_login,
+  );
+  const teams: TeamOption[] = (teamsResult.data ?? []).map((team) => ({
+    id: team.id,
+    name: team.name,
+    ageGroup: team.age_group,
+  }));
+  const currentSeason = (seasonsResult.data ?? []).find((season) => season.is_current) ?? null;
+  const questions: RegistrationQuestion[] = (questionsResult.data ?? [])
+    .map((row) => questionFromRow(row))
+    .filter((question): question is RegistrationQuestion => question !== null);
+
+  // Everyone this account may register, in the order the workflow adds them.
+  const people: Registerable[] = [];
+  if (personId && meResult.data) {
+    const me = meResult.data;
+    people.push({
+      personId,
+      name: personLabel(me),
+      firstName: me.preferred_name || me.first_name,
+      kind: "self",
+      minor: false,
+    });
+  }
+  for (const child of children) {
+    people.push({
+      personId: child.person_id,
+      name: personLabel(child),
+      firstName: child.preferred_name || child.first_name,
+      kind: "child",
+      minor: child.is_minor,
+    });
+  }
+  for (const adult of household) {
+    people.push({
+      personId: adult.person_id,
+      name: `${adult.first_name} ${adult.last_name}`.trim(),
+      firstName: adult.first_name,
+      kind: "adult",
+      minor: false,
+    });
+  }
+
+  // What each of them still owes the club: an emergency contact on the record,
+  // and proof of identity unless the club has already seen it. Both are asked
+  // of the database as the caller — a refusal means "not your question", and
+  // `needs_id_document()` then answers false rather than raising.
+  const subjectIds = people.map((person) => person.personId);
+  const contactsByPerson = await loadEmergencyContacts(subjectIds);
+  const needsIdByPerson = new Map(
+    await Promise.all(
+      subjectIds.map(async (id) => {
+        const { data } = await supabase.rpc("needs_id_document", { p_person_id: id });
+        return [id, data === true] as const;
+      }),
+    ),
+  );
+
+  const childIds = new Set(children.map((child) => child.person_id));
 
   // One card per person, in the order the function returns them (newest
   // first), with the caller's own card labelled.
@@ -60,11 +184,16 @@ export default async function MyRegistrationsPage() {
     else byPerson.set(row.person_id, { name: row.person_name, isSelf: row.is_self, rows: [row] });
   }
 
+  // The first-run workflow: somebody who has just signed up has themselves and
+  // nobody else, and nothing registered. The steps say what the club needs
+  // next rather than leaving them on an empty page.
+  const showSteps = registrations.length === 0;
+
   return (
     <>
       <PageHeader
-        title="Registrations"
-        subtitle="Where every registration in your household stands"
+        title="Register a player"
+        subtitle="Register yourself, a child or a connected adult — and see where every registration stands"
       />
 
       <div className="space-y-6 p-4 lg:p-6">
@@ -74,22 +203,129 @@ export default async function MyRegistrationsPage() {
           </p>
         )}
 
+        {showSteps && (
+          <Card className="border-accent/40">
+            <CardHeader className="p-4 lg:p-6">
+              <CardTitle className="text-base">Joining the club</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Four steps, in this order. Everything after the first is optional — register
+                whoever plays, and skip the rest.
+              </p>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+              <ol className="space-y-3 text-sm">
+                <li className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">1. Your own details</span>
+                  <span className="text-muted-foreground">
+                    — contact details and an emergency contact.
+                  </span>
+                  <Link
+                    href="/profile"
+                    className={
+                      buttonVariants({ variant: "outline", size: "sm" }) +
+                      " min-h-[44px] lg:min-h-0"
+                    }
+                  >
+                    <UserCircle className="h-4 w-4" /> My profile
+                  </Link>
+                </li>
+                <li className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">2. Add your children</span>
+                  <span className="text-muted-foreground">— one card each, with their details.</span>
+                  <Link
+                    href="/family"
+                    className={
+                      buttonVariants({ variant: "outline", size: "sm" }) +
+                      " min-h-[44px] lg:min-h-0"
+                    }
+                  >
+                    <Baby className="h-4 w-4" /> My children
+                  </Link>
+                </li>
+                <li className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium">3. Add connected adults</span>
+                  <span className="text-muted-foreground">
+                    — another parent, a grandparent, anyone the club should know.
+                  </span>
+                  <Link
+                    href="/connected-adults"
+                    className={
+                      buttonVariants({ variant: "outline", size: "sm" }) +
+                      " min-h-[44px] lg:min-h-0"
+                    }
+                  >
+                    <Contact className="h-4 w-4" /> Connected adults
+                  </Link>
+                </li>
+                <li>
+                  <span className="font-medium">4. Register whoever plays</span>
+                  <span className="text-muted-foreground"> — below, one form each.</span>
+                </li>
+              </ol>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader className="p-4 lg:p-6">
+            <CardTitle className="text-base">Who is playing?</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              A registration is one person, one season, one team. A club administrator confirms it
+              and can move the team if the age group is wrong.
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+            {people.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Your sign-in is not linked to a member record yet, so there is nobody to register.
+                Ask the club to link your account.
+              </p>
+            ) : (
+              people.map((person) => (
+                <div key={person.personId} className="rounded-lg border p-4">
+                  <p className="mb-2 flex flex-wrap items-center gap-2 text-sm font-medium">
+                    {person.name}
+                    <Badge variant="outline">{KIND_LABELS[person.kind]}</Badge>
+                  </p>
+                  <RegisterForm
+                    personId={person.personId}
+                    personName={person.name}
+                    firstName={person.firstName}
+                    minor={person.minor}
+                    needsId={needsIdByPerson.get(person.personId) ?? true}
+                    contactsOnRecord={(contactsByPerson.get(person.personId) ?? []).length}
+                    seasonId={currentSeason?.id ?? null}
+                    seasonName={currentSeason?.name ?? null}
+                    teams={teams}
+                    questions={questions}
+                    isSelf={person.kind === "self"}
+                  />
+                </div>
+              ))
+            )}
+            <p className="text-xs text-muted-foreground">
+              Somebody missing? Add a child on{" "}
+              <Link href="/family" className="underline underline-offset-2">
+                My children
+              </Link>{" "}
+              or an adult on{" "}
+              <Link href="/connected-adults" className="underline underline-offset-2">
+                Connected adults
+              </Link>
+              , and they appear here.
+            </p>
+          </CardContent>
+        </Card>
+
         {byPerson.size === 0 ? (
           <Card>
-            <CardContent className="space-y-2 py-8 text-center text-sm text-muted-foreground">
-              <p>No registrations yet.</p>
-              <p>
-                Register a child from{" "}
-                <Link href="/family" className="underline">
-                  My Children
-                </Link>
-                .
-              </p>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              Nothing registered yet — the forms above are where it starts.
             </CardContent>
           </Card>
         ) : (
-          Array.from(byPerson.entries()).map(([personId, entry]) => (
-            <Card key={personId}>
+          Array.from(byPerson.entries()).map(([subjectId, entry]) => (
+            <Card key={subjectId}>
               <CardHeader className="p-4 lg:p-6">
                 <CardTitle className="flex flex-wrap items-center gap-2 text-base">
                   <ClipboardCheck className="h-4 w-4" />
@@ -107,7 +343,7 @@ export default async function MyRegistrationsPage() {
                     // enforces that — this only stops offering a button the
                     // database would refuse.
                     const canWithdraw =
-                      (entry.isSelf || childIds.has(personId)) && status === "pending";
+                      (entry.isSelf || childIds.has(subjectId)) && status === "pending";
                     return (
                       <li
                         key={row.registration_id}
@@ -143,14 +379,6 @@ export default async function MyRegistrationsPage() {
             </Card>
           ))
         )}
-
-        <p className="text-sm text-muted-foreground">
-          A new registration for a child starts from{" "}
-          <Link href="/family" className="underline">
-            My Children
-          </Link>
-          , next to their record.
-        </p>
       </div>
     </>
   );
