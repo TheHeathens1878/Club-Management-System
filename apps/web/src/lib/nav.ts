@@ -5,15 +5,17 @@
  * still needs (Manage pitches, Rooms, Groups, Media, Super users, My role)
  * keep their place in the nearest section rather than vanishing.
  *
- * The ME and PARENT views share the five member-facing sections, spelled out
- * by Adam (2026-08-25, second pass — this supersedes the morning's "Club
- * Lobby, Team, My Groups" shape; the third pass makes the same menu the ME
- * view, the default for every sign-in): Club (Club Lobby, My groups,
- * Messaging, Events, Registrations), Me (My Profile, Connected Adults, My
- * Children), Finance (My Subs), Safeguarding (Report a concern), Settings
- * (Comms preferences). The lobby stays the landing page for both. There is no
- * Team entry any more — a team-scoped pick in the switcher still goes to the
- * team page, but the menu reaches teams through My Children.
+ * The ME and PARENT views share the Club section, spelled out by Adam
+ * (2026-08-25, second pass — this supersedes the morning's "Club Lobby, Team,
+ * My Groups" shape; the third pass makes the same menu the ME view, the
+ * default for every sign-in): Club Lobby, My groups, Messaging, Events,
+ * Registrations. From there they part (Adam, 2026-08-25, evening): the ME view
+ * is the person — Me (My Profile, Connected Adults, My Children), Finance (My
+ * Subs), Settings (Comms preferences) — and the PARENT view is the child's
+ * team: a Team section whose one entry, "Team page", goes through /my-team to
+ * the scoped team (or /family to pick one). The person-level items are NOT
+ * repeated in the parent menu; the switcher's "Me" is the way to them. Both
+ * views keep Report a concern, and the lobby stays the landing page for both.
  *
  * Two independent gates decide whether a link is rendered:
  *
@@ -81,7 +83,7 @@ const ALL_VIEWS = [
 /** The five views that belong to the football club rather than the room. */
 const CLUB_VIEWS = ["me", "player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
 
-/** The member-as-a-person menu: the default ME view and the parent's twin. */
+/** The Club section the default ME view and the parent view share. */
 const ME_VIEWS = ["me", "parent"] as const satisfies readonly RoleView[];
 
 export type NavEntry = {
@@ -155,6 +157,20 @@ export const NAV: readonly NavEntry[] = [
     group: "Club",
     allowed: () => true,
     views: ["player", "coach", "admin", "function_room"],
+  },
+
+  // --- Team (the parent view's second section, Adam 2026-08-25 evening) ----
+  {
+    // One link: the child's team page. /my-team is a redirect that already
+    // knows the answer — the switcher's team-scoped pick, or the only team the
+    // household has — and sends a parent of children on several teams to
+    // /family to choose. The gate mirrors qualifiesForView("parent").
+    href: "/my-team",
+    label: "Team page",
+    icon: Shirt,
+    group: "Team",
+    allowed: (c) => c.isGuardian || c.hasParentRole,
+    views: ["parent"],
   },
   {
     href: "/groups",
@@ -406,14 +422,15 @@ export const NAV: readonly NavEntry[] = [
     views: ["player", "coach", "admin"],
   },
 
-  // --- Me (Adam's parent menu, 2026-08-25 second pass; now also the ME view)
+  // --- Me (the ME view only — Adam, 2026-08-25 evening: the parent menu
+  // drops the person-level items; they belong to the Me view) ---------------
   {
     href: "/profile",
     label: "My Profile",
     icon: UserCircle,
     group: "Me",
     allowed: () => true,
-    views: ME_VIEWS,
+    views: ["me"],
   },
   {
     // The adults in the caller's household without a login of their own —
@@ -423,7 +440,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Contact,
     group: "Me",
     allowed: () => true,
-    views: ME_VIEWS,
+    views: ["me"],
   },
   {
     href: "/family",
@@ -431,17 +448,17 @@ export const NAV: readonly NavEntry[] = [
     icon: Baby,
     group: "Me",
     allowed: (c) => c.isGuardian || c.hasParentRole,
-    views: ME_VIEWS,
+    views: ["me"],
   },
 
-  // --- Finance (the me/parent menu's name for their own money) -------------
+  // --- Finance (the Me view's name for their own money) --------------------
   {
     href: "/my-subs",
     label: "My Subs",
     icon: Wallet,
     group: "Finance",
     allowed: () => true,
-    views: ME_VIEWS,
+    views: ["me"],
   },
 
   // --- Safeguarding --------------------------------------------------------
@@ -494,12 +511,14 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
   {
+    // Not in the parent view (Adam, 2026-08-25 evening) — a person-level
+    // setting, so the Me view carries it.
     href: "/settings/comms",
     label: "Comms preferences",
     icon: Mail,
     group: "Settings",
     allowed: () => true,
-    views: ["me", "player", "parent", "coach", "admin"],
+    views: ["me", "player", "coach", "admin"],
   },
 
   // --- You -----------------------------------------------------------------
