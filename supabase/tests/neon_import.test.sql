@@ -192,8 +192,11 @@ select is((select count(*) from public.neon_import_pending where kind = 'guardia
 select is((select count(*) from public.team_memberships m join public.people p on p.id = m.person_id
             where p.legacy_neon_user_id in ('u-child', 'u-player', 'u-eve') and m.left_at is null), 3::bigint,
   'known-DOB people are on their teams straight away');
-select ok((select last_error like '%date of birth unknown%' from public.neon_import_pending q join public.people p on p.id = q.person_id
-            where p.legacy_neon_user_id = 'u-coach1' and q.kind = 'membership'), 'unknown-DOB coach waits for the DOB gate (SG-0)');
+-- 20260825330000 (Adam): a COACH no longer waits on the date of birth — the
+-- club needs its coaching staff attached, and the date is asked for at their
+-- first sign-in. A player still waits, which the case below covers.
+select ok((select q.applied_at is not null from public.neon_import_pending q join public.people p on p.id = q.person_id
+            where p.legacy_neon_user_id = 'u-coach1' and q.kind = 'membership'), 'unknown-DOB coach is attached to the team anyway');
 select ok((select last_error like '%date of birth must be known%' from public.neon_import_pending where kind = 'guardianship'), 'unknown-DOB guardian waits (SG-4)');
 
 -- the parent signs in (auth import) and hits the gate
