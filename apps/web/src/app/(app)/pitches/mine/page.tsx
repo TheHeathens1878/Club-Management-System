@@ -34,8 +34,13 @@ export default async function MyPitchBookingsPage() {
     redirect("/lobby");
   }
 
+  // `fixture` is here because a coach can now ask for a MATCH, and a request
+  // you cannot see afterwards is not a request. `excludeAllocated` keeps the
+  // allocator's own fixture slots out of it — those are `/pitches`' business
+  // and `bookings_team_guard()` refuses a coach's hand on them anyway.
   const { items, error } = await loadPitchBookings({
-    kinds: ["training", "block"],
+    kinds: ["training", "block", "fixture"],
+    excludeAllocated: true,
     statuses: ["pending", "confirmed"],
     upcomingOnly: true,
     ...(asAdmin ? {} : { teamIds: access.staffTeamIds }),
@@ -70,7 +75,8 @@ export default async function MyPitchBookingsPage() {
                 </>
               )}
               Pending bookings can be moved; a confirmed one can be cancelled, and a club
-              administrator can move it. Fixtures are not listed here — they are allocated on{" "}
+              administrator can move it. Fixtures the club has allocated are not listed here —
+              they live on{" "}
               <Link href="/pitches" className="underline underline-offset-2">
                 Pitches
               </Link>

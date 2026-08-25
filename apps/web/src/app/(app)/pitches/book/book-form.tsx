@@ -3,12 +3,19 @@
 /**
  * Requesting a pitch (gap 3, deliverable 1).
  *
- * One form, two audiences. A coach gets exactly what
- * `bookings_team_staff_insert` allows — a pending training or block booking on
- * a pitch for a team they staff — and the status control is simply absent,
- * because `bookings_team_guard()` pins the row to `pending` anyway and offering
- * a choice the database overrides is worse than not offering it. A club
- * administrator gets the same form plus the choice to confirm on the spot.
+ * One form, two audiences — and which one you are is the HAT, not the role
+ * (Adam, 2026-08-25: "I can still book a pitch as confirmed using my coach
+ * login … remove this functionality"). Wearing the Coach hat this is a request
+ * form and the Save-as control is simply absent, whoever is wearing it: the
+ * booking goes through `request_team_pitch_booking()`, which has no status
+ * parameter and so cannot produce a confirmed row for anybody. Wearing the
+ * Club admin hat, and holding `is_club_admin()`, the same form gains the choice
+ * to confirm on the spot.
+ *
+ * A match (`booking_kind = 'fixture'`) asks who it is against — one of the
+ * club's own teams, or a club typed in — and offers the label that follows
+ * from the answer. Offers, not imposes: a label somebody has typed themselves
+ * is never overwritten (`nextSuggestedLabel`).
  *
  * The weekly repeat is shown only for training: a one-off block booking that
  * silently recurred twenty times is the sort of surprise a pitch diary never
@@ -27,8 +34,11 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select, Textarea } from "@/components/ui/field";
 import {
+  matchLabel,
   MAX_REPEAT_WEEKS,
+  nextSuggestedLabel,
   PITCH_BOOKING_KIND_LABELS,
+  type OppositionSide,
   type PitchBookingKind,
   type PitchOption,
   type TeamOption,
@@ -43,16 +53,26 @@ function teamLabel(team: TeamOption): string {
 
 export function BookForm({
   teams,
+  allTeams,
   pitches,
-  isAdmin,
+  canConfirm,
+  couldConfirmInAdminView,
   defaultTeamId,
   homePitchByTeam,
   today,
   prefill,
 }: {
   teams: TeamOption[];
+  /** Every active team — the opposition for an internal match, not a booker. */
+  allTeams: TeamOption[];
   pitches: PitchOption[];
-  isAdmin: boolean;
+  /**
+   * `is_club_admin()` AND the Club admin hat. Both, because the role alone is
+   * what let a coach-hatted committee sign-in confirm its own bookings.
+   */
+  canConfirm: boolean;
+  /** Holds club admin but is wearing another hat — worth saying so, once. */
+  couldConfirmInAdminView: boolean;
   defaultTeamId: string | null;
   /** `teams.home_resource_id` by team id, already filtered to bookable pitches. */
   homePitchByTeam: Record<string, string>;
@@ -70,8 +90,51 @@ export function BookForm({
   const [pitchTouched, setPitchTouched] = useState(Boolean(prefill?.pitchId));
   const [kind, setKind] = useState<PitchBookingKind>("training");
   const [repeats, setRepeats] = useState(false);
+  const [opposition, setOpposition] = useState<OppositionSide>("internal");
+  const [opponentTeamId, setOpponentTeamId] = useState("");
+  const [opponentName, setOpponentName] = useState("");
+  /** The Label box, and the last thing this form offered to put in it. */
+  const [label, setLabel] = useState("");
+  const [suggestion, setSuggestion] = useState("");
 
   const sharingCandidates = teams.filter((team) => team.id !== teamId);
+  /** You cannot play yourself: the booking's own team is never the opposition. */
+  const oppositionTeams = allTeams.filter((team) => team.id !== teamId);
+
+  /**
+   * Re-offer the label after anything it is built from moves.
+   *
+   * The new values are passed in rather than read from state because a React
+   * state setter does not update the variable this render is holding — reading
+   * `teamId` here right after `setTeamId(next)` would build the label from the
+   * team that was just replaced.
+   */
+  function offerLabel(next: {
+    teamId?: string;
+    kind?: PitchBookingKind;
+    opposition?: OppositionSide;
+    opponentTeamId?: string;
+    opponentName?: string;
+  }): void {
+    const forTeam = next.teamId ?? teamId;
+    const forKind = next.kind ?? kind;
+    const side = next.opposition ?? opposition;
+    const rivalId = next.opponentTeamId ?? opponentTeamId;
+    const rivalTyped = next.opponentName ?? opponentName;
+
+    const home =
+      teams.find((team) => team.id === forTeam)?.name ??
+      allTeams.find((team) => team.id === forTeam)?.name ??
+      "";
+    const away =
+      side === "internal"
+        ? (allTeams.find((team) => team.id === rivalId)?.name ?? "")
+        : rivalTyped;
+    const offered = forKind === "fixture" ? matchLabel(home, away) : "";
+
+    setLabel((current) => nextSuggestedLabel(current, suggestion, offered));
+    setSuggestion(offered);
+  }
 
   return (
     <form action={action} className="space-y-5">
@@ -79,7 +142,7 @@ export function BookForm({
           not booking. The database says the same thing — `bookings_team_guard()`
           pins a non-administrator's pitch booking to `pending` whatever is
           posted — but nobody should have to submit the form to find out. */}
-      {!isAdmin && (
+      {!canConfirm && (
         <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
           This is a <span className="font-medium">request</span>. It goes to a club administrator
           for approval and is held as <span className="font-medium">Awaiting confirmation</span>{" "}
@@ -89,6 +152,14 @@ export function BookForm({
             My pitch bookings
           </Link>
           .
+          {couldConfirmInAdminView && (
+            <>
+              {" "}
+              You are looking at the club as a coach. Switch the view to{" "}
+              <span className="font-medium">Club admin</span> if you meant to confirm this one
+              yourself.
+            </>
+          )}
         </p>
       )}
 
@@ -104,6 +175,10 @@ export function BookForm({
               const next = event.target.value;
               setTeamId(next);
               if (!pitchTouched) setResourceId(homePitchByTeam[next] ?? "");
+              // A team cannot be its own opposition.
+              const rival = opponentTeamId === next ? "" : opponentTeamId;
+              if (rival !== opponentTeamId) setOpponentTeamId(rival);
+              offerLabel({ teamId: next, opponentTeamId: rival });
             }}
           >
             <option value="" disabled>
@@ -191,9 +266,11 @@ export function BookForm({
               const next = event.target.value as PitchBookingKind;
               setKind(next);
               if (next !== "training") setRepeats(false);
+              offerLabel({ kind: next });
             }}
           >
             <option value="training">{PITCH_BOOKING_KIND_LABELS.training}</option>
+            <option value="fixture">{PITCH_BOOKING_KIND_LABELS.fixture}</option>
             <option value="block">{PITCH_BOOKING_KIND_LABELS.block}</option>
           </Select>
         </div>
@@ -204,13 +281,92 @@ export function BookForm({
             id="occasion"
             name="occasion"
             maxLength={120}
-            placeholder="e.g. Tuesday training"
+            placeholder={kind === "fixture" ? "e.g. U14 Mavericks v Sale Sharks" : "e.g. Tuesday training"}
+            value={label}
+            onChange={(event) => setLabel(event.target.value)}
           />
           <p className="text-xs text-muted-foreground">
-            What the club calendar shows. Left blank, it shows the team name.
+            {kind === "fixture"
+              ? "What the club calendar shows. Filled in from the teams above — change it if you want it to read differently."
+              : "What the club calendar shows. Left blank, it shows the team name."}
           </p>
         </div>
       </div>
+
+      {/* Adam, 2026-08-25: "if match is selected, it should ask if the
+          opposition is internal (and then choose the team) or external (free
+          type)". No opposition column exists and none is added — the answer
+          becomes the label, which is what the pitch diary shows. */}
+      {kind === "fixture" && (
+        <fieldset className="space-y-3 rounded-lg border bg-secondary/40 p-3">
+          <legend className="px-1 text-sm font-medium">Who is the match against?</legend>
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            {(
+              [
+                ["internal", "Another team in the club"],
+                ["external", "A club from outside"],
+              ] as const
+            ).map(([value, caption]) => (
+              <label key={value} className="flex min-h-[44px] items-center gap-2 text-sm sm:min-h-0">
+                <input
+                  type="radio"
+                  name="opposition"
+                  value={value}
+                  checked={opposition === value}
+                  onChange={() => {
+                    setOpposition(value);
+                    offerLabel({ opposition: value });
+                  }}
+                  className="h-4 w-4 border-input"
+                />
+                {caption}
+              </label>
+            ))}
+          </div>
+
+          {opposition === "internal" ? (
+            <div className="space-y-1">
+              <Label htmlFor="opponent_team_id">Opposition team</Label>
+              <Select
+                id="opponent_team_id"
+                name="opponent_team_id"
+                value={opponentTeamId}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setOpponentTeamId(next);
+                  offerLabel({ opponentTeamId: next });
+                }}
+              >
+                <option value="">Choose a team…</option>
+                {oppositionTeams.map((team) => (
+                  <option key={team.id} value={team.id}>
+                    {teamLabel(team)}
+                  </option>
+                ))}
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                Both teams are the club&apos;s, so this books the pitch once, for the team above.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-1">
+              <Label htmlFor="opponent_name">Opposition club</Label>
+              <Input
+                id="opponent_name"
+                name="opponent_name"
+                maxLength={80}
+                placeholder="e.g. Sale Sharks"
+                value={opponentName}
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setOpponentName(next);
+                  offerLabel({ opponentName: next });
+                }}
+              />
+            </div>
+          )}
+        </fieldset>
+      )}
 
       {sharingCandidates.length > 0 && (
         <fieldset className="space-y-2">
@@ -281,7 +437,7 @@ export function BookForm({
         <Textarea id="notes" name="notes" maxLength={500} placeholder="Anything the club should know" />
       </div>
 
-      {isAdmin && (
+      {canConfirm && (
         <div className="space-y-1">
           <Label htmlFor="status">Save as</Label>
           <Select id="status" name="status" defaultValue="confirmed" className="max-w-xs">
@@ -316,9 +472,9 @@ export function BookForm({
           className="h-11 w-full sm:w-auto"
           disabled={pending || teams.length === 0 || pitches.length === 0}
         >
-          {pending ? "Checking the pitch…" : isAdmin ? "Save booking" : "Request pitch"}
+          {pending ? "Checking the pitch…" : canConfirm ? "Save booking" : "Request pitch"}
         </Button>
-        {!isAdmin && (
+        {!canConfirm && (
           <p className="text-xs text-muted-foreground">
             Requests are held until a club administrator confirms them.
           </p>

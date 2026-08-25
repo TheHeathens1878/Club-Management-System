@@ -54,7 +54,11 @@ export default async function PitchRequestsPage({
 
   const [pendingResult, upcomingResult] = await Promise.all([
     loadPitchBookings({
-      kinds: ["training", "block"],
+      // `fixture` joins the desk now a coach can ask for a match; the
+      // allocator's own fixture slots are excluded — they were never requested
+      // and are not waiting on anybody.
+      kinds: ["training", "block", "fixture"],
+      excludeAllocated: true,
       statuses: ["pending"],
       upcomingOnly: true,
     }),
@@ -77,8 +81,9 @@ export default async function PitchRequestsPage({
           <CardHeader className="p-4 lg:p-6">
             <CardTitle>Waiting for a decision</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Training and block bookings a coach has requested — a coach can only ever create a
-              request, never a confirmed booking, so this is where every one of them is decided. A
+              Training, matches and other pitch use a coach has requested — a coach can only ever
+              create a request, never a confirmed booking, so this is where every one of them is
+              decided. A
               pending request already holds its slot against everything else on that pitch, so
               nothing can be double-booked while it waits; confirming is what tells the coach it is
               theirs. Declining cancels the booking, frees the pitch and keeps the reason on the

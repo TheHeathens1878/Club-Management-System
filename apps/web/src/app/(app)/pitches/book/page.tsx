@@ -6,8 +6,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { todayLondon } from "@/lib/pitch-booking";
-import { loadPitchBookingAccess, loadPitches } from "@/lib/pitch-booking-data";
-import { getStoredRoleView } from "@/lib/capabilities";
+import { loadActiveTeams, loadPitchBookingAccess, loadPitches } from "@/lib/pitch-booking-data";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { ChevronLeft } from "lucide-react";
 
 import { BookForm } from "./book-form";
@@ -42,15 +43,28 @@ export default async function BookPitchPage({
     start: requestedStart,
     end: requestedEnd,
   } = await searchParams;
-  const [access, pitches, roleView] = await Promise.all([
+  const [access, pitches, allTeams, capabilities, storedView] = await Promise.all([
     loadPitchBookingAccess(),
     loadPitches(),
+    loadActiveTeams(),
+    getCapabilities(),
     getStoredRoleView(),
   ]);
+  const view = resolveRoleView(storedView, capabilities);
   // In the Coach view even an administrator books for their own teams only.
-  if (roleView === "coach" && access.isAdmin && access.staffTeamIds.length > 0) {
+  if (view === "coach" && access.isAdmin && access.staffTeamIds.length > 0) {
     access.teams = access.teams.filter((team) => access.staffTeamIds.includes(team.id));
   }
+  /**
+   * Who may save a booking as confirmed, and it takes BOTH: `is_club_admin()`
+   * for the permission and the Club admin hat for the intent (Adam,
+   * 2026-08-25: "I can still book a pitch as confirmed using my coach login …
+   * remove this functionality"). A committee sign-in maps to club_admin, so
+   * ROLE alone was true whichever hat he had on, and the Save-as control
+   * followed the role. `createPitchBooking` asks the same question again for
+   * itself — this only decides which controls get drawn.
+   */
+  const canConfirm = access.isAdmin && view === "admin";
   const committee = isCommittee(session.profile?.role);
 
   if (!access.isAdmin && !committee && access.staffTeamIds.length === 0) {
@@ -75,7 +89,7 @@ export default async function BookPitchPage({
     <>
       <PageHeader
         title="Book a pitch"
-        subtitle="Ask for a training slot or another use of a pitch"
+        subtitle="Ask for a training slot, a match or another use of a pitch"
         action={
           <Link
             href="/pitches/mine"
@@ -113,8 +127,10 @@ export default async function BookPitchPage({
             ) : (
               <BookForm
                 teams={access.teams}
+                allTeams={allTeams}
                 pitches={pitches}
-                isAdmin={access.isAdmin}
+                canConfirm={canConfirm}
+                couldConfirmInAdminView={access.isAdmin && !canConfirm}
                 defaultTeamId={defaultTeamId}
                 homePitchByTeam={homePitchByTeam}
                 today={todayLondon()}

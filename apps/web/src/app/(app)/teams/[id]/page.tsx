@@ -1732,10 +1732,11 @@ export default async function TeamPage({
             <CardHeader>
               <CardTitle>Training &amp; pitch slots</CardTitle>
               <p className="text-sm text-muted-foreground">
-                The next {PITCH_BOOKING_LIMIT} pitch slots for this team — its own training and
-                block bookings, plus any session another team is sharing with it. Coaches request a
-                slot and a club administrator confirms it; until then it reads as awaiting
-                confirmation. The headcount beside a session is the squad&apos;s availability.
+                The next {PITCH_BOOKING_LIMIT} pitch slots for this team — its own training,
+                matches and other bookings, plus any session another team is sharing with it.
+                Coaches request a slot and a club administrator confirms it; until then it reads as
+                awaiting confirmation. The headcount beside a session is the squad&apos;s
+                availability.
               </p>
             </CardHeader>
             <CardContent>
