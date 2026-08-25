@@ -111,10 +111,11 @@ begin
     -- refuses it with the 42501 it has always given, and stepping in front of
     -- that with a sentence about coaches would only mislead.
     if public.is_pitch_resource(new.resource_id) then
-      if new.kind not in ('block', 'training', 'fixture') then
-        raise exception 'bookings: coaches may only request training, match or other-use slots'
-          using errcode = 'P0001';
-      end if;
+      -- No `kind` check here: `bookings_team_staff_insert` already names the
+      -- three kinds a coach may ask for, and it has always been the thing that
+      -- refuses the rest. Raising first would only replace its 42501 with a
+      -- sentence about coaches for people who are not coaching anything.
+      --
       -- A match REQUEST is not a fixture allocation. The link between a booking
       -- and a `fixtures` row is `allocate_fixture()`'s to make.
       if new.fixture_id is not null then
