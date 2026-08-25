@@ -18,6 +18,7 @@
  *     family, verified against the caller's household by the function.
  */
 
+import { countyForTown } from "@/lib/address";
 import { createClient } from "@/lib/supabase/server";
 import { emergencyContactsFromFormData, noEmergencyContacts } from "@/lib/emergency-contacts";
 import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
@@ -126,10 +127,14 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     return { error: "Tick at least one: playing yourself, or registering family members." };
   }
 
+  const town = text(formData, "address_town");
   const address = {
     line1: text(formData, "address_line1"),
     line2: text(formData, "address_line2"),
-    town: text(formData, "address_town"),
+    town,
+    // The town settles the county where the club knows the place (Adam,
+    // 2026-08-25); re-derived rather than trusted from the browser.
+    county: countyForTown(town) ?? text(formData, "address_county"),
     postcode: text(formData, "address_postcode"),
   };
   if (!address.line1 || !address.town || !address.postcode) {

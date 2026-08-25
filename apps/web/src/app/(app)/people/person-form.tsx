@@ -13,6 +13,7 @@ import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { TownCountyFields } from "@/components/town-county-fields";
 import { Textarea } from "@/components/ui/field";
 import { ADDRESS_KEYS, ADDRESS_LABELS, type AddressFields } from "@/lib/people-display";
 
@@ -103,7 +104,9 @@ export function PersonForm({
       <fieldset className="space-y-3">
         <legend className="text-sm font-medium">Address</legend>
         <div className="grid gap-4 sm:grid-cols-2">
-          {ADDRESS_KEYS.map((key) => (
+          {/* Town and county move together (Adam, 2026-08-25): a town the
+              club knows settles the county and holds it there. */}
+          {ADDRESS_KEYS.filter((key) => key !== "town" && key !== "county").map((key) => (
             <div key={key} className="space-y-1.5">
               <Label htmlFor={`address_${key}`}>{ADDRESS_LABELS[key]}</Label>
               <Input
@@ -113,6 +116,11 @@ export function PersonForm({
               />
             </div>
           ))}
+          <TownCountyFields
+            idPrefix="person-address"
+            defaultTown={values.address.town}
+            defaultCounty={values.address.county}
+          />
         </div>
       </fieldset>
 

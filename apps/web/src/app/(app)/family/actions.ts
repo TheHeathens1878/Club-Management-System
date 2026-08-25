@@ -36,6 +36,7 @@ import { revalidatePath } from "next/cache";
 
 import type { Json } from "@club/db";
 
+import { countyForTown } from "@/lib/address";
 import { createClient } from "@/lib/supabase/server";
 import { emergencyContactsFromFormData, noEmergencyContacts } from "@/lib/emergency-contacts";
 import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
@@ -186,6 +187,10 @@ export async function updateChildDetails(
   const line1 = String(formData.get("address_line1") ?? "").trim();
   const line2 = String(formData.get("address_line2") ?? "").trim();
   const town = String(formData.get("address_town") ?? "").trim();
+  // The town settles the county where the club knows the place (Adam,
+  // 2026-08-25), re-derived here so the stored address cannot disagree with
+  // the rule the form showed.
+  const county = countyForTown(town) ?? String(formData.get("address_county") ?? "").trim();
   const postcode = String(formData.get("address_postcode") ?? "").trim();
   const anyAddress = !!(line1 || line2 || town || postcode);
   // The four fields are only rendered while the box is UNTICKED, so an
@@ -216,7 +221,7 @@ export async function updateChildDetails(
     if (anyAddress && (!line1 || !town || !postcode)) {
       return { error: "An address needs at least the first line, the town and the postcode." };
     }
-    if (anyAddress) address = { line1, line2: line2 || null, town, postcode };
+    if (anyAddress) address = { line1, line2: line2 || null, town, county: county || null, postcode };
   }
 
   const { error } = await supabase.rpc("update_child_details", {

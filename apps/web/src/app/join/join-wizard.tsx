@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { EmergencyContactsFields, type LeadContact } from "@/components/emergency-contacts-fields";
+import { TownCountyFields } from "@/components/town-county-fields";
 import {
   QuestionBlock,
   customQuestionsPayload,
@@ -287,7 +288,7 @@ export function JoinWizard({ signedIn, defaults }: {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Input name="address_line1" placeholder="Address line 1" required className="sm:col-span-2" />
                   <Input name="address_line2" placeholder="Address line 2 (optional)" className="sm:col-span-2" />
-                  <Input name="address_town" placeholder="Town" required />
+                  <TownCountyFields idPrefix="join-address" required />
                   <Input name="address_postcode" placeholder="Postcode" required />
                 </div>
               </fieldset>

@@ -15,6 +15,7 @@
 
 import { revalidatePath } from "next/cache";
 
+import { countyForTown } from "@/lib/address";
 import { createClient } from "@/lib/supabase/server";
 import { emergencyContactsFromFormData } from "@/lib/emergency-contacts";
 import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
@@ -30,6 +31,11 @@ export async function updateContactDetails(
   const line1 = String(formData.get("address_line1") ?? "").trim();
   const line2 = String(formData.get("address_line2") ?? "").trim();
   const town = String(formData.get("address_town") ?? "").trim();
+  // The town settles the county where the club knows the place (Adam,
+  // 2026-08-25); the browser posts what the field was holding, and this
+  // re-derives it so a hand-edited form cannot store "Sale, Cheshire".
+  const postedCounty = String(formData.get("address_county") ?? "").trim();
+  const county = countyForTown(town) ?? postedCounty;
   const postcode = String(formData.get("address_postcode") ?? "").trim();
 
   const anyAddress = !!(line1 || line2 || town || postcode);
@@ -41,7 +47,9 @@ export async function updateContactDetails(
   const { error } = await supabase.rpc("update_own_contact", {
     p_preferred_name: preferred || undefined,
     p_phone: phone || undefined,
-    p_address: anyAddress ? { line1, line2: line2 || null, town, postcode } : undefined,
+    p_address: anyAddress
+      ? { line1, line2: line2 || null, town, county: county || null, postcode }
+      : undefined,
   });
 
   if (error) {

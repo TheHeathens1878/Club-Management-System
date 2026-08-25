@@ -10,6 +10,7 @@ import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
+import { TownCountyFields } from "@/components/town-county-fields";
 import { EmergencyContactsFields } from "@/components/emergency-contacts-fields";
 import type { EmergencyContact } from "@/lib/emergency-contacts";
 
@@ -21,6 +22,8 @@ export type ContactDetails = {
   line1: string;
   line2: string;
   town: string;
+  /** Settled by the town where the club knows it (see lib/address). */
+  county: string;
   postcode: string;
 };
 
@@ -76,15 +79,11 @@ export function ContactDetailsForm({ initial }: { initial: ContactDetails }) {
               autoComplete="address-line2"
             />
           </div>
-          <div className="space-y-1">
-            <Label htmlFor="address-town">Town</Label>
-            <Input
-              id="address-town"
-              name="address_town"
-              defaultValue={initial.town}
-              autoComplete="address-level2"
-            />
-          </div>
+          <TownCountyFields
+            idPrefix="profile-address"
+            defaultTown={initial.town}
+            defaultCounty={initial.county}
+          />
           <div className="space-y-1">
             <Label htmlFor="address-postcode">Postcode</Label>
             <Input
