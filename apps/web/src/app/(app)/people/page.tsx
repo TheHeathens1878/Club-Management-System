@@ -191,6 +191,23 @@ export default async function PeoplePage({
     // silently ignoring the filter the user picked.
     restricted = intersect(restricted, []);
   }
+  // The design's two extra chips (spec §2.7): Committee, and Under 18 — where
+  // a missing date of birth counts as under 18, exactly as SG-0 treats it.
+  const committeeFilter = params.type === "committee";
+  const under18Filter = params.type === "under18";
+
+  if (committeeFilter) {
+    const { data } = await supabase
+      .from("profiles")
+      .select("person_id")
+      .in("role", ["committee", "super_user"])
+      .not("person_id", "is", null);
+    restricted = intersect(
+      restricted,
+      (data ?? []).map((r) => r.person_id).filter((id): id is string => !!id),
+    );
+  }
+
   if (typeFilter) {
     const ids = new Set<string>();
 
@@ -259,6 +276,12 @@ export default async function PeoplePage({
     );
   }
   if (noDob) query = query.is("dob", null);
+  if (under18Filter) {
+    const cutoff = new Date();
+    cutoff.setFullYear(cutoff.getFullYear() - 18);
+    const iso = cutoff.toISOString().slice(0, 10);
+    query = query.or(`dob.gt.${iso},dob.is.null`);
+  }
   if (restricted !== null) query = query.in("id", restricted);
 
   const from = (page - 1) * PAGE_SIZE;
@@ -334,12 +357,73 @@ export default async function PeoplePage({
 
   const withLogin = new Set((profilesResult.data ?? []).map((p) => p.person_id));
 
+  // The design's row details: a minor's contact goes through their guardian
+  // ("via Kate Ashworth"), a pending account request reads Needs review, and a
+  // staff DBS inside 90 days of expiry reads DBS due. Three more bulk reads
+  // for the page's rows only.
+  const minorIds = people.filter((p) => isMinorDob(p.dob)).map((p) => p.id);
+  const [guardiansResult, requestsResult, dbsResult] = await Promise.all([
+    minorIds.length > 0
+      ? supabase
+          .from("guardianships")
+          .select("child_person_id,guardian_person_id")
+          .in("child_person_id", minorIds)
+          .is("ended_at", null)
+      : Promise.resolve({ data: [] as { child_person_id: string; guardian_person_id: string }[] }),
+    ids.length > 0
+      ? supabase
+          .from("account_requests")
+          .select("person_id")
+          .in("person_id", ids)
+          .eq("status", "pending")
+      : Promise.resolve({ data: [] as { person_id: string }[] }),
+    ids.length > 0
+      ? supabase
+          .from("certifications")
+          .select("person_id,expires_on")
+          .in("person_id", ids)
+          .eq("type", "fa_dbs")
+          .is("revoked_at", null)
+      : Promise.resolve({ data: [] as { person_id: string; expires_on: string | null }[] }),
+  ]);
+
+  const guardianOf = new Map<string, string>();
+  const guardianIds = Array.from(
+    new Set((guardiansResult.data ?? []).map((g) => g.guardian_person_id)),
+  );
+  const guardianPeople = new Map<string, { name: string; phone: string | null }>();
+  if (guardianIds.length > 0) {
+    const { data } = await supabase
+      .from("people")
+      .select("id,first_name,last_name,phone")
+      .in("id", guardianIds);
+    for (const row of data ?? []) {
+      guardianPeople.set(row.id, {
+        name: `${row.first_name} ${row.last_name}`.trim(),
+        phone: row.phone,
+      });
+    }
+  }
+  for (const link of guardiansResult.data ?? []) {
+    if (!guardianOf.has(link.child_person_id)) {
+      guardianOf.set(link.child_person_id, link.guardian_person_id);
+    }
+  }
+
+  const needsReview = new Set((requestsResult.data ?? []).map((r) => r.person_id));
+  const dbsDue = new Set<string>();
+  const dbsSoon = new Date();
+  dbsSoon.setDate(dbsSoon.getDate() + 90);
+  for (const cert of dbsResult.data ?? []) {
+    if (cert.expires_on && new Date(cert.expires_on) <= dbsSoon) dbsDue.add(cert.person_id);
+  }
+
   const chips: { key: string; label: string; href: string; active: boolean }[] = [
     {
       key: "all",
       label: "Everyone",
       href: buildHref(params, { type: undefined, page: undefined }),
-      active: typeFilter === null,
+      active: typeFilter === null && !committeeFilter && !under18Filter,
     },
     ...TYPES.map((type) => ({
       key: type,
@@ -347,6 +431,18 @@ export default async function PeoplePage({
       href: buildHref(params, { type, page: undefined }),
       active: typeFilter === type,
     })),
+    {
+      key: "committee",
+      label: "Committee",
+      href: buildHref(params, { type: "committee", page: undefined }),
+      active: committeeFilter,
+    },
+    {
+      key: "under18",
+      label: "Under 18",
+      href: buildHref(params, { type: "under18", page: undefined }),
+      active: under18Filter,
+    },
   ];
 
   const filtersApplied =
@@ -358,12 +454,23 @@ export default async function PeoplePage({
         title="People"
         subtitle="The club's contacts database — players, parents, coaches and hirers"
         action={
-          <Link
-            href="/people/new"
-            className={buttonVariants({ variant: "default", size: "sm" }) + " gap-2"}
-          >
-            <Plus className="h-4 w-4" /> Add a person
-          </Link>
+          <span className="flex gap-2">
+            {/* A plain anchor on purpose: this is a file download from a route
+                handler, and Link would try to client-navigate/prefetch it. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
+            <a
+              href="/people/export"
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+            >
+              Export CSV
+            </a>
+            <Link
+              href="/people/new"
+              className={buttonVariants({ variant: "default", size: "sm" }) + " gap-2"}
+            >
+              <Plus className="h-4 w-4" /> Add a person
+            </Link>
+          </span>
         }
       />
       <div className="space-y-6 p-6">
@@ -479,10 +586,11 @@ export default async function PeoplePage({
                 {/* A header, not a <table>: the whole row is one link, and a
                     link cannot wrap a <tr>. */}
                 <div className="hidden border-b pb-2 text-xs text-muted-foreground md:grid md:grid-cols-12 md:gap-3">
-                  <span className="md:col-span-4">Name</span>
+                  <span className="md:col-span-3">Name</span>
                   <span className="md:col-span-2">Type</span>
                   <span className="md:col-span-2">Teams</span>
-                  <span className="md:col-span-4">Contact</span>
+                  <span className="md:col-span-3">Contact</span>
+                  <span className="md:col-span-2">Status</span>
                 </div>
                 <ul className="divide-y">
                   {people.map((person) => {
@@ -491,13 +599,17 @@ export default async function PeoplePage({
                     const heldTeams = teamsByPerson.get(person.id) ?? [];
                     const extraTeams = heldTeams.length - TEAMS_SHOWN;
                     const linked = withLogin.has(person.id);
+                    const minor = isMinorDob(person.dob);
+                    const guardian = minor
+                      ? guardianPeople.get(guardianOf.get(person.id) ?? "")
+                      : undefined;
                     return (
                       <li key={person.id}>
                         <Link
                           href={personHref(person.id, params, page)}
                           className="grid gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none md:grid-cols-12 md:items-center"
                         >
-                          <span className="flex flex-wrap items-center gap-2 md:col-span-4">
+                          <span className="flex flex-wrap items-center gap-2 md:col-span-3">
                             <span
                               aria-hidden="true"
                               title={linked ? "Has a login" : "No login yet"}
@@ -510,7 +622,7 @@ export default async function PeoplePage({
                             <span className="sr-only">
                               {linked ? "Has a login." : "No login yet."}
                             </span>
-                            {isMinorDob(person.dob) && (
+                            {minor && (
                               <Badge variant="warning">
                                 {person.dob ? "Minor" : "No DOB — treated as a minor"}
                               </Badge>
@@ -533,9 +645,35 @@ export default async function PeoplePage({
                               : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
                                 (extraTeams > 0 ? ` +${extraTeams}` : "")}
                           </span>
-                          <span className="text-xs text-muted-foreground md:col-span-4">
-                            <span className="block break-all">{person.email ?? "No email"}</span>
-                            <span className="block">{person.phone ?? "No phone"}</span>
+                          <span className="text-xs text-muted-foreground md:col-span-3">
+                            {/* The design's rule, stated on the page: an
+                                under-18's contact goes through their guardian. */}
+                            {minor && guardian ? (
+                              <>
+                                <span className="block">via {guardian.name}</span>
+                                <span className="block">{guardian.phone ?? "No phone"}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span className="block break-all">
+                                  {person.email ?? "No email"}
+                                </span>
+                                <span className="block">{person.phone ?? "No phone"}</span>
+                              </>
+                            )}
+                          </span>
+                          <span className="md:col-span-2">
+                            {needsReview.has(person.id) ? (
+                              <Badge variant="destructive">Needs review</Badge>
+                            ) : dbsDue.has(person.id) ? (
+                              <Badge variant="warning">DBS due</Badge>
+                            ) : minor ? (
+                              <Badge variant="success">Registered</Badge>
+                            ) : linked ? (
+                              <Badge variant="success">Active</Badge>
+                            ) : (
+                              <Badge variant="muted">No login</Badge>
+                            )}
                           </span>
                         </Link>
                       </li>
@@ -543,6 +681,12 @@ export default async function PeoplePage({
                   })}
                 </ul>
               </div>
+            )}
+
+            {people.length > 0 && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Contact details for under-18s are shown through their guardian.
+              </p>
             )}
 
             {lastPage > 1 && (
