@@ -22,6 +22,7 @@
  */
 
 import {
+  Armchair,
   Beer,
   Baby,
   CalendarCheck,
@@ -80,6 +81,15 @@ export type NavEntry = {
 
 export const NAV: readonly NavEntry[] = [
   // --- The club ------------------------------------------------------------
+  {
+    // The design's front door: the club-wide noticeboard, results and the week.
+    href: "/lobby",
+    label: "Club lobby",
+    icon: Armchair,
+    group: "Club",
+    allowed: () => true,
+    views: CLUB_VIEWS,
+  },
   {
     // A player's own screen: their teams, and when those teams are next out.
     href: "/my-teams",

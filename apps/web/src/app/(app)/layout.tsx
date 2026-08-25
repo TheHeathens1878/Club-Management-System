@@ -72,11 +72,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
+          {/* The switcher now draws its own chip and panel (Adam's screenshot:
+              two-line options, tick on the active row) — no wrapper here. */}
           {switcher ? (
-            <div className="hidden rounded-lg border border-accent/40 bg-accent/15 px-3 py-2 lg:block">
-              <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-accent">
-                Viewing as
-              </p>
+            <div className="hidden lg:block">
               <RoleSwitcher options={switcher.options} current={switcher.current} />
             </div>
           ) : null}
