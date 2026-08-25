@@ -159,18 +159,18 @@ export const NAV: readonly NavEntry[] = [
     views: ["player", "coach", "admin", "function_room"],
   },
 
-  // --- Team (the parent view's second section, Adam 2026-08-25 evening) ----
+  // --- Team (the parent and coach views' second section, Adam 2026-08-25) --
   {
-    // One link: the child's team page. /my-team is a redirect that already
-    // knows the answer — the switcher's team-scoped pick, or the only team the
-    // household has — and sends a parent of children on several teams to
-    // /family to choose. The gate mirrors qualifiesForView("parent").
+    // One link: the team page. /my-team is a redirect that already knows the
+    // answer — the switcher's team-scoped pick, or the only team the hat
+    // covers — and otherwise sends a parent to /family and a coach to /teams
+    // to choose. The gate is the union of the two views' own qualifiers.
     href: "/my-team",
     label: "Team page",
     icon: Shirt,
     group: "Team",
-    allowed: (c) => c.isGuardian || c.hasParentRole,
-    views: ["parent"],
+    allowed: (c) => c.isGuardian || c.hasParentRole || c.isTeamStaff || c.hasCoachRole,
+    views: ["parent", "coach"],
   },
   {
     href: "/groups",
@@ -414,12 +414,14 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
   {
+    // Not in the coach view (Adam, 2026-08-25 evening: "remove Money - My
+    // subs and Comms preference as they sit under Me").
     href: "/my-subs",
     label: "My subs",
     icon: Wallet,
     group: "Money",
     allowed: () => true,
-    views: ["player", "coach", "admin"],
+    views: ["player", "admin"],
   },
 
   // --- Me (the ME view only — Adam, 2026-08-25 evening: the parent menu
@@ -511,14 +513,14 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
   {
-    // Not in the parent view (Adam, 2026-08-25 evening) — a person-level
-    // setting, so the Me view carries it.
+    // Not in the parent or coach views (Adam, 2026-08-25 evening) — a
+    // person-level setting, so the Me view carries it.
     href: "/settings/comms",
     label: "Comms preferences",
     icon: Mail,
     group: "Settings",
     allowed: () => true,
-    views: ["me", "player", "coach", "admin"],
+    views: ["me", "player", "admin"],
   },
 
   // --- You -----------------------------------------------------------------
