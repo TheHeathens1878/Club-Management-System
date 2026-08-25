@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { AlertTriangle, Clock } from "lucide-react";
 
+import { Avatar } from "@/components/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -30,6 +31,7 @@ import {
   addTeamMember,
   changeMemberRole,
   endMembership,
+  requestMemberLeave,
   setShirtNumber,
   type MembershipActionState,
 } from "./membership-actions";
@@ -59,6 +61,23 @@ export type MemberRow = {
   /** `person_compliance_status()` for the two SG-6 certifications, null for a player. */
   dbs: string | null;
   safeguarding: string | null;
+  /** Short-lived signed URL from `signPeoplePhotos`; null falls back to initials. */
+  photoUrl: string | null;
+};
+
+/**
+ * "This player has left" (Adam, 2026-08-25) — the coach's half of the squad
+ * edit, and the only half they have.
+ *
+ * `canRequest` is the team's staff who are NOT a club administrator: an admin
+ * has End, which does the thing immediately, so offering them the queue as
+ * well would only be a slower End. `pendingMembershipIds` are the rows already
+ * on the administrator's desk, which is what the row says instead of offering
+ * the button a second time.
+ */
+export type SquadLeave = {
+  canRequest: boolean;
+  pendingMembershipIds: string[];
 };
 
 export type PendingRow = {
@@ -97,6 +116,58 @@ function Feedback({ state }: { state: MembershipActionState }) {
   return null;
 }
 
+/**
+ * One row's "this player has left": a button that opens a small confirm form
+ * with an optional note, and nothing else. Its own component so each row keeps
+ * its own action state — a refusal on one player must not appear under another.
+ */
+function LeaveRequestForm({
+  teamId,
+  membershipId,
+  name,
+}: {
+  teamId: string;
+  membershipId: string;
+  name: string;
+}) {
+  const [state, action, sending] = useActionState(requestMemberLeave, EMPTY);
+
+  if (state.notice) {
+    return <p className="text-xs text-emerald-700">{state.notice}</p>;
+  }
+
+  return (
+    <details className="group">
+      <summary className="inline-flex min-h-[44px] cursor-pointer list-none items-center text-xs text-muted-foreground underline underline-offset-2 lg:min-h-0">
+        This player has left
+      </summary>
+      <form action={action} className="mt-2 space-y-2 rounded-lg border border-dashed p-3">
+        <input type="hidden" name="team_id" value={teamId} />
+        <input type="hidden" name="membership_id" value={membershipId} />
+        <p className="text-xs text-muted-foreground">
+          This asks a club administrator to remove {name} from the squad. Nothing changes until they
+          approve it.
+        </p>
+        <Input
+          name="note"
+          placeholder="Anything the club should know (optional)"
+          aria-label={`Why ${name} has left`}
+          className="h-11 text-xs lg:h-8"
+        />
+        <Button type="submit" size="sm" variant="outline" disabled={sending} className="h-11 px-3 text-xs lg:h-8">
+          {sending ? "Sending…" : "Send for approval"}
+        </Button>
+        {state.error ? <p className="text-xs text-destructive">{state.error}</p> : null}
+      </form>
+    </details>
+  );
+}
+
+/** "Leaving — awaiting admin": the row already on the administrator's desk. */
+function LeavePendingBadge() {
+  return <Badge variant="warning">Leaving — awaiting admin</Badge>;
+}
+
 export function MembersPanel({
   teamId,
   seasonId,
@@ -104,6 +175,7 @@ export function MembersPanel({
   members,
   pending,
   canEdit,
+  squadLeave,
 }: {
   teamId: string;
   seasonId: string | null;
@@ -111,6 +183,7 @@ export function MembersPanel({
   members: MemberRow[];
   pending: PendingRow[];
   canEdit: boolean;
+  squadLeave: SquadLeave;
 }) {
   const [addState, addAction, adding] = useActionState(addTeamMember, EMPTY);
   const [roleState, roleAction] = useActionState(changeMemberRole, EMPTY);
@@ -119,6 +192,7 @@ export function MembersPanel({
 
   const alreadyIn = members.map((m) => m.personId);
   const roleValues = Object.keys(ROLE_LABELS) as TeamRoleValue[];
+  const leavePending = new Set(squadLeave.pendingMembershipIds);
 
   return (
     <div className="space-y-6">
@@ -145,20 +219,26 @@ export function MembersPanel({
             {members.map((member) => (
               <li key={member.id} className="space-y-2.5 px-3 py-3">
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <Link
-                      href={`/people/${member.personId}`}
-                      className="block truncate font-medium underline underline-offset-2"
-                    >
-                      {member.name}
-                    </Link>
-                    <p className="mt-0.5 text-xs text-muted-foreground">
-                      {ROLE_LABELS[member.role]}
-                      {member.shirtNumber !== null ? ` · #${member.shirtNumber}` : ""}
-                      {` · joined ${formatStamp(member.joinedAt)}`}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Avatar name={member.name} photoUrl={member.photoUrl} size="md" />
+                    <div className="min-w-0">
+                      <Link
+                        href={`/people/${member.personId}`}
+                        className="block truncate font-medium underline underline-offset-2"
+                      >
+                        {member.name}
+                      </Link>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {ROLE_LABELS[member.role]}
+                        {member.shirtNumber !== null ? ` · #${member.shirtNumber}` : ""}
+                        {` · joined ${formatStamp(member.joinedAt)}`}
+                      </p>
+                    </div>
                   </div>
-                  {member.isMinor && <Badge variant="warning">Minor</Badge>}
+                  <div className="flex flex-none flex-col items-end gap-1">
+                    {member.isMinor && <Badge variant="warning">Minor</Badge>}
+                    {leavePending.has(member.id) ? <LeavePendingBadge /> : null}
+                  </div>
                 </div>
 
                 {member.childFacing ? (
@@ -231,6 +311,10 @@ export function MembersPanel({
                     </div>
                   </div>
                 )}
+
+                {squadLeave.canRequest && !leavePending.has(member.id) ? (
+                  <LeaveRequestForm teamId={teamId} membershipId={member.id} name={member.name} />
+                ) : null}
               </li>
             ))}
           </ul>
@@ -244,24 +328,36 @@ export function MembersPanel({
                   <th className="py-2 pr-3 font-medium">Shirt</th>
                   <th className="py-2 pr-3 font-medium">Joined</th>
                   <th className="py-2 pr-3 font-medium">Safeguarding</th>
-                  {canEdit && <th className="py-2 font-medium">Actions</th>}
+                  {canEdit || squadLeave.canRequest ? (
+                    <th className="py-2 font-medium">Actions</th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
                 {members.map((member) => (
                   <tr key={member.id} className="border-b align-top last:border-0">
                     <td className="py-2 pr-3">
-                      <Link
-                        href={`/people/${member.personId}`}
-                        className="font-medium underline underline-offset-2"
-                      >
-                        {member.name}
-                      </Link>
-                      {member.isMinor && (
-                        <Badge variant="warning" className="ml-2">
-                          Minor
-                        </Badge>
-                      )}
+                      <div className="flex items-center gap-2.5">
+                        <Avatar name={member.name} photoUrl={member.photoUrl} size="sm" />
+                        <div className="min-w-0">
+                          <Link
+                            href={`/people/${member.personId}`}
+                            className="font-medium underline underline-offset-2"
+                          >
+                            {member.name}
+                          </Link>
+                          {member.isMinor && (
+                            <Badge variant="warning" className="ml-2">
+                              Minor
+                            </Badge>
+                          )}
+                          {leavePending.has(member.id) ? (
+                            <div className="mt-1">
+                              <LeavePendingBadge />
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
                     </td>
                     <td className="py-2 pr-3">
                       {canEdit ? (
@@ -325,25 +421,36 @@ export function MembersPanel({
                         <span className="text-xs text-muted-foreground">Not child-facing</span>
                       )}
                     </td>
-                    {canEdit && (
+                    {canEdit || squadLeave.canRequest ? (
                       <td className="py-2">
-                        <form
-                          action={endAction}
-                          onSubmit={(event) => {
-                            const ok = window.confirm(
-                              `End the membership of ${member.name}? The record is kept, not deleted.`,
-                            );
-                            if (!ok) event.preventDefault();
-                          }}
-                        >
-                          <input type="hidden" name="team_id" value={teamId} />
-                          <input type="hidden" name="membership_id" value={member.id} />
-                          <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
-                            End
-                          </Button>
-                        </form>
+                        {/* End is immediate and club_admin's alone. Everyone
+                            else on the team's staff asks instead. */}
+                        {canEdit ? (
+                          <form
+                            action={endAction}
+                            onSubmit={(event) => {
+                              const ok = window.confirm(
+                                `End the membership of ${member.name}? The record is kept, not deleted.`,
+                              );
+                              if (!ok) event.preventDefault();
+                            }}
+                          >
+                            <input type="hidden" name="team_id" value={teamId} />
+                            <input type="hidden" name="membership_id" value={member.id} />
+                            <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
+                              End
+                            </Button>
+                          </form>
+                        ) : null}
+                        {squadLeave.canRequest && !leavePending.has(member.id) ? (
+                          <LeaveRequestForm
+                            teamId={teamId}
+                            membershipId={member.id}
+                            name={member.name}
+                          />
+                        ) : null}
                       </td>
-                    )}
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

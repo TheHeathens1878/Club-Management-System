@@ -13,11 +13,13 @@ import {
 
 import type { Json } from "@club/db";
 
+import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { signPeoplePhotos } from "@/lib/avatars";
 import { getCapabilities } from "@/lib/capabilities";
 import { scorelineLabel } from "@/lib/scoreline";
 import { createClient } from "@/lib/supabase/server";
@@ -216,6 +218,17 @@ export default async function EventPage({
       response: asResponse(row.response),
       stale: row.response_stale,
     }));
+
+  // The face by the name (Adam, 2026-08-25). `event_people()` returns person
+  // ids and names but no photo, so the paths come from the CALLER'S own
+  // `people` read — the only kind `signPeoplePhotos` may be handed. A reader
+  // whom `people` RLS does not entitle to the row gets no path and therefore
+  // initials, which is the right answer rather than a failure to handle.
+  const rosterPersonIds = Array.from(new Set(roster.map((row) => row.person_id)));
+  const { data: rosterPhotoRows } = rosterPersonIds.length
+    ? await supabase.from("people").select("id,photo_path").in("id", rosterPersonIds)
+    : { data: [] as { id: string; photo_path: string | null }[] };
+  const rosterPhotos = await signPeoplePhotos(rosterPhotoRows ?? []);
 
   const organisers = roster.filter((row) => row.is_organiser);
   const players = roster.filter((row) => !row.is_organiser);
@@ -506,6 +519,11 @@ export default async function EventPage({
                 <ul className="space-y-2">
                   {organisers.map((row) => (
                     <li key={row.person_id} className="flex flex-wrap items-center gap-2 text-sm">
+                      <Avatar
+                        name={row.full_name}
+                        photoUrl={rosterPhotos.get(row.person_id) ?? null}
+                        size="sm"
+                      />
                       <span className="font-medium">{row.full_name}</span>
                       <Badge variant={responseVariant(asResponse(row.response))}>
                         {responseLabel(asResponse(row.response))}
@@ -528,9 +546,14 @@ export default async function EventPage({
                   {accepted.length === 0 ? (
                     <p className="text-muted-foreground">Nobody yet.</p>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {accepted.map((row) => (
-                        <li key={row.person_id}>
+                        <li key={row.person_id} className="flex items-center gap-2">
+                          <Avatar
+                            name={row.full_name}
+                            photoUrl={rosterPhotos.get(row.person_id) ?? null}
+                            size="sm"
+                          />
                           {row.full_name}
                           {row.response_stale ? (
                             <span
@@ -555,9 +578,14 @@ export default async function EventPage({
                   {declined.length === 0 ? (
                     <p className="text-muted-foreground">Nobody.</p>
                   ) : (
-                    <ul className="space-y-1">
+                    <ul className="space-y-1.5">
                       {declined.map((row) => (
-                        <li key={row.person_id}>
+                        <li key={row.person_id} className="flex items-center gap-2">
+                          <Avatar
+                            name={row.full_name}
+                            photoUrl={rosterPhotos.get(row.person_id) ?? null}
+                            size="sm"
+                          />
                           {row.full_name}
                           {row.response_stale ? (
                             <span
@@ -582,9 +610,17 @@ export default async function EventPage({
                   {awaiting.length === 0 ? (
                     <p className="text-muted-foreground">Everyone has answered.</p>
                   ) : (
-                    <ul className="mb-2 space-y-1">
+                    <ul className="mb-2 space-y-1.5">
                       {awaiting.map((row) => (
-                        <li key={row.person_id} className="text-muted-foreground">
+                        <li
+                          key={row.person_id}
+                          className="flex items-center gap-2 text-muted-foreground"
+                        >
+                          <Avatar
+                            name={row.full_name}
+                            photoUrl={rosterPhotos.get(row.person_id) ?? null}
+                            size="sm"
+                          />
                           {row.full_name}
                         </li>
                       ))}

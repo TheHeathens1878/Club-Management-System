@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { signPeoplePhotos } from "@/lib/avatars";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { isClubAdmin, isSafeguardingLead, nameOf, resolveNames } from "@/lib/person";
 import { resolveRoleView } from "@/lib/role-view";
@@ -30,6 +31,7 @@ import {
   MembersPanel,
   type MemberRow,
   type PendingRow,
+  type SquadLeave,
   type TeamRoleValue,
 } from "./members-panel";
 import { MatchDayPanel, type MatchDayPitch } from "./matchday-panel";
@@ -276,6 +278,7 @@ export default async function TeamPage({
   // --------------------------------------------------------------------
   let members: MemberRow[] = [];
   let pending: PendingRow[] = [];
+  let squadLeave: SquadLeave = { canRequest: false, pendingMembershipIds: [] };
   let clubAdmin = false;
   let memberSeason: { id: string; name: string } | null = null;
   let staff: StaffMember[] = [];
@@ -340,6 +343,37 @@ export default async function TeamPage({
       // fallback every row would read "Club member".
       const memberNames = await resolveNames((membershipRows ?? []).map((row) => row.person_id));
 
+      // The face by the name (Adam, 2026-08-25). Read through the CALLER'S own
+      // client, which is the whole safety of `signPeoplePhotos`: it only ever
+      // signs `photo_path` values that reader's own `people` row returned.
+      // `people` has committee/admin, self and guardian read policies and no
+      // team-staff one, so a committee sign-in sees the photos and a coach —
+      // who reads the roster through `display_name()`, not `people` — gets
+      // initials. Initials are the correct answer there, not a broken image.
+      const memberPersonIds = Array.from(
+        new Set((membershipRows ?? []).map((row) => row.person_id)),
+      );
+      const { data: memberPhotoRows } = memberPersonIds.length
+        ? await userClient.from("people").select("id,photo_path").in("id", memberPersonIds)
+        : { data: [] as { id: string; photo_path: string | null }[] };
+      const memberPhotos = await signPeoplePhotos(memberPhotoRows ?? []);
+
+      // What is already on the administrator's desk, so a row that has been
+      // reported says so instead of offering the button again.
+      // `_staff_read` / `_admin_read` decide; a reader entitled to neither
+      // simply gets nothing back, which reads as "no requests".
+      const { data: leaveRows } = await userClient
+        .from("team_membership_leave_requests")
+        .select("team_membership_id")
+        .eq("team_id", id)
+        .eq("status", "pending");
+      squadLeave = {
+        // A club administrator has End, which does it immediately; offering
+        // them the queue as well would only be a slower End.
+        canRequest: teamStaff === true && !adminAnswer,
+        pendingMembershipIds: (leaveRows ?? []).map((row) => row.team_membership_id),
+      };
+
       members = await Promise.all(
         (membershipRows ?? []).map(async (row) => {
           const childFacing = isChildFacing(row.role);
@@ -369,6 +403,7 @@ export default async function TeamPage({
             childFacing,
             dbs: dbs.data ?? (childFacing ? "missing" : null),
             safeguarding: safeguarding.data ?? (childFacing ? "missing" : null),
+            photoUrl: memberPhotos.get(row.person_id) ?? null,
           } satisfies MemberRow;
         }),
       );
@@ -947,6 +982,7 @@ export default async function TeamPage({
                   members={members}
                   pending={pending}
                   canEdit={clubAdmin}
+                  squadLeave={squadLeave}
                 />
               </CardContent>
             </Card>

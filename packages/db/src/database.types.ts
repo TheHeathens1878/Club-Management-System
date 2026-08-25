@@ -4297,6 +4297,82 @@ export type Database = {
           },
         ]
       }
+      team_membership_leave_requests: {
+        Row: {
+          created_at: string
+          decided_at: string | null
+          decided_by: string | null
+          decision_note: string | null
+          id: string
+          note: string | null
+          person_id: string
+          requested_by_person_id: string | null
+          status: string
+          team_id: string
+          team_membership_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          note?: string | null
+          // Derived from the membership by `leave_request_fill()` — sending
+          // them is pointless, and sending the wrong ones changes nothing.
+          person_id?: string
+          requested_by_person_id?: string | null
+          status?: string
+          team_id?: string
+          team_membership_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          decided_at?: string | null
+          decided_by?: string | null
+          decision_note?: string | null
+          id?: string
+          note?: string | null
+          person_id?: string
+          requested_by_person_id?: string | null
+          status?: string
+          team_id?: string
+          team_membership_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "team_membership_leave_requests_team_membership_id_fkey"
+            columns: ["team_membership_id"]
+            isOneToOne: false
+            referencedRelation: "team_memberships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_membership_leave_requests_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_membership_leave_requests_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "team_membership_leave_requests_requested_by_person_id_fkey"
+            columns: ["requested_by_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       team_memberships: {
         Row: {
           created_at: string
@@ -5374,6 +5450,13 @@ export type Database = {
         Returns: string
       }
       current_person_id: { Args: never; Returns: string }
+      decide_leave_request: {
+        Args: { p_approve: boolean; p_note?: string; p_request_id: string }
+        Returns: {
+          detail: string
+          outcome: string
+        }[]
+      }
       delete_board_post: { Args: { p_post_id: string }; Returns: undefined }
       display_name: { Args: { p_person_id: string }; Returns: string }
       due_certification_nudges: {

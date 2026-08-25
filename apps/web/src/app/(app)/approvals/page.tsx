@@ -19,6 +19,7 @@ import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
 import { DecisionPanel } from "./decision-forms";
+import { LeaveDecisionForms } from "./leave-request-forms";
 
 /**
  * The approvals queue (gap 4) — the Neon app's /admin/approvals, rebuilt.
@@ -112,6 +113,46 @@ export default async function ApprovalsPage({
   const people = new Map((peopleRows ?? []).map((p) => [p.id, p]));
   const teamNames = new Map((teamRows ?? []).map((t) => [t.id, t.name]));
 
+  // ------------------------------------------------------------------
+  // "This player has left" (Adam, 2026-08-25) — a coach's squad change,
+  // waiting for the administrator who is the only one who may make it.
+  //
+  // Its own queue rather than a row among the account requests: approving one
+  // ENDS A MEMBERSHIP, which is a different act from granting someone a role,
+  // and `decide_leave_request()` is a different RPC. The account-request queue
+  // below is untouched.
+  // ------------------------------------------------------------------
+  const { data: leaveRows } = await supabase
+    .from("team_membership_leave_requests")
+    .select("id,person_id,team_id,requested_by_person_id,note,created_at")
+    .eq("status", "pending")
+    .order("created_at");
+  const leaveRequests = leaveRows ?? [];
+
+  const leavePersonIds = Array.from(
+    new Set(
+      leaveRequests
+        .flatMap((row) => [row.person_id, row.requested_by_person_id])
+        .filter((value): value is string => !!value),
+    ),
+  );
+  const leaveTeamIds = Array.from(new Set(leaveRequests.map((row) => row.team_id)));
+  const [{ data: leavePeopleRows }, { data: leaveTeamRows }] = await Promise.all([
+    leavePersonIds.length
+      ? supabase.from("people").select("id,first_name,last_name,preferred_name").in("id", leavePersonIds)
+      : Promise.resolve({ data: [] as { id: string; first_name: string; last_name: string; preferred_name: string | null }[] }),
+    leaveTeamIds.length
+      ? supabase.from("teams").select("id,name").in("id", leaveTeamIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  ]);
+  const leaveNames = new Map(
+    (leavePeopleRows ?? []).map((p) => [
+      p.id,
+      `${p.preferred_name || p.first_name} ${p.last_name}`.trim(),
+    ]),
+  );
+  const leaveTeams = new Map((leaveTeamRows ?? []).map((t) => [t.id, t.name]));
+
   // One call per distinct date of birth, not per request.
   const dobs = Array.from(
     new Set((peopleRows ?? []).map((p) => p.dob).filter((d): d is string => !!d)),
@@ -171,6 +212,70 @@ export default async function ApprovalsPage({
               >
                 Review registrations
               </Link>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {!decided && leaveRequests.length > 0 ? (
+          <Card>
+            <CardHeader className="p-4 pb-3 lg:p-6 lg:pb-3">
+              <CardTitle className="text-base">
+                Squad changes ({leaveRequests.length})
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                A coach has reported that a player has left. Approving one ends that team
+                membership — the same act as End on the team&apos;s Squad tab, which is why it is
+                yours alone. The record is kept either way; nothing is deleted, and the coach is
+                told what you decided.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+              <ul className="space-y-4">
+                {leaveRequests.map((row) => {
+                  const who = leaveNames.get(row.person_id) ?? "Club member";
+                  const asker = row.requested_by_person_id
+                    ? (leaveNames.get(row.requested_by_person_id) ?? "A coach")
+                    : "A coach";
+                  return (
+                    <li key={row.id} className="space-y-3 rounded-lg border p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">
+                            <Link href={`/people/${row.person_id}`} className="hover:underline">
+                              {who}
+                            </Link>
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {leaveTeams.get(row.team_id) ?? "Team"} · reported by {asker} ·{" "}
+                            {formatStamp(row.created_at)}
+                          </p>
+                        </div>
+                        <Link
+                          href={`/teams/${row.team_id}?tab=squad`}
+                          className={
+                            buttonVariants({ variant: "outline", size: "sm" }) +
+                            " min-h-[44px] lg:min-h-0"
+                          }
+                        >
+                          Open squad
+                        </Link>
+                      </div>
+
+                      {row.note ? (
+                        <p className="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">
+                          {row.note}
+                        </p>
+                      ) : null}
+
+                      <LeaveDecisionForms
+                        requestId={row.id}
+                        personId={row.person_id}
+                        personName={who}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
             </CardContent>
           </Card>
         ) : null}
