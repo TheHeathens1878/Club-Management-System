@@ -10,10 +10,13 @@
  *     a pending `block`/`training` booking on a pitch, for a team they staff,
  *     booked as themselves. Anything else is a 42501.
  *   - `bookings_team_guard()` is a BEFORE trigger, so it runs ahead of the
- *     WITH CHECK and raises P0001 with the sentence the coach needs
- *     ("only a club administrator can confirm a pitch booking"). Those
- *     messages are passed through verbatim — rewriting them would throw away
- *     the only explanation the user gets.
+ *     WITH CHECK. On INSERT it PINS a non-administrator's pitch booking to
+ *     `pending` whatever this file posts (Adam, 2026-08-25: a coach's booking
+ *     goes to an admin for approval), so the rule survives any client that
+ *     talks to the API directly. On UPDATE it raises P0001 with the sentence
+ *     the coach needs ("only a club administrator can confirm a pitch
+ *     booking"). Those messages are passed through verbatim — rewriting them
+ *     would throw away the only explanation the user gets.
  *   - `bookings_no_overlap`, the GiST exclusion constraint, is the single
  *     arbiter of whether a pitch is free. `booking_has_conflict()` is asked
  *     first so a clash can be named before anything is written, but the
@@ -189,7 +192,8 @@ export async function createPitchBooking(
   }
 
   // Only a club administrator may ask for a confirmed booking; for anyone else
-  // the policy pins status to 'pending' regardless of what was posted.
+  // `bookings_team_guard()` pins status to 'pending' regardless of what was
+  // posted, so this line is a courtesy to the form, not the rule.
   const wantsConfirmed = isAdmin && text(formData, "status", 20) === "confirmed";
   const status = wantsConfirmed ? "confirmed" : "pending";
 
@@ -275,7 +279,7 @@ export async function createPitchBooking(
   const outcome =
     status === "confirmed"
       ? `${what} confirmed.`
-      : `${what} requested. A club administrator will confirm it.`;
+      : `${what} requested. It has gone to a club administrator for approval — the slot is held for you and you will be told when it is decided.`;
 
   return { notice: `${outcome}${sharingWarning}`, teamId };
 }

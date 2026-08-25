@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
 
@@ -133,8 +134,13 @@ export default async function LobbyPage() {
   const results = resultsResult.data ?? [];
   const week = weekResult.data ?? [];
   // Adam, 2026-08-25: only admins post to the club noticeboard (coaches keep
-  // their own team's lobby on the team page).
-  const canPost = capabilities.isClubAdmin || capabilities.isCommittee;
+  // their own team's lobby on the team page) — and only while wearing the
+  // admin hat (Adam, later: "Coaches should not be able to post to the club
+  // lobby, so remove that option - just admins"). An admin looking at the
+  // lobby as a coach or a parent sees what a coach or a parent sees.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const canPost =
+    (capabilities.isClubAdmin || capabilities.isCommittee) && (view === "admin" || view === null);
   // Presentation only: the phone leads with the pinned notice, so the board is
   // split for that layout. The desktop list below still shows every post.
   const pinnedPost = posts.find((post) => post.pinned);

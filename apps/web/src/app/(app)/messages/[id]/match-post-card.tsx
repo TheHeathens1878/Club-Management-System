@@ -4,7 +4,10 @@
  * The "game needs a referee" card (Adam, 2026-08-25, from his WhatsApp
  * screenshot — "but use better icons"): the posted details as icon rows, and
  * a Claim button an approved referee can press once. A claimed card says who
- * got the game.
+ * got the game — and (Adam, later that evening: "refs and coaches can remove
+ * their claim to a game and it reopens it") offers Release to the referee who
+ * holds it, to the coach who posted it, and to a club admin. Released, the
+ * card is Referee needed again.
  */
 
 import { useActionState } from "react";
@@ -18,9 +21,10 @@ import {
   Timer,
   Trophy,
   UserCheck,
+  UserMinus,
 } from "lucide-react";
 
-import { claimMatchGame, type RefereeActionState } from "./referee-actions";
+import { claimMatchGame, releaseMatchGame, type RefereeActionState } from "./referee-actions";
 import type { MatchPostView } from "./thread-data";
 
 const EMPTY: RefereeActionState = {};
@@ -42,8 +46,19 @@ function kickoffLabel(iso: string): string {
   return `${day}, ${time} KO`;
 }
 
-export function MatchPostCard({ post, isReferee }: { post: MatchPostView; isReferee: boolean }) {
+export function MatchPostCard({
+  post,
+  isReferee,
+  myPersonId,
+  isAdmin,
+}: {
+  post: MatchPostView;
+  isReferee: boolean;
+  myPersonId: string | null;
+  isAdmin: boolean;
+}) {
   const [state, action, claiming] = useActionState(claimMatchGame, EMPTY);
+  const [releaseState, releaseAction, releasing] = useActionState(releaseMatchGame, EMPTY);
 
   const rows: { icon: typeof Trophy; text: string }[] = [
     { icon: Trophy, text: post.fixtureText },
@@ -60,6 +75,14 @@ export function MatchPostCard({ post, isReferee }: { post: MatchPostView; isRefe
     ...(post.kickoffAt ? [{ icon: CalendarClock, text: kickoffLabel(post.kickoffAt) }] : []),
     ...(post.feeText ? [{ icon: Banknote, text: post.feeText }] : []),
   ];
+
+  // Who may hand the game back — mirrors the guard trigger, so the button is
+  // never offered to someone the database would refuse.
+  const canRelease =
+    !!post.claimedByName &&
+    !!myPersonId &&
+    (myPersonId === post.claimedByPersonId || myPersonId === post.postedByPersonId || isAdmin);
+  const releaseLabel = myPersonId === post.claimedByPersonId ? "I can't referee this" : "Release game";
 
   return (
     <div className="my-1 min-w-[15rem] rounded-lg border bg-secondary/40 p-2.5">
@@ -80,10 +103,38 @@ export function MatchPostCard({ post, isReferee }: { post: MatchPostView; isRefe
 
       <div className="mt-2.5 border-t pt-2">
         {post.claimedByName ? (
-          <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
-            <BadgeCheck className="h-4 w-4 shrink-0" aria-hidden />
-            Referee obtained — {post.claimedByName}
-          </p>
+          <div className="space-y-1.5">
+            <p className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+              <BadgeCheck className="h-4 w-4 shrink-0" aria-hidden />
+              Referee obtained — {post.claimedByName}
+            </p>
+            {canRelease && (
+              <form action={releaseAction}>
+                <input type="hidden" name="post_id" value={post.id} />
+                <button
+                  type="submit"
+                  disabled={releasing}
+                  className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border bg-card px-3 text-xs font-semibold text-foreground transition-colors hover:bg-secondary disabled:opacity-60 lg:min-h-0 lg:py-1.5"
+                >
+                  {releasing ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                  ) : (
+                    <UserMinus className="h-3.5 w-3.5" aria-hidden />
+                  )}
+                  {releaseLabel}
+                </button>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  The game goes back to Referee needed for the next referee to claim.
+                </p>
+                {releaseState.error && (
+                  <p className="mt-1.5 text-xs text-destructive">{releaseState.error}</p>
+                )}
+                {releaseState.notice && (
+                  <p className="mt-1.5 text-xs text-emerald-700">{releaseState.notice}</p>
+                )}
+              </form>
+            )}
+          </div>
         ) : isReferee ? (
           <form action={action}>
             <input type="hidden" name="post_id" value={post.id} />
