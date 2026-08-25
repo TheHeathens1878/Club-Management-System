@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { Baby, ShieldCheck, Users } from "lucide-react";
+import { Baby, Contact, ShieldCheck, Users } from "lucide-react";
 
 import type { Database, Json } from "@club/db";
 
@@ -20,8 +20,10 @@ import { ageGroupFromDob } from "@/lib/waiting-list";
 import {
   AddChildForm,
   AppAccessForm,
+  ChildDetailsForm,
   RegisterForm,
   WithdrawForm,
+  type ChildDetails,
   type TeamOption,
 } from "./family-forms";
 
@@ -42,10 +44,12 @@ import {
  * knows their child's birthday, and a screen that prints children's dates of
  * birth is a screen that leaks them over someone's shoulder.
  *
- * There is no "edit my child" here on purpose. `people` has a guardian READ
- * policy and no guardian WRITE policy (P1.2 / SG-4), so a correction goes
- * through the club — and the card says so rather than offering a button that
- * the database would refuse.
+ * Editing is CONTACT ONLY (Adam, 2026-08-25), through
+ * `update_child_details()`. `people` still has a guardian READ policy and no
+ * guardian WRITE policy (P1.2 / SG-4) — the RPC is the whole authority — and
+ * the name and the date of birth are not fields on the form because they are
+ * not arguments to the function. The card says so rather than offering a
+ * button the database would refuse.
  */
 
 export const dynamic = "force-dynamic";
@@ -71,6 +75,20 @@ function parseTeams(value: Json | null | undefined): ChildTeam[] {
     out.push({ team_id: id, team_name: name, role: typeof role === "string" ? role : "player" });
   }
   return out;
+}
+
+function addressField(address: Json | null | undefined, key: string): string {
+  if (!address || typeof address !== "object" || Array.isArray(address)) return "";
+  const value = (address as Record<string, Json | undefined>)[key];
+  return typeof value === "string" ? value : "";
+}
+
+/** "1 Lead Street, Sale, M33 1AA" — the tick-box's label, so it is not a guess. */
+function addressLine(address: Json | null | undefined): string | null {
+  const parts = ["line1", "line2", "town", "postcode"]
+    .map((key) => addressField(address, key))
+    .filter((part) => part !== "");
+  return parts.length > 0 ? parts.join(", ") : null;
 }
 
 function ageGroupHint(dob: string | null): string {
@@ -213,6 +231,56 @@ export default async function FamilyPage() {
       .maybeSingle(),
   ]);
 
+  // ------------------------------------------------------------------
+  // The contact half of each child's record, for the edit form, plus the
+  // caller's OWN address — the thing "Same address as lead contact" copies.
+  // Both reads are the caller's: the children under `people_guardian_read`,
+  // the caller under `people_self_read`. Nothing here is filtered by hand.
+  // ------------------------------------------------------------------
+  const [childContactResult, leadResult] = await Promise.all([
+    childIds.length > 0
+      ? supabase.from("people").select("id,preferred_name,email,phone,address").in("id", childIds)
+      : Promise.resolve({
+          data: [] as {
+            id: string;
+            preferred_name: string | null;
+            email: string | null;
+            phone: string | null;
+            address: Json | null;
+          }[],
+          error: null,
+        }),
+    personId
+      ? supabase.from("people").select("address").eq("id", personId).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+  ]);
+
+  const leadAddress = leadResult.data?.address ?? null;
+  const leadAddressLine = addressLine(leadAddress);
+  const detailsByChild = new Map(
+    (childContactResult.data ?? []).map((row) => {
+      const line1 = addressField(row.address, "line1");
+      const town = addressField(row.address, "town");
+      const postcode = addressField(row.address, "postcode");
+      const line2 = addressField(row.address, "line2");
+      const hasOwn = !!(line1 || line2 || town || postcode);
+      const details: ChildDetails = {
+        preferredName: row.preferred_name ?? "",
+        email: row.email ?? "",
+        phone: row.phone ?? "",
+        line1,
+        line2,
+        town,
+        postcode,
+        // Ticked when the child's address IS the lead contact's, and for a
+        // child with no address of their own — the common case, and the one
+        // the tick-box exists to make one click long.
+        sameAsLead: !!leadAddressLine && (!hasOwn || addressLine(row.address) === leadAddressLine),
+      };
+      return [row.id, details] as const;
+    }),
+  );
+
   const consentByChild = new Map(
     (consentsResult.data ?? []).map(
       (row) => [row.child_person_id, { id: row.id, grantedAt: row.granted_at }] as const,
@@ -236,6 +304,11 @@ export default async function FamilyPage() {
         {registrationsError && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {registrationsError}
+          </p>
+        )}
+        {childContactResult.error && (
+          <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {childContactResult.error.message}
           </p>
         )}
         {consentsResult.error && (
@@ -308,6 +381,29 @@ export default async function FamilyPage() {
                         ))}
                       </div>
                     )}
+                  </div>
+
+                  <div className="space-y-3 border-t pt-4">
+                    <p className="mb-1 flex items-center gap-2 text-xs uppercase text-muted-foreground">
+                      <Contact className="h-3.5 w-3.5" /> Contact details
+                    </p>
+                    <ChildDetailsForm
+                      childPersonId={child.person_id}
+                      childName={name}
+                      initial={
+                        detailsByChild.get(child.person_id) ?? {
+                          preferredName: child.preferred_name ?? "",
+                          email: "",
+                          phone: "",
+                          line1: "",
+                          line2: "",
+                          town: "",
+                          postcode: "",
+                          sameAsLead: !!leadAddressLine,
+                        }
+                      }
+                      leadAddressLine={leadAddressLine}
+                    />
                   </div>
 
                   <div className="space-y-3 border-t pt-4">

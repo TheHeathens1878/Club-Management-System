@@ -19,12 +19,16 @@
  *     (`registrations_guardian_withdraw` / `registrations_self_withdraw`, both
  *     WITH CHECK `status = 'withdrawn'`).
  *
- * There is deliberately no "edit my child" action: `people` has a guardian
- * READ policy and no guardian INSERT or UPDATE, by design (P1.2 / SG-4). A
- * correction goes through the club, and the page says so.
+ *   · `update_child_details()` is the one narrow door onto a child's record
+ *     (Adam, 2026-08-25). `people` still has no guardian INSERT or UPDATE
+ *     policy — the RPC is SECURITY DEFINER and checks the live guardianship
+ *     itself — and it accepts CONTACT details only. Name and date of birth are
+ *     not parameters, so there is nothing here to send them with.
  */
 
 import { revalidatePath } from "next/cache";
+
+import type { Json } from "@club/db";
 
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -124,6 +128,80 @@ export async function registerForTeam(
 
   revalidatePath(PATH);
   return { notice: "Registration sent. A club administrator will review it." };
+}
+
+/**
+ * A guardian corrects their child's contact details (Adam, 2026-08-25).
+ *
+ * "Same address as lead contact" is resolved HERE, from the caller's own
+ * `people` row, not from whatever the browser posted: the tick-box is a
+ * statement about a household, and the address it stands for is the one the
+ * club currently holds for the signed-in guardian. Unticked, the four fields
+ * are written as the same object shape the join wizard writes — which is what
+ * lets two separated parents keep two different addresses for the same child.
+ */
+export async function updateChildDetails(
+  _prev: FamilyActionState,
+  formData: FormData,
+): Promise<FamilyActionState> {
+  const childId = String(formData.get("child_person_id") ?? "").trim();
+  if (!childId) return { error: "Missing the child these details belong to." };
+
+  const preferred = String(formData.get("preferred_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const sameAsLead = String(formData.get("same_as_lead") ?? "") === "yes";
+
+  const supabase = await createClient();
+
+  let address: Json | undefined;
+  if (sameAsLead) {
+    const { data: personId } = await supabase.rpc("current_person_id");
+    const { data: lead } = personId
+      ? await supabase.from("people").select("address").eq("id", personId).maybeSingle()
+      : { data: null };
+    const leadAddress = lead?.address ?? null;
+    if (!leadAddress) {
+      return {
+        error:
+          "There is no address on your own record to copy. Add yours on My profile, or untick the box and type your child's address.",
+      };
+    }
+    address = leadAddress;
+  } else {
+    const line1 = String(formData.get("address_line1") ?? "").trim();
+    const line2 = String(formData.get("address_line2") ?? "").trim();
+    const town = String(formData.get("address_town") ?? "").trim();
+    const postcode = String(formData.get("address_postcode") ?? "").trim();
+    const anyAddress = !!(line1 || line2 || town || postcode);
+    if (anyAddress && (!line1 || !town || !postcode)) {
+      return { error: "An address needs at least the first line, the town and the postcode." };
+    }
+    if (anyAddress) address = { line1, line2: line2 || null, town, postcode };
+  }
+
+  const { error } = await supabase.rpc("update_child_details", {
+    p_child_person_id: childId,
+    p_email: email || undefined,
+    p_phone: phone || undefined,
+    p_address: address,
+    p_preferred_name: preferred || undefined,
+  });
+
+  if (error) {
+    // P0001 is the SG-4 guard, or the email check, speaking for the parent.
+    if (error.code === "P0001") return { error: error.message };
+    if (error.code === "42501") {
+      return {
+        error:
+          "Your sign-in is not linked to a member record yet, so the club cannot record a change from you. Ask the club to link your account.",
+      };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath(PATH);
+  return { notice: "Saved." };
 }
 
 export async function withdrawRegistration(
