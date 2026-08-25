@@ -100,12 +100,13 @@ select set_config('test.member_person',
 -- 1
 select has_table('public', 'person_roles', 'public.person_roles exists');
 
--- 2 — the closed set, in the order PLAN.md P1.4 lists them.
+-- 2 — the closed set, in the order PLAN.md P1.4 lists them, plus referee
+-- (20260825020000 — Adam's referee programme).
 select enum_has_labels(
   'public', 'app_role',
   array['club_admin', 'safeguarding_lead', 'coach', 'staff', 'member',
-        'parent', 'hirer'],
-  'app_role carries exactly the seven roles SAFEGUARDING.md §1.3 tabulates'
+        'parent', 'hirer', 'referee'],
+  'app_role carries the seven §1.3 roles plus the 2026-08-25 referee hat'
 );
 
 -- 3 — a SEPARATE type from the baseline's user_role, which is untouched.

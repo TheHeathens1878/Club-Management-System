@@ -27,6 +27,7 @@ select throws_ok(
      values ('5e1f5e1f-aaaa-4111-8111-000000000002', 'rp-fifteen@test.invalid',
              jsonb_build_object('full_name', 'Finn Fifteen',
                                 'dob', to_char(current_date - interval '15 years', 'YYYY-MM-DD'))) $$,
+  'P0001', null,
   'a 15-year-old without guardian consent is still refused (SG-10)');
 
 -- The rest of the cast.
