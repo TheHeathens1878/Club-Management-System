@@ -233,7 +233,7 @@ export function FixturesSummary({
         })}
       </ul>
       <Link
-        href={`/teams/${teamId}?tab=fixtures`}
+        href={`/teams/${teamId}?tab=matchday`}
         className="text-sm font-medium text-primary underline-offset-4 hover:underline"
       >
         All fixtures

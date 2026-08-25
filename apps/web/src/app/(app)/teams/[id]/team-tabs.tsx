@@ -9,7 +9,7 @@ import Link from "next/link";
  * sideways on a phone instead of wrapping into two rows.
  */
 
-export type TeamTabKey = "chat" | "overview" | "members" | "fixtures" | "bookings" | "notices" | "settings";
+export type TeamTabKey = "matchday" | "board" | "squad" | "training" | "subs" | "settings";
 
 export type TeamTab = { key: TeamTabKey; label: string };
 
