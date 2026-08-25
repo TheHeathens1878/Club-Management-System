@@ -15,6 +15,13 @@
  * cannot leak a conversation the reader is not in, and an upload cannot land
  * outside a conversation the uploader is active in.
  *
+ * Typing `@` opens a picker of the people actually in this conversation, and
+ * choosing one writes `@First Last` into the box. Arrow keys move, Enter
+ * chooses — and, because Enter never sends here, choosing a name is all Enter
+ * can ever do — Escape closes, and on a phone the rows are 44px targets. Who
+ * was really mentioned is settled on the server against the live participant
+ * list; this picker is a convenience, not the authority.
+ *
  * Safeguarding shape (P5.1/P5.2): deleted and redacted bodies render as
  * tombstones EVERYWHERE, quotes included, via `visibleBody()`; announcement
  * read-only and the SG-9 banner are handled by the server page; reporting a
@@ -46,6 +53,14 @@ import {
 } from "lucide-react";
 
 import { Textarea } from "@/components/ui/field";
+import {
+  applyMention,
+  filterCandidates,
+  findMentionQuery,
+  splitMentions,
+  type MentionCandidate,
+  type MentionQuery,
+} from "@/lib/mentions";
 import { createClient } from "@/lib/supabase/client";
 
 import {
@@ -110,6 +125,7 @@ export function ThreadClient({
   canPost,
   canReact,
   readOnlyNotice,
+  mentionables = [],
   matchPosts = {},
   isReferee = false,
   isRefereesGroup = false,
@@ -129,6 +145,8 @@ export function ThreadClient({
   canPost: boolean;
   canReact: boolean;
   readOnlyNotice: string | null;
+  /** Who `@` may name: the LIVE participants, minus yourself. */
+  mentionables?: MentionCandidate[];
   /** The Referees group's game cards, keyed by message id. */
   matchPosts?: Record<string, MatchPostView>;
   isReferee?: boolean;
@@ -156,6 +174,9 @@ export function ThreadClient({
   const [reportFor, setReportFor] = useState<string | null>(null);
   /** Phone only: which message has its actions open (there is no hover). */
   const [actionsFor, setActionsFor] = useState<string | null>(null);
+  /** The half-typed `@…` under the caret, and which row of the picker is armed. */
+  const [mentionSpan, setMentionSpan] = useState<MentionQuery | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [sendState, sendAction, sending] = useActionState(sendMessage, EMPTY);
   const [reportState, reportAction] = useActionState(reportMessage, EMPTY);
   const formRef = useRef<HTMLFormElement>(null);
@@ -429,6 +450,92 @@ export function ThreadClient({
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // @mentions in the composer.
+  //
+  // The textarea is uncontrolled (the form action reads its value at submit),
+  // so the picker reads the caret out of the element and writes the chosen name
+  // back into it. Only the *span* being typed lives in React state.
+  // ---------------------------------------------------------------------------
+  const MENTION_LIMIT = 6;
+  const mentionMatches = useMemo(
+    () => (mentionSpan ? filterCandidates(mentionables, mentionSpan.query).slice(0, MENTION_LIMIT) : []),
+    [mentionSpan, mentionables],
+  );
+
+  const closeMentions = useCallback(() => {
+    setMentionSpan(null);
+    setMentionIndex(0);
+  }, []);
+
+  const syncMentions = useCallback(() => {
+    const el = textRef.current;
+    if (!el || mentionables.length === 0) return;
+    const span = findMentionQuery(el.value, el.selectionStart ?? el.value.length);
+    setMentionSpan(span);
+    setMentionIndex(0);
+  }, [mentionables.length]);
+
+  const chooseMention = useCallback(
+    (candidate: MentionCandidate) => {
+      const el = textRef.current;
+      if (!el || !mentionSpan) return;
+      const next = applyMention(el.value, mentionSpan, candidate.name);
+      el.value = next.text;
+      el.focus();
+      el.setSelectionRange(next.caret, next.caret);
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+      closeMentions();
+    },
+    [mentionSpan, closeMentions],
+  );
+
+  /**
+   * Enter chooses a name and NOTHING else. It cannot send: this is a textarea,
+   * so Enter's own default is a new line, and Send is the only submit (Adam,
+   * 2026-08-25). With the picker open we take that new line away and use the
+   * key to pick; with it closed the new line is left exactly as it was.
+   */
+  const onComposerKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (!mentionSpan) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMentions();
+        return;
+      }
+      if (mentionMatches.length === 0) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        chooseMention(mentionMatches[Math.min(mentionIndex, mentionMatches.length - 1)]!);
+      }
+    },
+    [mentionSpan, mentionMatches, mentionIndex, chooseMention, closeMentions],
+  );
+
+  /**
+   * Who a BUBBLE may show as mentioned: everyone the thread has a name for,
+   * people who have since left included — an old message keeps naming whom it
+   * named. The server decided long ago who was really mentioned; this only
+   * decides where the emphasis goes.
+   */
+  const renderCandidates = useMemo<MentionCandidate[]>(
+    () => Object.entries(names).map(([person_id, name]) => ({ person_id, name })),
+    [names],
+  );
 
   // ---------------------------------------------------------------------------
   // Reactions: optimistic toggle, server settles it.
@@ -814,7 +921,11 @@ export function ThreadClient({
                     ) : (
                       <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
                         {body.state === "ok" ? (
-                          body.text
+                          <MentionText
+                            text={body.text}
+                            candidates={renderCandidates}
+                            myPersonId={myPersonId}
+                          />
                         ) : (
                           <span className="italic text-muted-foreground">{body.text}</span>
                         )}
@@ -973,7 +1084,44 @@ export function ThreadClient({
             </p>
           )}
 
-          <div className="flex items-end gap-2">
+          <div className="relative flex items-end gap-2">
+            {mentionSpan && mentionMatches.length > 0 && (
+              /* Above the box, never over the thread's last line: the member is
+                 looking at what they are typing. Rows are 44px so a thumb can
+                 land on one; the armed row is named by aria-activedescendant so
+                 a screen reader hears the same arrow-key move a sighted user
+                 sees. */
+              <ul
+                id="mention-picker"
+                role="listbox"
+                aria-label="Mention someone in this conversation"
+                className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-64 overflow-y-auto rounded-xl border bg-card py-1 shadow-lg"
+              >
+                {mentionMatches.map((candidate, i) => (
+                  <li key={candidate.person_id}>
+                    <button
+                      id={`mention-option-${i}`}
+                      type="button"
+                      role="option"
+                      aria-selected={i === mentionIndex}
+                      // Keep the caret in the box: without this the mousedown
+                      // blurs the textarea and the span we are about to replace
+                      // is gone before the click lands.
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => chooseMention(candidate)}
+                      onMouseEnter={() => setMentionIndex(i)}
+                      className={
+                        "flex min-h-[44px] w-full items-center px-3 text-left text-sm " +
+                        (i === mentionIndex ? "bg-secondary font-semibold" : "hover:bg-secondary/60")
+                      }
+                    >
+                      <span className="mr-1 text-muted-foreground">@</span>
+                      {candidate.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <label
               className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border text-muted-foreground hover:bg-secondary lg:h-9 lg:w-9"
               title="Attach a photo"
@@ -996,10 +1144,26 @@ export function ThreadClient({
               name="body"
               rows={1}
               required
-              placeholder="Write a message…"
+              placeholder={
+                mentionables.length > 0 ? "Write a message… (@ to mention someone)" : "Write a message…"
+              }
               className="max-h-40 min-h-[44px] flex-1 resize-none lg:min-h-[2.25rem]"
-              onChange={announceTyping}
+              role={mentionSpan && mentionMatches.length > 0 ? "combobox" : undefined}
+              aria-expanded={mentionSpan !== null && mentionMatches.length > 0}
+              aria-controls={mentionSpan && mentionMatches.length > 0 ? "mention-picker" : undefined}
+              aria-activedescendant={
+                mentionSpan && mentionMatches.length > 0 ? `mention-option-${mentionIndex}` : undefined
+              }
+              aria-autocomplete="list"
+              onChange={() => {
+                announceTyping();
+                syncMentions();
+              }}
               onInput={autoGrow}
+              onKeyDown={onComposerKeyDown}
+              onKeyUp={syncMentions}
+              onClick={syncMentions}
+              onBlur={closeMentions}
             />
             <button
               type="submit"
@@ -1017,6 +1181,51 @@ export function ThreadClient({
         </form>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A message body with its `@mentions` picked out.
+ *
+ * Emphasis, not a link. A conversation can name someone whose member page the
+ * reader is not allowed to open, and a mention that turned into a route would
+ * be telling every reader that such a page exists. The chip is bold with a
+ * tinted pill — weight and shape carry it, so it is not a colour-only signal —
+ * and being mentioned YOURSELF is marked out further, and said aloud for a
+ * screen reader, because that is the one a member is scanning for.
+ */
+function MentionText({
+  text,
+  candidates,
+  myPersonId,
+}: {
+  text: string;
+  candidates: MentionCandidate[];
+  myPersonId: string;
+}) {
+  const segments = useMemo(() => splitMentions(text, candidates), [text, candidates]);
+  if (segments.length === 1 && segments[0]!.person_id === null) return <>{text}</>;
+  return (
+    <>
+      {segments.map((segment, i) =>
+        segment.person_id === null ? (
+          <span key={i}>{segment.text}</span>
+        ) : (
+          <strong
+            key={i}
+            className={
+              "rounded px-1 font-semibold " +
+              (segment.person_id === myPersonId
+                ? "bg-primary/25 text-primary underline decoration-primary/60 underline-offset-2"
+                : "bg-primary/10 text-primary")
+            }
+          >
+            {segment.text}
+            {segment.person_id === myPersonId && <span className="sr-only"> (this mentions you)</span>}
+          </strong>
+        ),
+      )}
+    </>
   );
 }
 

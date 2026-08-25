@@ -2693,6 +2693,42 @@ export type Database = {
           },
         ]
       }
+      message_mentions: {
+        Row: {
+          created_at: string
+          id: string
+          message_id: string
+          person_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message_id: string
+          person_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message_id?: string
+          person_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_mentions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_mentions_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_reactions: {
         Row: {
           created_at: string
@@ -5799,6 +5835,10 @@ export type Database = {
         Returns: number
       }
       mark_notification_read: { Args: { p_id: string }; Returns: undefined }
+      mention_people: {
+        Args: { p_message_id: string; p_person_ids: string[] }
+        Returns: number
+      }
       matchday_fixtures: {
         Args: { p_from: string; p_to: string }
         Returns: {
