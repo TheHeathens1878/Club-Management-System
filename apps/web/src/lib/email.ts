@@ -15,6 +15,16 @@ if (!configured) {
   console.warn("Microsoft Graph email not configured — emails will not be sent.");
 }
 
+/**
+ * Whether Graph can actually send. `sendEmail` skips quietly when it cannot,
+ * which is right for a booking confirmation and wrong for the Supabase Send
+ * Email hook: an auth email that is silently dropped locks somebody out, so
+ * that route checks this first and answers Auth with a 500.
+ */
+export function isEmailConfigured(): boolean {
+  return configured;
+}
+
 function getGraphClient(): Client {
   const credential = new ClientSecretCredential(TENANT_ID, CLIENT_ID, CLIENT_SECRET);
   const authProvider = new TokenCredentialAuthenticationProvider(credential, {
@@ -37,6 +47,13 @@ type SendParams = {
    * category a member may switch off.
    */
   category?: CommsCategory;
+  /**
+   * What to record in `outbound_messages` in place of the body. A sign-in,
+   * confirmation or reset link IS a live credential; the club's record needs
+   * to show that the email was sent, not to hold the key in a table an admin
+   * can read. Defaults to the body itself, which is right for everything else.
+   */
+  logBody?: string;
   /** Optional provenance for the `outbound_messages` row. */
   template?: string;
   entity?: string;
@@ -66,7 +83,7 @@ export async function sendEmail(params: SendParams) {
   }
 
   const category: CommsCategory = params.category ?? "transactional";
-  const logBody = params.text ?? params.html;
+  const logBody = params.logBody ?? params.text ?? params.html;
 
   const enqueueFor = async (address: string) => ({
     address,

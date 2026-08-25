@@ -65,6 +65,9 @@ export async function middleware(request: NextRequest) {
     // id; the cron route checks CRON_SECRET.
     path.startsWith("/api/sumup") ||
     path.startsWith("/api/cron") ||
+    // Supabase Auth's Send Email hook posts here with no session at all; it
+    // guards itself with the Standard Webhooks signature on every request.
+    path.startsWith("/api/auth") ||
     path.startsWith("/portal/pay/return");
 
   if (!user && !isPublic) {
