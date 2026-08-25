@@ -42,6 +42,7 @@ import {
   CheckCheck,
   Clock3,
   CornerUpLeft,
+  Eraser,
   Flag,
   ImagePlus,
   Loader2,
@@ -67,6 +68,7 @@ import {
   deleteMessage,
   markRead,
   openAttachmentMessage,
+  purgeMessage,
   reportMessage,
   sendMessage,
   toggleReaction,
@@ -130,6 +132,7 @@ export function ThreadClient({
   isReferee = false,
   isRefereesGroup = false,
   isAdmin = false,
+  isSuperUser = false,
 }: {
   conversationId: string;
   conversationType: string;
@@ -153,6 +156,13 @@ export function ThreadClient({
   /** The Referees group: games are requested through the form, not the chat. */
   isRefereesGroup?: boolean;
   isAdmin?: boolean;
+  /**
+   * The club owner. Adds one item to the actions: a permanent delete, which is
+   * the only hard delete of a message that exists (SAFEGUARDING.md SG-2, and
+   * the deliberate exception recorded there). Everyone else's delete is still
+   * the tombstone it always was.
+   */
+  isSuperUser?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -172,6 +182,10 @@ export function ThreadClient({
   const [actionError, setActionError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [reportFor, setReportFor] = useState<string | null>(null);
+  /** Super user only: which message has the permanent-delete reason box open. */
+  const [purgeFor, setPurgeFor] = useState<string | null>(null);
+  /** Ids this session has destroyed, so the bubble goes at once. */
+  const [purged, setPurged] = useState<Set<string>>(() => new Set());
   /** Phone only: which message has its actions open (there is no hover). */
   const [actionsFor, setActionsFor] = useState<string | null>(null);
   /** The half-typed `@…` under the caret, and which row of the picker is armed. */
@@ -179,6 +193,9 @@ export function ThreadClient({
   const [mentionIndex, setMentionIndex] = useState(0);
   const [sendState, sendAction, sending] = useActionState(sendMessage, EMPTY);
   const [reportState, reportAction] = useActionState(reportMessage, EMPTY);
+  const [purgeState, purgeAction] = useActionState(purgeMessage, EMPTY);
+  /** Which message the open purge form is about, read back when it succeeds. */
+  const purgedRef = useRef<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -211,8 +228,12 @@ export function ThreadClient({
         });
       }
     }
+    // A purged message has no row to come back to; drop it here as well as
+    // refreshing, because the copy this component is holding came from a read
+    // that happened before it was destroyed.
+    for (const id of purged) byId.delete(id);
     return Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
-  }, [earlier, initialMessages, live, pending, myPersonId]);
+  }, [earlier, initialMessages, live, pending, myPersonId, purged]);
 
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const confirmedIds = useMemo(() => {
@@ -693,6 +714,16 @@ export function ThreadClient({
     return map;
   }, [attachments]);
 
+  // A purge is the one action here whose row is really gone: nothing arrives
+  // over realtime to say so, so the thread is told directly and re-read.
+  useEffect(() => {
+    if (!purgeState.notice) return;
+    const id = purgedRef.current;
+    if (id) setPurged((prev) => new Set(prev).add(id));
+    purgedRef.current = null;
+    router.refresh();
+  }, [purgeState, router]);
+
   const typingNames = Object.values(typing).map((t) => t.name);
   const showSenderNames = conversationType !== "dm";
 
@@ -704,7 +735,12 @@ export function ThreadClient({
    * a message must stay one tap away on every viewport, which is why this is a
    * second rendering rather than a hover state nobody can reach.
    */
-  const messageActions = (message: ThreadMessage, mine: boolean, touch: boolean) => {
+  const messageActions = (
+    message: ThreadMessage,
+    mine: boolean,
+    touch: boolean,
+    usable: boolean,
+  ) => {
     const shape = touch
       ? "flex h-11 w-11 items-center justify-center rounded-full border bg-card text-muted-foreground"
       : "rounded-full p-1 hover:bg-secondary";
@@ -719,7 +755,7 @@ export function ThreadClient({
               (mine ? "right-full mr-1" : "left-full ml-1")
         }
       >
-        {canReact && (
+        {canReact && usable && (
           <details className="relative">
             <summary
               className={`flex cursor-pointer list-none items-center ${shape}`}
@@ -750,7 +786,7 @@ export function ThreadClient({
             </div>
           </details>
         )}
-        {canPost && (
+        {canPost && usable && (
           <button
             type="button"
             className={shape}
@@ -764,7 +800,7 @@ export function ThreadClient({
             {touch && <span className="sr-only">Reply</span>}
           </button>
         )}
-        {mine && (
+        {mine && usable && (
           <button
             type="button"
             className={shape}
@@ -783,15 +819,31 @@ export function ThreadClient({
             {touch && <span className="sr-only">Delete</span>}
           </button>
         )}
-        <button
-          type="button"
-          className={shape}
-          title="Report to the safeguarding lead"
-          onClick={() => setReportFor(reportFor === message.id ? null : message.id)}
-        >
-          <Flag className={glyph} />
-          {touch && <span className="sr-only">Report to the safeguarding lead</span>}
-        </button>
+        {usable && (
+          <button
+            type="button"
+            className={shape}
+            title="Report to the safeguarding lead"
+            onClick={() => setReportFor(reportFor === message.id ? null : message.id)}
+          >
+            <Flag className={glyph} />
+            {touch && <span className="sr-only">Report to the safeguarding lead</span>}
+          </button>
+        )}
+        {/* The club owner's permanent delete. Offered on a tombstoned message
+            too — clearing up a mistake usually starts with someone deleting
+            it the ordinary way first. */}
+        {isSuperUser && (
+          <button
+            type="button"
+            className={shape}
+            title="Delete permanently (destroys the message; cannot be undone)"
+            onClick={() => setPurgeFor(purgeFor === message.id ? null : message.id)}
+          >
+            <Eraser className={glyph} />
+            {touch && <span className="sr-only">Delete permanently</span>}
+          </button>
+        )}
       </div>
     );
   };
@@ -856,7 +908,7 @@ export function ThreadClient({
               )}
 
               <div className={`group flex ${mine ? "justify-end" : "justify-start"} ${firstOfRun ? "pt-2" : "pt-0.5"}`}>
-                {mine && body.state === "ok" && !isPending && (
+                {(mine && (body.state === "ok" || isSuperUser) && !isPending) && (
                   <MessageKebab
                     open={actionsFor === message.id}
                     onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
@@ -969,10 +1021,11 @@ export function ThreadClient({
 
                   {/* Hover actions on the desk; on a phone the kebab beside the
                       bubble opens the same set. */}
-                  {body.state === "ok" && !isPending && (
+                  {(body.state === "ok" || isSuperUser) && !isPending && (
                     <>
-                      {messageActions(message, mine, false)}
-                      {actionsFor === message.id && messageActions(message, mine, true)}
+                      {messageActions(message, mine, false, body.state === "ok")}
+                      {actionsFor === message.id &&
+                        messageActions(message, mine, true, body.state === "ok")}
                     </>
                   )}
 
@@ -1007,8 +1060,49 @@ export function ThreadClient({
                       </div>
                     </form>
                   )}
+
+                  {purgeFor === message.id && (
+                    <form
+                      action={purgeAction}
+                      className="mt-1 space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-2 shadow-sm"
+                      onSubmit={() => {
+                        purgedRef.current = message.id;
+                        setPurgeFor(null);
+                      }}
+                    >
+                      <input type="hidden" name="message_id" value={message.id} />
+                      <input type="hidden" name="conversation_id" value={conversationId} />
+                      <p className="text-[11px] text-muted-foreground">
+                        This destroys the message and its files. It cannot be undone, and the audit
+                        trail will record that you did it and why. The database refuses if the
+                        message is evidence in a safeguarding concern or under a legal hold.
+                      </p>
+                      <Textarea
+                        name="reason"
+                        required
+                        rows={2}
+                        placeholder="Why is this being destroyed?"
+                        className="text-xs"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="submit"
+                          className="inline-flex min-h-[44px] items-center rounded-md border border-destructive/40 px-3 text-[11px] font-medium text-destructive hover:bg-destructive/10 lg:min-h-0 lg:px-2 lg:py-1"
+                        >
+                          Delete permanently
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPurgeFor(null)}
+                          className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </form>
+                  )}
                 </div>
-                {!mine && body.state === "ok" && !isPending && (
+                {(!mine && (body.state === "ok" || isSuperUser) && !isPending) && (
                   <MessageKebab
                     open={actionsFor === message.id}
                     onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
@@ -1034,6 +1128,16 @@ export function ThreadClient({
       {reportState.notice && (
         <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {reportState.notice}
+        </p>
+      )}
+      {purgeState.error && (
+        <p className="whitespace-pre-line rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {purgeState.error}
+        </p>
+      )}
+      {purgeState.notice && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {purgeState.notice}
         </p>
       )}
 

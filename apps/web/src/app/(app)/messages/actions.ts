@@ -360,3 +360,56 @@ export async function startConversation(_prev: ActionState, formData: FormData):
   revalidatePath(MESSAGES_PATH);
   redirect(`${MESSAGES_PATH}/${conversation.id}`);
 }
+
+// ---------------------------------------------------------------------------
+// Permanent deletion of one message — super user only (Adam, 2026-08-25)
+// ---------------------------------------------------------------------------
+/**
+ * The soft delete above is unchanged and is still what everyone else gets: a
+ * tombstone, per SG-2. This is the one exception the club owner asked for, and
+ * every decision about whether it is allowed is made by `purge_message()` in
+ * the database — super user only, and refused outright for a message cited by
+ * a safeguarding concern or one of its notes, or under a legal hold. The RPC
+ * goes through the user-scoped client so that check sees the real caller.
+ *
+ * Attachments: the storage objects are removed with the SERVICE-ROLE client,
+ * and only AFTER the RPC has returned. Two things make that safe. First, the
+ * ordering: the database has already decided the purge is permitted and has
+ * already written the `messages.purged` audit row, so by the time this runs
+ * the `message_attachments` rows do not exist and the objects are orphans —
+ * unreachable through the storage policies, which key off the message row, and
+ * pointing at nothing. Second, the paths are read with the admin client
+ * BEFOREHAND rather than the caller's, because a super user need not be a
+ * participant of the conversation and their own client would (correctly) be
+ * shown nothing. The admin key is never used to decide anything here; it is
+ * used to finish what the database has already authorised.
+ */
+export async function purgeMessage(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const messageId = String(formData.get("message_id") ?? "");
+  const conversationId = String(formData.get("conversation_id") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!messageId) return { error: "No message given." };
+  if (!reason) {
+    return { error: "Say why. The reason is the only thing the audit row will be able to say." };
+  }
+
+  const admin = createAdminClient();
+  const { data: files } = await admin
+    .from("message_attachments")
+    .select("storage_bucket,storage_path")
+    .eq("message_id", messageId);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("purge_message", {
+    p_message_id: messageId,
+    p_reason: reason,
+  });
+  if (error) return { error: error.message };
+
+  for (const file of files ?? []) {
+    await admin.storage.from(file.storage_bucket).remove([file.storage_path]);
+  }
+
+  revalidatePath(`${MESSAGES_PATH}/${conversationId}`);
+  return { notice: "Message permanently deleted." };
+}

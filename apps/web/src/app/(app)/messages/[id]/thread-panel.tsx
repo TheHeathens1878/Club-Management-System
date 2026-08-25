@@ -88,6 +88,7 @@ export function ThreadPanel({
         isReferee={data.isReferee}
         isRefereesGroup={data.isRefereesGroup}
         isAdmin={data.isClubAdmin}
+        isSuperUser={data.isSuperUser}
       />
 
       {showLeave && myLive && !conversation.closed_at && (

@@ -22,7 +22,12 @@ import { EmergencyContactsFields } from "@/components/emergency-contacts-fields"
 import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
 import { formatDate, formatStamp } from "@/lib/people-display";
 
-import { softDeletePerson, restorePerson, type PersonActionState } from "../actions";
+import {
+  purgePerson,
+  restorePerson,
+  softDeletePerson,
+  type PersonActionState,
+} from "../actions";
 import {
   addGuardianship,
   addPersonCertification,
@@ -590,6 +595,84 @@ export function EmergencyContactsPanel({
           {emergencyContactLine(contacts[0]!)} is who the club rings first.
         </p>
       )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Permanent deletion — super user only (Adam, 2026-08-25)
+// ---------------------------------------------------------------------------
+/**
+ * The panel below the Retire panel, and only for a super user.
+ *
+ * Retiring is still the normal answer and still the one offered first. This is
+ * the other thing: a real, irreversible destruction, for a GDPR erasure request
+ * or for a test account that should never have existed.
+ *
+ * Three deliberate frictions, in the order a person meets them: a plain
+ * statement of what will be destroyed and that it cannot be undone; a reason,
+ * which is required because it is the only thing the surviving audit row will
+ * be able to say; and the person's full name typed out, which is what enables
+ * the button. None of these is the control — the control is `purge_person()`,
+ * which refuses a legal hold, a safeguarding concern and the caller themselves
+ * whatever this form sends. They are here so nobody arrives at that refusal by
+ * accident.
+ */
+export function PurgePanel({
+  personId,
+  personName,
+}: {
+  personId: string;
+  personName: string;
+}) {
+  const [state, action, pending] = useActionState(purgePerson, EMPTY_PERSON);
+  const [typed, setTyped] = useState("");
+  const armed = typed.trim().toLowerCase() === personName.trim().toLowerCase();
+
+  return (
+    <div className="mt-6 space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+      <p className="text-sm font-semibold text-destructive">Delete permanently</p>
+      <p className="text-sm text-muted-foreground">
+        This destroys {personName}&apos;s record and everything that references it — their sign-in,
+        team memberships, registrations, messages, reactions, emergency contacts, uploaded ID and
+        photo. Rows that belong to other people, and the club&apos;s own records, keep their place
+        and simply stop naming them. <span className="font-medium">It cannot be undone.</span>
+      </p>
+      <p className="text-sm text-muted-foreground">
+        The audit trail survives, including a new entry recording this deletion and your reason for
+        it. The database refuses outright if this person is under a legal hold, is named by a
+        safeguarding concern, or is in a conversation under a legal hold.
+      </p>
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="person_id" value={personId} />
+        <input type="hidden" name="person_name" value={personName} />
+        <div className="space-y-1">
+          <Label htmlFor="purge-reason">Why is this record being destroyed?</Label>
+          <Textarea id="purge-reason" name="reason" required rows={2} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="purge-confirm">
+            Type <span className="font-semibold">{personName}</span> to confirm
+          </Label>
+          <Input
+            id="purge-confirm"
+            name="confirm_name"
+            autoComplete="off"
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        </div>
+        <Button
+          type="submit"
+          size="sm"
+          variant="destructive"
+          disabled={!armed || pending}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
+          {pending ? "Deleting…" : "Delete permanently"}
+        </Button>
+      </form>
+      <Feedback state={state} />
     </div>
   );
 }

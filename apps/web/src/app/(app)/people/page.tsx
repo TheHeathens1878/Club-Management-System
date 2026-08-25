@@ -106,6 +106,8 @@ type SearchParams = {
   role?: string;
   team?: string;
   page?: string;
+  /** The one-line summary purgePerson() redirects back with. */
+  purged?: string;
 };
 
 /** `null` means "no restriction"; an empty array means "restricted to nobody". */
@@ -500,6 +502,11 @@ export default async function PeoplePage({
         }
       />
       <div className="space-y-6 p-4 lg:p-6">
+        {params.purged && (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {params.purged}
+          </p>
+        )}
         <Card>
           <CardHeader className="space-y-3 p-4 lg:p-6">
             <CardTitle className="text-base">Find someone</CardTitle>

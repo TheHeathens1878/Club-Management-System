@@ -10,9 +10,12 @@
  * birth correction that turns an existing team member into a minor is
  * re-evaluated by the database, not by this file.
  *
- * There is no delete. `deleted_at` is a soft delete (SG-2): `people` has no
- * FOR DELETE policy, no DELETE grant and a `deny_hard_delete` trigger, and
- * none of those may be relaxed.
+ * `deleted_at` is a soft delete (SG-2): `people` has no FOR DELETE policy, no
+ * DELETE grant and a `deny_hard_delete` trigger, and none of those may be
+ * relaxed. There is exactly ONE hard delete in this file — `purgePerson()` at
+ * the bottom — and it does not relax any of them either: it calls
+ * `purge_person()`, which is the single audited door the database opens for a
+ * super user and nobody else. See the comment there.
  */
 
 import { revalidatePath } from "next/cache";
@@ -20,7 +23,7 @@ import { redirect } from "next/navigation";
 
 import type { Json } from "@club/db";
 
-import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { countyForTown } from "@/lib/address";
 import {
@@ -36,6 +39,9 @@ export type PersonActionState = { error?: string; notice?: string };
 
 const NOT_ADMIN =
   "Only a club administrator can add or change a member record. Ask one to make the change, or to grant you the club_admin role.";
+
+const NOT_SUPER_USER =
+  "Only a super user can permanently delete a person. Everyone else retires the record, which keeps it (SAFEGUARDING.md SG-2).";
 
 async function requireCommittee() {
   const session = await getSessionProfile();
@@ -234,4 +240,153 @@ export async function restorePerson(
   revalidatePath("/people");
   revalidatePath(`/people/${personId}`);
   return { notice: "Restored." };
+}
+
+// ---------------------------------------------------------------------------
+// The one exception to the paragraph at the top of this file (2026-08-25)
+// ---------------------------------------------------------------------------
+/**
+ * Adam, the club owner and the sole super user: "allow super users to hard
+ * delete users and messages." GDPR erasure, and clearing out test accounts.
+ *
+ * Everything that decides whether this is allowed lives in the database:
+ * `purge_person()` is SECURITY DEFINER, checks `is_super_user()` itself, and
+ * refuses (P0001, in a sentence) anyone under a legal hold, anyone named by a
+ * safeguarding concern or one of its notes, anyone in a conversation under a
+ * legal hold, and the caller themselves. This file adds nothing to that: the
+ * `isSuperUser()` check below is only so the panel is not offered to someone
+ * the database would refuse, and the RPC goes through the USER-SCOPED client
+ * so the answer is the database's.
+ *
+ * Storage: the person's files are removed with the SERVICE-ROLE client, and
+ * only AFTER the RPC has returned. That ordering is what makes it safe — the
+ * database has already decided the purge is permitted and has already written
+ * the `people.purged` audit row, so the objects are the last remnant of rows
+ * that no longer exist. Paths are read with the admin client too, because a
+ * super user is not necessarily a participant of the conversations whose
+ * attachments they are about to destroy, and the policies would (correctly)
+ * hide those rows from their own client.
+ */
+export async function purgePerson(
+  _prev: PersonActionState,
+  formData: FormData,
+): Promise<PersonActionState> {
+  const session = await getSessionProfile();
+  if (!session || !isSuperUser(session.profile?.role)) return { error: NOT_SUPER_USER };
+
+  const personId = text(formData, "person_id");
+  const reason = text(formData, "reason");
+  const confirmation = text(formData, "confirm_name");
+  const expectedName = text(formData, "person_name");
+  if (!personId) return { error: "No person given." };
+  if (!reason) return { error: "Say why this record is being destroyed. The reason is the audit trail." };
+  if (confirmation.toLowerCase() !== expectedName.toLowerCase()) {
+    return { error: `Type ${expectedName} exactly to confirm.` };
+  }
+
+  const admin = createAdminClient();
+
+  // Read the file paths first: after the RPC these rows do not exist.
+  const { data: theirMessages } = await admin
+    .from("messages")
+    .select("id")
+    .eq("sender_person_id", personId);
+  const messageIds = (theirMessages ?? []).map((m) => m.id);
+  const attachments =
+    messageIds.length > 0
+      ? ((
+          await admin
+            .from("message_attachments")
+            .select("storage_bucket,storage_path")
+            .in("message_id", messageIds)
+        ).data ?? [])
+      : [];
+  const { data: idDocs } = await admin
+    .from("identity_documents")
+    .select("storage_path")
+    .eq("person_id", personId);
+  const { data: personRow } = await admin
+    .from("people")
+    .select("photo_path")
+    .eq("id", personId)
+    .maybeSingle();
+
+  const supabase = await createClient();
+  const { data: summary, error } = await supabase.rpc("purge_person", {
+    p_person_id: personId,
+    p_reason: reason,
+  });
+  if (error) return { error: friendlyDbError(error, NOT_SUPER_USER) };
+
+  // Only now, and only for rows the database has just destroyed.
+  await removeStorageObjects(
+    admin,
+    attachments.map((a) => ({ bucket: a.storage_bucket, path: a.storage_path })),
+  );
+  await removeStorageObjects(
+    admin,
+    (idDocs ?? [])
+      .map((d) => d.storage_path)
+      .filter((p): p is string => Boolean(p))
+      .map((path) => ({ bucket: "identity-documents", path })),
+  );
+  if (personRow?.photo_path) {
+    await removeStorageObjects(admin, [{ bucket: "person-photos", path: personRow.photo_path }]);
+  }
+
+  // The login, last. `profiles.id references auth.users on delete cascade`, and
+  // the profile row is already gone, so this only removes the account itself.
+  const authUserId = readAuthUserId(summary);
+  if (authUserId) await admin.auth.admin.deleteUser(authUserId);
+
+  revalidatePath("/people");
+  redirect(`/people?purged=${encodeURIComponent(purgeNotice(summary))}`);
+}
+
+type StorageObject = { bucket: string; path: string };
+
+async function removeStorageObjects(
+  admin: ReturnType<typeof createAdminClient>,
+  objects: StorageObject[],
+): Promise<void> {
+  const byBucket = new Map<string, string[]>();
+  for (const object of objects) {
+    if (!object.path) continue;
+    byBucket.set(object.bucket, [...(byBucket.get(object.bucket) ?? []), object.path]);
+  }
+  for (const [bucket, paths] of byBucket) {
+    // A file that is already gone is not an error worth failing the purge for:
+    // the rows it belonged to have been destroyed either way.
+    await admin.storage.from(bucket).remove(paths);
+  }
+}
+
+function readAuthUserId(summary: Json): string | null {
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) return null;
+  const value = (summary as Record<string, Json>).auth_user_id;
+  return typeof value === "string" ? value : null;
+}
+
+/** The counts the database returned, as one line the list page can show. */
+function purgeNotice(summary: Json): string {
+  const name = summaryString(summary, "person_name") ?? "That record";
+  const deleted =
+    summary && typeof summary === "object" && !Array.isArray(summary)
+      ? (summary as Record<string, Json>).deleted
+      : null;
+  const parts: string[] = [];
+  if (deleted && typeof deleted === "object" && !Array.isArray(deleted)) {
+    for (const [table, count] of Object.entries(deleted as Record<string, Json>)) {
+      if (typeof count === "number" && count > 0) parts.push(`${count} ${table.replace(/_/g, " ")}`);
+    }
+  }
+  return parts.length > 0
+    ? `${name} was permanently deleted: ${parts.join(", ")}.`
+    : `${name} was permanently deleted.`;
+}
+
+function summaryString(summary: Json, key: string): string | null {
+  if (!summary || typeof summary !== "object" || Array.isArray(summary)) return null;
+  const value = (summary as Record<string, Json>)[key];
+  return typeof value === "string" ? value : null;
 }

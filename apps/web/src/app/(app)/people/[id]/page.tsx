@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
 import { signPersonPhotoPath } from "@/lib/avatars";
 import { signIdentityDocumentPaths } from "@/lib/identity-docs";
 import { isClubAdmin, resolveNames, nameOf } from "@/lib/person";
@@ -40,6 +40,7 @@ import {
   EmergencyContactsPanel,
   GuardianshipsPanel,
   PersonCertificationsPanel,
+  PurgePanel,
   RetirePanel,
   RolesPanel,
   type GuardianshipRow,
@@ -523,6 +524,12 @@ export default async function PersonPage({
               personName={name}
               deletedAt={person.deleted_at}
             />
+            {/* Adam, the club owner and sole super user, asked for a real
+                delete for GDPR erasure and for test accounts. Nobody else is
+                offered it, and `purge_person()` would refuse them anyway. */}
+            {isSuperUser(session.profile?.role) && (
+              <PurgePanel personId={person.id} personName={name} />
+            )}
           </CardContent>
         </Card>
       </div>
