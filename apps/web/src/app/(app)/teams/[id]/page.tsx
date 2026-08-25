@@ -37,7 +37,7 @@ import { AllocateAllPanel } from "./allocate-all-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
 import { RecruitingPanel } from "./recruiting-panel";
 import { FixturesTable, type TeamFixture } from "./fixtures-list";
-import { fixtureHref } from "./fixtures-shared";
+import { fixtureHref, lineupHref } from "./fixtures-shared";
 import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
 import { formatBookingDateShort } from "@/lib/booking-time";
@@ -1061,9 +1061,7 @@ export default async function TeamPage({
                   )}
                   <Link
                     href={
-                      staffTools
-                        ? `/teams/${team.id}/fixtures/${nextMatch.id}/lineup`
-                        : fixtureHref(team.id, nextMatch)
+                      staffTools ? lineupHref(team.id, nextMatch) : fixtureHref(team.id, nextMatch)
                     }
                     className={
                       buttonVariants({ size: "sm" }) + " min-h-[44px] shrink-0 px-4 text-[12.5px]"
@@ -1131,9 +1129,7 @@ export default async function TeamPage({
                     )}
                     <Link
                       href={
-                        staffTools
-                          ? `/teams/${team.id}/fixtures/${fixtures[0].id}/lineup`
-                          : fixtureHref(team.id, fixtures[0])
+                        staffTools ? lineupHref(team.id, fixtures[0]) : fixtureHref(team.id, fixtures[0])
                       }
                       className={buttonVariants({ size: "sm" }) + " mt-2"}
                     >
