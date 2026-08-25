@@ -26,8 +26,12 @@ insert into public.booking_contacts (name, email) values
   ('Both Hats', 'both.hats@test.invalid'),
   ('Gone Away', 'gone.away@test.invalid');
 
+-- The import gives every person it creates the bare `member` role, so the
+-- test carries one too: it must not count as a relationship (20260825370000).
+insert into public.person_roles (person_id, role)
+  values ('cc000000-7777-4111-8111-000000000001', 'member');
 select ok(not public.is_club_person('cc000000-7777-4111-8111-000000000001'),
-  'a room customer has no club relationship');
+  'a room customer with the default member role has no club relationship');
 select ok(('cc000000-7777-4111-8111-000000000001' = any(public.hire_only_person_ids())),
   'so they are hire-only');
 
