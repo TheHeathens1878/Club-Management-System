@@ -1,7 +1,7 @@
+﻿-- =============================================================================
+-- club_overview() â€” the admin dashboard's numbers in one call
 -- =============================================================================
--- club_overview() — the admin dashboard's numbers in one call
--- =============================================================================
--- The design's Overview screen (spec §2.2): four stat cards and the "Needs
+-- The design's Overview screen (spec Â§2.2): four stat cards and the "Needs
 -- you" list. One SECURITY DEFINER read, club_admin/committee-gated, so the
 -- page is one round trip; the weekend fixture list and the next social come
 -- from matchday_fixtures() and social_events(), which already exist.
@@ -9,10 +9,10 @@
 -- Money comes from the subscription ledger exactly as /subs reads it:
 -- collected = payments net of refunds on current-season subscriptions;
 -- arrears = the same view's outstanding, counting only live subscriptions.
--- "Over 60 days" uses days_since_start — the club's own measure of how long a
+-- "Over 60 days" uses days_since_start â€” the club's own measure of how long a
 -- debt has been open.
 --
--- PR METADATA (PLAN.md §11): migrations y; RLS n (no tables; the function
+-- Renumbered 430000 -> 450000: the original number was burned when the first PR lost this file in a shared-tree race. PR METADATA (PLAN.md Â§11): migrations y; RLS n (no tables; the function
 -- gates itself); data touched: none; rollback: drop function.
 -- =============================================================================
 
