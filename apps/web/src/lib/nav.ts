@@ -313,6 +313,17 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
   {
+    // The clashes report: what the diary's overlap rule cannot untangle by
+    // itself — refused Full-Time reschedules, a team booked in two places,
+    // fixtures out of step with their booking, home fixtures with no pitch.
+    href: "/pitches/clashes",
+    label: "Clashes",
+    icon: ShieldAlert,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
+  },
+  {
     href: "/pitches/manage",
     label: "Manage pitches",
     icon: Settings2,

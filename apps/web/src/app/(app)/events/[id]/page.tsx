@@ -158,16 +158,22 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
   const capabilities = await getCapabilities();
   const canAssignPitch =
     capabilities.isClubAdmin && detail.status === "scheduled" && !detail.booked;
-  const { data: pitchRows } = canAssignPitch
-    ? await supabase
-        .from("resources")
-        .select("id,name")
-        .eq("type", "pitch")
-        .eq("active", true)
-        .order("sort_order")
-        .order("name")
-    : { data: null };
+  // The select opens on the team's home pitch (Adam, 2026-08-25: allocation
+  // defaults to the team's own venue) — a starting value, not a rule.
+  const [{ data: pitchRows }, { data: teamRow }] = canAssignPitch
+    ? await Promise.all([
+        supabase
+          .from("resources")
+          .select("id,name")
+          .eq("type", "pitch")
+          .eq("active", true)
+          .order("sort_order")
+          .order("name"),
+        supabase.from("teams").select("home_resource_id").eq("id", detail.teamId).maybeSingle(),
+      ])
+    : [{ data: null }, { data: null }];
   const pitches = pitchRows ?? [];
+  const homeResourceId = teamRow?.home_resource_id ?? null;
 
   const mine: EventPerson[] = roster
     .filter((row) => row.can_respond)
@@ -243,7 +249,11 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 <CardTitle className="text-base">Assign a pitch</CardTitle>
               </CardHeader>
               <CardContent>
-                <AssignPitch eventId={detail.id} pitches={pitches} />
+                <AssignPitch
+                  eventId={detail.id}
+                  pitches={pitches}
+                  homeResourceId={homeResourceId}
+                />
               </CardContent>
             </Card>
           ) : null}
