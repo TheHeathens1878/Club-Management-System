@@ -1777,6 +1777,96 @@ export type Database = {
           },
         ]
       }
+      fixture_lineup_slots: {
+        Row: {
+          created_at: string
+          lineup_id: string
+          person_id: string
+          placed_by: string | null
+          slot: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          lineup_id: string
+          person_id: string
+          placed_by?: string | null
+          slot: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          lineup_id?: string
+          person_id?: string
+          placed_by?: string | null
+          slot?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixture_lineup_slots_lineup_id_fkey"
+            columns: ["lineup_id"]
+            isOneToOne: false
+            referencedRelation: "fixture_lineups"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixture_lineup_slots_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      fixture_lineups: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          fixture_id: string
+          formation: string
+          id: string
+          name: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fixture_id: string
+          formation: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          fixture_id?: string
+          formation?: string
+          id?: string
+          name?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fixture_lineups_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: true
+            referencedRelation: "fixtures"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixture_lineups_fixture_id_fkey"
+            columns: ["fixture_id"]
+            isOneToOne: true
+            referencedRelation: "unallocated_home_fixtures"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fixtures: {
         Row: {
           allocation_conflict: boolean
@@ -5314,6 +5404,7 @@ export type Database = {
       is_team_guardian: { Args: { p_team_id: string }; Returns: boolean }
       is_team_member: { Args: { p_team_id: string }; Returns: boolean }
       is_team_staff: { Args: { p_team_id: string }; Returns: boolean }
+      lineup_team_id: { Args: { p_lineup_id: string }; Returns: string }
       map_user_role_to_app_role: {
         Args: { p_role: Database["public"]["Enums"]["user_role"] }
         Returns: Database["public"]["Enums"]["app_role"]
