@@ -163,6 +163,23 @@ export async function createEvent(
     return { error: "That date and time could not be read." };
   }
 
+  // "Meet at" (Adam, 2026-08-25): a time on the form, stored as minutes
+  // before the start so a reschedule carries it. Blank = no meet time.
+  const meetTime = text(formData, "meet_time", 5);
+  let meetMinutesBefore: number | null = null;
+  if (meetTime) {
+    let meetAt: string;
+    try {
+      meetAt = localToInstant(date, meetTime);
+    } catch {
+      return { error: "That meet time could not be read." };
+    }
+    const minutes = Math.round((Date.parse(startsAt) - Date.parse(meetAt)) / 60_000);
+    if (minutes < 0) return { error: "The meet time must not be after the start." };
+    if (minutes > 240) return { error: "The meet time is more than four hours before the start." };
+    meetMinutesBefore = minutes;
+  }
+
   const supabase = await createClient();
 
   if (repeats) {
@@ -182,6 +199,15 @@ export async function createEvent(
     const result = data?.[0];
     if (!result) return { error: "The series was not created." };
 
+    // Every occurrence meets at the same relative time. The insert default
+    // (30 minutes for matches) stands when the form left it blank.
+    if (meetMinutesBefore !== null) {
+      await supabase
+        .from("events")
+        .update({ meet_minutes_before: meetMinutesBefore })
+        .eq("series_id", result.series_id);
+    }
+
     // A clashing week keeps its event and loses only the pitch, so the series
     // is not lost — but the coach has to be told which weeks to sort out.
     if (bookPitch && result.clashes && result.clashes.length > 0) {
@@ -193,7 +219,7 @@ export async function createEvent(
       };
     }
   } else {
-    const { error } = await supabase.rpc("create_team_event", {
+    const { data, error } = await supabase.rpc("create_team_event", {
       p_team_id: teamId,
       p_type: type,
       p_title: title,
@@ -205,6 +231,12 @@ export async function createEvent(
       p_book: bookPitch,
     });
     if (error) return { error: friendlyDbError(error, CREATE_REFUSED) };
+    if (meetMinutesBefore !== null && data) {
+      await supabase
+        .from("events")
+        .update({ meet_minutes_before: meetMinutesBefore })
+        .eq("id", data);
+    }
   }
 
   revalidatePath("/events");

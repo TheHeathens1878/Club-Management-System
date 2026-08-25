@@ -35,8 +35,21 @@ export function EventForm({
   const [repeats, setRepeats] = useState(false);
   const [venueMode, setVenueMode] = useState<"resource" | "text">("resource");
   const [venueId, setVenueId] = useState("");
+  // "Meet at" follows the start time at 30 minutes before until the coach
+  // touches it — then their choice stands (Adam, 2026-08-25).
+  const [meetTime, setMeetTime] = useState("");
+  const [meetEdited, setMeetEdited] = useState(false);
 
   const canBook = venueMode === "resource" && venueId !== "";
+
+  function minus30(startTime: string): string {
+    const parts = startTime.split(":");
+    const hours = Number(parts[0] ?? "");
+    const minutes = Number(parts[1] ?? "");
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return "";
+    const total = (hours * 60 + minutes - 30 + 1440) % 1440;
+    return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  }
 
   return (
     <form action={action} className="max-w-xl space-y-4">
@@ -123,7 +136,31 @@ export function EventForm({
           <label htmlFor="event-time" className="text-sm font-medium">
             Start time
           </label>
-          <Input id="event-time" name="time" type="time" required />
+          <Input
+            id="event-time"
+            name="time"
+            type="time"
+            required
+            onChange={(event) => {
+              if (!meetEdited) setMeetTime(minus30(event.target.value));
+            }}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <label htmlFor="event-meet" className="text-sm font-medium">
+            Meet at
+          </label>
+          <Input
+            id="event-meet"
+            name="meet_time"
+            type="time"
+            value={meetTime}
+            onChange={(event) => {
+              setMeetEdited(true);
+              setMeetTime(event.target.value);
+            }}
+          />
+          <p className="text-xs text-muted-foreground">30 minutes before the start unless you change it.</p>
         </div>
         <div className="space-y-1.5">
           <label htmlFor="event-duration" className="text-sm font-medium">
