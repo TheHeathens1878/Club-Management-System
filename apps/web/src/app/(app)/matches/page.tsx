@@ -95,8 +95,12 @@ export default async function MatchesPage({
           <span className="flex gap-2">
             {/* Allocation is the club's job, not the coach's (Adam,
                 2026-08-25) — the destination page is committee-guarded, so
-                the door only shows to people it opens for. */}
-            {capabilities.isCommittee || capabilities.isClubAdmin ? (
+                the door only shows to people it opens for, and only while
+                they are wearing the admin hat. An admin looking at the
+                fixture desk as a coach sees what a coach sees; the same rule
+                the team page and the event page follow. */}
+            {(capabilities.isCommittee || capabilities.isClubAdmin) &&
+            (view === "admin" || view === null) ? (
               <Link href="/pitches" className={buttonVariants({ variant: "outline", size: "sm" })}>
                 <LandPlot className="h-4 w-4" /> Allocate pitches
               </Link>
