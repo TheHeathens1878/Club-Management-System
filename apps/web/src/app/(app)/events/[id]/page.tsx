@@ -5,7 +5,6 @@ import {
   CalendarDays,
   CircleCheck,
   ClipboardList,
-  LayoutGrid,
   MapPin,
   Pencil,
   Repeat,
@@ -20,9 +19,17 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities } from "@/lib/capabilities";
+import { scorelineLabel } from "@/lib/scoreline";
 import { createClient } from "@/lib/supabase/server";
 
+import {
+  LineupSection,
+  loadLineupSection,
+} from "../../teams/[id]/fixtures/[fixtureId]/lineup/lineup-section";
 import { AssignPitch } from "./assign-pitch";
+import { EventTabs, eventTabFrom } from "./event-tabs";
+import { MatchStatsSection } from "./match-stats-section";
+import { ScorelineSection } from "./scoreline-section";
 import { RespondButtons } from "../respond-buttons";
 import {
   eventTypeLabel,
@@ -46,6 +53,14 @@ import { RemindButton } from "./remind-button";
  * left) and `event_people` (the roster on the right, refused to anyone who is
  * not in the team, a guardian of it, its staff or an admin — that refusal is
  * rendered as a quiet note, not an error page).
+ *
+ * A MATCH gets tabs (Adam, 2026-08-25: "The event (match) page should have tabs
+ * showing details, line-up, match-stats … and scoreline"). They are URL-driven
+ * (`?tab=`) and server-rendered, the same idea as the team page's `TeamTabs`,
+ * so every tab is a link that can be shared and gone back from. Details is the
+ * page exactly as it was. Only a fixture-mirrored event has a bar at all — a
+ * training session or a social has nothing to put in the other three, so its
+ * page is untouched.
  */
 
 export const dynamic = "force-dynamic";
@@ -141,10 +156,17 @@ function asResponse(value: string | null): "accepted" | "declined" | null {
   return value === "accepted" || value === "declined" ? value : null;
 }
 
-export default async function EventPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function EventPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string | string[] }>;
+}) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   const { id } = await params;
+  const { tab: rawTab } = await searchParams;
 
   const supabase = await createClient();
   const { data: detailRaw, error: detailError } = await supabase.rpc("event_detail", {
@@ -203,6 +225,37 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
 
   const cancelled = detail.status === "cancelled";
 
+  // ------------------------------------------------------------ the tabs
+  // Only a fixture-mirrored event has them; anything else is the page as it
+  // has always been.
+  const tab = detail.fixtureId ? eventTabFrom(rawTab) : "details";
+  const canManageMatch = isStaff || capabilities.isClubAdmin;
+
+  // The header badge: the effective scoreline, which is the coach's pair when
+  // they entered one and Full-Time's otherwise — `lib/scoreline.ts` owns that
+  // rule and every screen asks it rather than deciding again.
+  const { data: fixtureScore } = detail.fixtureId
+    ? await supabase
+        .from("fixtures")
+        .select("is_home,home_score,away_score,coach_home_score,coach_away_score")
+        .eq("id", detail.fixtureId)
+        .maybeSingle()
+    : { data: null };
+  const headerScore = fixtureScore
+    ? scorelineLabel({
+        isHome: fixtureScore.is_home,
+        homeScore: fixtureScore.home_score,
+        awayScore: fixtureScore.away_score,
+        coachHomeScore: fixtureScore.coach_home_score,
+        coachAwayScore: fixtureScore.coach_away_score,
+      })
+    : null;
+
+  const lineup =
+    detail.fixtureId && tab === "lineup"
+      ? await loadLineupSection(detail.teamId, detail.fixtureId, { canManage: canManageMatch })
+      : null;
+
   // Editing (Adam, 2026-08-25): the team's staff and club admins, on a manual
   // event that has not been cancelled and has not happened. A fixture-mirrored
   // event is edited through its fixture — `update_team_event` says the same
@@ -219,21 +272,26 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         title={detail.title}
         subtitle={`${detail.teamName} · ${eventTypeLabel(detail.type)}`}
         action={
-          <div className="flex flex-wrap gap-2">
-            {/* A fixture-mirrored event is where a game on the team page now
-                lands (Adam, 2026-08-25), so the fixture's own screens hang
-                off it: the lineup for everyone, the availability marker —
-                the staff squad panel and the day-of register — for staff. */}
-            {detail.fixtureId ? (
-              <Link
-                href={`/teams/${detail.teamId}/fixtures/${detail.fixtureId}/lineup`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* The result, wherever it came from. The lineup used to have a
+                button here (#143); it is the Line-up tab now, so the only
+                fixture screen still worth a link is the availability marker —
+                the staff squad panel and the day-of register. */}
+            {headerScore ? (
+              <Badge
+                variant={
+                  headerScore.outcome === "win"
+                    ? "success"
+                    : headerScore.outcome === "loss"
+                      ? "destructive"
+                      : "muted"
+                }
+                className="text-sm tabular-nums"
               >
-                <LayoutGrid className="h-4 w-4" />{" "}
-                {isStaff || capabilities.isClubAdmin ? "Pick the lineup" : "Lineup"}
-              </Link>
+                {headerScore.text}
+              </Badge>
             ) : null}
-            {detail.fixtureId && (isStaff || capabilities.isClubAdmin) ? (
+            {detail.fixtureId && canManageMatch ? (
               <Link
                 href={`/teams/${detail.teamId}/fixtures/${detail.fixtureId}`}
                 className={buttonVariants({ variant: "outline", size: "sm" })}
@@ -256,6 +314,47 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         }
       />
 
+      {detail.fixtureId ? (
+        <div className="border-b bg-card px-4 pb-3 lg:px-8">
+          <EventTabs eventId={detail.id} active={tab} />
+        </div>
+      ) : null}
+
+      {tab === "lineup" ? (
+        <div className="p-4 lg:p-6">
+          {lineup ? (
+            <LineupSection data={lineup} />
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This match&apos;s lineup could not be read.
+            </p>
+          )}
+        </div>
+      ) : null}
+
+      {tab === "stats" && detail.fixtureId ? (
+        <div className="p-4 lg:p-6">
+          <MatchStatsSection
+            eventId={detail.id}
+            teamId={detail.teamId}
+            fixtureId={detail.fixtureId}
+            canManage={canManageMatch}
+          />
+        </div>
+      ) : null}
+
+      {tab === "score" && detail.fixtureId ? (
+        <div className="p-4 lg:p-6">
+          <ScorelineSection
+            eventId={detail.id}
+            teamId={detail.teamId}
+            fixtureId={detail.fixtureId}
+            canManage={canManageMatch}
+          />
+        </div>
+      ) : null}
+
+      {tab === "details" ? (
       <div className="grid gap-4 p-4 lg:grid-cols-[1fr_20rem] lg:gap-6 lg:p-6">
         {/* ------------------------------------------------ the event itself */}
         <div className="space-y-4">
@@ -506,6 +605,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           ) : null}
         </div>
       </div>
+      ) : null}
     </>
   );
 }
