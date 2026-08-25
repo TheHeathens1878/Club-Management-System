@@ -278,14 +278,26 @@ export function QuestionBlock({
         <fieldset className="space-y-2">
           <legend className="text-sm font-medium">{question.label}</legend>
           {help}
+          {/* Adam, 2026-08-25: "Photo permissions should be pre-ticked." This
+              is the STARTING POSITION of the boxes and nothing else. SG-5's
+              fail-closed rule is untouched: what is submitted is what is
+              ticked at that moment, an unticked box still writes NO
+              `guardian_consents` row, and absence of a row is still refusal.
+              Untick and the permission is not given. */}
           {player.isSelf ? (
             <>
               <p className="text-xs text-muted-foreground">
-                Tick where you are happy for the club to use photographs of you.
+                Untick anywhere you would rather the club did not use photographs of you.
               </p>
               {PHOTO_CONSENT_CHOICES.map((choice) => (
                 <label key={choice.field} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name={choice.field} value="yes" className="h-4 w-4" />
+                  <input
+                    type="checkbox"
+                    name={choice.field}
+                    value="yes"
+                    defaultChecked
+                    className="h-4 w-4"
+                  />
                   {PHOTO_PREFERENCE_LABELS[
                     choice.field.replace("photo_", "") as keyof typeof PHOTO_PREFERENCE_LABELS
                   ] ?? choice.label}
@@ -295,12 +307,19 @@ export function QuestionBlock({
           ) : (
             <>
               <p className="text-xs text-muted-foreground">
-                Each of these is a separate decision, and each one you leave unticked is a no. You
-                can change any of them later, and they are re-asked every season.
+                Each of these is a separate decision. They start ticked — untick any you are not
+                happy with, and one left unticked is a no. You can change any of them later, and
+                they are re-asked every season.
               </p>
               {PHOTO_CONSENT_CHOICES.map((choice) => (
                 <label key={choice.field} className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name={choice.field} value="yes" className="h-4 w-4" />
+                  <input
+                    type="checkbox"
+                    name={choice.field}
+                    value="yes"
+                    defaultChecked
+                    className="h-4 w-4"
+                  />
                   {choice.label}
                 </label>
               ))}

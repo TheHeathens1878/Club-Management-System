@@ -3123,6 +3123,52 @@ export type Database = {
         }
         Relationships: []
       }
+      person_registration_details: {
+        Row: {
+          details: Json
+          person_id: string
+          registration_id: string | null
+          season_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          details?: Json
+          person_id: string
+          registration_id?: string | null
+          season_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          details?: Json
+          person_id?: string
+          registration_id?: string | null
+          season_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "person_registration_details_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: true
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_registration_details_registration_id_fkey"
+            columns: ["registration_id"]
+            isOneToOne: false
+            referencedRelation: "registrations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_registration_details_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       person_roles: {
         Row: {
           granted_at: string
