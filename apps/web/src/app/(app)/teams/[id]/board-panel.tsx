@@ -158,7 +158,7 @@ export function BoardPanel({
             <div className="flex items-center gap-2">
               <Button type="submit" size="sm" disabled={pending}>
                 <MessageSquareText className="h-4 w-4" />
-                {pending ? "Posting…" : "Post to board"}
+                {pending ? "Posting…" : "Post to the lobby"}
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setComposing(false)}>
                 Cancel
@@ -173,13 +173,13 @@ export function BoardPanel({
             onClick={() => setComposing(true)}
             className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
           >
-            <MessageSquareText className="h-4 w-4" /> Post to board
+            <MessageSquareText className="h-4 w-4" /> Post to the lobby
           </Button>
         ))}
 
       {posts.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nothing on the board yet{canPost ? " — start it with the first post." : "."}
+          Nothing in the lobby yet{canPost ? " — start it with the first post." : "."}
         </p>
       ) : (
         <ul className="space-y-3">

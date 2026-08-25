@@ -409,12 +409,12 @@ export default async function LobbyPage() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm text-muted-foreground">
               <p>
-                A lobby post can be pushed onto every team&apos;s bulletin board, or aimed at just
+                A lobby post can be pushed onto every team&apos;s lobby, or aimed at just
                 the teams and age groups it concerns — and wherever people meet it, replies come
                 back to the one thread here.
               </p>
               <p className="flex items-center gap-1 text-xs">
-                <MessagesSquare className="h-3.5 w-3.5" /> Team boards live on each team&apos;s
+                <MessagesSquare className="h-3.5 w-3.5" /> Team lobbies live on each team&apos;s
                 page.
               </p>
             </CardContent>
