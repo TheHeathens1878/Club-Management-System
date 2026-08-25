@@ -83,7 +83,7 @@ export default async function LobbyPage() {
         }
       />
 
-      <div className="grid max-w-6xl gap-6 p-6 lg:grid-cols-[3fr_2fr]">
+      <div className="grid gap-6 p-6 lg:grid-cols-[3fr_2fr]">
         {/* --------------------------------------------------- noticeboard */}
         <div className="space-y-6">
           <Card>

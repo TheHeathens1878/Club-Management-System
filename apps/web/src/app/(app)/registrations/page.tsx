@@ -132,7 +132,7 @@ export default async function RegistrationsPage({
         }
       />
 
-      <div className="max-w-4xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         {!admin && (
           <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
             Only a club administrator can approve or reject a registration. You can read what the

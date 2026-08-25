@@ -91,7 +91,7 @@ export default async function MatchesPage({
         }
       />
 
-      <div className="max-w-6xl space-y-4 p-6">
+      <div className="space-y-4 p-6">
         <div className="flex flex-wrap items-center gap-2">
           {tabs.map((tab) => (
             <Link

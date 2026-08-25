@@ -102,7 +102,7 @@ export default async function WelcomePage({
         }
       />
 
-      <div className="max-w-4xl space-y-6 p-8">
+      <div className="space-y-6 p-8">
         {qualified.length > 0 ? (
           <RoleTiles views={qualified} current={resolveRoleView(storedView, capabilities)} />
         ) : (

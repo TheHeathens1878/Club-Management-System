@@ -250,7 +250,7 @@ export default async function BookingDetailPage({
           </Link>
         }
       />
-      <div className="max-w-4xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
           <Badge variant="muted">{kindLabel(booking.kind)}</Badge>

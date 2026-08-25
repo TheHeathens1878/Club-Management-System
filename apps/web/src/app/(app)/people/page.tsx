@@ -366,7 +366,7 @@ export default async function PeoplePage({
           </Link>
         }
       />
-      <div className="max-w-6xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         <Card>
           <CardHeader className="space-y-3">
             <CardTitle className="text-base">Find someone</CardTitle>

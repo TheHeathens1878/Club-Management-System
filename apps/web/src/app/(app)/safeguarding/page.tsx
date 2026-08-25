@@ -120,7 +120,7 @@ export default async function SafeguardingPage({
         }
       />
 
-      <div className="p-6 space-y-6 max-w-5xl">
+      <div className="p-6 space-y-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">Safeguarding lead</CardTitle>

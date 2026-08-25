@@ -227,7 +227,7 @@ export default async function FamilyPage() {
         subtitle="The children the club has you down as a guardian for, and their registrations"
       />
 
-      <div className="max-w-4xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         {childrenResult.error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {childrenResult.error.message}

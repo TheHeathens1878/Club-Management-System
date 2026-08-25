@@ -84,7 +84,7 @@ export default async function ManagePitchesPage() {
           </div>
         }
       />
-      <div className="max-w-4xl space-y-6 p-6">
+      <div className="space-y-6 p-6">
         {error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Could not load the pitches: {error.message}
