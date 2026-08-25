@@ -54,6 +54,25 @@ export type ThreadData = {
   readOnlyNotice: string | null;
   canManageGroup: boolean;
   unnamedLabel: string;
+  /** The Referees group's claimable game cards, keyed by message id. */
+  matchPosts: Record<string, MatchPostView>;
+  /** The caller holds the referee hat — may claim a posted game. */
+  isReferee: boolean;
+  /** This is the seeded Referees group, where games are posted. */
+  isRefereesGroup: boolean;
+};
+
+/** One "game needs a referee" card, serialisable for the client thread. */
+export type MatchPostView = {
+  id: string;
+  fixtureText: string;
+  durationText: string | null;
+  formatText: string | null;
+  locationText: string | null;
+  surface: string | null;
+  kickoffAt: string | null;
+  feeText: string | null;
+  claimedByName: string | null;
 };
 
 export async function loadThread(conversationId: string): Promise<ThreadData | null> {
@@ -91,24 +110,46 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
 
   const messages: ThreadMessage[] = (messageRows ?? []).slice().reverse();
   const messageIds = messages.map((m) => m.id);
-  const [{ data: reactionRows }, { data: attachmentRows }] = await Promise.all([
-    messageIds.length > 0
-      ? supabase
-          .from("message_reactions")
-          .select("id,message_id,person_id,emoji")
-          .in("message_id", messageIds)
-      : Promise.resolve({ data: [] }),
-    messageIds.length > 0
-      ? supabase
-          .from("message_attachments")
-          .select("id,message_id,storage_bucket,storage_path,content_type")
-          .in("message_id", messageIds)
-      : Promise.resolve({ data: [] }),
-  ]);
+  const isRefereesGroup = conversation.type === "group" && conversation.title === "Referees";
+  const [{ data: reactionRows }, { data: attachmentRows }, { data: matchPostRows }, refereeRole] =
+    await Promise.all([
+      messageIds.length > 0
+        ? supabase
+            .from("message_reactions")
+            .select("id,message_id,person_id,emoji")
+            .in("message_id", messageIds)
+        : Promise.resolve({ data: [] }),
+      messageIds.length > 0
+        ? supabase
+            .from("message_attachments")
+            .select("id,message_id,storage_bucket,storage_path,content_type")
+            .in("message_id", messageIds)
+        : Promise.resolve({ data: [] }),
+      isRefereesGroup && messageIds.length > 0
+        ? supabase
+            .from("referee_match_posts")
+            .select(
+              "id,message_id,fixture_text,duration_text,format_text,location_text,surface,kickoff_at,fee_text,claimed_by_person_id",
+            )
+            .in("message_id", messageIds)
+        : Promise.resolve({ data: [] }),
+      // The caller's own hat, read through their own person_roles rows.
+      supabase
+        .from("person_roles")
+        .select("id")
+        .eq("person_id", personId)
+        .eq("role", "referee")
+        .is("revoked_at", null)
+        .limit(1)
+        .maybeSingle(),
+    ]);
 
   const names = await resolveNames([
     ...participants.map((p) => p.person_id),
     ...messages.map((m) => m.sender_person_id),
+    ...(matchPostRows ?? [])
+      .map((row) => row.claimed_by_person_id)
+      .filter((id): id is string => !!id),
   ]);
   const nameMap: Record<string, string> = {};
   for (const p of participants) nameMap[p.person_id] = nameOf(names, p.person_id);
@@ -159,5 +200,25 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
     readOnlyNotice,
     canManageGroup,
     unnamedLabel: UNNAMED,
+    matchPosts: Object.fromEntries(
+      (matchPostRows ?? []).map((row) => [
+        row.message_id,
+        {
+          id: row.id,
+          fixtureText: row.fixture_text,
+          durationText: row.duration_text,
+          formatText: row.format_text,
+          locationText: row.location_text,
+          surface: row.surface,
+          kickoffAt: row.kickoff_at,
+          feeText: row.fee_text,
+          claimedByName: row.claimed_by_person_id
+            ? nameOf(names, row.claimed_by_person_id)
+            : null,
+        },
+      ]),
+    ),
+    isReferee: !!refereeRole.data,
+    isRefereesGroup,
   };
 }

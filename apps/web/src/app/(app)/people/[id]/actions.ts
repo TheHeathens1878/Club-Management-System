@@ -42,6 +42,7 @@ const APP_ROLES: AppRole[] = [
   "member",
   "parent",
   "hirer",
+  "referee",
 ];
 const RELATIONSHIPS: GuardianRelationship[] = [
   "parent",
