@@ -10,25 +10,29 @@
  * it.
  */
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
 import { Pencil, Plus, UserPlus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { Select, Textarea } from "@/components/ui/field";
-import { formatStamp } from "@/lib/people-display";
+import { Select } from "@/components/ui/field";
+import { EmergencyContactsFields, type LeadContact } from "@/components/emergency-contacts-fields";
 import {
-  KIT_SIZES,
-  PHOTO_PREFERENCE_LABELS,
-  type PhotoPreferences,
-} from "@/lib/registration-form";
+  QuestionBlock,
+  customQuestionsPayload,
+  stageRegistrationUploads,
+} from "@/components/registration-question-block";
+import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
+import { formatStamp } from "@/lib/people-display";
+import type { RegistrationQuestion } from "@/lib/registration-questions";
 
 import {
   addChild,
   allowAppAccess,
   registerForTeam,
   updateChildDetails,
+  updateChildEmergencyContacts,
   withdrawAppAccess,
   withdrawRegistration,
   type FamilyActionState,
@@ -340,22 +344,47 @@ export function ChildDetailsForm({
   );
 }
 
+/**
+ * "Register for a team" — the family screen's copy of /join step 3 (Adam,
+ * 2026-08-25: "Why is the main registration form not showing when register a
+ * player? There is no photo upload or ID upload"). The form IS the builder's
+ * questions, drawn by the same <QuestionBlock/> the wizard uses, and the photo
+ * and the ID go to their buckets from the browser before the action runs —
+ * which is why this form drives the action itself rather than through
+ * useActionState. The emergency contact is not asked here any more: it lives
+ * on the child's record above, and the action refuses a registration for a
+ * child with none.
+ */
 export function RegisterForm({
   personId,
   personName,
+  firstName,
+  minor,
+  needsId,
+  contactsOnRecord,
   seasonId,
   seasonName,
   teams,
+  questions,
   isSelf = false,
 }: {
   personId: string;
   personName: string;
+  firstName: string;
+  minor: boolean;
+  /** The club has neither seen their ID nor holds a document. */
+  needsId: boolean;
+  /** How many emergency contacts are on the person's record. */
+  contactsOnRecord: number;
   seasonId: string | null;
   seasonName: string | null;
   teams: TeamOption[];
+  /** The live registration form, in position order. */
+  questions: RegistrationQuestion[];
   isSelf?: boolean;
 }) {
-  const [state, action, pending] = useActionState<FamilyActionState, FormData>(registerForTeam, {});
+  const [state, setState] = useState<FamilyActionState>({});
+  const [pending, startTransition] = useTransition();
   const [open, setOpen] = useState(false);
 
   if (!seasonId) {
@@ -383,14 +412,30 @@ export function RegisterForm({
     );
   }
 
-  const photoKeys = Object.keys(PHOTO_PREFERENCE_LABELS) as (keyof PhotoPreferences)[];
+  const player = { personId, firstName, isSelf, minor, needsId };
+
+  function submit(formData: FormData) {
+    formData.set("person_id", personId);
+    formData.set("season_id", seasonId ?? "");
+    formData.set("is_self", isSelf ? "yes" : "no");
+    formData.set("is_minor", minor ? "yes" : "no");
+    formData.set("gdpr_asked", questions.some((q) => q.qtype === "gdpr_consent") ? "yes" : "no");
+    formData.set("custom_questions", customQuestionsPayload(questions));
+    startTransition(async () => {
+      // The files go to their buckets first; the action is handed the paths.
+      const staged = await stageRegistrationUploads(formData, personId);
+      if ("error" in staged) {
+        setState({ error: staged.error });
+        return;
+      }
+      const result = await registerForTeam({}, formData);
+      setState(result);
+      if (result.notice) setOpen(false);
+    });
+  }
 
   return (
-    <form action={action} className="space-y-5 rounded-lg border bg-secondary/20 p-4">
-      <input type="hidden" name="person_id" value={personId} />
-      <input type="hidden" name="season_id" value={seasonId} />
-      {isSelf && <input type="hidden" name="is_self" value="yes" />}
-
+    <form action={submit} className="space-y-5 rounded-lg border bg-secondary/20 p-4">
       <p className="text-sm">
         Registering <span className="font-medium">{personName}</span>
         {seasonName ? ` for ${seasonName}` : ""}.
@@ -415,149 +460,136 @@ export function RegisterForm({
         </p>
       </div>
 
-      <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold">Emergency contact</legend>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label htmlFor={`emergency-name-${personId}`}>
-              Name <span className="text-destructive">*</span>
-            </Label>
-            <Input id={`emergency-name-${personId}`} name="emergency_name" required />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor={`emergency-phone-${personId}`}>
-              Phone <span className="text-destructive">*</span>
-            </Label>
-            <Input id={`emergency-phone-${personId}`} name="emergency_phone" type="tel" required />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={`emergency-rel-${personId}`}>Relationship to the player</Label>
-          <Input
-            id={`emergency-rel-${personId}`}
-            name="emergency_relationship"
-            placeholder="Mother, father, grandparent…"
-          />
-        </div>
-      </fieldset>
-
-      <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold">Medical</legend>
-        <p className="text-xs text-muted-foreground">
-          Only club administrators and the club&apos;s safeguarding lead can read this. Coaches
-          cannot — pitch-side access to a medical note is a separate, recorded request.
+      {contactsOnRecord === 0 ? (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Add an emergency contact for {firstName} first — it is kept on their record, under
+          Contact details above, and the club will not take a registration without one.
         </p>
-        <div className="space-y-1">
-          <Label htmlFor={`medical-conditions-${personId}`}>Conditions</Label>
-          <Textarea
-            id={`medical-conditions-${personId}`}
-            name="medical_conditions"
-            rows={2}
-            placeholder="e.g. asthma, epilepsy — or leave blank if none"
-          />
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1">
-            <Label htmlFor={`medical-medication-${personId}`}>Medication</Label>
-            <Input id={`medical-medication-${personId}`} name="medical_medication" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor={`medical-allergies-${personId}`}>Allergies</Label>
-            <Input id={`medical-allergies-${personId}`} name="medical_allergies" />
-          </div>
-        </div>
-      </fieldset>
-
-      <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold">Playing details (optional)</legend>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="space-y-1">
-            <Label htmlFor={`previous-club-${personId}`}>Previous club</Label>
-            <Input id={`previous-club-${personId}`} name="previous_club" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor={`position-${personId}`}>Preferred position</Label>
-            <Input id={`position-${personId}`} name="preferred_position" />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor={`kit-${personId}`}>Kit size</Label>
-            <Select id={`kit-${personId}`} name="kit_size" defaultValue="">
-              <option value="">Not sure yet</option>
-              {KIT_SIZES.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </Select>
-          </div>
-        </div>
-      </fieldset>
-
-      {isSelf ? (
-        <fieldset className="space-y-2 rounded-lg border bg-card p-3">
-          <legend className="px-1 text-sm font-semibold">Photos of you</legend>
-          <p className="text-xs text-muted-foreground">
-            Where you are happy for the club to use photographs of you. Leave them all unticked and
-            the club uses none.
-          </p>
-          {photoKeys.map((key) => (
-            <label key={key} className="flex cursor-pointer items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                name={`photo_${key}`}
-                value="yes"
-                className="mt-0.5 h-4 w-4 accent-primary"
-              />
-              <span>{PHOTO_PREFERENCE_LABELS[key]}</span>
-            </label>
-          ))}
-        </fieldset>
       ) : (
-        <p className="rounded-lg border bg-card px-3 py-2 text-xs text-muted-foreground">
-          Photo permissions for a child are recorded separately by the club, one decision at a time,
-          and last for the season. The club will ask you for them — they are not a tick-box on this
-          form.
+        <p className="text-xs text-muted-foreground">
+          Emergency contacts on record: {contactsOnRecord}. Change them under Contact details
+          above.
         </p>
       )}
 
-      {/* GDPR is a default on every registration (Adam, 2026-08-25), so it is
-          asked here as well as on /join — not only where the form builder
-          renders it. */}
-      <label className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
-        <input
-          type="checkbox"
-          name="gdpr_accepted"
-          value="yes"
-          required
-          className="mt-0.5 h-4 w-4 accent-primary"
-        />
-        <span>
-          <span className="font-medium">Data protection.</span> I have read how the club stores and
-          uses this information, and I know it can be corrected or removed on request.{" "}
-          <span className="text-destructive">*</span>
-        </span>
-      </label>
+      {questions.map((question) => (
+        <QuestionBlock key={question.id} question={question} player={player} />
+      ))}
 
-      <label className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
-        <input
-          type="checkbox"
-          name="terms_accepted"
-          value="yes"
-          required
-          className="mt-0.5 h-4 w-4 accent-primary"
-        />
-        <span>
-          <span className="font-medium">I confirm</span> these details are correct and accept the
-          club&apos;s playing terms for the season.{" "}
-          <span className="text-destructive">*</span>
-        </span>
-      </label>
+      {questions.length === 0 && (
+        <label className="flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+          <input
+            type="checkbox"
+            name="terms_accepted"
+            value="yes"
+            required
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span>
+            <span className="font-medium">I confirm</span> these details are correct and accept
+            the club&apos;s playing terms for the season.{" "}
+            <span className="text-destructive">*</span>
+          </span>
+        </label>
+      )}
 
       <Feedback state={state} />
 
       <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
+        <Button
+          type="submit"
+          size="sm"
+          disabled={pending || contactsOnRecord === 0}
+          className="min-h-[44px] lg:min-h-0"
+        >
           {pending ? "Sending…" : "Send registration"}
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setOpen(false)}
+          className="min-h-[44px] lg:min-h-0"
+        >
+          Cancel
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+/**
+ * A child's emergency contacts (Adam, 2026-08-25): up to two, on the child's
+ * record, with "I am the first emergency contact" for the signed-in guardian.
+ * Closes on a successful save for the same reason the address form does — a
+ * reset must never land on a live tick-box.
+ */
+export function EmergencyContactsForm({
+  childPersonId,
+  childName,
+  initial,
+  lead,
+}: {
+  childPersonId: string;
+  childName: string;
+  initial: EmergencyContact[];
+  lead: LeadContact | null;
+}) {
+  const [state, action, pending] = useActionState<FamilyActionState, FormData>(
+    updateChildEmergencyContacts,
+    {},
+  );
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (state.notice) setOpen(false);
+  }, [state]);
+
+  if (!open) {
+    return (
+      <div className="space-y-2">
+        {initial.length === 0 ? (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            No emergency contact on record yet — the club cannot register {childName} for a team
+            without one.
+          </p>
+        ) : (
+          <ul className="space-y-1 text-sm">
+            {initial.map((contact) => (
+              <li key={contact.position}>
+                <span className="text-muted-foreground">{contact.position}.</span>{" "}
+                {emergencyContactLine(contact)}
+              </li>
+            ))}
+          </ul>
+        )}
+        <Feedback state={state} />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => setOpen(true)}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
+          <Pencil className="h-4 w-4" />{" "}
+          {initial.length === 0 ? "Add emergency contacts" : "Edit emergency contacts"}
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <form action={action} className="space-y-4 rounded-lg border bg-secondary/20 p-4">
+      <input type="hidden" name="child_person_id" value={childPersonId} />
+      <EmergencyContactsFields
+        idPrefix={`ec-${childPersonId}`}
+        initial={initial}
+        lead={lead}
+        personName={childName}
+      />
+      <Feedback state={state} />
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
+          {pending ? "Saving…" : "Save contacts"}
         </Button>
         <Button
           type="button"

@@ -19,10 +19,15 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { ageGroupFromDob } from "@/lib/waiting-list";
 
+import type { LeadContact } from "@/components/emergency-contacts-fields";
+import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
+import { questionFromRow, type RegistrationQuestion } from "@/lib/registration-questions";
+
 import {
   AddChildForm,
   AppAccessForm,
   ChildDetailsForm,
+  EmergencyContactsForm,
   RegisterForm,
   WithdrawForm,
   type ChildDetails,
@@ -161,11 +166,21 @@ export default async function FamilyPage() {
   const supabase = await createClient();
   const personId = await getCurrentPersonId();
 
-  const [childrenResult, teamsResult, seasonsResult] = await Promise.all([
+  const [childrenResult, teamsResult, seasonsResult, questionsResult] = await Promise.all([
     supabase.rpc("my_children"),
     supabase.from("teams").select("id,name,age_group,sort_order").eq("active", true).order("sort_order").order("name"),
     supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
+    // The registration form as the club currently asks it — the same rows
+    // /join renders, so "Register for a team" here IS the registration form.
+    supabase
+      .from("registration_questions")
+      .select("id,qkey,label,help_text,qtype,options,required,system,locked,position,archived_at")
+      .is("archived_at", null)
+      .order("position"),
   ]);
+  const questions: RegistrationQuestion[] = (questionsResult.data ?? [])
+    .map((row) => questionFromRow(row))
+    .filter((question): question is RegistrationQuestion => question !== null);
 
   const children = childrenResult.data ?? [];
   const teams: TeamOption[] = (teamsResult.data ?? []).map((team) => ({
@@ -262,11 +277,36 @@ export default async function FamilyPage() {
           error: null,
         }),
     personId
-      ? supabase.from("people").select("address").eq("id", personId).maybeSingle()
+      ? supabase
+          .from("people")
+          .select("first_name,last_name,phone,address")
+          .eq("id", personId)
+          .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
   ]);
 
   const leadAddress = leadResult.data?.address ?? null;
+  // The caller as "I am the first emergency contact" — name and number from
+  // their own record, which is what the server copies when the box is ticked.
+  const lead: LeadContact | null = leadResult.data
+    ? {
+        name: `${leadResult.data.first_name} ${leadResult.data.last_name}`.trim(),
+        phone: leadResult.data.phone,
+      }
+    : null;
+
+  // Emergency contacts (Adam, 2026-08-25: on the person, not the form), read
+  // under `emergency_contacts_self_read`; and whether each child still owes
+  // the club an ID, asked of `needs_id_document()` the way /join asks it.
+  const contactsByChild = await loadEmergencyContacts(childIds);
+  const needsIdByChild = new Map(
+    await Promise.all(
+      childIds.map(async (id) => {
+        const { data } = await supabase.rpc("needs_id_document", { p_person_id: id });
+        return [id, data === true] as const;
+      }),
+    ),
+  );
   const leadAddressLine = addressLine(leadAddress);
   const detailsByChild = new Map(
     (childContactResult.data ?? []).map((row) => {
@@ -416,6 +456,12 @@ export default async function FamilyPage() {
                       }
                       leadAddressLine={leadAddressLine}
                     />
+                    <EmergencyContactsForm
+                      childPersonId={child.person_id}
+                      childName={child.preferred_name || child.first_name}
+                      initial={contactsByChild.get(child.person_id) ?? []}
+                      lead={lead}
+                    />
                   </div>
 
                   <div className="space-y-3 border-t pt-4">
@@ -441,9 +487,14 @@ export default async function FamilyPage() {
                     <RegisterForm
                       personId={child.person_id}
                       personName={name}
+                      firstName={child.preferred_name || child.first_name}
+                      minor={child.is_minor}
+                      needsId={needsIdByChild.get(child.person_id) ?? true}
+                      contactsOnRecord={(contactsByChild.get(child.person_id) ?? []).length}
                       seasonId={currentSeason?.id ?? null}
                       seasonName={currentSeason?.name ?? null}
                       teams={teams}
+                      questions={questions}
                     />
                   </div>
                 </CardContent>

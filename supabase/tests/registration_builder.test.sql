@@ -66,12 +66,14 @@ select lives_ok(
   $$ update public.registration_questions set archived_at = now() where qkey = 'school_year' $$,
   'and can archive it again');
 
+-- Nine live questions, not ten: 20260825150000 took the emergency contact off
+-- the form and moved it onto the person.
 select is(
   (select public.set_registration_question_order(
      array(select id from public.registration_questions
             where archived_at is null
             order by (qkey = 'terms') desc, "position"))),
-  10,
+  9,
   'reordering renumbers every live question');
 
 reset role;
