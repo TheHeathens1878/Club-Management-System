@@ -118,6 +118,11 @@ export default async function LobbyPage() {
       .from("events")
       .select("id,title,type,starts_at,teams(name)")
       .eq("status", "scheduled")
+      // Adam, 2026-08-25: normal training and matches stay off the club lobby
+      // — a parent or coach should not be shown other teams' diaries here.
+      // Social/club happenings are the week feed; team diaries live on the
+      // team pages and in Events.
+      .eq("type", "social")
       .gte("starts_at", new Date(now).toISOString())
       .lte("starts_at", new Date(now + 7 * DAY_MS).toISOString())
       .order("starts_at")
@@ -127,7 +132,9 @@ export default async function LobbyPage() {
   const posts = postsResult.data ?? [];
   const results = resultsResult.data ?? [];
   const week = weekResult.data ?? [];
-  const canPost = capabilities.isClubAdmin || capabilities.isCommittee || capabilities.isTeamStaff;
+  // Adam, 2026-08-25: only admins post to the club noticeboard (coaches keep
+  // their own team's lobby on the team page).
+  const canPost = capabilities.isClubAdmin || capabilities.isCommittee;
   // Presentation only: the phone leads with the pinned notice, so the board is
   // split for that layout. The desktop list below still shows every post.
   const pinnedPost = posts.find((post) => post.pinned);

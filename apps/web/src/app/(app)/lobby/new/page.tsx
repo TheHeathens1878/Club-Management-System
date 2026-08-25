@@ -20,7 +20,9 @@ export const metadata = { title: "Post to the lobby" };
 
 export default async function NewLobbyPostPage() {
   const capabilities = await getCapabilities();
-  if (!capabilities.isClubAdmin && !capabilities.isCommittee && !capabilities.isTeamStaff) {
+  // Adam, 2026-08-25: only admins post to the club noticeboard. Team staff
+  // post to their team's lobby from the team page, not from here.
+  if (!capabilities.isClubAdmin && !capabilities.isCommittee) {
     redirect("/lobby");
   }
 

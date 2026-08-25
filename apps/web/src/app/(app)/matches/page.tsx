@@ -93,9 +93,14 @@ export default async function MatchesPage({
         subtitle="Every fixture on the desk — pitch, replies and what still needs doing"
         action={
           <span className="flex gap-2">
-            <Link href="/pitches" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <LandPlot className="h-4 w-4" /> Allocate pitches
-            </Link>
+            {/* Allocation is the club's job, not the coach's (Adam,
+                2026-08-25) — the destination page is committee-guarded, so
+                the door only shows to people it opens for. */}
+            {capabilities.isCommittee || capabilities.isClubAdmin ? (
+              <Link href="/pitches" className={buttonVariants({ variant: "outline", size: "sm" })}>
+                <LandPlot className="h-4 w-4" /> Allocate pitches
+              </Link>
+            ) : null}
             <Link href="/teams" className={buttonVariants({ size: "sm" })}>
               <CalendarPlus className="h-4 w-4" /> Add a fixture
             </Link>

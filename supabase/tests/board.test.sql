@@ -1,7 +1,8 @@
 -- =============================================================================
 -- The board (20260824400000)
 -- =============================================================================
---   A  who may post: admin anywhere; staff club-wide and to their own teams;
+--   A  who may post: admin anywhere; staff to their own teams only (the club
+--      noticeboard is the administrators' voice — Adam, 2026-08-25);
 --      a parent not at all; staff cannot target someone else's team
 --   B  the club lobby: club posts for everyone; targeted posts only for their
 --      audience; age groups expand to teams at posting time
@@ -57,8 +58,8 @@ reset role;
 
 set local request.jwt.claims to '{"sub":"b0b0b0b0-8888-4111-8111-000000000002","role":"authenticated"}';
 set local role authenticated;
-select set_config('bd.clubpost', public.create_board_post('Pitch closed next week', 'The 3G is being resurfaced.')::text, true);
-select isnt(current_setting('bd.clubpost'), '', 'a coach posts club-wide');
+select throws_like($$ select public.create_board_post('Pitch closed next week', 'The 3G is being resurfaced.') $$,
+  '%club noticeboard%', 'a coach cannot post club-wide — the noticeboard is the administrators'' voice');
 select throws_like($$
   select public.create_board_post('Sneaky', 'x', array['9a9a9a9a-8888-4111-8111-000000000003']::uuid[])
 $$, '%teams you are staff of%', 'a coach cannot target a team they do not staff');
@@ -69,6 +70,8 @@ reset role;
 
 set local request.jwt.claims to '{"sub":"b0b0b0b0-8888-4111-8111-000000000001","role":"authenticated"}';
 set local role authenticated;
+-- The unpushed club post the later sections read — admin-authored now.
+select set_config('bd.clubpost', public.create_board_post('Pitch closed next week', 'The 3G is being resurfaced.')::text, true);
 select set_config('bd.pushed', public.create_board_post('Autumn subs are open', 'Due 1 September.',
   null, null, true, true)::text, true);
 select is((select push_to_boards from public.board_posts where id = current_setting('bd.pushed')::uuid), true,
