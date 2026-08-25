@@ -17,11 +17,13 @@
  */
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
-import { Eye, MessageSquarePlus, Search } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useMemo, useState, useTransition } from "react";
+import { Archive, ArchiveRestore, Eye, MessageSquarePlus, Search, Trash2 } from "lucide-react";
 
 import { Input, Label } from "@/components/ui/input";
+
+import { archiveConversation, removeConversation, unarchiveConversation } from "./rail-actions";
 
 export type RailItem = {
   id: string;
@@ -37,11 +39,15 @@ export type RailItem = {
   supervised: boolean;
   closed: boolean;
   left: boolean;
+  /** Shelved by the caller and quiet since — hidden from every other filter. */
+  archived: boolean;
 };
 
-type Filter = "all" | "teams" | "groups" | "direct" | "unread";
+type Filter = "all" | "teams" | "groups" | "direct" | "unread" | "archived";
 
 function matchesFilter(item: RailItem, filter: Filter): boolean {
+  if (filter === "archived") return item.archived;
+  if (item.archived) return false;
   switch (filter) {
     case "all":
       return true;
@@ -61,13 +67,29 @@ function matchesFilter(item: RailItem, filter: Filter): boolean {
 
 export function ConversationRail({ items }: { items: RailItem[] }) {
   const pathname = usePathname();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>(
     searchParams.get("filter") === "groups" ? "groups" : "all",
   );
+  const [busy, startTransition] = useTransition();
+  const [railError, setRailError] = useState<string | null>(null);
 
-  const unreadCount = useMemo(() => items.filter((item) => item.unread > 0).length, [items]);
+  const run = (action: () => Promise<{ error?: string }>) => {
+    setRailError(null);
+    startTransition(async () => {
+      const result = await action();
+      if (result.error) setRailError(result.error);
+      router.refresh();
+    });
+  };
+
+  const unreadCount = useMemo(
+    () => items.filter((item) => item.unread > 0 && !item.archived).length,
+    [items],
+  );
+  const archivedCount = useMemo(() => items.filter((item) => item.archived).length, [items]);
   const needle = query.trim().toLocaleLowerCase("en-GB");
   const shown = items.filter(
     (item) =>
@@ -82,6 +104,9 @@ export function ConversationRail({ items }: { items: RailItem[] }) {
     { key: "groups", label: "Groups" },
     { key: "direct", label: "Direct" },
     { key: "unread", label: unreadCount > 0 ? `Unread ${unreadCount}` : "Unread" },
+    ...(archivedCount > 0
+      ? [{ key: "archived" as Filter, label: `Archived ${archivedCount}` }]
+      : []),
   ];
 
   return (
@@ -141,6 +166,11 @@ export function ConversationRail({ items }: { items: RailItem[] }) {
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {railError && (
+          <p className="border-b bg-destructive/10 px-4 py-2 text-xs text-destructive">
+            {railError}
+          </p>
+        )}
         {shown.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted-foreground">
             {items.length === 0
@@ -154,8 +184,51 @@ export function ConversationRail({ items }: { items: RailItem[] }) {
             const href = `/messages/${item.id}`;
             const active = pathname === href;
             return (
+              <div key={item.id} className="group/row relative">
+                <span className="absolute right-2 top-2 z-10 hidden gap-1 group-hover/row:flex group-focus-within/row:flex">
+                  {item.archived ? (
+                    <button
+                      type="button"
+                      title="Unarchive"
+                      disabled={busy}
+                      onClick={() => run(() => unarchiveConversation(item.id))}
+                      className="rounded-md bg-card/90 p-1 text-muted-foreground shadow-sm hover:text-foreground"
+                    >
+                      <ArchiveRestore className="h-3.5 w-3.5" />
+                      <span className="sr-only">Unarchive</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      title="Archive"
+                      disabled={busy}
+                      onClick={() => run(() => archiveConversation(item.id))}
+                      className="rounded-md bg-card/90 p-1 text-muted-foreground shadow-sm hover:text-foreground"
+                    >
+                      <Archive className="h-3.5 w-3.5" />
+                      <span className="sr-only">Archive</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    title="Delete (leave and archive — history is kept)"
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Delete this conversation from your list? You will leave it and it moves to Archived — the club keeps the message history.",
+                        )
+                      ) {
+                        run(() => removeConversation(item.id));
+                      }
+                    }}
+                    className="rounded-md bg-card/90 p-1 text-muted-foreground shadow-sm hover:text-destructive"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="sr-only">Delete</span>
+                  </button>
+                </span>
               <Link
-                key={item.id}
                 href={href}
                 className={
                   "block border-b border-l-[3px] px-4 py-3 transition-colors " +
@@ -208,6 +281,7 @@ export function ConversationRail({ items }: { items: RailItem[] }) {
                   )}
                 </p>
               </Link>
+              </div>
             );
           })
         )}
