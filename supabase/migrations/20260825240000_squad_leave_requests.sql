@@ -157,6 +157,16 @@ create policy "team_membership_leave_requests_staff_insert"
 -- NO update policy and NO delete policy, deliberately. A decision is
 -- `decide_leave_request()` and nothing else; a request is history once made.
 
+-- Privileges. A policy grants nothing on its own — it only narrows what a
+-- privilege already allows — so these are what let `authenticated` reach the
+-- table at all. UPDATE and DELETE are withheld from `authenticated` on purpose:
+-- that is a second lock on the same door as the missing policies, and it fails
+-- closed if a policy is ever added without thinking it through.
+-- `decide_leave_request()` needs none of this: it is SECURITY DEFINER and runs
+-- as the owner.
+grant select, insert         on public.team_membership_leave_requests to authenticated;
+grant select, insert, update on public.team_membership_leave_requests to service_role;
+
 
 -- 3. The request is derived, not declared -------------------------------------
 

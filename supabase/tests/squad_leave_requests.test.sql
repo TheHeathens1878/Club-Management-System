@@ -315,14 +315,15 @@ select is((select status from public.team_membership_leave_requests
             where id = 'e9e9e9e9-9999-4111-8111-000000000001'), 'approved',
   'and the first decision stands');
 
--- Not even an administrator writes the row by hand: there is no UPDATE policy.
-select lives_ok($$
+-- Not even an administrator writes the row by hand: `authenticated` holds no
+-- UPDATE privilege on the table and there is no UPDATE policy behind it.
+select throws_ok($$
   update public.team_membership_leave_requests set status = 'rejected'
    where id = 'e9e9e9e9-9999-4111-8111-000000000001'
-$$, 'a direct UPDATE raises nothing...');
+$$, '42501', null, 'a direct UPDATE is refused outright, even to an administrator');
 select is((select status from public.team_membership_leave_requests
             where id = 'e9e9e9e9-9999-4111-8111-000000000001'), 'approved',
-  '...and changes nothing — the RPC is the only way a status moves');
+  'and the status is untouched — the RPC is the only way it moves');
 reset role;
 
 select is((select count(*) from public.audit_log
