@@ -72,6 +72,7 @@ export function TeamFilterGrid({
   noTeamsMessage,
   head,
   actions,
+  footerNote,
 }: {
   items: TeamFilterItem[];
   initialQuery: string;
@@ -82,6 +83,8 @@ export function TeamFilterGrid({
   head: ReactNode;
   /** Server-rendered controls beside the search box — the "New team" button. */
   actions?: ReactNode;
+  /** The design's right-aligned footer line under the table. */
+  footerNote?: string;
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [showAll, setShowAll] = useState(initialShowAll);
@@ -90,6 +93,12 @@ export function TeamFilterGrid({
   const needsStaffCount = useMemo(
     () => items.filter((item) => item.active && item.needsStaff).length,
     [items],
+  );
+
+  // "Show the other N teams" — the inactive rows the default filter hides.
+  const hiddenInactive = useMemo(
+    () => (showAll ? 0 : items.filter((item) => !item.active).length),
+    [items, showAll],
   );
 
   const needle = query.trim().toLocaleLowerCase("en-GB");
@@ -174,6 +183,25 @@ export function TeamFilterGrid({
               ))}
             </tbody>
           </table>
+          {(hiddenInactive > 0 || footerNote) && (
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2.5 text-xs">
+              {hiddenInactive > 0 ? (
+                <button
+                  type="button"
+                  className="font-medium text-primary hover:underline"
+                  onClick={() => {
+                    setShowAll(true);
+                    syncUrl(query, true);
+                  }}
+                >
+                  Show the other {hiddenInactive} {hiddenInactive === 1 ? "team" : "teams"}
+                </button>
+              ) : (
+                <span />
+              )}
+              {footerNote && <span className="text-muted-foreground">{footerNote}</span>}
+            </div>
+          )}
         </div>
       )}
     </>

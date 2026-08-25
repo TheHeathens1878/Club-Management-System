@@ -39,6 +39,8 @@ import { FixturesTable, type TeamFixture } from "./fixtures-list";
 import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
 import { formatBookingDateShort } from "@/lib/booking-time";
+import { faFormatFor } from "@/lib/fa-formats";
+import { setTeamActive } from "../actions";
 import { loadThread } from "../../messages/[id]/thread-data";
 import { ThreadPanel } from "../../messages/[id]/thread-panel";
 import { googleMapsUrl } from "../../events/shared";
@@ -161,7 +163,9 @@ export default async function TeamPage({
   // roster, Training the pitch diary — and the committee keeps Subs and the
   // Settings machinery. A tab the caller cannot use is not rendered.
   const tabs: TeamTab[] = [
-    { key: "matchday", label: "Matchday" },
+    // The design's rename (2026-08-25): the first tab is the team's Overview —
+    // same key, so ?tab=matchday links and the alias map keep working.
+    { key: "matchday", label: "Overview" },
     { key: "board", label: "Communications" },
     // A parent or player gets the team's life, not its management: no roster
     // page, no money, no settings ("Parents don't need to see pitch
@@ -454,14 +458,52 @@ export default async function TeamPage({
   let defaultFtName = "";
   let runs: ImportRunView[] = [];
 
+  // Overview extras: the board's latest posts, the chat's tail and — for
+  // staff — the next match's availability by name.
+  type OverviewAvailability = {
+    personId: string;
+    name: string;
+    status: "available" | "unavailable" | "maybe" | null;
+  };
+  let overviewPosts: BoardPost[] = [];
+  let overviewThread: Awaited<ReturnType<typeof loadThread>> = null;
+  let availabilityList: OverviewAvailability[] = [];
+
   if (tab === "matchday") {
-    const fixturesResult = await userClient
-      .from("fixtures")
-      .select(FIXTURE_SELECT)
-      .eq("team_id", id)
-      .gte("kickoff_at", nowIso)
-      .order("kickoff_at")
-      .limit(UPCOMING_LIMIT);
+    const squadIds = canManageTeam ? await teamPlayerIds(userClient, id) : [];
+    const [fixturesResult, postsResult, roomResult] = await Promise.all([
+      userClient
+        .from("fixtures")
+        .select(FIXTURE_SELECT)
+        .eq("team_id", id)
+        .gte("kickoff_at", nowIso)
+        .order("kickoff_at")
+        .limit(UPCOMING_LIMIT),
+      userClient.rpc("team_board_posts", { p_team_id: id, p_limit: 3 }),
+      userClient
+        .from("conversations")
+        .select("id")
+        .eq("team_id", id)
+        .eq("type", "team")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    overviewPosts = (postsResult.data ?? []).map((row) => ({
+      postId: row.post_id,
+      title: row.title,
+      body: row.body,
+      audience: row.audience,
+      pinned: row.pinned,
+      authorName: row.author_name,
+      createdAt: row.created_at,
+      readCount: row.read_count,
+      readOf: row.read_of,
+      replyCount: row.reply_count,
+      canManage: row.can_manage,
+    }));
+    if (roomResult.data) overviewThread = await loadThread(roomResult.data.id);
 
     fixturesFailed = !!fixturesResult.error;
     // Staff only: a parent's client reads just their own household's
@@ -470,7 +512,7 @@ export default async function TeamPage({
       ? await fixtureHeadcounts(
           userClient,
           (fixturesResult.data ?? []).map((row) => row.id),
-          await teamPlayerIds(userClient, id),
+          squadIds,
         )
       : new Map<string, Headcount>();
     fixtures = (fixturesResult.data ?? []).map((row) => ({
@@ -488,6 +530,32 @@ export default async function TeamPage({
       pitchAddress: row.resources?.address ?? null,
       headcount: fixtureCounts.get(row.id) ?? null,
     }));
+
+    // The Availability card: the squad by name against the next match, the
+    // exceptions surfaced first. Staff only, same reason as the headcounts.
+    if (canManageTeam && fixtures[0] && squadIds.length > 0) {
+      const [{ data: availRows }, names] = await Promise.all([
+        userClient
+          .from("availability")
+          .select("person_id,status")
+          .eq("fixture_id", fixtures[0].id),
+        resolveNames(squadIds),
+      ]);
+      const statusBy = new Map(
+        (availRows ?? []).map((row) => [row.person_id, row.status] as const),
+      );
+      const weight = (status: OverviewAvailability["status"]): number =>
+        status === "unavailable" ? 0 : status === "maybe" ? 1 : status === null ? 2 : 3;
+      availabilityList = squadIds
+        .map((personId) => ({
+          personId,
+          name: nameOf(names, personId),
+          status: (statusBy.get(personId) ?? null) as OverviewAvailability["status"],
+        }))
+        .sort(
+          (a, b) => weight(a.status) - weight(b.status) || a.name.localeCompare(b.name, "en-GB"),
+        );
+    }
   }
 
   // --------------------------------------------------------------------
@@ -619,6 +687,42 @@ export default async function TeamPage({
       })
       .sort((a, b) => a.name.localeCompare(b.name, "en-GB"));
   }
+
+  // Overview derivations: the FA rules strip, the availability tallies, and
+  // the chat tail. All cheap, all from data already in hand.
+  const formatRules = faFormatFor(team.age_group);
+  const availTally = {
+    available: availabilityList.filter((row) => row.status === "available").length,
+    away: availabilityList.filter((row) => row.status === "unavailable").length,
+    maybe: availabilityList.filter((row) => row.status === "maybe").length,
+    noReply: availabilityList.filter((row) => row.status === null).length,
+  };
+  const chatMessages = overviewThread
+    ? overviewThread.messages.filter((message) => !message.deleted_at).slice(-3)
+    : [];
+  let chatUnread = 0;
+  if (overviewThread) {
+    const lastRead = overviewThread.myLive?.last_read_message_id ?? null;
+    const index = lastRead
+      ? overviewThread.messages.findIndex((message) => message.id === lastRead)
+      : -1;
+    chatUnread =
+      index >= 0 ? overviewThread.messages.length - index - 1 : overviewThread.messages.length;
+  }
+  const initialsOf = (name: string): string =>
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0]?.toLocaleUpperCase("en-GB") ?? "")
+      .join("");
+  const chatTime = (iso: string): string =>
+    new Date(iso).toLocaleTimeString("en-GB", {
+      timeZone: "Europe/London",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    });
 
   return (
     <>
@@ -869,12 +973,264 @@ export default async function TeamPage({
                       href={`/teams/${team.id}/fixtures/${fixtures[0].id}`}
                       className={buttonVariants({ size: "sm" }) + " mt-2"}
                     >
-                      Availability &amp; attendance
+                      Pick the team
                     </Link>
                   </div>
                 </div>
+
+                {/* The format strip: the FA's rules for this age group, derived
+                    — never stored — so rollover changes them automatically. */}
+                {formatRules && (
+                  <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3 border-t border-border pt-4">
+                    {[
+                      ["Format", formatRules.format],
+                      ["Match length", formatRules.matchLength],
+                      ["Pitch size", formatRules.pitchSize],
+                      ["Ball", formatRules.ball],
+                    ].map(([label, value]) => (
+                      <div key={label}>
+                        <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                          {label}
+                        </p>
+                        <p className="mt-0.5 text-sm font-semibold">{value}</p>
+                      </div>
+                    ))}
+                    <p className="ml-auto max-w-[34ch] text-xs text-muted-foreground">
+                      FA rules for {formatRules.age}. Changes automatically when the age group
+                      moves up at rollover.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
+
+            {/* -------------------------------------------------------------- */}
+            {/* The Overview grid: availability + jobs on the left, the board  */}
+            {/* and chat previews on the right (design build, 2026-08-25).     */}
+            {/* -------------------------------------------------------------- */}
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <div className="space-y-4">
+                {canManageTeam && fixtures[0] && availabilityList.length > 0 && (
+                  <Card className="overflow-hidden">
+                    <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-4">
+                      <CardTitle className="text-base">Availability</CardTitle>
+                      {availTally.noReply > 0 && (
+                        <Link
+                          href={`/teams/${team.id}/fixtures/${fixtures[0].id}`}
+                          className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-200"
+                        >
+                          Chase the {availTally.noReply} no-
+                          {availTally.noReply === 1 ? "reply" : "replies"}
+                        </Link>
+                      )}
+                    </CardHeader>
+                    <CardContent className="p-0">
+                      <div className="px-4 pb-1 pt-4">
+                        <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+                          {availTally.available > 0 && (
+                            <div
+                              className="bg-emerald-600"
+                              style={{
+                                width: `${(availTally.available / availabilityList.length) * 100}%`,
+                              }}
+                            />
+                          )}
+                          {availTally.away + availTally.maybe > 0 && (
+                            <div
+                              className="bg-primary"
+                              style={{
+                                width: `${((availTally.away + availTally.maybe) / availabilityList.length) * 100}%`,
+                              }}
+                            />
+                          )}
+                        </div>
+                        <p className="mt-2 flex flex-wrap gap-x-4 text-xs text-muted-foreground">
+                          <span>
+                            <strong className="text-emerald-700">{availTally.available}</strong>{" "}
+                            available
+                          </span>
+                          <span>
+                            <strong className="text-primary">{availTally.away}</strong> away
+                          </span>
+                          {availTally.maybe > 0 && (
+                            <span>
+                              <strong className="text-amber-700">{availTally.maybe}</strong> maybe
+                            </span>
+                          )}
+                          <span>
+                            <strong className="text-foreground">{availTally.noReply}</strong> no
+                            reply
+                          </span>
+                        </p>
+                      </div>
+                      <ul className="mt-2">
+                        {availabilityList.slice(0, 5).map((row) => (
+                          <li
+                            key={row.personId}
+                            className="flex items-center gap-3 border-t px-4 py-2.5"
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                              {initialsOf(row.name)}
+                            </span>
+                            <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
+                            <span
+                              className={
+                                "text-xs font-semibold " +
+                                (row.status === "available"
+                                  ? "text-emerald-700"
+                                  : row.status === "unavailable"
+                                    ? "text-primary"
+                                    : row.status === "maybe"
+                                      ? "text-amber-700"
+                                      : "text-amber-700")
+                              }
+                            >
+                              {row.status === "available"
+                                ? "Available"
+                                : row.status === "unavailable"
+                                  ? "Away"
+                                  : row.status === "maybe"
+                                    ? "Maybe"
+                                    : "No reply"}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                      <Link
+                        href={`/teams/${team.id}?tab=squad`}
+                        className="block border-t px-4 py-2.5 text-xs text-primary hover:underline"
+                      >
+                        Show all {availabilityList.length} in the squad
+                      </Link>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <Card className="overflow-hidden">
+                  <CardHeader className="flex-row items-baseline justify-between space-y-0 border-b py-4">
+                    <CardTitle className="text-base">Bulletin board</CardTitle>
+                    <Link
+                      href={`/teams/${team.id}?tab=board`}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      All posts
+                    </Link>
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    {overviewPosts.length === 0 ? (
+                      <p className="px-4 py-4 text-sm text-muted-foreground">
+                        Nothing on the board yet.
+                      </p>
+                    ) : (
+                      overviewPosts.map((post, index) => (
+                        <div
+                          key={post.postId}
+                          className={
+                            "px-4 py-3" +
+                            (index > 0 ? " border-t" : "") +
+                            (post.pinned ? " bg-primary/5" : "")
+                          }
+                        >
+                          <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            {post.pinned && (
+                              <span className="font-display text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary">
+                                Pinned
+                              </span>
+                            )}
+                            {post.audience === "club" ? "Club-wide" : post.authorName}
+                            {" · "}
+                            {new Date(post.createdAt).toLocaleDateString("en-GB", {
+                              timeZone: "Europe/London",
+                              day: "numeric",
+                              month: "short",
+                            })}
+                          </p>
+                          <p className="mt-1 text-sm font-semibold">{post.title}</p>
+                          {post.pinned && post.body && (
+                            <p className="mt-1 line-clamp-3 max-w-[52ch] text-sm text-muted-foreground">
+                              {post.body}
+                            </p>
+                          )}
+                          <p className="mt-1.5 flex gap-4 text-xs text-muted-foreground">
+                            <span>
+                              {post.readCount} of {post.readOf} read
+                            </span>
+                            <span>
+                              {post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}
+                            </span>
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </CardContent>
+                </Card>
+
+                {overviewThread && (
+                  <Card className="overflow-hidden">
+                    <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-4">
+                      <CardTitle className="text-base">Team chat</CardTitle>
+                      {chatUnread > 0 && (
+                        <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
+                          {chatUnread > 9 ? "9+" : chatUnread}
+                        </span>
+                      )}
+                    </CardHeader>
+                    <CardContent className="space-y-3 bg-secondary/30 p-4">
+                      {chatMessages.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No messages yet.</p>
+                      ) : (
+                        chatMessages.map((message) => {
+                          const mine = message.sender_person_id === overviewThread.personId;
+                          const senderName =
+                            overviewThread.nameMap[message.sender_person_id] ??
+                            overviewThread.unnamedLabel;
+                          return (
+                            <div
+                              key={message.id}
+                              className={"flex gap-2.5" + (mine ? " flex-row-reverse" : "")}
+                            >
+                              <span
+                                className={
+                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold " +
+                                  (mine
+                                    ? "bg-primary text-primary-foreground"
+                                    : "bg-muted text-muted-foreground")
+                                }
+                              >
+                                {initialsOf(senderName)}
+                              </span>
+                              <div className={"min-w-0" + (mine ? " text-right" : "")}>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {senderName} · {chatTime(message.created_at)}
+                                </p>
+                                <p
+                                  className={
+                                    "mt-1 inline-block max-w-[38ch] rounded-lg px-3 py-2 text-left text-sm " +
+                                    (mine
+                                      ? "bg-foreground text-background"
+                                      : "border bg-card")
+                                  }
+                                >
+                                  {message.body}
+                                </p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                      <Link
+                        href={`/teams/${team.id}?tab=board`}
+                        className="block pt-1 text-xs text-primary hover:underline"
+                      >
+                        Open the chat
+                      </Link>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
 
             <Card>
               <CardHeader>
@@ -1015,6 +1371,34 @@ export default async function TeamPage({
                   }
                   runs={runs}
                 />
+              </CardContent>
+            </Card>
+
+            {/* Active/inactive moved here from the teams table (the design
+                drops that column — the list's "Active only" filter shows the
+                state, this is where it changes). */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Team status</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  An inactive team keeps its history but drops out of the default teams list, the
+                  rollover and the allocator&apos;s work lists.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <form action={setTeamActive} className="flex items-center gap-3">
+                  <input type="hidden" name="team_id" value={team.id} />
+                  <input type="hidden" name="active" value={team.active ? "false" : "true"} />
+                  <Badge variant={team.active ? "success" : "muted"}>
+                    {team.active ? "Active" : "Inactive"}
+                  </Badge>
+                  <button
+                    type="submit"
+                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                  >
+                    {team.active ? "Mark inactive" : "Mark active"}
+                  </button>
+                </form>
               </CardContent>
             </Card>
           </div>

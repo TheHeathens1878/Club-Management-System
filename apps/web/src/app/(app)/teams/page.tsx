@@ -22,8 +22,11 @@ import { STAFF_TEAM_ROLES } from "@/lib/pitch-booking";
 import { formatBookingDateShort } from "@/lib/booking-time";
 import { widgetUrl } from "@club/fulltime";
 
-import { createSeason, createTeam, setCurrentSeason, setTeamActive } from "./actions";
+import { faFormatDetail, faFormatFor } from "@/lib/fa-formats";
+
+import { createSeason, createTeam, setCurrentSeason } from "./actions";
 import { ClubWidgetsPanel } from "./club-widgets-panel";
+import { FormatsPanel } from "./formats-panel";
 import { TeamFilterGrid, type TeamFilterItem } from "./team-filter";
 
 /** The Full-Time link columns this list condenses into one dot and one label. */
@@ -68,8 +71,13 @@ type TeamCard = {
   league: string | null;
   division: string | null;
   players: number;
-  /** Every staff member by name, the manager (else head coach) first. */
-  staffNames: string[];
+  /** The manager's name, else the head coach's; null with `others` > 0 is the
+      design's "No manager" state, null with 0 others is "No staff". */
+  lead: string | null;
+  /** Staff beyond the lead, condensed to "+ N assistants" / "+ N coaches". */
+  others: number;
+  /** "assistants" when any remaining staff is an assistant, else "coaches". */
+  othersWord: string;
   nextOut: NextOut | null;
   /** null = no subscriptions set up for this squad, shown as an em-dash. */
   subsOwing: number | null;
@@ -219,14 +227,21 @@ function compareTeams(a: TeamCard, b: TeamCard): number {
 export default async function TeamsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ saved?: string; error?: string; q?: string; status?: string }>;
+  searchParams: Promise<{
+    saved?: string;
+    error?: string;
+    q?: string;
+    status?: string;
+    tab?: string;
+  }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
-  const { saved, error: errorParam, q, status } = await searchParams;
+  const { saved, error: errorParam, q, status, tab } = await searchParams;
   const query = (q ?? "").trim();
   const showAll = status === "all";
+  const formatsTab = tab === "formats";
   const nowIso = new Date().toISOString();
 
   // ------------------------------------------------------------------
@@ -436,22 +451,27 @@ export default async function TeamsPage({
   );
   const subscribedPeople = new Set(subscriptionRows.map((row) => row.person_id));
 
+  // Which roles the non-lead staff hold, for the "+ N assistants" wording.
+  const rolesByTeamPerson = new Map<string, string>();
+  for (const row of memberships) {
+    if (STAFF_TEAM_ROLES.includes(row.role)) {
+      rolesByTeamPerson.set(`${row.team_id}:${row.person_id}`, row.role);
+    }
+  }
+
   const allTeams: TeamCard[] = teamRows
     .map((team) => {
       const players = playerIds.get(team.id) ?? new Set<string>();
       const staff = staffIds.get(team.id) ?? new Set<string>();
+      // The design's Staff cell: the manager (else the head coach) by name,
+      // everyone else condensed to a count — "+ 2 assistants" / "+ 1 coach".
       const lead = managerBy.get(team.id) ?? coachBy.get(team.id) ?? null;
       const fixture = nextFixture.get(team.id) ?? null;
       const squadSubscribed = Array.from(players).some((id) => subscribedPeople.has(id));
-      // Every staff member by name, the lead first (Adam, 2026-08-25: "All
-      // staff should be shown on the + 2 assistants").
-      const staffNames = [
-        ...(lead ? [personName.get(lead) ?? "Club member"] : []),
-        ...Array.from(staff)
-          .filter((personId) => personId !== lead)
-          .map((personId) => personName.get(personId) ?? "Club member")
-          .sort((a, b) => a.localeCompare(b, "en-GB")),
-      ];
+      const rest = Array.from(staff).filter((personId) => personId !== lead);
+      const restRoles = rest.map(
+        (personId) => rolesByTeamPerson.get(`${team.id}:${personId}`) ?? "coach",
+      );
       return {
         id: team.id,
         name: team.name,
@@ -462,7 +482,11 @@ export default async function TeamsPage({
         league: team.league,
         division: team.division,
         players: players.size,
-        staffNames,
+        lead: lead ? personName.get(lead) ?? "Club member" : null,
+        others: rest.length,
+        othersWord: restRoles.some((role) => role === "assistant_coach")
+          ? "assistant"
+          : "coach",
         nextOut: fixture
           ? {
               when: kickoffShort(fixture.kickoff_at),
@@ -482,17 +506,57 @@ export default async function TeamsPage({
   const currentSeason = seasons.find((season) => season.is_current) ?? null;
   const loadError = teamsResult.error ?? seasonsResult.error;
 
+  // The header eyebrow: "31 teams · 612 players" — active teams, distinct
+  // live players across them.
+  const activeTeams = allTeams.filter((team) => team.active);
+  const distinctPlayers = new Set<string>();
+  for (const team of activeTeams) {
+    for (const personId of playerIds.get(team.id) ?? []) distinctPlayers.add(personId);
+  }
+
+  // The Formats & rules tab wants every active pitch by name.
+  const allPitches = formatsTab
+    ? await supabase
+        .from("resources")
+        .select("id,name")
+        .eq("type", "pitch")
+        .eq("active", true)
+        .order("sort_order")
+        .order("name")
+        .then((result) => result.data ?? [])
+    : [];
+
   return (
     <>
       <PageHeader
         title="Teams"
         subtitle={
           canAdmin
-            ? "Every team in the club — open one to run it"
+            ? `${activeTeams.length} teams · ${distinctPlayers.size} players`
             : "The teams you help run — open one to see its members, fixtures and pitches"
         }
       />
       <div className="space-y-6 p-6">
+        {/* The design's two sub-tabs: the list, and the FA formats reference. */}
+        <div className="flex gap-6 border-b">
+          {[
+            { href: "/teams", label: "All teams", active: !formatsTab },
+            { href: "/teams?tab=formats", label: "Formats & rules", active: formatsTab },
+          ].map((item) => (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={
+                "-mb-px border-b-2 pb-2.5 text-sm transition-colors " +
+                (item.active
+                  ? "border-primary font-semibold text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground")
+              }
+            >
+              {item.label}
+            </Link>
+          ))}
+        </div>
         {saved && (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -511,10 +575,23 @@ export default async function TeamsPage({
           </div>
         )}
 
+        {formatsTab && (
+          <FormatsPanel
+            teams={allTeams.map((team) => ({
+              id: team.id,
+              name: team.name,
+              ageGroup: team.ageGroup,
+              active: team.active,
+            }))}
+            pitches={allPitches}
+          />
+        )}
+
         {/* ---------------------------------------------------------------- */}
         {/* Find a team — the box filters as you type (client-side over the  */}
         {/* server-rendered cards), and the URL keeps up so the view shares. */}
         {/* ---------------------------------------------------------------- */}
+        {!formatsTab && (
         <TeamFilterGrid
           initialQuery={query}
           initialShowAll={showAll}
@@ -561,16 +638,19 @@ export default async function TeamsPage({
           head={
             <tr>
               <th className="px-4 py-2.5 font-medium">Team</th>
-              <th className="px-4 py-2.5 font-medium">League</th>
+              <th className="px-4 py-2.5 font-medium">
+                Format
+                <span className="block font-normal normal-case tracking-normal text-muted-foreground/80">
+                  from age group
+                </span>
+              </th>
               <th className="px-4 py-2.5 font-medium">Staff</th>
               <th className="px-4 py-2.5 font-medium">Squad</th>
               <th className="px-4 py-2.5 font-medium">Next out</th>
               {canAdmin && <th className="px-4 py-2.5 font-medium">Subs</th>}
-              <th className="px-4 py-2.5">
-                <span className="sr-only">Actions</span>
-              </th>
             </tr>
           }
+          footerNote="Format is read from the age group, not stored per team"
           items={allTeams.map((team): TeamFilterItem => {
             const ft = canAdmin
               ? fullTimeState(
@@ -579,7 +659,8 @@ export default async function TeamsPage({
                   clubWidgetUrls.length > 0,
                 )
               : null;
-            const needsStaff = team.staffNames.length === 0;
+            const needsStaff = team.lead === null && team.others === 0;
+            const rules = faFormatFor(team.ageGroup);
             return {
               key: team.id,
               haystack: `${team.name} ${team.ageGroup ?? ""} ${team.league ?? ""} ${
@@ -600,6 +681,13 @@ export default async function TeamsPage({
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-muted-foreground">
                       {team.ageGroup ?? "No age group"}
                       {team.gender ? <> · {GENDER_LABELS[team.gender] ?? team.gender}</> : null}
+                      {team.league ? (
+                        <>
+                          {" · "}
+                          {team.league}
+                          {team.division ? `, ${team.division}` : ""}
+                        </>
+                      ) : null}
                       {!team.active && <Badge variant="muted">Inactive</Badge>}
                       {ft && (
                         <span className="inline-flex items-center gap-1" title={ft.detail}>
@@ -610,34 +698,36 @@ export default async function TeamsPage({
                     </p>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    {team.league ? (
+                    {rules ? (
                       <>
-                        <p>{team.league}</p>
-                        {team.division && (
-                          <p className="text-xs text-muted-foreground">{team.division}</p>
-                        )}
+                        <p>{rules.format}</p>
+                        <p className="text-xs text-muted-foreground">{faFormatDetail(rules)}</p>
                       </>
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
                   </td>
                   <td className="px-4 py-3 align-top">
-                    {team.staffNames.length > 0 ? (
+                    {team.lead !== null || team.others > 0 ? (
                       <>
-                        <p>{team.staffNames[0]}</p>
-                        {team.staffNames.slice(1).map((name) => (
-                          <p key={name} className="text-xs text-muted-foreground">
-                            {name}
+                        {team.lead !== null ? (
+                          <p>{team.lead}</p>
+                        ) : (
+                          <p className="font-medium text-primary">No manager</p>
+                        )}
+                        {team.others > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            {team.lead !== null ? "+ " : ""}
+                            {team.others} {team.othersWord}
+                            {team.others === 1 ? "" : team.othersWord === "coach" ? "es" : "s"}
                           </p>
-                        ))}
+                        )}
                       </>
                     ) : (
                       <p className="font-medium text-primary">No staff</p>
                     )}
                   </td>
-                  <td className="px-4 py-3 align-top">
-                    {team.players} {team.players === 1 ? "player" : "players"}
-                  </td>
+                  <td className="px-4 py-3 align-top">{team.players}</td>
                   <td className="px-4 py-3 align-top">
                     {team.nextOut ? (
                       <>
@@ -663,32 +753,24 @@ export default async function TeamsPage({
                         <span className="text-muted-foreground">—</span>
                       ) : team.subsOwing === 0 ? (
                         <Badge variant="success">All paid</Badge>
+                      ) : team.subsOwing >= 5 ? (
+                        <Badge variant="destructive">{team.subsOwing} owing</Badge>
                       ) : (
                         <Badge variant="warning">{team.subsOwing} owing</Badge>
                       )}
                     </td>
                   )}
-                  <td className="px-4 py-3 text-right align-top">
-                    {canAdmin && (
-                      <form action={setTeamActive} className="inline">
-                        <input type="hidden" name="team_id" value={team.id} />
-                        <input type="hidden" name="active" value={team.active ? "false" : "true"} />
-                        <Button type="submit" variant="ghost" size="sm" className="h-7 px-2 text-xs">
-                          {team.active ? "Mark inactive" : "Mark active"}
-                        </Button>
-                      </form>
-                    )}
-                  </td>
                 </tr>
               ),
             };
           })}
         />
+        )}
 
         {/* ---------------------------------------------------------------- */}
         {/* Season toolbar — administrators only                             */}
         {/* ---------------------------------------------------------------- */}
-        {canAdmin && (
+        {!formatsTab && canAdmin && (
           <Card>
             <CardContent className="space-y-4 pt-6">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
@@ -764,7 +846,7 @@ export default async function TeamsPage({
         {/* ---------------------------------------------------------------- */}
         {/* Club-wide Full-Time widgets — administrators only                */}
         {/* ---------------------------------------------------------------- */}
-        {canAdmin && (
+        {!formatsTab && canAdmin && (
           <Card>
             <CardContent className="pt-6">
               <details>
