@@ -70,12 +70,32 @@ export default async function MessagesLayout({ children }: { children: React.Rea
     // One string literal, not a concatenation: supabase-js infers the row type
     // from the select text, and only a literal carries that type.
     .select(
-      "conversation_id,last_read_message_id,left_at,muted_until,basis,conversations(id,type,title,team_id,resource_id,scope_label,supervised_by_lead,closed_at,created_at,resources(name),teams(name))",
+      "conversation_id,last_read_message_id,left_at,joined_at,muted_until,basis,conversations(id,type,title,team_id,resource_id,scope_label,supervised_by_lead,closed_at,created_at,resources(name),teams(name))",
     )
     .eq("person_id", personId)
     .limit(CONVERSATION_LIMIT);
 
-  const rows = (participantRows ?? []).filter((r) => r.conversations !== null);
+  // One row per CONVERSATION, not per participation: a person can hold several
+  // rows in one room — left as staff, re-added as guardian — and the live one
+  // (else the most recent) is the one that speaks for them.
+  const byConversation = new Map<string, NonNullable<typeof participantRows>[number]>();
+  for (const row of participantRows ?? []) {
+    if (row.conversations === null) continue;
+    const existing = byConversation.get(row.conversation_id);
+    if (!existing) {
+      byConversation.set(row.conversation_id, row);
+      continue;
+    }
+    const rowLive = row.left_at === null;
+    const existingLive = existing.left_at === null;
+    if (
+      (rowLive && !existingLive) ||
+      (rowLive === existingLive && row.joined_at > existing.joined_at)
+    ) {
+      byConversation.set(row.conversation_id, row);
+    }
+  }
+  const rows = Array.from(byConversation.values());
 
   // One round trip for every "where had I got to", rather than one per row.
   const lastReadIds = rows.map((r) => r.last_read_message_id).filter((id): id is string => !!id);

@@ -6,7 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
 
@@ -28,6 +29,16 @@ export default async function TrainingPage() {
     redirect("/events");
   }
 
+  // The chosen hat scopes the page, exactly as Matches does (Adam,
+  // 2026-08-25): coach view → the coach's own teams, narrowed further by a
+  // team-scoped switcher pick.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const scope = await getTeamScope(view, capabilities);
+  const coachTeamIds =
+    view === "coach" ? new Set(capabilities.staffTeams.map((team) => team.id)) : null;
+  const inView = (teamId: string): boolean =>
+    scope ? teamId === scope.id : coachTeamIds ? coachTeamIds.has(teamId) : true;
+
   const supabase = await createClient();
   const now = Date.now();
   const [sessionsResult, termResult] = await Promise.all([
@@ -37,8 +48,8 @@ export default async function TrainingPage() {
     }),
     supabase.rpc("training_attendance_term"),
   ]);
-  const sessions = sessionsResult.data ?? [];
-  const term = (termResult.data ?? []).filter((row) => row.marked > 0);
+  const sessions = (sessionsResult.data ?? []).filter((row) => inView(row.team_id));
+  const term = (termResult.data ?? []).filter((row) => row.marked > 0 && inView(row.team_id));
 
   return (
     <>
