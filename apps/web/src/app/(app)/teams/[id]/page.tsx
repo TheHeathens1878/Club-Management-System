@@ -192,7 +192,7 @@ export default async function TeamPage({
     // A parent or player gets the team's life, not its management: no roster
     // page, no money, no settings ("Parents don't need to see pitch
     // calendars" — the same instinct, applied to the tabs).
-    ...(canManageTeam ? [{ key: "squad", label: "Squad" } as TeamTab] : []),
+    ...(staffTools ? [{ key: "squad", label: "Squad" } as TeamTab] : []),
     { key: "training", label: "Training" },
     ...(committee
       ? [
@@ -301,7 +301,12 @@ export default async function TeamPage({
   let exemptions: ExemptionRow[] = [];
   let lead = false;
 
-  if (tab === "squad") {
+  // The roster is the coach's and the club's screen. Adam, 2026-08-25:
+  // "parents should not see emergency contacts in the Squad page" — so the
+  // tab follows the hat, not just the capability. A coach who is also a
+  // parent, looking at the team as a parent, gets the team's life and not
+  // its management, and `?tab=squad` typed by hand lands on Overview.
+  if (tab === "squad" && staffTools) {
     const [
       seasonsResult,
       childFacingResult,
@@ -375,7 +380,11 @@ export default async function TeamPage({
       // coaches to read emergency contacts"): `emergency_contacts_staff_read`
       // admits the team's staff for its live members; a reader the policies
       // refuse simply gets none. Read through the caller's client.
-      const memberContacts = await loadEmergencyContacts(memberPersonIds);
+      // Only the people who ring them: the emergency contacts are drawn on
+      // the roster for staff wearing the coach or admin hat and nobody else.
+      const memberContacts = staffTools
+        ? await loadEmergencyContacts(memberPersonIds)
+        : new Map<string, { position: number; name: string; phone: string; relationship: string }[]>();
 
       // What is already on the administrator's desk, so a row that has been
       // reported says so instead of offering the button again.
@@ -1053,7 +1062,7 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {/* Squad — the roster, the paperwork, and what recruitment says     */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "squad" && canManageTeam && (
+        {tab === "squad" && staffTools && (
           <div className="space-y-6">
             <Card>
               <CardHeader>
