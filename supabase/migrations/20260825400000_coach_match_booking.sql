@@ -106,21 +106,26 @@ begin
     if new.ends_at <= new.starts_at or new.starts_at < now() - interval '1 day' then
       raise exception 'bookings: a coach may only request future slots' using errcode = 'P0001';
     end if;
-    if new.kind not in ('block', 'training', 'fixture') then
-      raise exception 'bookings: coaches may only request training, match or other-use slots'
-        using errcode = 'P0001';
-    end if;
-    -- A match REQUEST is not a fixture allocation. The link between a booking
-    -- and a `fixtures` row is `allocate_fixture()`'s to make.
-    if new.fixture_id is not null then
-      raise exception 'bookings: a fixture''s pitch slot is allocated on Pitches, not requested here'
-        using errcode = 'P0001';
-    end if;
-    -- A pitch booking made by anyone who is not a club administrator is a
-    -- REQUEST. Whatever the client posted, it lands on the requests desk.
-    if public.is_pitch_resource(new.resource_id)
-       and coalesce(new.status, 'pending'::public.booking_status) <> 'pending'::public.booking_status then
-      new.status := 'pending'::public.booking_status;
+    -- Everything below is about a PITCH. A non-pitch row from a caller with no
+    -- staff role is not this guard's to explain — `bookings_team_staff_insert`
+    -- refuses it with the 42501 it has always given, and stepping in front of
+    -- that with a sentence about coaches would only mislead.
+    if public.is_pitch_resource(new.resource_id) then
+      if new.kind not in ('block', 'training', 'fixture') then
+        raise exception 'bookings: coaches may only request training, match or other-use slots'
+          using errcode = 'P0001';
+      end if;
+      -- A match REQUEST is not a fixture allocation. The link between a booking
+      -- and a `fixtures` row is `allocate_fixture()`'s to make.
+      if new.fixture_id is not null then
+        raise exception 'bookings: a fixture''s pitch slot is allocated on Pitches, not requested here'
+          using errcode = 'P0001';
+      end if;
+      -- A pitch booking made by anyone who is not a club administrator is a
+      -- REQUEST. Whatever the client posted, it lands on the requests desk.
+      if coalesce(new.status, 'pending'::public.booking_status) <> 'pending'::public.booking_status then
+        new.status := 'pending'::public.booking_status;
+      end if;
     end if;
     return new;
   end if;
