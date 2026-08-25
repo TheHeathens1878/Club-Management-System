@@ -57,6 +57,22 @@ export default async function EndOfSeasonPage() {
         }))
     : [];
 
+  // The club's seasons run 1 July – 30 June (Adam, 2026-08-25), so the
+  // create-a-season form opens on the year after the current one, named the
+  // way the club names them ("2026/27" → "2027/28") when the pattern holds.
+  let nextSeasonDefaults: { name: string; startsOn: string; endsOn: string } | null = null;
+  if (current) {
+    const startYear = new Date(current.ends_on).getFullYear();
+    const nameMatch = /^(\d{4})\/(\d{2})$/.exec(current.name.trim());
+    nextSeasonDefaults = {
+      name: nameMatch
+        ? `${Number(nameMatch[1]) + 1}/${String(Number(nameMatch[2]) + 1).padStart(2, "0")}`
+        : "",
+      startsOn: `${startYear}-07-01`,
+      endsOn: `${startYear + 1}-06-30`,
+    };
+  }
+
   return (
     <>
       <PageHeader
@@ -93,6 +109,7 @@ export default async function EndOfSeasonPage() {
                 currentSeasonName={current.name}
                 targetSeasons={targetSeasons}
                 teams={teams}
+                nextSeasonDefaults={nextSeasonDefaults}
               />
             ) : (
               <p className="text-sm text-muted-foreground">
