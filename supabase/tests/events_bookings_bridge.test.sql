@@ -51,12 +51,16 @@ insert into public.team_memberships (person_id, team_id, season_id, role) values
   (current_setting('br.player')::uuid, '8f8f8f8f-4444-4111-8111-000000000001', '6f6f6f6f-4444-4111-8111-000000000001', 'player'),
   ('b6b6b6b6-4444-4111-8111-00000000000a', '8f8f8f8f-4444-4111-8111-000000000001', '6f6f6f6f-4444-4111-8111-000000000001', 'player');
 
+-- Times in this section are pinned to 10:00 London on their day, not to
+-- now(): section B books the same pitch at 19:00 on day +7, and a practice
+-- created at "now() + 7 days" clashed with it whenever CI ran between 18:00
+-- and 20:00 London — two red tests every evening, from nothing but the clock.
 -- A. one-off event books the pitch --------------------------------------------
 set local request.jwt.claims to '{"sub":"b6b6b6b6-4444-4111-8111-000000000001","role":"authenticated"}';
 set local role authenticated;
 select set_config('br.ev1', public.create_team_event(
   '8f8f8f8f-4444-4111-8111-000000000001', 'practice', 'Tuesday practice',
-  now() + interval '7 days', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)::text, true);
+  ((now() at time zone 'Europe/London' + interval '7 days')::date + time '10:00') at time zone 'Europe/London', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)::text, true);
 
 select isnt((select booking_id from public.events where id = current_setting('br.ev1')::uuid), null,
   'a coach''s practice reserves the pitch');
@@ -68,14 +72,14 @@ select is((select count(*) from public.events where booking_id is not null), 1::
 
 select throws_like($$
   select public.create_team_event('8f8f8f8f-4444-4111-8111-000000000001', 'practice', 'Clashing practice',
-    now() + interval '7 days', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)
+    ((now() at time zone 'Europe/London' + interval '7 days')::date + time '10:00') at time zone 'Europe/London', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)
 $$, '%already booked%', 'a clashing slot refuses');
 select is((select count(*) from public.events where title = 'Clashing practice'), 0::bigint,
   'nothing is written when the pitch is taken');
 
 select lives_ok($$
   select public.create_team_event('8f8f8f8f-4444-4111-8111-000000000001', 'social', 'Presentation night',
-    now() + interval '7 days', 120, null, 'The clubhouse', null, false)
+    ((now() at time zone 'Europe/London' + interval '7 days')::date + time '10:00') at time zone 'Europe/London', 120, null, 'The clubhouse', null, false)
 $$, 'an event with no pitch to reserve is created regardless');
 reset role;
 
@@ -83,7 +87,7 @@ set local request.jwt.claims to '{"sub":"b6b6b6b6-4444-4111-8111-000000000002","
 set local role authenticated;
 select set_config('br.ev2', public.create_team_event(
   '8f8f8f8f-4444-4111-8111-000000000001', 'practice', 'Admin practice',
-  now() + interval '9 days', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)::text, true);
+  ((now() at time zone 'Europe/London' + interval '9 days')::date + time '10:00') at time zone 'Europe/London', 60, '7a7a7a7a-4444-4111-8111-000000000001', null, null, true)::text, true);
 select is((select b.status::text from public.bookings b
             join public.events e on e.booking_id = b.id where e.id = current_setting('br.ev2')::uuid),
   'confirmed', 'a club admin''s pitch booking is confirmed outright');
@@ -93,7 +97,7 @@ set local request.jwt.claims to '{"sub":"b6b6b6b6-4444-4111-8111-000000000003","
 set local role authenticated;
 select throws_like($$
   select public.create_team_event('8f8f8f8f-4444-4111-8111-000000000001', 'practice', 'Player practice',
-    now() + interval '11 days', 60, null, null, null, false)
+    ((now() at time zone 'Europe/London' + interval '11 days')::date + time '10:00') at time zone 'Europe/London', 60, null, null, null, false)
 $$, '%staff or a club admin%', 'a player cannot create a team event');
 reset role;
 
