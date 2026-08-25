@@ -1,6 +1,16 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, CalendarDays, CircleCheck, MapPin, Pencil, Repeat, User } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  CircleCheck,
+  ClipboardList,
+  LayoutGrid,
+  MapPin,
+  Pencil,
+  Repeat,
+  User,
+} from "lucide-react";
 
 import type { Json } from "@club/db";
 
@@ -210,6 +220,27 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         subtitle={`${detail.teamName} · ${eventTypeLabel(detail.type)}`}
         action={
           <div className="flex flex-wrap gap-2">
+            {/* A fixture-mirrored event is where a game on the team page now
+                lands (Adam, 2026-08-25), so the fixture's own screens hang
+                off it: the lineup for everyone, the availability marker —
+                the staff squad panel and the day-of register — for staff. */}
+            {detail.fixtureId ? (
+              <Link
+                href={`/teams/${detail.teamId}/fixtures/${detail.fixtureId}/lineup`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                <LayoutGrid className="h-4 w-4" />{" "}
+                {isStaff || capabilities.isClubAdmin ? "Pick the lineup" : "Lineup"}
+              </Link>
+            ) : null}
+            {detail.fixtureId && (isStaff || capabilities.isClubAdmin) ? (
+              <Link
+                href={`/teams/${detail.teamId}/fixtures/${detail.fixtureId}`}
+                className={buttonVariants({ variant: "outline", size: "sm" })}
+              >
+                <ClipboardList className="h-4 w-4" /> Availability
+              </Link>
+            ) : null}
             {canEdit ? (
               <Link
                 href={`/events/${detail.id}/edit`}

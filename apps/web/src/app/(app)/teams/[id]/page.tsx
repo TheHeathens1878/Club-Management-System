@@ -3,8 +3,9 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { isClubAdmin, isSafeguardingLead, nameOf, resolveNames } from "@/lib/person";
+import { resolveRoleView } from "@/lib/role-view";
 import { personLabel } from "@/lib/people-display";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -36,6 +37,7 @@ import { AllocateAllPanel } from "./allocate-all-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
 import { RecruitingPanel } from "./recruiting-panel";
 import { FixturesTable, type TeamFixture } from "./fixtures-list";
+import { fixtureHref } from "./fixtures-shared";
 import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
 import { formatBookingDateShort } from "@/lib/booking-time";
@@ -112,6 +114,13 @@ export default async function TeamPage({
     capabilities.playerTeams.some((teamRef) => teamRef.id === id);
   if (!committee && teamStaff !== true && !teamMember) redirect("/room-bookings");
   const canManageTeam = committee || teamStaff === true;
+  // The hat being worn (Adam, 2026-08-25: "Pick the team on parent view
+  // shouldn't be available"): a coach who is also a parent looks at the team
+  // as a parent when the switcher says so, and the staff shortcuts step back
+  // to the member ones. The data gates above are unchanged — this is only
+  // which button the page draws.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const staffTools = canManageTeam && view !== "parent" && view !== "player" && view !== "me";
 
   const admin = createAdminClient();
   const nowIso = new Date().toISOString();
@@ -515,6 +524,19 @@ export default async function TeamPage({
           squadIds,
         )
       : new Map<string, Headcount>();
+    // The RSVP event mirroring each fixture (events module): a game on this
+    // page opens the Event & RSVP page (Adam, 2026-08-25) — the fixture's own
+    // marker page stays reachable from there for staff. Read as the caller:
+    // the events policy admits the team, its parents, its staff and admins.
+    const fixtureIds = (fixturesResult.data ?? []).map((row) => row.id);
+    const { data: eventRows } =
+      fixtureIds.length > 0
+        ? await userClient.from("events").select("id,fixture_id").in("fixture_id", fixtureIds)
+        : { data: [] as { id: string; fixture_id: string | null }[] };
+    const eventByFixture = new Map<string, string>();
+    for (const row of eventRows ?? []) {
+      if (row.fixture_id) eventByFixture.set(row.fixture_id, row.id);
+    }
     fixtures = (fixturesResult.data ?? []).map((row) => ({
       id: row.id,
       bookingId: row.booking_id,
@@ -529,6 +551,7 @@ export default async function TeamPage({
       pitchName: row.resources?.name ?? null,
       pitchAddress: row.resources?.address ?? null,
       headcount: fixtureCounts.get(row.id) ?? null,
+      eventId: eventByFixture.get(row.id) ?? null,
     }));
 
     // The Availability card: the squad by name against the next match, the
@@ -1037,12 +1060,16 @@ export default async function TeamPage({
                     </p>
                   )}
                   <Link
-                    href={`/teams/${team.id}/fixtures/${nextMatch.id}`}
+                    href={
+                      staffTools
+                        ? `/teams/${team.id}/fixtures/${nextMatch.id}/lineup`
+                        : fixtureHref(team.id, nextMatch)
+                    }
                     className={
                       buttonVariants({ size: "sm" }) + " min-h-[44px] shrink-0 px-4 text-[12.5px]"
                     }
                   >
-                    {canManageTeam ? "Pick the team" : "Availability"}
+                    {staffTools ? "Pick the team" : "Event & RSVP"}
                   </Link>
                 </div>
               </div>
@@ -1103,10 +1130,14 @@ export default async function TeamPage({
                       </>
                     )}
                     <Link
-                      href={`/teams/${team.id}/fixtures/${fixtures[0].id}`}
+                      href={
+                        staffTools
+                          ? `/teams/${team.id}/fixtures/${fixtures[0].id}/lineup`
+                          : fixtureHref(team.id, fixtures[0])
+                      }
                       className={buttonVariants({ size: "sm" }) + " mt-2"}
                     >
-                      Pick the team
+                      {staffTools ? "Pick the team" : "Event & RSVP"}
                     </Link>
                   </div>
                 </div>
@@ -1152,7 +1183,7 @@ export default async function TeamPage({
                       <CardTitle className="text-base">Availability</CardTitle>
                       {availTally.noReply > 0 && (
                         <Link
-                          href={`/teams/${team.id}/fixtures/${fixtures[0].id}`}
+                          href={fixtureHref(team.id, fixtures[0])}
                           className="inline-flex min-h-[44px] items-center rounded-full bg-amber-100 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-200 lg:min-h-0 lg:py-1"
                         >
                           Chase the {availTally.noReply} no-
