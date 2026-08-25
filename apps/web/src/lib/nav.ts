@@ -1,5 +1,9 @@
 /**
- * The nav, expressed as one table.
+ * The nav, expressed as one table — regrouped 2026-08-25 to the Club CRM
+ * design's own sections (spec §1): Club, Matchday, Pitches, Function room,
+ * Money, Safeguarding, Settings. Items the design does not draw but the club
+ * still needs (Manage pitches, Rooms, Groups, Media, Super users, My role)
+ * keep their place in the nearest section rather than vanishing.
  *
  * Two independent gates decide whether a link is rendered:
  *
@@ -36,6 +40,7 @@ import {
   Contact,
   Images,
   LandPlot,
+  LayoutDashboard,
   Mail,
   MessageSquare,
   Receipt,
@@ -80,15 +85,31 @@ export type NavEntry = {
 };
 
 export const NAV: readonly NavEntry[] = [
-  // --- The club ------------------------------------------------------------
+  // --- Club (the design's first section) -----------------------------------
   {
-    // The design's front door: the club-wide noticeboard, results and the week.
     href: "/lobby",
     label: "Club lobby",
     icon: Armchair,
     group: "Club",
     allowed: () => true,
     views: CLUB_VIEWS,
+  },
+  {
+    href: "/messages",
+    label: "Messages",
+    icon: MessageSquare,
+    group: "Club",
+    allowed: () => true,
+    views: ALL_VIEWS,
+  },
+  {
+    href: "/groups",
+    label: "Groups",
+    icon: UsersRound,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+    child: true,
   },
   {
     // A player's own screen: their teams, and when those teams are next out.
@@ -109,15 +130,13 @@ export const NAV: readonly NavEntry[] = [
     views: ["parent"],
   },
   {
-    // Matches, practices and socials with accept/decline — fed by my_events(),
-    // so every view sees only its own teams' occasions.
-    href: "/events",
-    label: "Events",
-    icon: CalendarCheck,
+    // The admin's first screen: the club at a glance.
+    href: "/overview",
+    label: "Overview",
+    icon: LayoutDashboard,
     group: "Club",
-    allowed: (c) =>
-      c.hasPlayerMembership || c.isGuardian || c.hasParentRole || c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: CLUB_VIEWS,
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
   },
   {
     href: "/teams",
@@ -171,6 +190,17 @@ export const NAV: readonly NavEntry[] = [
     views: ["coach", "admin"],
   },
   {
+    // The member-facing diary with accept/decline — the design places it in
+    // Matchday for players and parents; coaches work from Matches/Training.
+    href: "/events",
+    label: "Events",
+    icon: CalendarCheck,
+    group: "Matchday",
+    allowed: (c) =>
+      c.hasPlayerMembership || c.isGuardian || c.hasParentRole || c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: CLUB_VIEWS,
+  },
+  {
     href: "/training",
     label: "Training",
     icon: CalendarCheck,
@@ -185,6 +215,57 @@ export const NAV: readonly NavEntry[] = [
     group: "Matchday",
     allowed: () => true,
     views: CLUB_VIEWS,
+  },
+
+  // --- Pitches (a different diary entirely from the function room) ---------
+  {
+    href: "/pitches/calendar",
+    label: "Pitch calendar",
+    icon: CalendarDays,
+    group: "Pitches",
+    allowed: (c) =>
+      c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
+    views: CLUB_VIEWS,
+  },
+  {
+    href: "/pitches/book",
+    label: "Book a pitch",
+    icon: CalendarPlus,
+    group: "Pitches",
+    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/pitches/mine",
+    label: "Pitch bookings",
+    icon: CalendarCheck,
+    group: "Pitches",
+    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/pitches",
+    label: "Allocate fixtures",
+    icon: LandPlot,
+    group: "Pitches",
+    allowed: (c) => c.isCommittee,
+    views: ["admin"],
+  },
+  {
+    href: "/pitches/requests",
+    label: "Pitch requests",
+    icon: Inbox,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+  },
+  {
+    href: "/pitches/manage",
+    label: "Manage pitches",
+    icon: Settings2,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
   },
 
   // --- Function room -------------------------------------------------------
@@ -223,82 +304,12 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin", "function_room"],
   },
 
-  // --- Pitches (a different diary entirely from the function room) ---------
-  {
-    href: "/pitches/calendar",
-    label: "Pitch calendar",
-    icon: CalendarDays,
-    group: "Pitches",
-    allowed: (c) =>
-      c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
-    views: CLUB_VIEWS,
-  },
-  {
-    href: "/pitches/book",
-    label: "Book a pitch",
-    icon: CalendarPlus,
-    group: "Pitches",
-    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: ["coach", "admin"],
-  },
-  {
-    href: "/pitches/mine",
-    label: "Pitch bookings",
-    icon: CalendarCheck,
-    group: "Pitches",
-    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: ["coach", "admin"],
-  },
-  {
-    href: "/pitches/requests",
-    label: "Pitch requests",
-    icon: Inbox,
-    group: "Pitches",
-    allowed: (c) => c.isClubAdmin,
-    views: ["admin"],
-  },
-  {
-    href: "/pitches",
-    label: "Allocate fixtures",
-    icon: LandPlot,
-    group: "Pitches",
-    allowed: (c) => c.isCommittee,
-    views: ["admin"],
-  },
-  {
-    href: "/pitches/manage",
-    label: "Manage pitches",
-    icon: Settings2,
-    group: "Pitches",
-    allowed: (c) => c.isClubAdmin || c.isCommittee,
-    views: ["admin"],
-  },
-
-  // --- Messages ------------------------------------------------------------
-  {
-    href: "/messages",
-    label: "Messages",
-    icon: MessageSquare,
-    group: "Messages",
-    allowed: () => true,
-    views: ALL_VIEWS,
-  },
-  {
-    href: "/groups",
-    label: "Groups",
-    icon: UsersRound,
-    group: "Messages",
-    allowed: (c) => c.isClubAdmin,
-    views: ["admin"],
-    child: true,
-  },
-
-  // --- Subs ----------------------------------------------------------------
+  // --- Money ---------------------------------------------------------------
   {
     href: "/subs",
     label: "Subs",
     icon: Receipt,
-    group: "Subs",
+    group: "Money",
     allowed: (c) => c.isCommittee,
     views: ["admin"],
   },
@@ -306,7 +317,7 @@ export const NAV: readonly NavEntry[] = [
     href: "/my-subs",
     label: "My subs",
     icon: Wallet,
-    group: "Subs",
+    group: "Money",
     allowed: () => true,
     views: CLUB_VIEWS,
   },

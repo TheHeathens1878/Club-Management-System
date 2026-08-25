@@ -80,6 +80,12 @@ export async function setRoleView(view: RoleView, teamId?: string): Promise<void
   });
 
   revalidatePath("/", "layout");
+  // Adam, 2026-08-25: "if I select parent from the drop down, I think it
+  // should just go to the team page for that child" — a team-scoped parent or
+  // player pick lands on the team, not on a list of teams.
+  if (team && (view === "parent" || view === "player")) {
+    redirect(`/teams/${team.id}`);
+  }
   redirect(ROLE_VIEW_HOME[view]);
 }
 
