@@ -420,7 +420,7 @@ create trigger trg_leave_requests_guard
 
 insert into public.audit_log (actor_email, action, entity, detail)
 values ('migration', 'migration.schema', 'team_membership_leave_requests',
-        jsonb_build_object('migration', '20260825240000_squad_leave_requests',
+        jsonb_build_object('migration', '20260825270000_squad_leave_requests',
                            'changes', array['team_membership_leave_requests table + RLS',
                                             'leave_request_fill derives person/team/requester',
                                             'leave_request_notify tells club_admins in-app',

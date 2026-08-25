@@ -1,5 +1,5 @@
 -- =============================================================================
--- "This player has left" is a request; End stays club_admin-only (20260825240000)
+-- "This player has left" is a request; End stays club_admin-only (20260825270000)
 -- =============================================================================
 -- Adam, 2026-08-25: "Parents and coaches should not be able to click on End to
 -- remove a squad member (in Squad in team page). Coaches should be able to
