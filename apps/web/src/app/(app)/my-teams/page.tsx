@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { getCurrentPersonId } from "@/lib/person";
 import { loadPitchCalendar, todayForCalendar } from "@/lib/pitch-calendar-data";
 import {
@@ -216,7 +218,23 @@ export default async function MyTeamsPage() {
     });
   }
 
-  const myTeamIds = new Set(subjects.flatMap((subject) => subject.teams.map((team) => team.teamId)));
+  // "Viewing as Player – O45 Men" (or a parent's team pick) narrows the page
+  // to that team; a stale scope silently widens back to everything.
+  const capabilities = await getCapabilities();
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const scope = await getTeamScope(view, capabilities);
+  const scopedSubjects = scope
+    ? subjects
+        .map((subject) => ({
+          ...subject,
+          teams: subject.teams.filter((team) => team.teamId === scope.id),
+        }))
+        .filter((subject) => subject.teams.length > 0)
+    : subjects;
+
+  const myTeamIds = new Set(
+    scopedSubjects.flatMap((subject) => subject.teams.map((team) => team.teamId)),
+  );
 
   // Next up: the club's pitch diary, narrowed to exactly these teams.
   let upcoming: CalendarEntry[] = [];
@@ -256,7 +274,7 @@ export default async function MyTeamsPage() {
           </p>
         ) : null}
 
-        {subjects.length === 0 ? (
+        {scopedSubjects.length === 0 ? (
           <Card>
             <CardHeader>
               <CardTitle className="text-base">No teams yet</CardTitle>
@@ -273,7 +291,7 @@ export default async function MyTeamsPage() {
             </CardContent>
           </Card>
         ) : (
-          subjects.map((subject) => (
+          scopedSubjects.map((subject) => (
             <Card key={subject.personId}>
               <CardHeader>
                 <CardTitle className="flex flex-wrap items-center gap-2 text-base">
