@@ -10,7 +10,7 @@ export default async function LoginPage() {
       logoUrl={s.logo_url || null}
       logoAlt={s.logo_alt || "Club logo"}
       clubName={s.club_name || "AoM Sports Club"}
-      clubTagline={s.club_tagline || "Sign in to the function room system"}
+      clubTagline={s.club_tagline || "Sign in to the club portal"}
     />
   );
 }
