@@ -110,7 +110,8 @@ begin
         if v_id is null then
           select g.id into v_id from public.guardianships g
            where g.guardian_person_id = r.person_id
-             and g.child_person_id = (r.payload ->> 'child_person_id')::uuid;
+             and g.child_person_id = (r.payload ->> 'child_person_id')::uuid
+             and g.ended_at is null;
         end if;
       else
         if v_season is null then
@@ -120,11 +121,19 @@ begin
         v_team := (r.payload ->> 'team_id')::uuid;
 
         -- SG-0 still holds a PLAYER's membership: their age group is derived
-        -- from the date, and an unknown date is what the rule is about. A
-        -- coach, assistant coach or manager goes on now (Adam, 2026-08-25) and
-        -- gives the date at their first sign-in.
-        if v_role = 'player'::public.team_role
-           and (select p.dob from public.people p where p.id = r.person_id) is null then
+        -- from the date, and an unknown date is what the rule is about.
+        --
+        -- A coach, assistant coach or manager goes on now (Adam, 2026-08-25)
+        -- and gives the date at their first sign-in — BUT only while SG-6
+        -- enforcement is off, which is this club's deliberate setting since
+        -- 20260824240000 (the FA Clubs Portal is its system of record). With
+        -- enforcement ON the arithmetic is live and an unknown-DOB coach reads
+        -- as a minor on the team sheet, which would then refuse every CHILD
+        -- added to that team afterwards — the exact harm the original gate was
+        -- written to prevent. So the relaxation follows the switch rather than
+        -- overriding it, and turning enforcement back on restores the wait.
+        if (select p.dob from public.people p where p.id = r.person_id) is null
+           and (v_role = 'player'::public.team_role or public.sg6_enforcement_enabled()) then
           raise exception 'date of birth unknown — waiting for the first-login DOB gate (SG-0)' using errcode = 'P0001';
         end if;
 
@@ -143,7 +152,7 @@ begin
 
         -- Adding a minor to a team whose child-facing members are not yet
         -- compliant: grant each of them the same 30-day exemption first.
-        if public.is_minor(r.person_id) and v_role = 'player'::public.team_role then
+        if public.is_minor(r.person_id) then
           if exists (select 1 from public.team_noncompliant_child_facing(v_team) n where n.person_id <> r.person_id) then
             if v_lead is null then
               raise exception 'no safeguarding_lead exists to grant the certification exemption (D-P3-2)' using errcode = 'P0001';
@@ -190,7 +199,7 @@ end;
 $$;
 
 comment on function public.apply_neon_pending(uuid) is
-  'Applies the queued Neon import rows. A player''s membership still waits for a date of birth (SG-0); a coach, assistant coach or manager no longer does — the date is asked for at their first sign-in instead (20260825330000).';
+  'Applies the queued Neon import rows. A player''s membership still waits for a date of birth (SG-0); a coach, assistant coach or manager no longer does — the date is asked for at their first sign-in instead (20260825340000).';
 
 
 -- =============================================================================

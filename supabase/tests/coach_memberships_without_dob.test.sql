@@ -1,5 +1,5 @@
 -- =============================================================================
--- A coach's queued membership applies without a date of birth (20260825330000)
+-- A coach's queued membership applies without a date of birth (20260825340000)
 -- =============================================================================
 --   A  a queued COACH membership applies with no date of birth on record
 --   B  a queued PLAYER membership still waits for one (SG-0)
@@ -13,12 +13,20 @@ begin;
 
 select plan(10);
 
+-- The relaxation follows the SG-6 switch, and this club runs with it off
+-- (20260824240000). Set it explicitly so the case under test is the one the
+-- club is actually in, whatever another suite left behind.
+update public.site_settings set value = '0' where key = 'safeguarding.sg6_enforcement';
+
 insert into auth.users (id, email, raw_user_meta_data) values
-  ('d0b0d0b0-6666-4111-8111-000000000001', 'nd-coach@test.invalid',  '{"full_name": "Dana Coach"}'::jsonb),
-  ('d0b0d0b0-6666-4111-8111-000000000002', 'nd-player@test.invalid', '{"full_name": "Percy Player"}'::jsonb),
-  ('d0b0d0b0-6666-4111-8111-000000000003', 'nd-known@test.invalid',  '{"full_name": "Kay Known", "dob": "1990-05-05"}'::jsonb);
+  ('d0b0d0b0-6666-4111-8111-000000000001', 'nd-coach@test.invalid', '{"full_name": "Dana Coach"}'::jsonb),
+  ('d0b0d0b0-6666-4111-8111-000000000003', 'nd-known@test.invalid', '{"full_name": "Kay Known", "dob": "1990-05-05"}'::jsonb);
+-- The player has no login of their own — SG-10 refuses to make an account
+-- holder a minor, and this one becomes thirteen halfway through.
+insert into public.people (id, first_name, last_name)
+  values ('d0b0d0b0-6666-4111-8111-0000000000b1', 'Percy', 'Player');
 select set_config('nd.coach',  (select person_id::text from public.profiles where id = 'd0b0d0b0-6666-4111-8111-000000000001'), true);
-select set_config('nd.player', (select person_id::text from public.profiles where id = 'd0b0d0b0-6666-4111-8111-000000000002'), true);
+select set_config('nd.player', 'd0b0d0b0-6666-4111-8111-0000000000b1', true);
 select set_config('nd.known',  (select person_id::text from public.profiles where id = 'd0b0d0b0-6666-4111-8111-000000000003'), true);
 
 -- Neither the coach nor the player has a date of birth; the third does.
