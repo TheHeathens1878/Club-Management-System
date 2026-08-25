@@ -54,13 +54,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <aside className="theme-ink w-full shrink-0 border-b border-border bg-background text-foreground lg:w-60 lg:border-b-0 lg:border-r">
         <div className="flex gap-2 p-3 lg:h-full lg:flex-col lg:p-4">
           <div className="hidden items-center gap-2.5 border-b border-border pb-3 lg:mb-1 lg:flex">
-            {/* The crest is a black shield, so it sits on a paper chip — on
-                the ink rail the artwork would otherwise vanish into the
-                background. */}
-            <span className="flex h-10 w-9 shrink-0 items-center justify-center rounded-md bg-white p-1 shadow-sm">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/crest.png" alt="" className="h-full w-auto" />
-            </span>
+            {/* The crest is a black shield on a dark rail, so its silhouette
+                gets a faint paper rim from drop-shadows on the alpha edge —
+                the badge reads without a chip behind it (Adam, 2026-08-25:
+                "this white background on the logo … doesn't work"). */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/crest.png"
+              alt=""
+              className="h-10 w-auto shrink-0 [filter:drop-shadow(0_0_1px_hsl(34_30%_96%_/_0.9))_drop-shadow(0_0_1px_hsl(34_30%_96%_/_0.6))]"
+            />
             <div className="min-w-0">
               <p className="font-display text-[13px] font-semibold uppercase leading-tight tracking-wide">
                 AoM Sports Club
