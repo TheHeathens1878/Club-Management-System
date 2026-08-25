@@ -833,7 +833,7 @@ export default async function TeamPage({
           <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
             <Card>
               <CardHeader>
-                <CardTitle>Bulletin board</CardTitle>
+                <CardTitle>Team Lobby</CardTitle>
                 <p className="text-sm text-muted-foreground">
                   Visible to squad, parents and staff. A post marked Club-wide came from the club
                   lobby — replies to it belong on the club post, so its link takes you there.
@@ -1246,7 +1246,7 @@ export default async function TeamPage({
               <div className="order-1 space-y-4 lg:order-2">
                 <Card className="overflow-hidden">
                   <CardHeader className="flex-row items-baseline justify-between space-y-0 border-b py-4">
-                    <CardTitle className="text-base">Bulletin board</CardTitle>
+                    <CardTitle className="text-base">Team Lobby</CardTitle>
                     <Link
                       href={`/teams/${team.id}?tab=board`}
                       className="inline-flex min-h-[44px] items-center text-xs text-primary hover:underline lg:min-h-0"

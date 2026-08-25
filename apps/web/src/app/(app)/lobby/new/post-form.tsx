@@ -80,9 +80,11 @@ export function PostForm({
           </label>
           {audience === "club" ? (
             <label className="ml-4 flex min-h-[44px] items-start gap-2 lg:ml-6 lg:min-h-0">
-              <input type="checkbox" name="push_to_boards" value="true" className="mt-1" />
+              {/* Checked by default (Adam, 2026-08-25: club-wide posts belong
+                  on every team lobby unless the poster says otherwise). */}
+              <input type="checkbox" name="push_to_boards" value="true" defaultChecked className="mt-1" />
               <span>
-                Also push it onto every team&apos;s bulletin board
+                Also push it onto every team&apos;s lobby
                 <span className="block text-xs text-muted-foreground">
                   It appears on each board with a club-wide chip — replies still come back to the
                   one thread here.
