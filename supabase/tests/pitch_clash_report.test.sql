@@ -116,11 +116,14 @@ select is(
   jsonb_array_length(current_setting('cr.report')::jsonb -> 'team_overlaps'),
   1,
   'exactly one team-in-two-places pair is found');
-select is(
-  (select x -> 'first' ->> 'pitch_name'
+-- The pair's first/second ordering follows booking id (a uuid), so which side
+-- each booking lands on is not deterministic — assert both pitches are named.
+select ok(
+  (select (x -> 'first' ->> 'pitch_name') is distinct from (x -> 'second' ->> 'pitch_name')
+      and (x -> 'first' ->> 'pitch_name')  in ('CR Pitch 1', 'CR Pitch 2')
+      and (x -> 'second' ->> 'pitch_name') in ('CR Pitch 1', 'CR Pitch 2')
      from jsonb_array_elements(current_setting('cr.report')::jsonb -> 'team_overlaps') x limit 1),
-  'CR Pitch 1',
-  'the overlap pair names the pitches');
+  'the overlap pair names both pitches');
 
 select ok(
   (select (x ->> 'time_mismatch')::boolean
