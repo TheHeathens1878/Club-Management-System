@@ -14,6 +14,7 @@ import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { isMinorDob, personLabel, sanitiseSearch } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
+import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 
 /**
  * The club's contacts database (gap 2).
@@ -259,10 +260,26 @@ export default async function PeoplePage({
 
   const impossible = restricted !== null && restricted.length === 0;
 
+  // Hirers are NOT members (Adam, 2026-08-25): a function-room customer's
+  // portal login mints a person row as P0.4 lift-and-shift debt, but their
+  // contact record lives in booking_contacts and this list must not show
+  // them. A `booker` profile is the one durable marker of that debt — read
+  // through the legacy client because 'booker' is outside the user_role enum.
+  const { data: bookerProfiles } = await createLegacyAdminClient()
+    .from("profiles")
+    .select("person_id")
+    .eq("role", "booker");
+  const hirerPersonIds = ((bookerProfiles ?? []) as { person_id: string | null }[])
+    .map((row) => row.person_id)
+    .filter((id): id is string => !!id);
+
   let query = supabase
     .from("people")
     .select("id,first_name,last_name,preferred_name,dob,email,phone", { count: "exact" })
     .is("deleted_at", null);
+  if (hirerPersonIds.length > 0) {
+    query = query.not("id", "in", `(${hirerPersonIds.join(",")})`);
+  }
 
   if (term.length > 0) {
     const pattern = `%${term}%`;
@@ -452,7 +469,7 @@ export default async function PeoplePage({
     <>
       <PageHeader
         title="People"
-        subtitle="The club's contacts database — players, parents, coaches and hirers"
+        subtitle="The club's contacts database — players, parents, coaches and staff. Hirers live in the function room's own contacts book."
         action={
           <span className="flex gap-2">
             {/* A plain anchor on purpose: this is a file download from a route

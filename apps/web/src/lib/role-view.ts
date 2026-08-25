@@ -257,10 +257,10 @@ export function roleViewOptions(c: Capabilities): RoleViewOption[] {
     });
 
   // The person themselves first — the default view, and the way back to it
-  // from any hat.
+  // from any hat. Function Room goes LAST (Adam, 2026-08-25: "Function Room
+  // should always be at the bottom of the dropdown") — see the end.
   if (qualifiesForView("me", c)) add("me", null, "Me");
   if (qualifiesForView("admin", c)) add("admin", null, "Club Admin");
-  if (qualifiesForView("function_room", c)) add("function_room", null, "Function Room");
 
   // Group by team: every team any hat touches, alphabetically, with the hats
   // for that team in coach → parent → player order.
@@ -283,6 +283,9 @@ export function roleViewOptions(c: Capabilities): RoleViewOption[] {
   if (qualifiesForView("coach", c) && c.staffTeams.length === 0) add("coach", null, ROLE_VIEW_LABELS.coach);
   if (qualifiesForView("parent", c) && c.parentTeams.length === 0) add("parent", null, ROLE_VIEW_LABELS.parent);
   if (qualifiesForView("player", c) && c.playerTeams.length === 0) add("player", null, ROLE_VIEW_LABELS.player);
+
+  // The room is not a club hat — it props up the bottom of the list.
+  if (qualifiesForView("function_room", c)) add("function_room", null, "Function Room");
 
   return options;
 }
