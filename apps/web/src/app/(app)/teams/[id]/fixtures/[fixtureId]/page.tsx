@@ -46,7 +46,7 @@ export default async function FixtureAttendancePage({
   const { data: fixture } = await supabase
     .from("fixtures")
     .select(
-      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name)",
+      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
     )
     .eq("id", fixtureId)
     .eq("team_id", teamId)
@@ -151,7 +151,9 @@ export default async function FixtureAttendancePage({
   const title = fixture.is_home
     ? `${teamName} v ${fixture.opponent}`
     : `${fixture.opponent} v ${teamName}`;
-  const pitchName = (fixture.resources as { name: string } | null)?.name ?? null;
+  const venueResource = fixture.resources as { name: string; address: string | null } | null;
+  const pitchName = venueResource?.name ?? null;
+  const pitchAddress = venueResource?.address ?? null;
 
   return (
     <>
@@ -185,8 +187,10 @@ export default async function FixtureAttendancePage({
           {(pitchName || fixture.venue_text) && (
             <a
               href={googleMapsUrl(
+                // A home match pins the venue's street address (Manage
+                // venues) when recorded — the pitch name is the fallback.
                 fixture.is_home
-                  ? (pitchName ?? fixture.venue_text ?? "")
+                  ? (pitchAddress ?? pitchName ?? fixture.venue_text ?? "")
                   : (fixture.venue_text ?? ""),
               )}
               target="_blank"

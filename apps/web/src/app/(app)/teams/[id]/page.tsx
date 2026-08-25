@@ -55,7 +55,7 @@ const RUN_LIMIT = 10;
  * from the select text, and only a literal carries that type.
  */
 const FIXTURE_SELECT =
-  "id,booking_id,kickoff_at,is_home,opponent,competition,status,venue_text,allocation_conflict,seasons(name),resources!fixtures_venue_resource_id_fkey(name)";
+  "id,booking_id,kickoff_at,is_home,opponent,competition,status,venue_text,allocation_conflict,seasons(name),resources!fixtures_venue_resource_id_fkey(name,address)";
 
 /** The payload `migrate_neon()` queues for a held-back membership. */
 function pendingMembershipPayload(payload: unknown): {
@@ -485,6 +485,7 @@ export default async function TeamPage({
       allocationConflict: row.allocation_conflict,
       seasonName: row.seasons?.name ?? null,
       pitchName: row.resources?.name ?? null,
+      pitchAddress: row.resources?.address ?? null,
       headcount: fixtureCounts.get(row.id) ?? null,
     }));
   }
@@ -841,7 +842,12 @@ export default async function TeamPage({
                     </p>
                     {(fixtures[0].pitchName || fixtures[0].venueText) && (
                       <a
-                        href={googleMapsUrl(fixtures[0].pitchName ?? fixtures[0].venueText ?? "")}
+                        href={googleMapsUrl(
+                          (fixtures[0].isHome ? fixtures[0].pitchAddress : null) ??
+                            fixtures[0].pitchName ??
+                            fixtures[0].venueText ??
+                            "",
+                        )}
                         target="_blank"
                         rel="noreferrer"
                         className="mt-1 inline-block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
