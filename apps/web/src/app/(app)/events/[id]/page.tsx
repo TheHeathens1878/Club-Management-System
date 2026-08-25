@@ -9,8 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { getCapabilities } from "@/lib/capabilities";
 import { createClient } from "@/lib/supabase/server";
 
+import { AssignPitch } from "./assign-pitch";
 import { RespondButtons } from "../respond-buttons";
 import {
   eventTypeLabel,
@@ -51,6 +53,8 @@ type Detail = {
   /** When to arrive — starts_at minus meet_minutes_before (Adam, 2026-08-25). */
   meetAt: string | null;
   venue: string | null;
+  /** The pitch's address from Manage venues — the maps link's target (Adam). */
+  venueAddress: string | null;
   notes: string | null;
   createdByName: string;
   booked: boolean;
@@ -100,6 +104,7 @@ function parseDetail(value: Json | null): Detail | null {
     endsAt: str(record, "ends_at"),
     meetAt: str(record, "meet_at"),
     venue: str(record, "venue"),
+    venueAddress: str(record, "venue_address"),
     notes: str(record, "notes"),
     createdByName: str(record, "created_by_name") ?? "the club",
     booked: record["booked"] === true,
@@ -147,6 +152,22 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
 
   const { data: staffAnswer } = await supabase.rpc("is_team_staff", { p_team_id: detail.teamId });
   const isStaff = staffAnswer === true;
+
+  // Admins assign the pitch right here (Adam, 2026-08-25): offered when the
+  // event holds no confirmed pitch yet — a fixture reassign included.
+  const capabilities = await getCapabilities();
+  const canAssignPitch =
+    capabilities.isClubAdmin && detail.status === "scheduled" && !detail.booked;
+  const { data: pitchRows } = canAssignPitch
+    ? await supabase
+        .from("resources")
+        .select("id,name")
+        .eq("type", "pitch")
+        .eq("active", true)
+        .order("sort_order")
+        .order("name")
+    : { data: null };
+  const pitches = pitchRows ?? [];
 
   const mine: EventPerson[] = roster
     .filter((row) => row.can_respond)
@@ -202,9 +223,27 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Your response</CardTitle>
+                {/* Adam, 2026-08-25: replies are asked for on socials; on
+                    matches and training they are welcome but never demanded. */}
+                <p className="text-xs text-muted-foreground">
+                  {detail.type === "social"
+                    ? "Replies help the organisers plan — please answer."
+                    : "Replying is optional for matches and training — the coach plans either way."}
+                </p>
               </CardHeader>
               <CardContent>
                 <RespondButtons eventId={detail.id} people={mine} disabled={cancelled} />
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {canAssignPitch && pitches.length > 0 ? (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Assign a pitch</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <AssignPitch eventId={detail.id} pitches={pitches} />
               </CardContent>
             </Card>
           ) : null}
@@ -229,8 +268,10 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 <MapPin className="h-4 w-4 text-muted-foreground" />
                 {detail.venue ? (
                   <>
+                    {/* The maps link prefers the venue's real address from
+                        Manage venues (Adam, 2026-08-25) over its name. */}
                     <a
-                      href={googleMapsUrl(detail.venue)}
+                      href={googleMapsUrl(detail.venueAddress ?? detail.venue)}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="underline underline-offset-2 hover:text-foreground"
@@ -243,6 +284,11 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                       </Badge>
                     ) : detail.bookingStatus === "pending" ? (
                       <Badge variant="warning">Pitch requested — awaiting the club</Badge>
+                    ) : null}
+                    {detail.venueAddress ? (
+                      <span className="basis-full pl-6 text-xs text-muted-foreground">
+                        {detail.venueAddress}
+                      </span>
                     ) : null}
                   </>
                 ) : (
