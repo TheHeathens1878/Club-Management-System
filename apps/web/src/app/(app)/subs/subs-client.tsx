@@ -94,10 +94,13 @@ export function PlansPanel({
                 {plan.team_name ? ` · ${plan.team_name}` : " · club-wide"}
               </p>
             </div>
-            <form action={activeAction}>
+            <form action={activeAction} className="w-full lg:w-auto">
               <input type="hidden" name="plan_id" value={plan.id} />
               <input type="hidden" name="active" value={plan.active ? "false" : "true"} />
-              <button type="submit" className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-secondary">
+              <button
+                type="submit"
+                className="min-h-[44px] w-full rounded-md border px-3 text-xs font-medium hover:bg-secondary lg:min-h-0 lg:w-auto lg:py-1.5"
+              >
                 {plan.active ? "Close" : "Reopen"}
               </button>
             </form>
@@ -156,7 +159,7 @@ export function PlansPanel({
         <button
           type="submit"
           disabled={creating}
-          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+          className="min-h-[44px] w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 lg:min-h-0 lg:w-auto"
         >
           Create plan
         </button>
@@ -175,15 +178,17 @@ export function ArrearsPanel({ rows }: { rows: ArrearsRow[] }) {
 
       {rows.map((row) => (
         <div key={row.subscription_id} className="rounded-lg border p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
+          {/* Member left, what is owed right — the phone keeps them on one
+              line rather than dropping the money below the name. */}
+          <div className="flex items-start justify-between gap-2 lg:items-center">
+            <div className="min-w-0">
               <p className="text-sm font-medium">{row.person_name ?? "Club member"}</p>
               <p className="text-xs text-muted-foreground">
                 {row.plan_name}
                 {row.team_name ? ` · ${row.team_name}` : ""} · {row.status}
               </p>
             </div>
-            <div className="text-right text-xs">
+            <div className="flex-none text-right text-xs">
               <p className="font-medium">
                 {money(row.outstanding_pence)} outstanding
               </p>
@@ -193,8 +198,11 @@ export function ArrearsPanel({ rows }: { rows: ArrearsRow[] }) {
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-end gap-2">
-            <form action={payAction} className="flex flex-wrap items-end gap-2">
+          <div className="mt-3 flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end">
+            <form
+              action={payAction}
+              className="flex flex-col gap-2 lg:flex-row lg:flex-wrap lg:items-end"
+            >
               <input type="hidden" name="subscription_id" value={row.subscription_id} />
               <div className="space-y-1">
                 <Label htmlFor={`amount-${row.subscription_id}`} className="text-xs">
@@ -203,7 +211,7 @@ export function ArrearsPanel({ rows }: { rows: ArrearsRow[] }) {
                 <Input
                   id={`amount-${row.subscription_id}`}
                   name="amount"
-                  className="h-9 w-28"
+                  className="h-11 w-full lg:h-9 lg:w-28"
                   placeholder="20.00"
                   required
                 />
@@ -215,21 +223,24 @@ export function ArrearsPanel({ rows }: { rows: ArrearsRow[] }) {
                 <Input
                   id={`method-${row.subscription_id}`}
                   name="method"
-                  className="h-9 w-32"
+                  className="h-11 w-full lg:h-9 lg:w-32"
                   placeholder="cash"
                 />
               </div>
-              <button type="submit" className="h-9 rounded-md border px-3 text-xs font-medium hover:bg-secondary">
+              <button
+                type="submit"
+                className="h-11 rounded-md border px-3 text-xs font-medium hover:bg-secondary lg:h-9"
+              >
                 Record payment
               </button>
             </form>
 
-            <form action={cancelAction} className="flex items-end gap-2">
+            <form action={cancelAction} className="flex flex-col gap-2 lg:flex-row lg:items-end">
               <input type="hidden" name="subscription_id" value={row.subscription_id} />
               <input type="hidden" name="cancel_reason" value="cancelled by the club" />
               <button
                 type="submit"
-                className="h-9 rounded-md border px-3 text-xs font-medium text-muted-foreground hover:bg-secondary"
+                className="h-11 rounded-md border px-3 text-xs font-medium text-muted-foreground hover:bg-secondary lg:h-9"
               >
                 Cancel subscription
               </button>

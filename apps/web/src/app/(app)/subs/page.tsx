@@ -75,29 +75,29 @@ export default async function SubsPage() {
     <>
       <PageHeader title="Subs" subtitle="Plans, subscriptions and what is outstanding" />
 
-      <div className="p-6 space-y-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Plans</CardTitle>
             <p className="text-sm text-muted-foreground">
               What the club charges for a season, club-wide or per team. Stripe products and prices
               are created on the fly when the first member pays.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <PlansPanel plans={plans} seasons={seasonOptions} teams={teamOptions} />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Arrears</CardTitle>
             <p className="text-sm text-muted-foreground">
               Live subscriptions with what has been paid netted off, refunds included. Payments
               taken in cash or by transfer go in here and land in the same ledger as Stripe&apos;s.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {arrearsError && (
               <p className="mb-3 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 {arrearsError.message}

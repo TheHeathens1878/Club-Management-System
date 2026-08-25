@@ -105,30 +105,43 @@ export default async function OverviewPage() {
         subtitle={seasonName ? `Season ${seasonName}` : "The whole club at a glance"}
         action={
           <span className="flex gap-2">
-            <Link href="/lobby/new" className={buttonVariants({ variant: "outline", size: "sm" })}>
+            <Link
+              href="/lobby/new"
+              className={buttonVariants({
+                variant: "outline",
+                size: "sm",
+                className: "min-h-[44px] lg:min-h-0",
+              })}
+            >
               <PenLine className="h-4 w-4" /> Post a notice
             </Link>
-            <Link href="/messages/new" className={buttonVariants({ size: "sm" })}>
+            <Link
+              href="/messages/new"
+              className={buttonVariants({ size: "sm", className: "min-h-[44px] lg:min-h-0" })}
+            >
               <MessageSquarePlus className="h-4 w-4" /> New message
             </Link>
           </span>
         }
       />
 
-      <div className="max-w-6xl space-y-6 p-6">
+      <div className="max-w-6xl space-y-4 p-4 lg:space-y-6 lg:p-6">
         {overviewResult.error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Could not load the overview: {overviewResult.error.message}
           </p>
         ) : null}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Counter tiles: 2-up on a phone, the design's four across from lg. */}
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
           <Card>
-            <CardContent className="p-5">
+            <CardContent className="p-4 lg:p-5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Registered players
               </p>
-              <p className="mt-2 text-3xl font-bold tracking-tight">{num(o, "players")}</p>
+              <p className="mt-2 text-2xl font-bold tracking-tight lg:text-3xl">
+                {num(o, "players")}
+              </p>
               {num(o, "players_this_month") > 0 ? (
                 <p className="mt-1 text-xs text-emerald-700">
                   +{num(o, "players_this_month")} this month
@@ -139,22 +152,26 @@ export default async function OverviewPage() {
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-5">
+            <CardContent className="p-4 lg:p-5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Teams active
               </p>
-              <p className="mt-2 text-3xl font-bold tracking-tight">{num(o, "teams_active")}</p>
+              <p className="mt-2 text-2xl font-bold tracking-tight lg:text-3xl">
+                {num(o, "teams_active")}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {num(o, "age_groups")} age group{num(o, "age_groups") === 1 ? "" : "s"}
               </p>
             </CardContent>
           </Card>
           <Card>
-            <CardContent className="p-5">
+            <CardContent className="p-4 lg:p-5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                 Subs collected
               </p>
-              <p className="mt-2 text-3xl font-bold tracking-tight">{pounds(collected)}</p>
+              <p className="mt-2 text-2xl font-bold tracking-tight lg:text-3xl">
+                {pounds(collected)}
+              </p>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-secondary">
                 <div
                   className="h-full rounded-full bg-emerald-600"
@@ -167,11 +184,11 @@ export default async function OverviewPage() {
             </CardContent>
           </Card>
           <Card className={num(o, "arrears_pence") > 0 ? "border-destructive/30" : undefined}>
-            <CardContent className="p-5">
+            <CardContent className="p-4 lg:p-5">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-destructive">
                 In arrears
               </p>
-              <p className="mt-2 text-3xl font-bold tracking-tight text-destructive">
+              <p className="mt-2 text-2xl font-bold tracking-tight text-destructive lg:text-3xl">
                 {pounds(num(o, "arrears_pence"))}
               </p>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -182,9 +199,9 @@ export default async function OverviewPage() {
           </Card>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-[4fr_3fr]">
+        <div className="grid gap-4 lg:grid-cols-[4fr_3fr] lg:gap-6">
           <Card>
-            <CardHeader className="flex-row items-baseline justify-between space-y-0">
+            <CardHeader className="flex-row items-baseline justify-between space-y-0 p-4 lg:p-6">
               <CardTitle className="text-base">This week</CardTitle>
               <Link
                 href="/matches"
@@ -193,60 +210,95 @@ export default async function OverviewPage() {
                 All fixtures
               </Link>
             </CardHeader>
-            <CardContent className="divide-y p-0">
+            <CardContent className="p-0">
               {weekend.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-muted-foreground">
+                <p className="px-4 py-6 text-sm text-muted-foreground lg:px-5">
                   No fixtures in the next seven days.
                 </p>
               ) : (
-                weekend.map((row) => (
-                  <Link
-                    key={row.fixture_id}
-                    href={row.event_id ? `/events/${row.event_id}` : "/matches"}
-                    className="flex items-center gap-4 px-5 py-3 text-sm transition hover:bg-secondary/40"
-                  >
-                    <span className="w-16 flex-none text-xs font-semibold text-muted-foreground">
-                      {formatEventDate(row.kickoff_at).slice(0, 6)}
-                      <br />
-                      {formatEventTime(row.kickoff_at)}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-semibold">
-                        {row.team_name} v {row.opponent}
-                      </span>
-                      <span className="block text-xs text-muted-foreground">
-                        {row.competition ?? "League"} · {row.is_home ? "Home" : "Away"}
-                      </span>
-                    </span>
-                    <span className="flex-none text-xs">
-                      {!row.is_home ? (
-                        <span className="text-muted-foreground">Away</span>
-                      ) : row.pitch_name ? (
-                        row.pitch_name
-                      ) : (
-                        <span className="text-amber-700">Unallocated</span>
-                      )}
-                    </span>
-                    <Badge
-                      variant={
-                        row.squad > 0 && row.accepted * 2 < row.squad ? "warning" : "success"
-                      }
-                    >
-                      {row.accepted} of {row.squad}
-                    </Badge>
-                  </Link>
-                ))
+                <>
+                  {/* Phone: one card per fixture — kickoff, competition and
+                      venue fold into the muted line so nothing scrolls sideways. */}
+                  <div className="divide-y lg:hidden">
+                    {weekend.map((row) => (
+                      <Link
+                        key={row.fixture_id}
+                        href={row.event_id ? `/events/${row.event_id}` : "/matches"}
+                        className="flex min-h-[44px] items-center gap-3 px-4 py-3"
+                      >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate text-sm font-semibold">
+                            {row.team_name} v {row.opponent}
+                          </span>
+                          <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                            {formatEventDate(row.kickoff_at).slice(0, 6)} ·{" "}
+                            {formatEventTime(row.kickoff_at)} ·{" "}
+                            {!row.is_home ? "Away" : (row.pitch_name ?? "Unallocated")}
+                          </span>
+                        </span>
+                        <Badge
+                          className="flex-none"
+                          variant={
+                            row.squad > 0 && row.accepted * 2 < row.squad ? "warning" : "success"
+                          }
+                        >
+                          {row.accepted} of {row.squad}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
+
+                  <div className="hidden divide-y lg:block">
+                    {weekend.map((row) => (
+                      <Link
+                        key={row.fixture_id}
+                        href={row.event_id ? `/events/${row.event_id}` : "/matches"}
+                        className="flex items-center gap-4 px-5 py-3 text-sm transition hover:bg-secondary/40"
+                      >
+                        <span className="w-16 flex-none text-xs font-semibold text-muted-foreground">
+                          {formatEventDate(row.kickoff_at).slice(0, 6)}
+                          <br />
+                          {formatEventTime(row.kickoff_at)}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold">
+                            {row.team_name} v {row.opponent}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {row.competition ?? "League"} · {row.is_home ? "Home" : "Away"}
+                          </span>
+                        </span>
+                        <span className="flex-none text-xs">
+                          {!row.is_home ? (
+                            <span className="text-muted-foreground">Away</span>
+                          ) : row.pitch_name ? (
+                            row.pitch_name
+                          ) : (
+                            <span className="text-amber-700">Unallocated</span>
+                          )}
+                        </span>
+                        <Badge
+                          variant={
+                            row.squad > 0 && row.accepted * 2 < row.squad ? "warning" : "success"
+                          }
+                        >
+                          {row.accepted} of {row.squad}
+                        </Badge>
+                      </Link>
+                    ))}
+                  </div>
+                </>
               )}
             </CardContent>
           </Card>
 
           <Card className="self-start">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle className="text-base">Needs you</CardTitle>
             </CardHeader>
             <CardContent className="divide-y p-0">
               {needs.length === 0 ? (
-                <p className="px-5 py-6 text-sm text-muted-foreground">
+                <p className="px-4 py-6 text-sm text-muted-foreground lg:px-5">
                   Nothing waiting on you — a rare sight. Enjoy it.
                 </p>
               ) : (
@@ -254,10 +306,10 @@ export default async function OverviewPage() {
                   <Link
                     key={item.title}
                     href={item.href}
-                    className="flex gap-3 px-5 py-3 transition hover:bg-secondary/40"
+                    className="flex min-h-[44px] gap-3 px-4 py-3 transition hover:bg-secondary/40 lg:px-5"
                   >
                     <span className={`w-1 flex-none rounded-full ${item.tone}`} />
-                    <span>
+                    <span className="min-w-0 flex-1">
                       <span className="block text-sm font-semibold">{item.title}</span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">
                         {item.detail}
