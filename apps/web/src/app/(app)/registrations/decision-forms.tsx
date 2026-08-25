@@ -159,10 +159,17 @@ export function IdVerifiedForm({
   personId,
   verified,
   verifiedAt,
+  verifiedByName,
 }: {
   personId: string;
   verified: boolean;
   verifiedAt?: string | null;
+  /**
+   * Who ticked it (Adam, 2026-08-25: "it should put a name against the ID
+   * approval"). Resolved on the server from `people.id_verified_by` through
+   * `profiles.person_id`; absent when the caller may not see that name.
+   */
+  verifiedByName?: string | null;
 }) {
   const [state, action, pending] = useActionState(setPersonIdVerified, {});
 
@@ -174,6 +181,7 @@ export function IdVerifiedForm({
         <>
           <span className="flex items-center gap-1.5 text-sm text-emerald-700">
             <ShieldCheck className="h-4 w-4" /> ID seen and verified
+            {verifiedByName ? ` by ${verifiedByName}` : ""}
             {verifiedAt ? ` · ${new Date(verifiedAt).toLocaleDateString("en-GB")}` : ""}
           </span>
           <Button

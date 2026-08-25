@@ -27,8 +27,10 @@ import { WithdrawForm } from "../family/family-forms";
  * `registrations_admin_read`.
  *
  * Withdraw is offered only where the database would allow it — the subject or
- * an active guardian (`registrations_guard()`); a connected adult's
- * registration is read-only here, because the guard refuses a withdrawal from
+ * an active guardian (`registrations_guard()`), and only while the
+ * registration is still PENDING (Adam, 2026-08-25: once it has been granted
+ * only an administrator withdraws it). A connected adult's registration is
+ * read-only here, because the guard refuses a withdrawal from
  * someone who is neither the subject nor a guardian. New registrations start
  * from My Children (for a child) — the forms live beside the people they are
  * about.
@@ -99,9 +101,13 @@ export default async function MyRegistrationsPage() {
                 <ul className="space-y-2">
                   {entry.rows.map((row) => {
                     const status = row.status as RegistrationStatusValue;
+                    // Adam, 2026-08-25: a family withdraws while it is still
+                    // waiting; once the club has approved it, only a club
+                    // administrator can. `registrations_guard()` is what
+                    // enforces that — this only stops offering a button the
+                    // database would refuse.
                     const canWithdraw =
-                      (entry.isSelf || childIds.has(personId)) &&
-                      (status === "pending" || status === "approved");
+                      (entry.isSelf || childIds.has(personId)) && status === "pending";
                     return (
                       <li
                         key={row.registration_id}
@@ -123,6 +129,11 @@ export default async function MyRegistrationsPage() {
                           <div className="mt-2">
                             <WithdrawForm registrationId={row.registration_id} />
                           </div>
+                        )}
+                        {status === "approved" && (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Approved — ask a club administrator to withdraw.
+                          </p>
                         )}
                       </li>
                     );

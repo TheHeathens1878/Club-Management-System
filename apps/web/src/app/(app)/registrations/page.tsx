@@ -13,6 +13,7 @@ import { getSessionProfile } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
 import { signIdentityDocumentPaths } from "@/lib/identity-docs";
 import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
+import { resolveUserNames, verifierName } from "@/lib/registration-verifiers";
 import { formatStamp } from "@/lib/people-display";
 import {
   REGISTRATION_STATUS_LABELS,
@@ -174,7 +175,10 @@ export default async function RegistrationsPage({
   // no ID section — the page decides nothing for itself.
   const subjects = personIds.length > 0 ? personIds : ["00000000-0000-0000-0000-000000000000"];
   const [{ data: peopleRows }, { data: documentRows }, { data: questionRows }] = await Promise.all([
-    supabase.from("people").select("id,photo_path,id_verified,id_verified_at").in("id", subjects),
+    supabase
+      .from("people")
+      .select("id,photo_path,id_verified,id_verified_at,id_verified_by")
+      .in("id", subjects),
     supabase
       .from("identity_documents")
       .select("id,person_id,kind,storage_path,created_at,purge_after,purged_at")
@@ -184,6 +188,12 @@ export default async function RegistrationsPage({
   ]);
 
   const peopleById = new Map((peopleRows ?? []).map((row) => [row.id, row] as const));
+  // Who ticked "ID seen and verified" (Adam, 2026-08-25: a name against the ID
+  // approval). `id_verified_by` is an auth user; the name comes back through
+  // that user's `profiles.person_id`, read as the caller.
+  const verifierNames = await resolveUserNames(
+    (peopleRows ?? []).map((row) => row.id_verified_by),
+  );
   // Emergency contacts come off the person now, under `emergency_contacts_admin_read`.
   const contactsByPerson = await loadEmergencyContacts(personIds);
   const photoUrls = await signPeoplePhotos(peopleRows ?? []);
@@ -394,7 +404,10 @@ export default async function RegistrationsPage({
                       {liveDocuments.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
                           {person?.id_verified
-                            ? "No document on file — the club has recorded that it has seen ID for this player."
+                            ? `No document on file — ${verifierName(
+                                verifierNames,
+                                person.id_verified_by,
+                              )} has recorded that the club has seen ID for this player.`
                             : "Nothing on file."}
                         </p>
                       ) : (
@@ -434,6 +447,11 @@ export default async function RegistrationsPage({
                           personId={registration.person_id}
                           verified={person.id_verified}
                           verifiedAt={person.id_verified_at}
+                          verifiedByName={
+                            person.id_verified
+                              ? verifierName(verifierNames, person.id_verified_by)
+                              : null
+                          }
                         />
                       )}
                     </div>

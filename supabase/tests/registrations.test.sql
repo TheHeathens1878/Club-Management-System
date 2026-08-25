@@ -5,7 +5,8 @@
 --   A  shape: enum values, table, RLS, policies, privileges
 --   B  who may submit: adult self, guardian for minor, admin for anyone;
 --      stranger for a minor refused (SG-4), adult for another adult refused
---   C  status machine: decisions admin-only; withdraw by subject/guardian;
+--   C  status machine: decisions admin-only; withdraw by subject/guardian
+--      while PENDING, by a club_admin once approved (20260825230000);
 --      final states; decided_* stamped; approval creates the player
 --      membership and SG-6 refuses a non-compliant team at approval time
 --   D  SG-5 photo consents through guardian_consents: grant by active
@@ -18,7 +19,7 @@
 
 begin;
 
-select plan(53);
+select plan(54);
 
 -- SG-6 tier-1 enforcement is OFF in production (FA Clubs Portal is the record;
 -- see the 2026-08-23 amendment in SAFEGUARDING.md). These tests exercise the
@@ -207,15 +208,23 @@ select lives_ok(
   $$update public.registrations set status = 'withdrawn' where id = 'e3e3e3e3-1111-4111-8111-000000000001'$$,
   'the subject withdraws their own registration');
 reset role;
--- guardian withdraws the child's
+-- the guardian's child's registration was APPROVED above, and since
+-- 20260825230000 (Adam: "parents can't withdraw registration after it's been
+-- granted, only admin") that is the club's to undo.
 set local request.jwt.claims to '{"sub":"a3a3a3a3-1111-4111-8111-000000000005","role":"authenticated"}';
+set local role authenticated;
+select throws_ok(
+  $$update public.registrations set status = 'withdrawn' where id = 'e3e3e3e3-1111-4111-8111-000000000002'$$,
+  'P0001', null, 'a guardian cannot withdraw an approved registration');
+reset role;
+set local request.jwt.claims to '{"sub":"a3a3a3a3-1111-4111-8111-000000000001","role":"authenticated"}';
 set local role authenticated;
 select lives_ok(
   $$update public.registrations set status = 'withdrawn' where id = 'e3e3e3e3-1111-4111-8111-000000000002'$$,
-  'a guardian withdraws their child''s registration');
+  'a club administrator withdraws it for them');
 reset role;
 select is((select status::text from public.registrations where id = 'e3e3e3e3-1111-4111-8111-000000000002'), 'withdrawn',
-  'the guardian withdrawal took effect (approved → withdrawn)');
+  'the administrator''s withdrawal took effect (approved → withdrawn)');
 -- after a withdrawal a new one may be submitted (as the adult themself)
 set local request.jwt.claims to '{"sub":"a3a3a3a3-1111-4111-8111-000000000004","role":"authenticated"}';
 set local role authenticated;
