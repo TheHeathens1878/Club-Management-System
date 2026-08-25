@@ -9,7 +9,10 @@
 --   1. `my_capabilities()` gains `has_referee_role`. The referee hat is a
 --      `person_roles` row like the coach's, and the role switcher can only
 --      offer a view it can see; nothing else in the capabilities payload
---      changes, so every existing reader is untouched.
+--      changes, so every existing reader is untouched. The body below is the
+--      20260825070000 one — the club-rules waiting-list clause included — plus
+--      the new key; replacing it with an older copy would quietly revoke a
+--      coach's automatic waiting-list access.
 --   2. `referees_group_notify()` — an AFTER INSERT statement trigger on
 --      `messages`, scoped to the seeded Referees group, telling every live
 --      participant except the sender that something has been posted. The
@@ -50,8 +53,17 @@ as $$
     'person_id', me.person_id,
     'is_club_admin', public.is_club_admin(),
     'is_safeguarding_lead', public.is_safeguarding_lead(),
+    -- The 20260825070000 rule: a coach of a U-band team holds it without a
+    -- grant. Carried forward verbatim — replacing this function with an older
+    -- body would quietly revoke that, which is what CI caught.
     'has_waiting_list_access', exists (
-      select 1 from public.waiting_list_access w where w.person_id = me.person_id),
+      select 1 from public.waiting_list_access w where w.person_id = me.person_id)
+      or exists (
+      select 1 from public.team_memberships m
+      join public.teams t on t.id = m.team_id
+      where m.person_id = me.person_id and m.left_at is null
+        and m.role in ('coach', 'assistant_coach', 'manager')
+        and public.waiting_list_age_number(t.age_group) is not null),
     'has_coach_role', exists (
       select 1 from public.person_roles r
       where r.person_id = me.person_id and r.revoked_at is null and r.role = 'coach'),
