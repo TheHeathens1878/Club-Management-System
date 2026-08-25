@@ -169,6 +169,18 @@ export type RoleViewOption = {
   teamId: string | null;
   label: string;
   value: string;
+  /** The two lines the design's panel draws: "Coach" over "U14 Mavericks". */
+  role: string;
+  scope: string;
+};
+
+/** The design's short role words — "Club admin", not "Club admin view". */
+const ROLE_WORDS: Record<RoleView, string> = {
+  player: "Player",
+  parent: "Parent",
+  coach: "Coach",
+  admin: "Club admin",
+  function_room: "Function room",
 };
 
 export function serializeViewOption(view: RoleView, teamId: string | null): string {
@@ -205,7 +217,14 @@ export function teamsForView(view: RoleView, c: Capabilities): TeamRef[] {
 export function roleViewOptions(c: Capabilities): RoleViewOption[] {
   const options: RoleViewOption[] = [];
   const add = (view: RoleView, team: TeamRef | null, label: string) =>
-    options.push({ view, teamId: team?.id ?? null, label, value: serializeViewOption(view, team?.id ?? null) });
+    options.push({
+      view,
+      teamId: team?.id ?? null,
+      label,
+      value: serializeViewOption(view, team?.id ?? null),
+      role: ROLE_WORDS[view],
+      scope: team?.name ?? (view === "function_room" ? "The room and the bar" : "Whole club"),
+    });
 
   if (qualifiesForView("admin", c)) add("admin", null, "Club Admin");
   if (qualifiesForView("function_room", c)) add("function_room", null, "Function Room");
@@ -245,11 +264,17 @@ export function roleSwitcherProps(
   c: Capabilities,
   view: RoleView,
   teamScope: string | null,
-): { options: { value: string; label: string }[]; current: string } {
+): {
+  options: { value: string; label: string; role: string; scope: string }[];
+  current: string;
+} {
   const options = roleViewOptions(c);
   const scoped = serializeViewOption(view, teamScope);
   const current = options.some((option) => option.value === scoped)
     ? scoped
     : options.find((option) => option.view === view)?.value ?? serializeViewOption(view, null);
-  return { options: options.map(({ value, label }) => ({ value, label })), current };
+  return {
+    options: options.map(({ value, label, role, scope }) => ({ value, label, role, scope })),
+    current,
+  };
 }
