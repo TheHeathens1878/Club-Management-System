@@ -54,7 +54,7 @@ export default async function ManageGroupPage({
     return (
       <>
         <PageHeader title="Not a group" subtitle="Team rooms are not edited here" />
-        <div className="p-6 max-w-2xl">
+        <div className="max-w-2xl p-4 lg:p-6">
           <Card>
             <CardContent className="space-y-3 p-6 text-sm text-muted-foreground">
               <p>
@@ -62,7 +62,10 @@ export default async function ManageGroupPage({
                 season, and their membership from the team sheet — renaming one here would create a
                 second room the next time somebody joins or leaves.
               </p>
-              <Link href={`/messages/${id}`} className={buttonVariants({ size: "sm" })}>
+              <Link
+                href={`/messages/${id}`}
+                className={buttonVariants({ size: "sm" }) + " min-h-[44px] lg:min-h-0"}
+              >
                 Open the conversation
               </Link>
             </CardContent>
@@ -116,13 +119,15 @@ export default async function ManageGroupPage({
           <div className="flex items-center gap-2">
             <Link
               href={`/messages/${id}`}
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5"}
+              className={
+                buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] gap-1.5 lg:min-h-0"
+              }
             >
               <MessageSquare className="h-3.5 w-3.5" /> Open chat
             </Link>
             <Link
               href="/groups"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
             >
               <ChevronLeft className="h-4 w-4" /> All groups
             </Link>
@@ -130,7 +135,7 @@ export default async function ManageGroupPage({
         }
       />
 
-      <div className="p-6 space-y-4 max-w-3xl">
+      <div className="max-w-3xl space-y-4 p-4 lg:p-6">
         {/*
           SG-9 (P5.4): a supervised conversation says so wherever it is shown,
           persistently and without a way to dismiss it. Same words as the thread

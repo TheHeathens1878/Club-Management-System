@@ -62,7 +62,7 @@ export function MatchPostComposer({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold"
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold lg:min-h-0"
       >
         <span className="inline-flex items-center gap-2">
           <Megaphone className="h-4 w-4 text-primary" /> Post a game that needs a referee
@@ -82,7 +82,7 @@ export function MatchPostComposer({
                 id="rp-fixture"
                 value={fixtureId}
                 onChange={(event) => pickFixture(event.target.value)}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className="h-11 w-full rounded-md border bg-background px-3 py-2 text-sm lg:h-10"
               >
                 <option value="">Free-type the details below…</option>
                 {fixtures.map((option) => (
@@ -146,7 +146,7 @@ export function MatchPostComposer({
               <select
                 id="rp-surface"
                 name="surface"
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className="h-11 w-full rounded-md border bg-background px-3 py-2 text-sm lg:h-10"
                 defaultValue=""
               >
                 <option value="">—</option>
@@ -187,7 +187,7 @@ export function MatchPostComposer({
           <button
             type="submit"
             disabled={posting}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+            className="inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-2"
           >
             {posting && <Loader2 className="h-4 w-4 animate-spin" />} Post to the referees
           </button>

@@ -72,7 +72,13 @@ function RemoveMemberForm({
       <form action={action}>
         <input type="hidden" name="conversation_id" value={conversationId} />
         <input type="hidden" name="person_id" value={member.personId} />
-        <Button type="submit" variant="ghost" size="sm" disabled={pending} className="gap-1.5">
+        <Button
+          type="submit"
+          variant="ghost"
+          size="sm"
+          disabled={pending}
+          className="min-h-[44px] gap-1.5 lg:min-h-0"
+        >
           <UserMinus className="h-3.5 w-3.5" /> Remove
         </Button>
       </form>
@@ -148,7 +154,12 @@ export function GroupMembersPanel({
             required
           />
           <Feedback state={state} />
-          <Button type="submit" size="sm" disabled={pending} className="gap-1.5">
+          <Button
+            type="submit"
+            size="sm"
+            disabled={pending}
+            className="min-h-[44px] w-full gap-1.5 sm:w-auto lg:min-h-0"
+          >
             <UserPlus className="h-3.5 w-3.5" /> Add to group
           </Button>
         </form>

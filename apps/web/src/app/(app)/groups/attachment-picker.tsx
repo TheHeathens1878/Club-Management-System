@@ -18,6 +18,9 @@ import { isAttachmentChoice, type AttachmentChoice } from "@/lib/group-scope";
 
 import type { TeamOption, VenueGroupOption } from "./attachment-options";
 
+/** 44px on a phone, the desk's 40px from lg up. */
+const FIELD = "h-11 lg:h-10";
+
 export function AttachmentPicker({
   venues,
   teams,
@@ -42,6 +45,7 @@ export function AttachmentPicker({
         <Select
           id="attachment-kind"
           name="attachment_kind"
+          className={FIELD}
           value={kind}
           onChange={(e) => setKind(isAttachmentChoice(e.target.value) ? e.target.value : "none")}
         >
@@ -55,7 +59,12 @@ export function AttachmentPicker({
       {kind === "resource" && (
         <div className="space-y-1.5">
           <Label htmlFor="attachment-resource">Venue</Label>
-          <Select id="attachment-resource" name="resource_id" defaultValue={initialResourceId}>
+          <Select
+            id="attachment-resource"
+            name="resource_id"
+            className={FIELD}
+            defaultValue={initialResourceId}
+          >
             <option value="">Choose a venue…</option>
             {venues.map((group) => (
               <optgroup key={group.venue} label={group.venue}>
@@ -78,7 +87,7 @@ export function AttachmentPicker({
       {kind === "team" && (
         <div className="space-y-1.5">
           <Label htmlFor="attachment-team">Team</Label>
-          <Select id="attachment-team" name="team_id" defaultValue={initialTeamId}>
+          <Select id="attachment-team" name="team_id" className={FIELD} defaultValue={initialTeamId}>
             <option value="">Choose a team…</option>
             {teams.map((team) => (
               <option key={team.id} value={team.id}>
@@ -99,6 +108,7 @@ export function AttachmentPicker({
           <Input
             id="attachment-label"
             name="scope_label"
+            className={FIELD}
             defaultValue={initialScopeLabel}
             placeholder="e.g. Presentation night, Minibus rota, Committee"
             maxLength={120}

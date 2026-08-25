@@ -50,18 +50,23 @@ export default async function LeadConversationPage({
         title="Conversation (oversight)"
         subtitle="Read under SG-9 — this access has been recorded"
         action={
-          <Link href="/safeguarding" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+          <Link
+            href="/safeguarding"
+            className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
+          >
             <ChevronLeft className="h-4 w-4" /> Safeguarding
           </Link>
         }
       />
 
-      <div className="p-6 space-y-4 max-w-3xl">
+      {/* A readable measure on a phone: 16px gutters, and the conversation id
+          wraps inside the banner rather than pushing the page sideways. */}
+      <div className="max-w-3xl space-y-4 p-4 lg:p-6">
         <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <Eye className="mt-0.5 h-4 w-4 shrink-0" />
-          <div>
+          <div className="min-w-0">
             <p className="font-medium">This read is logged against your name.</p>
-            <p className="mt-0.5">
+            <p className="mt-0.5 break-words">
               Conversation <span className="font-mono">{id}</span> · reason: {reason}
             </p>
           </div>
@@ -74,7 +79,13 @@ export default async function LeadConversationPage({
         ) : (
           <>
             <div className="flex justify-end">
-              <a href={exportHref} className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}>
+              <a
+                href={exportHref}
+                className={
+                  buttonVariants({ variant: "outline", size: "sm" }) +
+                  " min-h-[44px] w-full gap-2 sm:w-auto lg:min-h-0"
+                }
+              >
                 <Download className="h-4 w-4" /> Export as JSON
               </a>
             </div>

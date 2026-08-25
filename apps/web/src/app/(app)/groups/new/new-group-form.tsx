@@ -52,6 +52,7 @@ export function NewGroupForm({
           required
           maxLength={120}
           placeholder="e.g. Ashton Park Saturday crew"
+          className="h-11 lg:h-10"
         />
       </div>
 
@@ -77,6 +78,7 @@ export function NewGroupForm({
                   size="icon"
                   onClick={() => setRows((current) => current.filter((k) => k !== key))}
                   aria-label={`Remove member ${index + 1}`}
+                  className="h-11 w-11 lg:h-10 lg:w-10"
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -88,7 +90,7 @@ export function NewGroupForm({
           type="button"
           variant="outline"
           size="sm"
-          className="gap-1.5"
+          className="min-h-[44px] w-full gap-1.5 sm:w-auto lg:min-h-0"
           onClick={() => {
             setRows((current) => [...current, nextKey]);
             setNextKey((n) => n + 1);
@@ -108,7 +110,11 @@ export function NewGroupForm({
         </p>
       )}
 
-      <Button type="submit" disabled={pending} className="gap-2">
+      <Button
+        type="submit"
+        disabled={pending}
+        className="min-h-[44px] w-full gap-2 sm:w-auto lg:min-h-0"
+      >
         <UsersRound className="h-4 w-4" /> Create group
       </Button>
     </form>

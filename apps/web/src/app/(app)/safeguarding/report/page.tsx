@@ -28,7 +28,7 @@ export default async function ReportConcernPage() {
     <>
       <PageHeader title="Report a safeguarding concern" subtitle="Goes straight to the club's safeguarding lead" />
 
-      <div className="p-6 space-y-6 max-w-2xl">
+      <div className="max-w-2xl space-y-6 p-4 lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Tell the safeguarding lead</CardTitle>

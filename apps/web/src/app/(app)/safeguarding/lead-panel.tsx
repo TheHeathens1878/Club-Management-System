@@ -43,14 +43,14 @@ export function LeadPanel({
 
       {canEdit ? (
         <form action={action} className="flex flex-wrap items-end gap-2">
-          <div className="min-w-64 space-y-1">
+          <div className="w-full space-y-1 sm:w-auto sm:min-w-64">
             <Label htmlFor="lead-person">Appoint</Label>
             <select
               id="lead-person"
               name="person_id"
               required
               defaultValue=""
-              className="block w-full rounded-md border bg-background px-3 py-2 text-sm"
+              className="block h-11 w-full rounded-md border bg-background px-3 py-2 text-sm lg:h-auto"
             >
               <option value="" disabled>
                 Choose a person…
@@ -63,7 +63,12 @@ export function LeadPanel({
               ))}
             </select>
           </div>
-          <Button type="submit" size="sm" disabled={pending}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={pending}
+            className="min-h-[44px] w-full sm:w-auto lg:min-h-0"
+          >
             {pending ? "Saving…" : "Make safeguarding lead"}
           </Button>
           {state.error ? <p className="w-full text-sm text-destructive">{state.error}</p> : null}

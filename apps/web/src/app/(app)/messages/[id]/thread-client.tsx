@@ -3,7 +3,12 @@
 /**
  * The live half of a thread (PLAN.md P5.4), WhatsApp-style:
  * grouped bubbles with tails, day chips, sent/read ticks, reply-with-quote,
- * emoji reactions, photo attachments, Enter-to-send and optimistic sending.
+ * emoji reactions, photo attachments and optimistic sending.
+ *
+ * Enter does NOT send (Adam, 2026-08-25): it puts a new line in the box like
+ * any other textarea, and the Send button is the only thing that posts. A
+ * conversation this one can be — a team room, a room a young person is in — is
+ * not a place for a message to leave by accident.
  *
  * The browser client is the user's own client, so Realtime and Storage apply
  * the same participant-scoped RLS as the server read did — a subscription
@@ -33,6 +38,7 @@ import {
   Flag,
   ImagePlus,
   Loader2,
+  MoreVertical,
   Send,
   SmilePlus,
   Trash2,
@@ -138,6 +144,8 @@ export function ThreadClient({
   const [actionError, setActionError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [reportFor, setReportFor] = useState<string | null>(null);
+  /** Phone only: which message has its actions open (there is no hover). */
+  const [actionsFor, setActionsFor] = useState<string | null>(null);
   const [sendState, sendAction, sending] = useActionState(sendMessage, EMPTY);
   const [reportState, reportAction] = useActionState(reportMessage, EMPTY);
   const formRef = useRef<HTMLFormElement>(null);
@@ -371,13 +379,6 @@ export function ThreadClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendState, sending]);
 
-  const onComposerKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      formRef.current?.requestSubmit();
-    }
-  }, []);
-
   const autoGrow = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     el.style.height = "auto";
@@ -538,6 +539,106 @@ export function ThreadClient({
   const typingNames = Object.values(typing).map((t) => t.name);
   const showSenderNames = conversationType !== "dm";
 
+  /**
+   * React, reply, delete and — always — report to the safeguarding lead.
+   *
+   * The desk reveals these on hover in a chip beside the bubble. A phone has no
+   * hover, so the same four render under the bubble as 44px targets: reporting
+   * a message must stay one tap away on every viewport, which is why this is a
+   * second rendering rather than a hover state nobody can reach.
+   */
+  const messageActions = (message: ThreadMessage, mine: boolean, touch: boolean) => {
+    const shape = touch
+      ? "flex h-11 w-11 items-center justify-center rounded-full border bg-card text-muted-foreground"
+      : "rounded-full p-1 hover:bg-secondary";
+    const glyph = touch ? "h-[18px] w-[18px] text-muted-foreground" : "h-3.5 w-3.5 text-muted-foreground";
+
+    return (
+      <div
+        className={
+          touch
+            ? `mt-1 flex items-center gap-1.5 lg:hidden ${mine ? "justify-end" : "justify-start"}`
+            : "absolute top-0 hidden items-center gap-0.5 rounded-full border bg-card px-1 py-0.5 shadow-sm lg:group-hover:flex " +
+              (mine ? "right-full mr-1" : "left-full ml-1")
+        }
+      >
+        {canReact && (
+          <details className="relative">
+            <summary
+              className={`flex cursor-pointer list-none items-center ${shape}`}
+              title="React"
+            >
+              <SmilePlus className={glyph} />
+            </summary>
+            <div
+              className={`absolute z-20 mt-1 flex gap-1 rounded-full border bg-card p-1 shadow-md ${mine ? "right-0" : "left-0"} ${touch ? "bottom-full mb-1 mt-0" : ""}`}
+            >
+              {QUICK_EMOJI.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={
+                    touch
+                      ? "flex h-11 w-11 items-center justify-center rounded-full text-xl"
+                      : "rounded-full p-0.5 text-base hover:bg-secondary"
+                  }
+                  onClick={(e) => {
+                    react(message.id, emoji);
+                    (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </details>
+        )}
+        {canPost && (
+          <button
+            type="button"
+            className={shape}
+            title="Reply"
+            onClick={() => {
+              setReplyTo(message);
+              textRef.current?.focus();
+            }}
+          >
+            <CornerUpLeft className={glyph} />
+            {touch && <span className="sr-only">Reply</span>}
+          </button>
+        )}
+        {mine && (
+          <button
+            type="button"
+            className={shape}
+            title="Delete for everyone (the record keeps a tombstone)"
+            onClick={() => {
+              const fd = new FormData();
+              fd.set("message_id", message.id);
+              fd.set("conversation_id", conversationId);
+              void deleteMessage(EMPTY, fd).then((res) => {
+                if (res.error) setActionError(res.error);
+                else router.refresh();
+              });
+            }}
+          >
+            <Trash2 className={glyph} />
+            {touch && <span className="sr-only">Delete</span>}
+          </button>
+        )}
+        <button
+          type="button"
+          className={shape}
+          title="Report to the safeguarding lead"
+          onClick={() => setReportFor(reportFor === message.id ? null : message.id)}
+        >
+          <Flag className={glyph} />
+          {touch && <span className="sr-only">Report to the safeguarding lead</span>}
+        </button>
+      </div>
+    );
+  };
+
   return (
     <div className="flex flex-col gap-3">
       <div className="space-y-0.5">
@@ -547,7 +648,7 @@ export function ThreadClient({
               type="button"
               onClick={() => void loadEarlier()}
               disabled={loadingEarlier}
-              className="rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground hover:bg-secondary"
+              className="inline-flex min-h-[44px] items-center rounded-full border bg-card px-4 text-xs text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-3 lg:py-1"
             >
               {loadingEarlier ? "Loading…" : "Load earlier messages"}
             </button>
@@ -591,6 +692,12 @@ export function ThreadClient({
               )}
 
               <div className={`group flex ${mine ? "justify-end" : "justify-start"} ${firstOfRun ? "pt-2" : "pt-0.5"}`}>
+                {mine && body.state === "ok" && !isPending && (
+                  <MessageKebab
+                    open={actionsFor === message.id}
+                    onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
+                  />
+                )}
                 <div className={`relative max-w-[75%] min-w-0 ${mine ? "items-end" : "items-start"}`}>
                   <div
                     className={
@@ -687,76 +794,13 @@ export function ThreadClient({
                     </div>
                   )}
 
-                  {/* Hover actions */}
+                  {/* Hover actions on the desk; on a phone the kebab beside the
+                      bubble opens the same set. */}
                   {body.state === "ok" && !isPending && (
-                    <div
-                      className={
-                        "absolute top-0 hidden items-center gap-0.5 rounded-full border bg-card px-1 py-0.5 shadow-sm group-hover:flex " +
-                        (mine ? "right-full mr-1" : "left-full ml-1")
-                      }
-                    >
-                      {canReact && (
-                        <details className="relative">
-                          <summary className="flex cursor-pointer list-none items-center rounded-full p-1 hover:bg-secondary" title="React">
-                            <SmilePlus className="h-3.5 w-3.5 text-muted-foreground" />
-                          </summary>
-                          <div className={`absolute z-20 mt-1 flex gap-1 rounded-full border bg-card p-1 shadow-md ${mine ? "right-0" : "left-0"}`}>
-                            {QUICK_EMOJI.map((emoji) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                className="rounded-full p-0.5 text-base hover:bg-secondary"
-                                onClick={(e) => {
-                                  react(message.id, emoji);
-                                  (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-                                }}
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                        </details>
-                      )}
-                      {canPost && (
-                        <button
-                          type="button"
-                          className="rounded-full p-1 hover:bg-secondary"
-                          title="Reply"
-                          onClick={() => {
-                            setReplyTo(message);
-                            textRef.current?.focus();
-                          }}
-                        >
-                          <CornerUpLeft className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
-                      )}
-                      {mine && (
-                        <button
-                          type="button"
-                          className="rounded-full p-1 hover:bg-secondary"
-                          title="Delete for everyone (the record keeps a tombstone)"
-                          onClick={() => {
-                            const fd = new FormData();
-                            fd.set("message_id", message.id);
-                            fd.set("conversation_id", conversationId);
-                            void deleteMessage(EMPTY, fd).then((res) => {
-                              if (res.error) setActionError(res.error);
-                              else router.refresh();
-                            });
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="rounded-full p-1 hover:bg-secondary"
-                        title="Report to the safeguarding lead"
-                        onClick={() => setReportFor(reportFor === message.id ? null : message.id)}
-                      >
-                        <Flag className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </div>
+                    <>
+                      {messageActions(message, mine, false)}
+                      {actionsFor === message.id && messageActions(message, mine, true)}
+                    </>
                   )}
 
                   {reportFor === message.id && (
@@ -774,13 +818,16 @@ export function ThreadClient({
                         className="text-xs"
                       />
                       <div className="flex gap-2">
-                        <button type="submit" className="rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-secondary">
+                        <button
+                          type="submit"
+                          className="inline-flex min-h-[44px] items-center rounded-md border px-3 text-[11px] font-medium hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                        >
                           Send report
                         </button>
                         <button
                           type="button"
                           onClick={() => setReportFor(null)}
-                          className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary"
+                          className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
                         >
                           Cancel
                         </button>
@@ -788,6 +835,12 @@ export function ThreadClient({
                     </form>
                   )}
                 </div>
+                {!mine && body.state === "ok" && !isPending && (
+                  <MessageKebab
+                    open={actionsFor === message.id}
+                    onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
+                  />
+                )}
               </div>
             </div>
           );
@@ -819,7 +872,15 @@ export function ThreadClient({
       {readOnlyNotice ? (
         <p className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{readOnlyNotice}</p>
       ) : canPost ? (
-        <form ref={formRef} action={sendAction} onSubmit={onComposerSubmit} className="space-y-2">
+        /* On a phone the composer is pinned to the bottom of the thread, clear
+           of the tab bar and its home-indicator inset; on the desk it is the
+           last block of the panel, exactly as it was. */
+        <form
+          ref={formRef}
+          action={sendAction}
+          onSubmit={onComposerSubmit}
+          className="sticky bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 space-y-2 rounded-t-xl border-t bg-background pb-2 pt-2 lg:static lg:rounded-none lg:border-t-0 lg:pb-0 lg:pt-0"
+        >
           <input type="hidden" name="conversation_id" value={conversationId} />
           <input type="hidden" name="client_id" value={clientIdRef.current} />
           <input type="hidden" name="reply_to" value={replyTo?.id ?? ""} />
@@ -843,7 +904,7 @@ export function ThreadClient({
 
           <div className="flex items-end gap-2">
             <label
-              className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border text-muted-foreground hover:bg-secondary"
+              className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border text-muted-foreground hover:bg-secondary lg:h-9 lg:w-9"
               title="Attach a photo"
             >
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
@@ -865,27 +926,46 @@ export function ThreadClient({
               rows={1}
               required
               placeholder="Write a message…"
-              className="max-h-40 min-h-[2.25rem] flex-1 resize-none"
+              className="max-h-40 min-h-[44px] flex-1 resize-none lg:min-h-[2.25rem]"
               onChange={announceTyping}
               onInput={autoGrow}
-              onKeyDown={onComposerKeyDown}
             />
             <button
               type="submit"
               disabled={sending || uploading}
               aria-label="Send"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 lg:h-9 lg:w-9"
             >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
           <p className="text-[11px] text-muted-foreground">
-            Enter sends · Shift+Enter for a new line ·{" "}
+            Enter starts a new line — Send is the only thing that sends ·{" "}
             {connected ? "Live" : "Reconnecting — messages refresh every few seconds"}
           </p>
         </form>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The phone's way in to a message's actions — react, reply, delete, and report
+ * to the safeguarding lead. It exists because the desk's set is revealed by
+ * hover, and a touch screen never hovers; nothing about what the actions do
+ * changes with the viewport.
+ */
+function MessageKebab({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex h-11 w-11 flex-none items-center justify-center self-end text-muted-foreground lg:hidden"
+    >
+      <MoreVertical className="h-4 w-4" />
+      <span className="sr-only">{open ? "Hide message actions" : "Message actions"}</span>
+    </button>
   );
 }
 

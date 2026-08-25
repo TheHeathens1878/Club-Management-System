@@ -20,7 +20,7 @@ export default async function MessagesPage() {
     return (
       <>
         <PageHeader title="Messages" subtitle="Club conversations" />
-        <div className="max-w-2xl p-6">
+        <div className="max-w-2xl p-4 lg:p-6">
           <Card>
             <CardContent className="p-6 text-sm text-muted-foreground">
               Your sign-in is not linked to a member record yet, so there are no conversations to
