@@ -160,6 +160,33 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
 
+  // --- Matchday (the design's own section) ---------------------------------
+  {
+    // The coach/admin desk: every fixture with pitch and reply state.
+    href: "/matches",
+    label: "Matches",
+    icon: Shirt,
+    group: "Matchday",
+    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/training",
+    label: "Training",
+    icon: CalendarCheck,
+    group: "Matchday",
+    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/social",
+    label: "Social",
+    icon: CalendarDays,
+    group: "Matchday",
+    allowed: () => true,
+    views: CLUB_VIEWS,
+  },
+
   // --- Function room -------------------------------------------------------
   {
     href: "/room-bookings",
