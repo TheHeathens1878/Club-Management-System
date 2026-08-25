@@ -77,10 +77,12 @@ export default async function PitchRequestsPage({
           <CardHeader className="p-4 lg:p-6">
             <CardTitle>Waiting for a decision</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Training and block bookings a coach has requested. Confirming brings the slot under
-              the pitch&apos;s overlap constraint for the first time, so it can still be refused if
-              something took the pitch in the meantime. Declining cancels the booking and keeps the
-              reason on the record.
+              Training and block bookings a coach has requested — a coach can only ever create a
+              request, never a confirmed booking, so this is where every one of them is decided. A
+              pending request already holds its slot against everything else on that pitch, so
+              nothing can be double-booked while it waits; confirming is what tells the coach it is
+              theirs. Declining cancels the booking, frees the pitch and keeps the reason on the
+              record.
             </p>
           </CardHeader>
           <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
