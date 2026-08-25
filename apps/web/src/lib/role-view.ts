@@ -131,10 +131,13 @@ export function qualifiesForView(view: RoleView, c: Capabilities): boolean {
 
 /**
  * Precedence when nothing has been chosen, or when a cookie names a view the
- * person does not hold: the widest hat first. Distinct from {@link ROLE_VIEWS},
+ * person does not hold: the MEMBER hat first (Adam, 2026-08-25 — a first
+ * sign-in gets the Me page and the lobby, whatever else they hold; the
+ * switcher is where the wider hats live). Function-room staff keep their diary
+ * as the fallback when they hold no club hat. Distinct from {@link ROLE_VIEWS},
  * which is the order the tiles are drawn in.
  */
-const VIEW_PRECEDENCE = ["admin", "function_room", "coach", "parent", "player"] as const;
+const VIEW_PRECEDENCE = ["parent", "player", "coach", "admin", "function_room"] as const;
 
 /** Every view this person holds, in tile order. */
 export function qualifiedViews(c: Capabilities): RoleView[] {

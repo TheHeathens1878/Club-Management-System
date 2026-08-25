@@ -5,6 +5,15 @@
  * still needs (Manage pitches, Rooms, Groups, Media, Super users, My role)
  * keep their place in the nearest section rather than vanishing.
  *
+ * The PARENT view has its own five sections, spelled out by Adam (2026-08-25,
+ * second pass — this supersedes the morning's "Club Lobby, Team, My Groups"
+ * shape): Club (Club Lobby, My groups, Messaging, Events, Registrations),
+ * Me (My Profile, Connected Adults, My Children), Finance (My Subs),
+ * Safeguarding (Report a concern), Settings (Comms preferences). The lobby
+ * stays the parent's landing page. There is no Team entry any more — a
+ * team-scoped pick in the switcher still goes to the team page, but the menu
+ * reaches teams through My Children.
+ *
  * Two independent gates decide whether a link is rendered:
  *
  *   1. `allowed(capabilities)` — what this person may actually reach. It
@@ -95,12 +104,51 @@ export const NAV: readonly NavEntry[] = [
     views: CLUB_VIEWS,
   },
   {
+    // The parent's copy of the messages entries sits first so the parent menu
+    // reads Lobby → My groups → Messaging → Events → Registrations in order.
+    href: "/messages?filter=groups",
+    label: "My groups",
+    icon: UsersRound,
+    group: "Club",
+    allowed: () => true,
+    views: ["parent"],
+  },
+  {
+    href: "/messages",
+    label: "Messaging",
+    icon: MessageSquare,
+    group: "Club",
+    allowed: () => true,
+    views: ["parent"],
+  },
+  {
+    // Adam's parent menu (2026-08-25, second pass): Events came back into the
+    // parent's Club section after the morning's menu left it out. Same
+    // destination as Matchday's entry; the guard mirrors the page's admit.
+    href: "/events",
+    label: "Events",
+    icon: CalendarCheck,
+    group: "Club",
+    allowed: (c) => c.isGuardian || c.hasParentRole,
+    views: ["parent"],
+  },
+  {
+    // The household's registration statuses — not the admin queue at
+    // /registrations, which keeps its own entry below.
+    href: "/my-registrations",
+    label: "Registrations",
+    icon: ClipboardCheck,
+    group: "Club",
+    allowed: () => true,
+    views: ["parent"],
+  },
+  {
     href: "/messages",
     label: "Messages",
     icon: MessageSquare,
     group: "Club",
     allowed: () => true,
-    views: ALL_VIEWS,
+    views: ["player", "coach", "admin", "function_room"],
   },
   {
     href: "/groups",
@@ -119,26 +167,6 @@ export const NAV: readonly NavEntry[] = [
     group: "Club",
     allowed: (c) => c.hasPlayerMembership,
     views: ["player"],
-  },
-  {
-    // Adam's parent menu (2026-08-25): "Club — Club Lobby, Team, My Groups
-    // [and Messages]; Me — My Children, My Subs, Comms Preferences". Team is
-    // the scoped child's team via the /my-team redirect; My Groups is the
-    // messages list narrowed to groups.
-    href: "/my-team",
-    label: "Team",
-    icon: Shirt,
-    group: "Club",
-    allowed: (c) => c.isGuardian || c.hasParentRole,
-    views: ["parent"],
-  },
-  {
-    href: "/messages?filter=groups",
-    label: "My Groups",
-    icon: UsersRound,
-    group: "Club",
-    allowed: () => true,
-    views: ["parent"],
   },
   {
     // The admin's first screen: the club at a glance.
@@ -338,7 +366,25 @@ export const NAV: readonly NavEntry[] = [
     views: ["player", "coach", "admin"],
   },
 
-  // --- Me (Adam's parent menu, 2026-08-25) ---------------------------------
+  // --- Me (Adam's parent menu, 2026-08-25 second pass) ---------------------
+  {
+    href: "/profile",
+    label: "My Profile",
+    icon: UserCircle,
+    group: "Me",
+    allowed: () => true,
+    views: ["parent"],
+  },
+  {
+    // The adults in the caller's household without a login of their own —
+    // added at /join or on this page, read back through my_household().
+    href: "/connected-adults",
+    label: "Connected Adults",
+    icon: Contact,
+    group: "Me",
+    allowed: () => true,
+    views: ["parent"],
+  },
   {
     href: "/family",
     label: "My Children",
@@ -347,19 +393,13 @@ export const NAV: readonly NavEntry[] = [
     allowed: (c) => c.isGuardian || c.hasParentRole,
     views: ["parent"],
   },
+
+  // --- Finance (the parent menu's name for their own money) ----------------
   {
     href: "/my-subs",
     label: "My Subs",
     icon: Wallet,
-    group: "Me",
-    allowed: () => true,
-    views: ["parent"],
-  },
-  {
-    href: "/settings/comms",
-    label: "Comms Preferences",
-    icon: Mail,
-    group: "Me",
+    group: "Finance",
     allowed: () => true,
     views: ["parent"],
   },
@@ -419,7 +459,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Mail,
     group: "Settings",
     allowed: () => true,
-    views: ["player", "coach", "admin"],
+    views: ["player", "parent", "coach", "admin"],
   },
 
   // --- You -----------------------------------------------------------------
