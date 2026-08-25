@@ -63,11 +63,11 @@ select throws_like(
   'a coach cannot open an age group through the RPC');
 select throws_ok(
   $$ update public.waiting_list_age_groups set is_open = true where age_group = 'U12' $$,
-  '42501',
+  '42501', null::text,
   'and the table itself refuses a coach the write');
 select throws_ok(
   $$ insert into public.waiting_list_age_groups (age_group, is_open) values ('U12', true) $$,
-  '42501',
+  '42501', null::text,
   'including adding a group of their own');
 reset role;
 
