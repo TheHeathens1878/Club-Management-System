@@ -26,7 +26,7 @@ export function ThreadPanel({
       fixtures ready to auto-complete. */
   postFixtures?: FixtureOption[];
 }) {
-  const { conversation, personId, myLive } = data;
+  const { conversation, participants, personId, myLive } = data;
 
   // Who `@` may name: the people actually in the room now, minus yourself, and
   // minus anyone whose name this reader is not entitled to see ("Club member"
@@ -88,6 +88,7 @@ export function ThreadPanel({
         isReferee={data.isReferee}
         isRefereesGroup={data.isRefereesGroup}
         isAdmin={data.isClubAdmin}
+        isSuperUser={data.isSuperUser}
       />
 
       {showLeave && myLive && !conversation.closed_at && (

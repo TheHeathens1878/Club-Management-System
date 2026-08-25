@@ -5800,6 +5800,7 @@ export type Database = {
       is_safeguarding_lead: { Args: never; Returns: boolean }
       is_staff: { Args: never; Returns: boolean }
       is_staff_of_booking: { Args: { p_booking_id: string }; Returns: boolean }
+      is_super_user: { Args: never; Returns: boolean }
       is_supervision_exempt: { Args: { p_person_id: string }; Returns: boolean }
       is_team_guardian: { Args: { p_team_id: string }; Returns: boolean }
       is_team_member: { Args: { p_team_id: string }; Returns: boolean }
@@ -6084,6 +6085,14 @@ export type Database = {
           status: Database["public"]["Enums"]["booking_status"]
           team_id: string
         }[]
+      }
+      purge_message: {
+        Args: { p_message_id: string; p_reason: string }
+        Returns: undefined
+      }
+      purge_person: {
+        Args: { p_person_id: string; p_reason: string }
+        Returns: Json
       }
       queued_messages: {
         Args: {

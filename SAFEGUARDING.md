@@ -467,6 +467,78 @@ the trigger, not the grant, is doing the work.
 **Implemented by.** P5.2 (messages), P4.3 (concerns), and a small migration in
 Phase 1 that adds the guard to the existing `public.audit_log`.
 
+#### SG-2.1 — The super-user purge: one named exception, and its guards
+
+**Decided by Adam, 2026-08-25** ("allow super users to hard delete users and
+messages"), and recorded here because §6.2 requires the weakening of an
+invariant to be written down with its reason. The two reasons are a UK GDPR
+Article 17 erasure request the club must be able to honour, and clearing out
+test accounts and mistakes the club made itself. Implemented by migration
+`20260825350000_super_user_purge.sql`.
+
+**What is permitted.** `public.purge_message(message_id, reason)` and
+`public.purge_person(person_id, reason)`, and nothing else. Both are
+`SECURITY DEFINER`, both refuse anyone whose `profiles.role` is not
+`super_user` with `42501`, both require a non-empty reason, and both are the
+only callers of the door described below.
+
+**How the trigger is honoured rather than bypassed.** `deny_hard_delete()` is
+not disabled, dropped, or `ALTER TABLE ... DISABLE TRIGGER`-ed anywhere, and
+`deny_truncate()` is untouched. The delete guard gains exactly one condition: a
+transaction-local ticket whose value is the id of an `audit_log` row written in
+the SAME transaction with action `messages.purged` or `people.purged`. The
+audit row is therefore a *precondition* of the destruction, not a promise made
+after it. This is the route SG-2 itself anticipates above: "if that role ever
+needs to bypass `deny_hard_delete()` it must do so via an explicitly named,
+audit-logged function — not by disabling the trigger."
+
+**What the ticket can and cannot open.** Nine tables, named as literals inside
+the trigger function: `people`, `person_roles`, `guardian_consents`,
+`certifications`, `certification_exemptions`, `identity_documents`, `messages`,
+`message_attachments`, `conversation_participants`. **`audit_log`,
+`safeguarding_concerns`, `safeguarding_concern_notes` and `media_items` are not
+on that list and can never be reached by a purge** — the trail and the evidence
+outlive the destruction by construction, and the `people.purged` /
+`messages.purged` rows survive the purge that wrote them.
+
+**The privilege layer is unchanged.** `DELETE` and `TRUNCATE` remain revoked
+from `anon`, `authenticated` and `service_role` on every guarded table, and no
+`FOR DELETE` policy is added anywhere. A forged ticket set from a client buys
+nothing, because the privilege refusal comes first.
+
+**Evidence is not the owner's to destroy (SG-8).** `purge_message` refuses a
+message cited by a `safeguarding_concerns` narrative or a concern note, a
+message in a conversation under `conversations.legal_hold`, a message whose
+author is under `people.legal_hold`, and a message covered by a legal-held
+concern. `purge_person` refuses a person under `people.legal_hold`, a person
+named by any concern as subject, reported person or reporter, a person who
+authored a concern note, a person in a conversation under a legal hold, and the
+caller themselves. It also refuses where destroying this person would destroy
+somebody else's record through a `not null` foreign key that cannot be nulled:
+a subscription they merely pay for on another person's behalf, and an SG-6
+certification exemption they granted to another person. Every refusal is
+`P0001` and says which rule it is.
+
+**The compensating control is the trail (SG-7).** The audit row names the
+actor, the entity, and the REASON — a mandatory argument — and never the
+message body or any concern content, exactly as SG-7 requires of `detail`.
+`purge_person` additionally records the counts per table, so the audit row can
+answer "what was destroyed" after the rows are gone.
+
+**Rows that are somebody else's are nulled, not deleted.** `audit_log`,
+`bookings`, `payments`, `outbound_messages`, `waiting_list_notes`,
+`conversations.created_by_person_id` and the rest keep their rows and lose the
+reference. The full table-by-table list is in the migration header.
+
+**Test.** `supabase/tests/super_user_purge.test.sql` — a club_admin is refused
+both doors (42501); a cited message, a held conversation, a held author, a held
+person, a concern subject, a concern reporter and the caller are each refused
+by name (P0001); an ordinary message and an ordinary person are purged and
+everything hanging off them goes while other people's rows do not; the audit
+row carries the reason and not the body; and the SG-2 guard still refuses a
+plain hard delete for the table owner, refuses a forged ticket, and refuses a
+REAL ticket used against `audit_log`.
+
 ---
 
 ### SG-3 — Safeguarding concerns are restricted
@@ -1272,6 +1344,16 @@ invariants above *require to exist*.
 
 ### 6.1 Review log
 
+- **2026-08-25 — the super-user purge (Adam's decision, §6.2 record):** "allow
+  super users to hard delete users and messages." SG-2 gains its first and only
+  exception, written up as **SG-2.1**: two named, audited, super-user-only
+  functions, gated on an audit row that must exist before anything is
+  destroyed, scoped to nine tables that exclude `audit_log`,
+  `safeguarding_concerns`, `safeguarding_concern_notes` and `media_items`, and
+  refusing every legal hold and every person or message a safeguarding concern
+  names. The triggers are not disabled and the DELETE/TRUNCATE revokes stand.
+  This is a weakening of SG-2 and needs Adam's explicit agreement on the record
+  — the request is his, and this entry is that record.
 - **2026-08-22 — Codex review on PR #3:** four P1 findings (service_role
   bypass, TRUNCATE, guardianship-change re-evaluation, team-composition
   certification check) incorporated into SG-3 / SG-2 / SG-1 / SG-6.

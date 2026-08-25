@@ -1,4 +1,4 @@
-import { getSessionProfile } from "@/lib/auth";
+import { getSessionProfile, isSuperUser } from "@/lib/auth";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames, UNNAMED } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
@@ -62,6 +62,8 @@ export type ThreadData = {
   isRefereesGroup: boolean;
   /** The caller is a club admin — may release any claimed game. */
   isClubAdmin: boolean;
+  /** The club owner: the only person offered a permanent delete (SG-2). */
+  isSuperUser: boolean;
 };
 
 /** One "game needs a referee" card, serialisable for the client thread. */
@@ -228,5 +230,6 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
     isReferee: !!refereeRole.data,
     isRefereesGroup,
     isClubAdmin: await isClubAdmin(),
+    isSuperUser: isSuperUser(session.profile?.role),
   };
 }
