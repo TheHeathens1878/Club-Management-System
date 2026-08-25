@@ -266,7 +266,9 @@ export function LineupBuilder({
       >
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="font-display text-sm font-semibold uppercase tracking-wide">
-            {canManage ? "Unplaced players" : "Not on the pitch"}
+            {/* Not "not on the pitch": the substitutes are not on the pitch
+                either, and they are named in the strip above. */}
+            {canManage ? "Unplaced players" : "Not named"}
           </h2>
           <span className="text-xs text-muted-foreground">
             {filled} of {formation.slots.length} placed
