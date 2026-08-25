@@ -54,17 +54,17 @@ export default async function NotificationsPage({
         }
         action={feed.personId ? <MarkAllReadButton unread={feed.unread} /> : undefined}
       />
-      <div className="max-w-3xl space-y-6 p-6">
+      <div className="max-w-3xl space-y-4 p-4 lg:space-y-6 lg:p-6">
         {feed.personId === null ? (
           <Card>
-            <CardContent className="p-6 text-sm text-muted-foreground">
+            <CardContent className="p-4 text-sm text-muted-foreground lg:p-6">
               Your sign-in is not linked to a member record yet, so there is nothing addressed to
               you. A club administrator can link it on your member profile.
             </CardContent>
           </Card>
         ) : (
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle>Your notifications</CardTitle>
               <p className="text-sm text-muted-foreground">
                 {feed.total === 0
@@ -72,7 +72,7 @@ export default async function NotificationsPage({
                   : `Showing ${firstOnPage}–${lastOnPage} of ${feed.total}. Opening one marks it read.`}
               </p>
             </CardHeader>
-            <CardContent className="px-3">
+            <CardContent className="px-3 pb-4 lg:pb-6">
               {feed.error ? (
                 <p className="px-3 text-sm text-destructive">
                   Could not load your notifications: {feed.error}
@@ -89,7 +89,9 @@ export default async function NotificationsPage({
             {feed.page > 1 ? (
               <Link
                 href={`/notifications?page=${feed.page - 1}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+                className={
+                  buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+                }
               >
                 <ChevronLeft className="h-4 w-4" /> Newer
               </Link>
@@ -102,7 +104,9 @@ export default async function NotificationsPage({
             {feed.page < feed.pageCount ? (
               <Link
                 href={`/notifications?page=${feed.page + 1}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+                className={
+                  buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+                }
               >
                 Older <ChevronRight className="h-4 w-4" />
               </Link>

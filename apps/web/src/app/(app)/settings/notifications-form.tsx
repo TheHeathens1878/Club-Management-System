@@ -36,19 +36,23 @@ export function NotificationsForm({
       {GROUPS.map((g) => {
         const selected = new Set(selections[g.key] ?? []);
         return (
-          <div key={g.key} className="rounded-lg border p-4">
+          <div key={g.key} className="rounded-lg border p-3 lg:p-4">
             <p className="text-sm font-semibold">{g.title}</p>
             <p className="text-xs text-muted-foreground mb-3">{g.desc}</p>
             <div className="space-y-2">
               {staff.map((u) => (
-                <label key={u.id} className="flex items-center gap-2 text-sm">
+                <label
+                  key={u.id}
+                  className="flex min-h-[44px] items-center gap-3 text-sm lg:min-h-0 lg:gap-2"
+                >
                   <input
                     type="checkbox"
                     name={g.key}
                     value={u.id}
                     defaultChecked={selected.has(u.id)}
+                    className="shrink-0"
                   />
-                  <span>
+                  <span className="min-w-0 break-words">
                     {u.full_name ?? u.email}
                     {u.full_name && <span className="text-muted-foreground"> · {u.email}</span>}
                   </span>
@@ -63,8 +67,10 @@ export function NotificationsForm({
         If no one is selected for an event, all super users and committee members are notified by default.
       </p>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit">Save notification recipients</Button>
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
+        <Button type="submit" className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
+          Save notification recipients
+        </Button>
         {ok && <span className="text-sm text-green-600">Saved.</span>}
       </div>
     </form>

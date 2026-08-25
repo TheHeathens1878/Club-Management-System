@@ -18,7 +18,7 @@ export function DeleteRoomButton({ roomId, roomName }: { roomId: string; roomNam
       type="button"
       onClick={handleClick}
       disabled={loading}
-      className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-destructive border border-destructive/30 hover:bg-destructive/10 transition-colors disabled:opacity-50"
+      className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md border border-destructive/30 px-3 py-1.5 text-sm text-destructive transition-colors hover:bg-destructive/10 disabled:opacity-50 sm:min-h-0 sm:w-auto"
       title="Delete room"
     >
       {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}

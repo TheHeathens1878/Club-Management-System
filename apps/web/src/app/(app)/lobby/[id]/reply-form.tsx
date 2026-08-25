@@ -41,7 +41,13 @@ export function ReplyForm({ postId }: { postId: string }) {
         placeholder="Reply to the whole thread…"
         className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
       />
-      <Button type="submit" size="sm" disabled={sending}>
+      {/* Thumb-sized and full width on a phone; the desk keeps its small button. */}
+      <Button
+        type="submit"
+        size="sm"
+        disabled={sending}
+        className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+      >
         {sending ? "Sending…" : "Reply"}
       </Button>
     </form>
@@ -57,7 +63,13 @@ export function PostControls({ postId, pinned }: { postId: string; pinned: boole
       <form action={pinAction}>
         <input type="hidden" name="post_id" value={postId} />
         <input type="hidden" name="pinned" value={pinned ? "false" : "true"} />
-        <Button type="submit" size="sm" variant="outline" disabled={pinning}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={pinning}
+          className="min-h-[44px] lg:min-h-0"
+        >
           {pinned ? (
             <>
               <PinOff className="h-4 w-4" /> Unpin
@@ -78,7 +90,13 @@ export function PostControls({ postId, pinned }: { postId: string; pinned: boole
         }}
       >
         <input type="hidden" name="post_id" value={postId} />
-        <Button type="submit" size="sm" variant="outline" disabled={deleting}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={deleting}
+          className="min-h-[44px] lg:min-h-0"
+        >
           <Trash2 className="h-4 w-4" /> Remove
         </Button>
       </form>

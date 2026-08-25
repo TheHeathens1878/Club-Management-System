@@ -40,12 +40,17 @@ export default async function NewLobbyPostPage() {
         title="Post to the lobby"
         subtitle="The whole club, every team's board, or just the teams it concerns"
         action={
-          <Link href="/lobby" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/lobby"
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
+          >
             <ArrowLeft className="h-4 w-4" /> Club lobby
           </Link>
         }
       />
-      <div className="p-6">
+      <div className="p-4 lg:p-6">
         <PostForm teams={teams} ageGroups={ageGroups} isAdmin={capabilities.isClubAdmin} />
       </div>
     </>

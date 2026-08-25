@@ -52,22 +52,22 @@ export function PreferencesForm({ preferences }: { preferences: PreferenceSet })
   const [state, action, pending] = useActionState(savePreferences, EMPTY);
 
   return (
-    <form action={action} className="space-y-3 rounded-lg border p-4">
+    <form action={action} className="space-y-3 rounded-lg border p-3 lg:p-4">
       <input type="hidden" name="person_id" value={preferences.personId} />
       <p className="text-sm font-medium">{preferences.name}</p>
-      {/* Each channel is a 44px row on a phone — a tick box on its own is a
-          10px target. Two columns from sm, as the desk has always had. */}
-      <div className="grid gap-1 sm:grid-cols-2 sm:gap-2">
+      {/* Below sm each channel is a full-width tappable row; from sm the
+          original two-column checkbox grid returns unchanged. */}
+      <div className="grid gap-2 sm:grid-cols-2">
         {Object.entries(CHANNEL_LABELS).map(([channel, label]) => (
           <label
             key={channel}
-            className="flex min-h-[44px] items-center gap-2 text-sm sm:min-h-0"
+            className="flex min-h-[44px] items-center gap-3 rounded-md border border-border px-3 text-sm sm:min-h-0 sm:gap-2 sm:rounded-none sm:border-0 sm:px-0"
           >
             <input
               type="checkbox"
               name={`channel_${channel}`}
               defaultChecked={preferences.channels[channel] ?? false}
-              className="h-4 w-4"
+              className="h-4 w-4 shrink-0"
             />
             {label}
             {channel === "sms" && <span className="text-xs text-muted-foreground">(opt-in)</span>}
@@ -78,7 +78,7 @@ export function PreferencesForm({ preferences }: { preferences: PreferenceSet })
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-1.5"
+        className="min-h-[44px] w-full rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-60 sm:min-h-0 sm:w-auto"
       >
         Save
       </button>
@@ -103,17 +103,17 @@ export function SuppressionsPanel({ suppressions }: { suppressions: SuppressionR
         {suppressions.map((row) => (
           <div
             key={row.id}
-            className="flex flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+            className="flex min-h-[44px] flex-wrap items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm lg:min-h-0"
           >
             <div className="min-w-0">
-              <span className="font-mono text-xs">{row.address}</span>
+              <span className="break-all font-mono text-xs">{row.address}</span>
               <span className="text-xs text-muted-foreground"> · {row.channel} · {row.reason}</span>
             </div>
             <form action={removeAction}>
               <input type="hidden" name="suppression_id" value={row.id} />
               <button
                 type="submit"
-                className="inline-flex min-h-[44px] items-center rounded border px-3 text-xs hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                className="min-h-[44px] rounded border px-3 py-1 text-xs hover:bg-secondary lg:min-h-0 lg:px-2"
               >
                 Remove
               </button>
@@ -123,7 +123,7 @@ export function SuppressionsPanel({ suppressions }: { suppressions: SuppressionR
         <Feedback state={removeState} />
       </div>
 
-      <form action={addAction} className="space-y-3 rounded-lg border border-dashed p-4">
+      <form action={addAction} className="space-y-3 rounded-lg border border-dashed p-3 lg:p-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="suppress-channel">Channel</Label>
@@ -131,7 +131,7 @@ export function SuppressionsPanel({ suppressions }: { suppressions: SuppressionR
               id="suppress-channel"
               name="channel"
               defaultValue="email"
-              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm lg:h-10"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm sm:h-10"
             >
               {Object.entries(CHANNEL_LABELS).map(([channel, label]) => (
                 <option key={channel} value={channel}>
@@ -142,30 +142,18 @@ export function SuppressionsPanel({ suppressions }: { suppressions: SuppressionR
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="suppress-address">Address</Label>
-            <Input
-              id="suppress-address"
-              name="address"
-              placeholder="name@example.com"
-              required
-              className="h-11 lg:h-10"
-            />
+            <Input id="suppress-address" name="address" placeholder="name@example.com" required className="min-h-[44px] sm:min-h-0" />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="suppress-reason">Reason</Label>
-            <Input
-              id="suppress-reason"
-              name="reason"
-              placeholder="hard bounce"
-              required
-              className="h-11 lg:h-10"
-            />
+            <Input id="suppress-reason" name="reason" placeholder="hard bounce" required className="min-h-[44px] sm:min-h-0" />
           </div>
         </div>
         <Feedback state={addState} />
         <button
           type="submit"
           disabled={adding}
-          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-2"
+          className="min-h-[44px] w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:min-h-0 sm:w-auto"
         >
           Suppress address
         </button>

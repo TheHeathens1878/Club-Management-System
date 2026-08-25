@@ -276,19 +276,20 @@ export function BookingsCalendar({
         </div>
       )}
 
-      {/* Calendar header */}
+      {/* Calendar header. On a phone the month stepper keeps its own row and
+          the tools scroll sideways beneath it rather than wrapping. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 cal-no-print">
-          <Button variant="outline" size="sm" onClick={prevMonth}><ChevronLeft className="h-4 w-4" /></Button>
+        <div className="flex w-full items-center justify-between gap-2 cal-no-print lg:w-auto lg:justify-start">
+          <Button variant="outline" size="sm" onClick={prevMonth} className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"><ChevronLeft className="h-4 w-4" /></Button>
           <h2 className="text-base font-semibold min-w-[160px] text-center">{monthLabel}</h2>
-          <Button variant="outline" size="sm" onClick={nextMonth}><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="outline" size="sm" onClick={nextMonth} className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"><ChevronRight className="h-4 w-4" /></Button>
         </div>
-        <div className="flex items-center gap-2 cal-no-print flex-wrap">
+        <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 pb-1 cal-no-print lg:mx-0 lg:w-auto lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
           {showRoomFilter && (
             <select
               value={roomFilter}
               onChange={(e) => setRoomFilter(e.target.value)}
-              className="rounded-md border bg-background px-3 py-1.5 text-sm"
+              className="min-h-[44px] shrink-0 rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0"
             >
               <option value="all">All rooms</option>
               {roomIds.map((id) => (
@@ -296,11 +297,11 @@ export function BookingsCalendar({
               ))}
             </select>
           )}
-          <Button variant="outline" size="sm" onClick={() => setYm(today.slice(0, 7))}>Today</Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()}>
+          <Button variant="outline" size="sm" onClick={() => setYm(today.slice(0, 7))} className="min-h-[44px] shrink-0 lg:min-h-0">Today</Button>
+          <Button variant="outline" size="sm" onClick={() => window.print()} className="min-h-[44px] shrink-0 lg:min-h-0">
             <Printer className="h-4 w-4" /> This month
           </Button>
-          <Button variant="outline" size="sm" onClick={() => { setExportFrom(ym); setExportTo(ym); setRangeOpen((v) => !v); }}>
+          <Button variant="outline" size="sm" onClick={() => { setExportFrom(ym); setExportTo(ym); setRangeOpen((v) => !v); }} className="min-h-[44px] shrink-0 lg:min-h-0">
             <CalendarRange className="h-4 w-4" /> Multi-month
           </Button>
         </div>
@@ -308,14 +309,14 @@ export function BookingsCalendar({
 
       {/* Multi-month range picker */}
       {rangeOpen && (
-        <div className="cal-no-print flex flex-wrap items-end gap-4 rounded-lg border bg-muted/30 px-4 py-3">
+        <div className="cal-no-print flex flex-col items-stretch gap-3 rounded-lg border bg-muted/30 px-4 py-3 lg:flex-row lg:flex-wrap lg:items-end lg:gap-4">
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground">From</label>
             <input
               type="month"
               value={exportFrom}
               onChange={(e) => setExportFrom(e.target.value)}
-              className="rounded-md border bg-background px-3 py-1.5 text-sm"
+              className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
             />
           </div>
           <div className="space-y-1">
@@ -325,15 +326,15 @@ export function BookingsCalendar({
               value={exportTo}
               min={exportFrom}
               onChange={(e) => setExportTo(e.target.value)}
-              className="rounded-md border bg-background px-3 py-1.5 text-sm"
+              className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
             />
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={handleMultiExport} disabled={!!printMonths}>
+            <Button size="sm" onClick={handleMultiExport} disabled={!!printMonths} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
               <Printer className="h-4 w-4" />
               {printMonths ? "Preparing…" : `Export ${buildMonthRange(exportFrom, exportTo).length} month${buildMonthRange(exportFrom, exportTo).length !== 1 ? "s" : ""}`}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setRangeOpen(false)}>
+            <Button variant="ghost" size="sm" onClick={() => setRangeOpen(false)} className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0">
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -343,8 +344,13 @@ export function BookingsCalendar({
         </div>
       )}
 
-      {/* Live calendar */}
-      <MonthGrid ym={ym} byDate={byDate} today={today} roomName={roomName} awayEntries={awayEntries} />
+      {/* Live calendar. Seven day columns cannot usefully compress to a phone,
+          so below lg the month keeps its width and scrolls in its own lane. */}
+      <div className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:overflow-visible lg:px-0">
+        <div className="min-w-[640px] lg:min-w-0">
+          <MonthGrid ym={ym} byDate={byDate} today={today} roomName={roomName} awayEntries={awayEntries} />
+        </div>
+      </div>
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3 pt-1 cal-no-print">

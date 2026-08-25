@@ -94,14 +94,14 @@ export function StatusForm({
                 The booker is emailed a confirmation with the total and deposit terms, plus a portal link to pay.
               </p>
               <div className="flex gap-2">
-                <Button size="sm" onClick={runConfirm} disabled={loading !== null}>
+                <Button size="sm" onClick={runConfirm} disabled={loading !== null} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
                   {loading === "confirm" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm & notify booker"}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setConfirm(null)}>Back</Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="min-h-[44px] lg:min-h-0">Back</Button>
               </div>
             </div>
           ) : (
-            <Button size="sm" onClick={() => setConfirm("confirm")} disabled={loading !== null}>
+            <Button size="sm" onClick={() => setConfirm("confirm")} disabled={loading !== null} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
               Confirm booking
             </Button>
           )}
@@ -137,10 +137,11 @@ export function StatusForm({
                   variant="destructive"
                   onClick={runCancel}
                   disabled={loading !== null || !cancelReason.trim()}
+                  className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
                 >
                   {loading === "cancel" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send cancellation"}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => { setConfirm(null); setCancelReason(""); }}>
+                <Button size="sm" variant="outline" onClick={() => { setConfirm(null); setCancelReason(""); }} className="min-h-[44px] lg:min-h-0">
                   Back
                 </Button>
               </div>
@@ -151,7 +152,7 @@ export function StatusForm({
               variant="outline"
               onClick={() => setConfirm("cancel")}
               disabled={loading !== null}
-              className="border-destructive/40 text-destructive hover:bg-destructive/10"
+              className="min-h-[44px] w-full border-destructive/40 text-destructive hover:bg-destructive/10 lg:min-h-0 lg:w-auto"
             >
               Cancel booking
             </Button>

@@ -43,14 +43,17 @@ export default async function SocialPage() {
         }
         action={
           canCreate ? (
-            <Link href="/events/new" className={buttonVariants({ size: "sm" })}>
+            <Link
+              href="/events/new"
+              className={buttonVariants({ size: "sm" }) + " min-h-[44px] lg:min-h-0"}
+            >
               <CalendarPlus className="h-4 w-4" /> Create an event
             </Link>
           ) : undefined
         }
       />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         {error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Could not load the socials: {error.message}
@@ -66,32 +69,42 @@ export default async function SocialPage() {
           </Card>
         ) : (
           <Card className="overflow-hidden">
+            {/* Below md the two halves stack: the occasion, then its reply
+                arithmetic underneath. */}
             <div className="grid md:grid-cols-[3fr_2fr]">
-              <div className="p-6">
+              <div className="p-5 lg:p-6">
                 <p className="text-xs font-semibold uppercase tracking-wide text-primary">
                   {formatEventDate(hero.starts_at)} · {formatEventTime(hero.starts_at)}
                   {hero.venue ? ` · ${hero.venue}` : ""}
                 </p>
-                <h2 className="mt-2 text-2xl font-bold">{hero.title}</h2>
+                <h2 className="mt-2 text-xl font-bold lg:text-2xl">{hero.title}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">{hero.team_name}</p>
                 {hero.notes ? (
                   <p className="mt-3 max-w-prose whitespace-pre-line text-sm">{hero.notes}</p>
                 ) : null}
                 <div className="mt-5 flex flex-wrap gap-2">
-                  <Link href={`/events/${hero.event_id}`} className={buttonVariants({ size: "sm" })}>
+                  <Link
+                    href={`/events/${hero.event_id}`}
+                    className={
+                      buttonVariants({ size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+                    }
+                  >
                     Reply on the event page
                   </Link>
                   {hero.can_manage ? (
                     <Link
                       href={`/events/${hero.event_id}`}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      className={
+                        buttonVariants({ variant: "outline", size: "sm" }) +
+                        " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+                      }
                     >
                       Manage · remind the quiet ones
                     </Link>
                   ) : null}
                 </div>
               </div>
-              <div className="border-t bg-secondary/30 p-6 md:border-l md:border-t-0">
+              <div className="border-t bg-secondary/30 p-5 md:border-l md:border-t-0 lg:p-6">
                 <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Replies
                 </p>
@@ -128,12 +141,17 @@ export default async function SocialPage() {
           </Card>
         )}
 
+        {/* The rest: one up on a phone, then two and three as the screen allows. */}
         {rest.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 lg:gap-4">
             {rest.map((event) => (
-              <Link key={event.event_id} href={`/events/${event.event_id}`} className="group">
+              <Link
+                key={event.event_id}
+                href={`/events/${event.event_id}`}
+                className="group block min-h-[44px]"
+              >
                 <Card className="h-full transition group-hover:border-primary/40">
-                  <CardContent className="p-5">
+                  <CardContent className="p-4 lg:p-5">
                     <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                       {formatEventDate(event.starts_at)} · {formatEventTime(event.starts_at)}
                     </p>

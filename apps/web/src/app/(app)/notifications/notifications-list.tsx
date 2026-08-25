@@ -58,7 +58,13 @@ export function MarkAllReadButton({ unread }: { unread: number }) {
   return (
     <div className="space-y-2">
       <form action={action}>
-        <Button type="submit" variant="outline" size="sm" disabled={pending || unread === 0}>
+        <Button
+          type="submit"
+          variant="outline"
+          size="sm"
+          disabled={pending || unread === 0}
+          className="min-h-[44px] lg:min-h-0"
+        >
           <CheckCheck className="h-4 w-4" /> Mark all read
         </Button>
       </form>
@@ -98,8 +104,11 @@ function NotificationRow({ item }: { item: NotificationItem }) {
   return (
     <li
       className={
-        "border-l-2 px-3 py-4 " +
-        (unread ? "border-l-primary bg-primary/5" : "border-l-transparent")
+        // A phone gets a tappable card per notification; the desk keeps the
+        // divided list it has always had.
+        "rounded-xl border-y border-r border-l-2 px-3 py-3 lg:rounded-none lg:border-y-0 " +
+        "lg:border-r-0 lg:py-4 " +
+        (unread ? "border-l-primary bg-primary/5" : "border-l-border lg:border-l-transparent")
       }
     >
       {item.link ? (
@@ -108,7 +117,7 @@ function NotificationRow({ item }: { item: NotificationItem }) {
           <input type="hidden" name="link" value={item.link} />
           <button
             type="submit"
-            className="flex w-full items-start justify-between gap-3 text-left hover:opacity-80"
+            className="flex min-h-[44px] w-full items-start justify-between gap-3 text-left hover:opacity-80 lg:min-h-0"
           >
             <span className="min-w-0 space-y-1">{summary}</span>
             <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -120,7 +129,13 @@ function NotificationRow({ item }: { item: NotificationItem }) {
           {unread && (
             <form action={action}>
               <input type="hidden" name="notification_id" value={item.id} />
-              <Button type="submit" variant="ghost" size="sm" disabled={pending}>
+              <Button
+                type="submit"
+                variant="ghost"
+                size="sm"
+                disabled={pending}
+                className="min-h-[44px] lg:min-h-0"
+              >
                 Mark read
               </Button>
             </form>
@@ -146,7 +161,7 @@ export function NotificationsList({ items }: { items: NotificationItem[] }) {
   }
 
   return (
-    <ul className="divide-y">
+    <ul className="space-y-2 py-1 lg:space-y-0 lg:divide-y lg:py-0">
       {items.map((item) => (
         <NotificationRow key={item.id} item={item} />
       ))}

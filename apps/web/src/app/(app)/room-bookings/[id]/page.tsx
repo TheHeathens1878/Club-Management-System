@@ -78,14 +78,17 @@ export default async function RoomBookingDetailPage({
         title={`Booking #${shortRef}`}
         subtitle={`${roomName} · ${formatBookingDate(window.date)}`}
         action={
-          <Link href="/room-bookings" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/room-bookings"
+            className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"}
+          >
             <ChevronLeft className="h-4 w-4" /> All bookings
           </Link>
         }
       />
 
-      <div className="grid gap-6 p-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <div className="grid gap-4 p-4 lg:grid-cols-3 lg:gap-6 lg:p-6">
+        <div className="space-y-4 lg:col-span-2 lg:space-y-6">
           {/* Booking details */}
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-2">
@@ -175,7 +178,7 @@ export default async function RoomBookingDetailPage({
                 />
                 <button
                   type="submit"
-                  className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                  className="min-h-[44px] w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 lg:min-h-0 lg:w-auto"
                 >
                   Save notes
                 </button>
@@ -184,7 +187,7 @@ export default async function RoomBookingDetailPage({
           </Card>
         </div>
 
-        <div className="space-y-6">
+        <div className="space-y-4 lg:space-y-6">
           {/* Status / actions */}
           {canEdit && (
             <Card>

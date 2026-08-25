@@ -44,15 +44,22 @@ export default async function LobbyPostPage({ params }: { params: Promise<{ id: 
         title={post.title}
         subtitle={`${post.author_name} · ${formatEventDate(post.created_at)}`}
         action={
-          <Link href="/lobby" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/lobby"
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
+          >
             <ArrowLeft className="h-4 w-4" /> Club lobby
           </Link>
         }
       />
 
-      <div className="max-w-3xl space-y-4 p-6">
+      {/* A thread is prose: a comfortable measure on a phone, the same 3xl
+          column on a desk. */}
+      <div className="max-w-3xl space-y-3 p-4 lg:space-y-4 lg:p-6">
         <Card>
-          <CardContent className="space-y-3 p-5">
+          <CardContent className="space-y-3 p-4 lg:p-5">
             <p className="flex flex-wrap items-center gap-2">
               {post.pinned ? (
                 <Badge variant="warning">
@@ -70,13 +77,13 @@ export default async function LobbyPostPage({ params }: { params: Promise<{ id: 
                   : `${post.read_count} read`}
               </span>
             </p>
-            <p className="whitespace-pre-line text-sm leading-relaxed">{post.body}</p>
+            <p className="max-w-prose whitespace-pre-line text-sm leading-relaxed">{post.body}</p>
             {post.can_manage ? <PostControls postId={post.post_id} pinned={post.pinned} /> : null}
           </CardContent>
         </Card>
 
         <Card>
-          <CardContent className="space-y-4 p-5">
+          <CardContent className="space-y-4 p-4 lg:p-5">
             <p className="text-sm font-semibold">
               {replies.length === 0
                 ? "No replies yet"
@@ -86,11 +93,11 @@ export default async function LobbyPostPage({ params }: { params: Promise<{ id: 
               </span>
             </p>
             {replies.map((reply) => (
-              <div key={reply.reply_id} className="rounded-md border bg-card px-3 py-2">
+              <div key={reply.reply_id} className="rounded-md border bg-card px-3 py-2.5 lg:py-2">
                 <p className="text-xs text-muted-foreground">
                   {reply.is_mine ? "You" : reply.author_name} · {formatEventDate(reply.created_at)}
                 </p>
-                <p className="mt-1 whitespace-pre-line text-sm">{reply.body}</p>
+                <p className="mt-1 max-w-prose whitespace-pre-line text-sm">{reply.body}</p>
               </div>
             ))}
             <ReplyForm postId={post.post_id} />

@@ -30,8 +30,9 @@ export type SiteSettings = {
 
 const DEFAULTS: SiteSettings = {
   club_name: "AoM Sports Club",
-  club_tagline: "Function Room Hire",
-  club_description: "Our function rooms are available for private hire — parties, meetings, celebrations and more.",
+  club_tagline: "Teams, fixtures, messages, payments — and function room hire",
+  club_description:
+    "Members, parents, coaches and committee sign in for club life. Our function room is available for private hire — parties, meetings and celebrations.",
   login_subtitle: "Sign in to manage room bookings",
   login_no_email: "Contact the club to get access.",
   contact_email: "bookings@aomsportsclub.co.uk",

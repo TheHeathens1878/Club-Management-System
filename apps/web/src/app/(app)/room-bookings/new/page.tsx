@@ -44,19 +44,22 @@ export default async function NewInternalBookingPage() {
         title="New internal booking"
         subtitle="Create a room booking on behalf of a customer"
         action={
-          <Link href="/room-bookings" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/room-bookings"
+            className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"}
+          >
             <ChevronLeft className="h-4 w-4" /> Back
           </Link>
         }
       />
-      <div className="p-6 max-w-2xl">
-        <form action={submitAction} className="space-y-6">
+      <div className="max-w-2xl p-4 lg:p-6">
+        <form action={submitAction} className="space-y-4 lg:space-y-6">
           <Card>
             <CardHeader><CardTitle>Room &amp; timing</CardTitle></CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-1.5">
                 <Label htmlFor="room_id">Room *</Label>
-                <select id="room_id" name="room_id" required className="w-full rounded-md border bg-background px-3 py-2 text-sm">
+                <select id="room_id" name="room_id" required className="min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0">
                   <option value="">Select a room…</option>
                   {(rooms ?? []).map((r) => (
                     <option key={r.id} value={r.id}>{r.name}</option>
@@ -112,7 +115,7 @@ export default async function NewInternalBookingPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="status">Booking status</Label>
-                  <select id="status" name="status" className="w-full rounded-md border bg-background px-3 py-2 text-sm">
+                  <select id="status" name="status" className="min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0">
                     <option value="confirmed">Confirmed</option>
                     <option value="pending">Pending (awaiting confirmation)</option>
                   </select>
@@ -125,7 +128,7 @@ export default async function NewInternalBookingPage() {
                   </div>
                 </div>
               </div>
-              <label className="flex items-center gap-2 text-sm">
+              <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
                 <input type="checkbox" name="mark_paid" className="h-4 w-4 accent-primary" />
                 Mark as paid
               </label>
@@ -135,11 +138,14 @@ export default async function NewInternalBookingPage() {
           <div className="flex gap-3">
             <button
               type="submit"
-              className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+              className="min-h-[44px] flex-1 rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 lg:min-h-0 lg:flex-none"
             >
               Create booking
             </button>
-            <Link href="/room-bookings" className={buttonVariants({ variant: "outline" })}>
+            <Link
+              href="/room-bookings"
+              className={buttonVariants({ variant: "outline" }) + " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"}
+            >
               Cancel
             </Link>
           </div>
