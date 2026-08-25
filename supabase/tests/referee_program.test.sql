@@ -159,6 +159,9 @@ insert into auth.users (id, email, raw_user_meta_data) values
 select set_config('rp.coach', (select person_id::text from public.profiles where id = '5e1f5e1f-aaaa-4111-8111-000000000005'), true);
 insert into public.conversation_participants (conversation_id, person_id, basis)
   values (public.referees_group_id(), current_setting('rp.coach')::uuid, 'member');
+-- reset role leaves the last session's claims in place, and the messages guard
+-- insists the sender is the caller — so the coach speaks as the coach.
+set local request.jwt.claims to '{"sub":"5e1f5e1f-aaaa-4111-8111-000000000005","role":"authenticated"}';
 insert into public.messages (id, conversation_id, sender_person_id, body)
   values ('9e55a9e0-aaaa-4111-8111-000000000002', public.referees_group_id(),
           current_setting('rp.coach')::uuid, 'Referee needed: U12 v Altrincham');
