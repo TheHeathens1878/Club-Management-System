@@ -62,7 +62,7 @@ export default async function PitchesPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
 
   const { weekend: weekendParam } = await searchParams;
   const weekend =

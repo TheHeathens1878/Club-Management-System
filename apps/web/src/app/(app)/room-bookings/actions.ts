@@ -37,13 +37,13 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 
 async function requireStaff() {
   const session = await getSessionProfile();
-  if (!session || !isStaff(session.profile?.role)) redirect("/room-bookings");
+  if (!session || !isStaff(session.profile?.role)) redirect("/lobby");
   return session;
 }
 
 async function requireCommittee() {
   const session = await getSessionProfile();
-  if (!session || !isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!session || !isCommittee(session.profile?.role)) redirect("/lobby");
   return session;
 }
 

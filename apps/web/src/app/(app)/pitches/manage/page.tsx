@@ -27,7 +27,7 @@ import { ManagePitchesPanel, type PitchAdminRow } from "./manage-panel";
 export default async function ManagePitchesPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
 
   const supabase = await createClient();
   const { data, error } = await supabase

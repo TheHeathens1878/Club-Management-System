@@ -9,7 +9,7 @@ import { FaqsClient } from "@/app/(app)/settings/faqs-client";
 export default async function BarPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isBarManager(session.profile?.role)) redirect("/room-bookings");
+  if (!isBarManager(session.profile?.role)) redirect("/lobby");
 
   const admin = createAdminClient();
   const [{ data: nonUserStaff }, { data: faqs }] = await Promise.all([

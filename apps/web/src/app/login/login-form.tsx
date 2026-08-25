@@ -70,7 +70,12 @@ export function LoginForm({
       .select("role")
       .eq("id", data.user?.id ?? "")
       .maybeSingle();
-    const home = isBookerRole(profile?.role) ? "/portal" : "/room-bookings";
+    // Adam, 2026-08-25: a new member signed in and was thrown back to the
+    // login page. Sign-in used to land everyone who is not a hirer on the
+    // function-room diary — which admits STAFF only and bounces everyone else
+    // to /login, so an ordinary member looped for ever. The club's front door
+    // is the lobby (the same default the middleware uses for "/").
+    const home = isBookerRole(profile?.role) ? "/portal" : "/lobby";
 
     // Honour where they were originally headed, falling back to their home.
     const redirectedFrom = new URLSearchParams(window.location.search).get("redirectedFrom");

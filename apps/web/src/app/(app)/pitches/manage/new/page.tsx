@@ -19,7 +19,7 @@ import { NewPitchForm } from "./new-pitch-form";
 export default async function NewPitchPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
 
   return (
     <>

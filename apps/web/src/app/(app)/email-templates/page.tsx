@@ -12,7 +12,7 @@ import { buttonVariants } from "@/components/ui/button";
 export default async function EmailTemplatesPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const admin = createAdminClient();
   const { data: saved } = await admin.from("email_templates").select("key,updated_at,updated_by");

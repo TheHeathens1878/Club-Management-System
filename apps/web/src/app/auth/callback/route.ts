@@ -29,9 +29,12 @@ export async function GET(request: Request) {
     return NextResponse.redirect(`${origin}/auth/set-password`);
   }
 
-  // Send bookers to their portal; staff/members to the bookings area.
+  // Send hirers to their portal and everyone else to the club lobby (Adam,
+  // 2026-08-25: confirming an email landed a new member on the room-booking
+  // site). The lobby admits any signed-in person; the room diary is staff-only
+  // and would bounce them straight back to /login.
   const { data: { user } } = await supabase.auth.getUser();
-  let dest = "/room-bookings";
+  let dest = "/lobby";
   if (user) {
     const { data: profile } = await supabase
       .from("profiles")
