@@ -188,7 +188,7 @@ export default async function PersonPage({
   const name = personLabel(person);
 
   // What the latest registration said about this person — the read-only copy
-  // on the contact record (20260825230000). It carries the `registrations`
+  // on the contact record (20260825260000). It carries the `registrations`
   // read policies, so a reader who is not entitled to the form gets nothing
   // back and the card is not rendered. The SG-5 photo consents beside it are
   // `guardian_consents` rows, read the same way.

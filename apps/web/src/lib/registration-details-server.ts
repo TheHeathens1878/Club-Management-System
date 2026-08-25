@@ -1,6 +1,6 @@
 /**
  * The read-only copy of the registration answers that lives on a person's
- * contact record — `person_registration_details` (20260825230000).
+ * contact record — `person_registration_details` (20260825260000).
  *
  * Adam, 2026-08-25: "The registration form should update read-only information
  * in the contact record (consents, health etc). This is overwritten on each

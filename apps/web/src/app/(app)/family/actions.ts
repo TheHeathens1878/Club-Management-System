@@ -20,7 +20,7 @@
  *     Adam 2026-08-25) — up to two, replaced as a set, guardian or admin only.
  *   · Withdrawing is the single UPDATE the guardian and the subject may make
  *     (`registrations_guardian_withdraw` / `registrations_self_withdraw`, both
- *     WITH CHECK `status = 'withdrawn'`) — and, since 20260825230000, only
+ *     WITH CHECK `status = 'withdrawn'`) — and, since 20260825260000, only
  *     while the registration is still PENDING. An approved one is withdrawn by
  *     a club administrator; `registrations_guard()` refuses anyone else with a
  *     P0001 that says so, and the sentence below prints it unchanged.

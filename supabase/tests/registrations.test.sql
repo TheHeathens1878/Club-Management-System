@@ -6,7 +6,7 @@
 --   B  who may submit: adult self, guardian for minor, admin for anyone;
 --      stranger for a minor refused (SG-4), adult for another adult refused
 --   C  status machine: decisions admin-only; withdraw by subject/guardian
---      while PENDING, by a club_admin once approved (20260825230000);
+--      while PENDING, by a club_admin once approved (20260825260000);
 --      final states; decided_* stamped; approval creates the player
 --      membership and SG-6 refuses a non-compliant team at approval time
 --   D  SG-5 photo consents through guardian_consents: grant by active
@@ -209,7 +209,7 @@ select lives_ok(
   'the subject withdraws their own registration');
 reset role;
 -- the guardian's child's registration was APPROVED above, and since
--- 20260825230000 (Adam: "parents can't withdraw registration after it's been
+-- 20260825260000 (Adam: "parents can't withdraw registration after it's been
 -- granted, only admin") that is the club's to undo.
 set local request.jwt.claims to '{"sub":"a3a3a3a3-1111-4111-8111-000000000005","role":"authenticated"}';
 set local role authenticated;

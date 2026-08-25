@@ -460,7 +460,7 @@ create policy "registrations_guardian_withdraw" on public.registrations for upda
 
 insert into public.audit_log (actor_email, action, entity, detail)
 values ('migration', 'migration.schema', 'registrations',
-        jsonb_build_object('migration', '20260825230000_registration_followups',
+        jsonb_build_object('migration', '20260825260000_registration_followups',
                            'changes', array['registration_pending_notify tells club_admins in-app',
                                             'account_request_arrival_notify tells club_admins in-app',
                                             'person_registration_details snapshot of the latest form',

@@ -68,7 +68,7 @@ set local request.jwt.claims to '{"sub":"d9d9d9d9-1111-4111-8111-000000000001","
 set local role authenticated;
 select lives_ok($$ select public.reject_account_request('f9f9f9f9-1111-4111-8111-000000000001', 'unknown to the club') $$, 'reject');
 reset role;
--- Scoped to the requester: since 20260825230000 the ARRIVAL of a request also
+-- Scoped to the requester: since 20260825260000 the ARRIVAL of a request also
 -- writes an 'account_requests' row, addressed to every live club_admin.
 select is((select (subject, body like '%unknown to the club%') from public.outbound_messages
             where channel = 'in_app' and entity = 'account_requests'
