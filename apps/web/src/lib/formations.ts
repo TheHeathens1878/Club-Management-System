@@ -1,6 +1,8 @@
 /**
  * The formations a team may line up in, per playing format (Adam, 2026-08-25:
- * "The formations available will depend on the playing format").
+ * "The formations available will depend on the playing format"; later that
+ * evening: "We also need much more formations at 11 a side and other
+ * formats").
  *
  * Code, not data: the FA's shapes are a reference table, not club records, so
  * they live here beside `fa-formats.ts` — a team's format is derived from its
@@ -12,7 +14,17 @@
  * y = 0 is the opponents' goal line and y = 100 is your own, so the goalkeeper
  * sits at the bottom and the strikers at the top — the way a coach holds a
  * tactics board. Slot keys are shared across shapes on purpose ("GK", "CB1",
- * "LM" …): changing formation keeps everyone whose key survives.
+ * "LM" …): changing formation keeps everyone whose key survives. The keys
+ * follow the position's usual name — LB/RB, LWB/RWB, CB1–3, DM1–2, CM1–3,
+ * AM1–2, LM/RM, LW/RW, ST1–2 — so a left-back stays a left-back whether the
+ * shape has four at the back or five.
+ *
+ * Shapes are built from LINES (see `shape()`): a line is a number of players
+ * at one depth, spread evenly across the pitch, with keys and labels chosen
+ * for that line's role. The names follow the convention the FA and every
+ * coaching manual use — outfield players from the back, the goalkeeper
+ * implied — which is also the shape `fixture_lineups.formation`'s CHECK
+ * constraint admits (`^[0-9]+(-[0-9]+){1,4}$`).
  *
  * Plain module, no server imports — a client component reads it too.
  */
@@ -39,193 +51,154 @@ export type Formation = {
   slots: readonly FormationSlot[];
 };
 
-const GK = (y = 92): FormationSlot => ({ key: "GK", label: "GK", x: 50, y });
+/**
+ * The roles a line can play, from the back. Each names its keys/labels for
+ * one, two, three, four or five players across — the wide players first take
+ * the wide keys (LB/RB, LM/RM, LW/RW) and the middle ones the numbered
+ * central keys, so a 3 and a 5 at the back share CB1..CB3 and a 4-4-2's LB is
+ * the 5-3-2's LB too.
+ */
+type LineRole = "defence" | "holding" | "midfield" | "attackingMid" | "attack";
+
+const LINE_KEYS: Record<LineRole, Record<number, readonly [string, string][]>> = {
+  defence: {
+    1: [["CB1", "CB"]],
+    2: [["CB1", "CB"], ["CB2", "CB"]],
+    3: [["LB", "LB"], ["CB1", "CB"], ["RB", "RB"]],
+    4: [["LB", "LB"], ["CB1", "CB"], ["CB2", "CB"], ["RB", "RB"]],
+    5: [["LWB", "LWB"], ["CB1", "CB"], ["CB2", "CB"], ["CB3", "CB"], ["RWB", "RWB"]],
+  },
+  holding: {
+    1: [["DM1", "DM"]],
+    2: [["DM1", "DM"], ["DM2", "DM"]],
+    3: [["LM", "LM"], ["DM1", "DM"], ["RM", "RM"]],
+    4: [["LM", "LM"], ["DM1", "DM"], ["DM2", "DM"], ["RM", "RM"]],
+    5: [["LM", "LM"], ["DM1", "DM"], ["CM1", "CM"], ["DM2", "DM"], ["RM", "RM"]],
+  },
+  midfield: {
+    1: [["CM1", "CM"]],
+    2: [["CM1", "CM"], ["CM2", "CM"]],
+    3: [["CM1", "CM"], ["CM2", "CM"], ["CM3", "CM"]],
+    4: [["LM", "LM"], ["CM1", "CM"], ["CM2", "CM"], ["RM", "RM"]],
+    5: [["LM", "LM"], ["CM1", "CM"], ["CM2", "CM"], ["CM3", "CM"], ["RM", "RM"]],
+  },
+  attackingMid: {
+    1: [["AM1", "AM"]],
+    2: [["AM1", "AM"], ["AM2", "AM"]],
+    3: [["LW", "LW"], ["AM1", "AM"], ["RW", "RW"]],
+    4: [["LW", "LW"], ["AM1", "AM"], ["AM2", "AM"], ["RW", "RW"]],
+    5: [["LW", "LW"], ["AM1", "AM"], ["CM2", "CM"], ["AM2", "AM"], ["RW", "RW"]],
+  },
+  attack: {
+    1: [["ST1", "ST"]],
+    2: [["ST1", "ST"], ["ST2", "ST"]],
+    3: [["LW", "LW"], ["ST1", "ST"], ["RW", "RW"]],
+    4: [["LW", "LW"], ["ST1", "ST"], ["ST2", "ST"], ["RW", "RW"]],
+    5: [["LW", "LW"], ["ST1", "ST"], ["ST2", "ST"], ["ST3", "ST"], ["RW", "RW"]],
+  },
+};
+
+/** How far in from the touchlines a line of N players spreads. */
+function spread(count: number): number[] {
+  if (count === 1) return [50];
+  const inset = count >= 4 ? 14 : count === 3 ? 20 : 32;
+  const step = (100 - inset * 2) / (count - 1);
+  return Array.from({ length: count }, (_, i) => Math.round(inset + step * i));
+}
+
+/**
+ * The depths the lines sit at, from the goalkeeper's y upwards, spread across
+ * the pitch between the back line and the front line so a shape with five
+ * lines does not bunch and a shape with three does not gape.
+ */
+function depths(lineCount: number, gkY: number): number[] {
+  const back = gkY - 18;
+  const front = 18;
+  if (lineCount === 1) return [Math.round((back + front) / 2)];
+  const step = (back - front) / (lineCount - 1);
+  return Array.from({ length: lineCount }, (_, i) => Math.round(back - step * i));
+}
+
+type LineSpec = { role: LineRole; count: number };
+
+/**
+ * Build a formation from its lines, back to front. Wide players in a line
+ * stand a touch higher than the central ones (x = the touchline players'
+ * columns, y − 3) — the way a back four is drawn, full-backs slightly
+ * advanced of the centre-backs — so the board reads like a coach's.
+ */
+function shape(name: string, lines: LineSpec[], gkY = 92): Formation {
+  const ys = depths(lines.length, gkY);
+  const slots: FormationSlot[] = [{ key: "GK", label: "GK", x: 50, y: gkY }];
+  lines.forEach((line, lineIndex) => {
+    const keys = LINE_KEYS[line.role][line.count];
+    if (!keys) throw new Error(`No key layout for ${line.count} ${line.role} players (${name})`);
+    const xs = spread(line.count);
+    keys.forEach(([key, label], i) => {
+      const wide = line.count >= 3 && (i === 0 || i === line.count - 1);
+      slots.push({ key, label, x: xs[i]!, y: ys[lineIndex]! - (wide ? 3 : 0) });
+    });
+  });
+  return { name, slots };
+}
+
+const D = (count: number): LineSpec => ({ role: "defence", count });
+const H = (count: number): LineSpec => ({ role: "holding", count });
+const M = (count: number): LineSpec => ({ role: "midfield", count });
+const A = (count: number): LineSpec => ({ role: "attackingMid", count });
+const F = (count: number): LineSpec => ({ role: "attack", count });
 
 /** Non-empty by construction — every format has at least one shape to fall back on. */
 export const FORMATIONS: Record<PlayingFormat, readonly [Formation, ...Formation[]]> = {
   "11v11": [
-    {
-      name: "4-4-2",
-      slots: [
-        GK(),
-        { key: "LB", label: "LB", x: 15, y: 72 },
-        { key: "CB1", label: "CB", x: 38, y: 75 },
-        { key: "CB2", label: "CB", x: 62, y: 75 },
-        { key: "RB", label: "RB", x: 85, y: 72 },
-        { key: "LM", label: "LM", x: 15, y: 47 },
-        { key: "CM1", label: "CM", x: 38, y: 50 },
-        { key: "CM2", label: "CM", x: 62, y: 50 },
-        { key: "RM", label: "RM", x: 85, y: 47 },
-        { key: "ST1", label: "ST", x: 37, y: 20 },
-        { key: "ST2", label: "ST", x: 63, y: 20 },
-      ],
-    },
-    {
-      name: "4-3-3",
-      slots: [
-        GK(),
-        { key: "LB", label: "LB", x: 15, y: 72 },
-        { key: "CB1", label: "CB", x: 38, y: 75 },
-        { key: "CB2", label: "CB", x: 62, y: 75 },
-        { key: "RB", label: "RB", x: 85, y: 72 },
-        { key: "CM1", label: "CM", x: 25, y: 50 },
-        { key: "CM2", label: "CM", x: 50, y: 54 },
-        { key: "CM3", label: "CM", x: 75, y: 50 },
-        { key: "LW", label: "LW", x: 18, y: 22 },
-        { key: "ST1", label: "ST", x: 50, y: 16 },
-        { key: "RW", label: "RW", x: 82, y: 22 },
-      ],
-    },
-    {
-      name: "3-5-2",
-      slots: [
-        GK(),
-        { key: "CB1", label: "CB", x: 25, y: 74 },
-        { key: "CB2", label: "CB", x: 50, y: 77 },
-        { key: "CB3", label: "CB", x: 75, y: 74 },
-        { key: "LM", label: "LM", x: 12, y: 48 },
-        { key: "CM1", label: "CM", x: 33, y: 52 },
-        { key: "CM2", label: "CM", x: 50, y: 44 },
-        { key: "CM3", label: "CM", x: 67, y: 52 },
-        { key: "RM", label: "RM", x: 88, y: 48 },
-        { key: "ST1", label: "ST", x: 37, y: 18 },
-        { key: "ST2", label: "ST", x: 63, y: 18 },
-      ],
-    },
-    {
-      name: "4-5-1",
-      slots: [
-        GK(),
-        { key: "LB", label: "LB", x: 15, y: 72 },
-        { key: "CB1", label: "CB", x: 38, y: 75 },
-        { key: "CB2", label: "CB", x: 62, y: 75 },
-        { key: "RB", label: "RB", x: 85, y: 72 },
-        { key: "LM", label: "LM", x: 12, y: 46 },
-        { key: "CM1", label: "CM", x: 33, y: 50 },
-        { key: "CM2", label: "CM", x: 50, y: 42 },
-        { key: "CM3", label: "CM", x: 67, y: 50 },
-        { key: "RM", label: "RM", x: 88, y: 46 },
-        { key: "ST1", label: "ST", x: 50, y: 17 },
-      ],
-    },
+    shape("4-4-2", [D(4), M(4), F(2)]),
+    shape("4-3-3", [D(4), M(3), F(3)]),
+    shape("4-2-3-1", [D(4), H(2), A(3), F(1)]),
+    shape("4-1-4-1", [D(4), H(1), M(4), F(1)]),
+    shape("4-4-1-1", [D(4), M(4), A(1), F(1)]),
+    shape("4-3-1-2", [D(4), M(3), A(1), F(2)]),
+    shape("4-1-2-1-2", [D(4), H(1), M(2), A(1), F(2)]),
+    shape("4-5-1", [D(4), M(5), F(1)]),
+    shape("4-2-2-2", [D(4), H(2), A(2), F(2)]),
+    shape("3-5-2", [D(3), M(5), F(2)]),
+    shape("3-4-3", [D(3), M(4), F(3)]),
+    shape("3-4-1-2", [D(3), M(4), A(1), F(2)]),
+    shape("3-4-2-1", [D(3), M(4), A(2), F(1)]),
+    shape("5-3-2", [D(5), M(3), F(2)]),
+    shape("5-4-1", [D(5), M(4), F(1)]),
+    shape("5-2-3", [D(5), M(2), F(3)]),
   ],
   "9v9": [
-    {
-      name: "3-3-2",
-      slots: [
-        GK(),
-        { key: "LB", label: "LB", x: 20, y: 72 },
-        { key: "CB1", label: "CB", x: 50, y: 76 },
-        { key: "RB", label: "RB", x: 80, y: 72 },
-        { key: "LM", label: "LM", x: 20, y: 47 },
-        { key: "CM1", label: "CM", x: 50, y: 50 },
-        { key: "RM", label: "RM", x: 80, y: 47 },
-        { key: "ST1", label: "ST", x: 36, y: 20 },
-        { key: "ST2", label: "ST", x: 64, y: 20 },
-      ],
-    },
-    {
-      name: "3-2-3",
-      slots: [
-        GK(),
-        { key: "LB", label: "LB", x: 20, y: 72 },
-        { key: "CB1", label: "CB", x: 50, y: 76 },
-        { key: "RB", label: "RB", x: 80, y: 72 },
-        { key: "CM1", label: "CM", x: 35, y: 50 },
-        { key: "CM2", label: "CM", x: 65, y: 50 },
-        { key: "LW", label: "LW", x: 20, y: 22 },
-        { key: "ST1", label: "ST", x: 50, y: 17 },
-        { key: "RW", label: "RW", x: 80, y: 22 },
-      ],
-    },
-    {
-      name: "2-4-2",
-      slots: [
-        GK(),
-        { key: "CB1", label: "CB", x: 35, y: 74 },
-        { key: "CB2", label: "CB", x: 65, y: 74 },
-        { key: "LM", label: "LM", x: 15, y: 48 },
-        { key: "CM1", label: "CM", x: 38, y: 51 },
-        { key: "CM2", label: "CM", x: 62, y: 51 },
-        { key: "RM", label: "RM", x: 85, y: 48 },
-        { key: "ST1", label: "ST", x: 36, y: 20 },
-        { key: "ST2", label: "ST", x: 64, y: 20 },
-      ],
-    },
-    {
-      name: "3-4-1",
-      slots: [
-        GK(),
-        { key: "LB", label: "LB", x: 20, y: 72 },
-        { key: "CB1", label: "CB", x: 50, y: 76 },
-        { key: "RB", label: "RB", x: 80, y: 72 },
-        { key: "LM", label: "LM", x: 15, y: 47 },
-        { key: "CM1", label: "CM", x: 38, y: 50 },
-        { key: "CM2", label: "CM", x: 62, y: 50 },
-        { key: "RM", label: "RM", x: 85, y: 47 },
-        { key: "ST1", label: "ST", x: 50, y: 19 },
-      ],
-    },
+    shape("3-3-2", [D(3), M(3), F(2)]),
+    shape("3-2-3", [D(3), M(2), F(3)]),
+    shape("2-4-2", [D(2), M(4), F(2)]),
+    shape("3-4-1", [D(3), M(4), F(1)]),
+    shape("3-1-3-1", [D(3), H(1), M(3), F(1)]),
+    shape("3-2-2-1", [D(3), M(2), A(2), F(1)]),
+    shape("2-3-3", [D(2), M(3), F(3)]),
+    shape("2-3-2-1", [D(2), M(3), A(2), F(1)]),
+    shape("4-3-1", [D(4), M(3), F(1)]),
+    shape("4-2-2", [D(4), M(2), F(2)]),
+    shape("3-1-2-2", [D(3), H(1), M(2), F(2)]),
   ],
   "7v7": [
-    {
-      name: "2-3-1",
-      slots: [
-        GK(90),
-        { key: "LB", label: "LB", x: 32, y: 72 },
-        { key: "RB", label: "RB", x: 68, y: 72 },
-        { key: "LM", label: "LM", x: 20, y: 46 },
-        { key: "CM1", label: "CM", x: 50, y: 49 },
-        { key: "RM", label: "RM", x: 80, y: 46 },
-        { key: "ST1", label: "ST", x: 50, y: 19 },
-      ],
-    },
-    {
-      name: "3-2-1",
-      slots: [
-        GK(90),
-        { key: "LB", label: "LB", x: 22, y: 71 },
-        { key: "CB1", label: "CB", x: 50, y: 75 },
-        { key: "RB", label: "RB", x: 78, y: 71 },
-        { key: "CM1", label: "CM", x: 35, y: 47 },
-        { key: "CM2", label: "CM", x: 65, y: 47 },
-        { key: "ST1", label: "ST", x: 50, y: 19 },
-      ],
-    },
-    {
-      name: "2-2-2",
-      slots: [
-        GK(90),
-        { key: "LB", label: "LB", x: 32, y: 72 },
-        { key: "RB", label: "RB", x: 68, y: 72 },
-        { key: "CM1", label: "CM", x: 32, y: 48 },
-        { key: "CM2", label: "CM", x: 68, y: 48 },
-        { key: "ST1", label: "ST", x: 35, y: 20 },
-        { key: "ST2", label: "ST", x: 65, y: 20 },
-      ],
-    },
+    shape("2-3-1", [D(2), M(3), F(1)], 90),
+    shape("3-2-1", [D(3), M(2), F(1)], 90),
+    shape("2-2-2", [D(2), M(2), F(2)], 90),
+    shape("3-1-2", [D(3), M(1), F(2)], 90),
+    shape("2-1-2-1", [D(2), H(1), M(2), F(1)], 90),
+    shape("1-3-2", [D(1), M(3), F(2)], 90),
+    shape("2-1-3", [D(2), M(1), F(3)], 90),
+    shape("3-3", [D(3), F(3)], 90),
+    shape("1-2-2-1", [D(1), M(2), A(2), F(1)], 90),
   ],
   "5v5": [
-    {
-      name: "1-2-1",
-      slots: [
-        GK(88),
-        { key: "CB1", label: "CB", x: 50, y: 70 },
-        { key: "LM", label: "LM", x: 27, y: 45 },
-        { key: "RM", label: "RM", x: 73, y: 45 },
-        { key: "ST1", label: "ST", x: 50, y: 20 },
-      ],
-    },
-    {
-      name: "2-1-1",
-      slots: [
-        GK(88),
-        { key: "LB", label: "LB", x: 30, y: 70 },
-        { key: "RB", label: "RB", x: 70, y: 70 },
-        { key: "CM1", label: "CM", x: 50, y: 45 },
-        { key: "ST1", label: "ST", x: 50, y: 20 },
-      ],
-    },
+    shape("1-2-1", [D(1), M(2), F(1)], 88),
+    shape("2-1-1", [D(2), M(1), F(1)], 88),
+    shape("1-1-2", [D(1), M(1), F(2)], 88),
+    shape("2-2", [D(2), F(2)], 88),
+    shape("1-3", [D(1), F(3)], 88),
+    shape("3-1", [D(3), F(1)], 88),
   ],
 };
 
