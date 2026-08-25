@@ -37,6 +37,7 @@ export function AllocateControl({
   pitches,
   currentResourceId = null,
   homeResourceId = null,
+  homeKickoffTime = null,
   allowUnallocate = false,
   compact = false,
 }: {
@@ -45,6 +46,8 @@ export function AllocateControl({
   currentResourceId?: string | null;
   /** `teams.home_resource_id` — where the select opens when nothing is set. */
   homeResourceId?: string | null;
+  /** `teams.home_kickoff_time` — the KO box opens on it; blank keeps the fixture's own time. */
+  homeKickoffTime?: string | null;
   allowUnallocate?: boolean;
   compact?: boolean;
 }) {
@@ -57,6 +60,11 @@ export function AllocateControl({
   );
   const [pre, setPre] = useState("");
   const [post, setPost] = useState("");
+  // A fresh allocation opens on the team's home kick-off; a move keeps the
+  // fixture's own time unless the admin types one.
+  const [kickoff, setKickoff] = useState(
+    currentResourceId === null && homeKickoffTime ? homeKickoffTime.slice(0, 5) : "",
+  );
   const [busy, setBusy] = useState<null | "allocate" | "unallocate">(null);
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -81,12 +89,17 @@ export function AllocateControl({
       setError("Buffers must be a whole number of minutes, or blank for the pitch's default.");
       return;
     }
+    if (kickoff !== "" && !/^([01]\d|2[0-3]):[0-5]\d$/.test(kickoff)) {
+      setError("The kick-off must be a time like 10:30, or blank to keep the fixture's own.");
+      return;
+    }
     setBusy("allocate");
     const result = await allocateFixture({
       fixtureId,
       resourceId,
       preBufferMinutes: pre_,
       postBufferMinutes: post_,
+      kickoffTime: kickoff || null,
     });
     setBusy(null);
     if (result.error) {
@@ -138,6 +151,17 @@ export function AllocateControl({
               </option>
             ))}
           </select>
+        </label>
+        <label className="w-28">
+          {!compact && <span className="mb-1 block text-xs text-muted-foreground">KO</span>}
+          <Input
+            aria-label="Kick-off time"
+            type="time"
+            value={kickoff}
+            onChange={(e) => setKickoff(e.target.value)}
+            className="h-9"
+            title="The fixture is re-timed to this kick-off on its own date; blank keeps its current time."
+          />
         </label>
         <label className="w-24">
           {!compact && <span className="mb-1 block text-xs text-muted-foreground">Pre (min)</span>}

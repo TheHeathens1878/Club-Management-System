@@ -26,6 +26,7 @@ export function PersonPicker({
   placeholder = "Search by name or email…",
   excludeIds = [],
   required = false,
+  onPick,
 }: {
   id: string;
   name: string;
@@ -33,6 +34,8 @@ export function PersonPicker({
   placeholder?: string;
   excludeIds?: string[];
   required?: boolean;
+  /** Fired with the chosen person, and with null when the choice is cleared. */
+  onPick?: (person: PersonOption | null) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<PersonOption[]>([]);
@@ -84,6 +87,7 @@ export function PersonPicker({
               setSelected(null);
               setQuery("");
               setResults([]);
+              onPick?.(null);
             }}
             className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-secondary"
             aria-label="Clear the chosen person"
@@ -119,7 +123,10 @@ export function PersonPicker({
                 <button
                   key={person.id}
                   type="button"
-                  onClick={() => setSelected(person)}
+                  onClick={() => {
+                    setSelected(person);
+                    onPick?.(person);
+                  }}
                   className="block w-full px-3 py-2 text-left text-sm hover:bg-secondary"
                 >
                   <span className="font-medium">{person.name}</span>

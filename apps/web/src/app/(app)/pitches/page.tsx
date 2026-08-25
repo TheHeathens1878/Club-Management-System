@@ -101,7 +101,7 @@ export default async function PitchesPage({
       // places a pitch is chosen on this screen — the unallocated list, the
       // flagged list and the grid's "Move to…" panel — because the view and
       // the grid function both carry `team_id` and neither can embed it.
-      admin.from("teams").select("id,home_resource_id"),
+      admin.from("teams").select("id,home_resource_id,home_kickoff_time"),
     ]);
 
   const pitches: PitchOption[] = (pitchesResult.data ?? []).map((row) => ({
@@ -112,8 +112,10 @@ export default async function PitchesPage({
   }));
 
   const homePitchByTeam: Record<string, string> = {};
+  const homeKickoffByTeam: Record<string, string> = {};
   for (const row of teamsResult.data ?? []) {
     if (row.home_resource_id !== null) homePitchByTeam[row.id] = row.home_resource_id;
+    if (row.home_kickoff_time !== null) homeKickoffByTeam[row.id] = row.home_kickoff_time;
   }
 
   // Latest conflict detail per fixture — the rows arrive newest first, so the
@@ -249,6 +251,9 @@ export default async function PitchesPage({
                         homeResourceId={
                           fixture.team_id ? homePitchByTeam[fixture.team_id] ?? null : null
                         }
+                        homeKickoffTime={
+                          fixture.team_id ? homeKickoffByTeam[fixture.team_id] ?? null : null
+                        }
                       />
                     </li>
                   );
@@ -301,6 +306,7 @@ export default async function PitchesPage({
               pitches={pitches}
               entries={gridEntries}
               homePitchByTeam={homePitchByTeam}
+              homeKickoffByTeam={homeKickoffByTeam}
             />
           </CardContent>
         </Card>
@@ -354,6 +360,7 @@ export default async function PitchesPage({
                         pitches={pitches}
                         currentResourceId={fixture.venue_resource_id}
                         homeResourceId={homePitchByTeam[fixture.team_id] ?? null}
+                        homeKickoffTime={homeKickoffByTeam[fixture.team_id] ?? null}
                         allowUnallocate
                       />
                     </li>

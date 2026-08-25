@@ -33,7 +33,7 @@ select has_column('public', 'fixtures', 'booking_id', 'fixtures.booking_id');
 select has_column('public', 'fixtures', 'allocation_conflict', 'fixtures.allocation_conflict');
 select has_column('public', 'bookings', 'fixture_id', 'bookings.fixture_id');
 select has_view('public', 'unallocated_home_fixtures', 'unallocated_home_fixtures view');
-select has_function('public', 'allocate_fixture', array['uuid', 'uuid', 'integer', 'integer'], 'allocate_fixture()');
+select has_function('public', 'allocate_fixture', array['uuid', 'uuid', 'integer', 'integer', 'time'], 'allocate_fixture()');
 select has_function('public', 'pitch_grid', array['timestamp with time zone', 'timestamp with time zone'], 'pitch_grid()');
 
 -- B. unallocated view: both home fixtures, not the away one

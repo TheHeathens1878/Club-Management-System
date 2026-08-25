@@ -11,7 +11,7 @@
  */
 
 import Link from "next/link";
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -187,6 +187,12 @@ export function GuardianshipsPanel({
 }) {
   const [addState, addAction, adding] = useActionState(addGuardianship, EMPTY);
   const [endState, endAction] = useActionState(endGuardianship, EMPTY);
+  // The direction options speak in names ("Adam Wareing is the guardian of
+  // Matthew Wareing"), so the wrong way round is visible BEFORE the SG-4 guard
+  // has to refuse it. Until someone is picked, a neutral placeholder stands in.
+  const [otherName, setOtherName] = useState<string | null>(null);
+  const [direction, setDirection] = useState<"guardian_of" | "child_of">("guardian_of");
+  const other = otherName ?? "the person chosen";
 
   const children = links.filter((l) => l.personIsGuardian);
   const guardians = links.filter((l) => !l.personIsGuardian);
@@ -245,14 +251,29 @@ export function GuardianshipsPanel({
           label="The other person"
           excludeIds={[personId]}
           required
+          onPick={(person) => setOtherName(person?.name ?? null)}
         />
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="guardianship-direction">This record is the…</Label>
-            <Select id="guardianship-direction" name="direction" defaultValue="guardian_of">
-              <option value="guardian_of">Guardian of the person chosen</option>
-              <option value="child_of">Child of the person chosen</option>
+            <Label htmlFor="guardianship-direction">Which way round?</Label>
+            <Select
+              id="guardianship-direction"
+              name="direction"
+              value={direction}
+              onChange={(event) => setDirection(event.target.value as "guardian_of" | "child_of")}
+            >
+              <option value="guardian_of">
+                {personName} is the guardian of {other}
+              </option>
+              <option value="child_of">
+                {personName} is the child of {other}
+              </option>
             </Select>
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              {direction === "guardian_of"
+                ? `${personName} will be recorded as the adult responsible for ${other}.`
+                : `${other} will be recorded as the adult responsible for ${personName}.`}
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="guardianship-relationship">Relationship</Label>
