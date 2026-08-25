@@ -4,11 +4,13 @@ import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabili
 import { resolveRoleView } from "@/lib/role-view";
 
 /**
- * "Team" in the parent menu (Adam, 2026-08-25): straight to the child's team.
+ * "Team page" in the parent and coach menus (Adam, 2026-08-25): straight to
+ * the team.
  *
  * A redirect, not a page: the team-scoped switcher pick already knows which
- * team; a parent with one child-team goes there too; only a parent of children
- * on several teams with no scope chosen lands on /family to pick.
+ * team; a parent with one child-team or a coach with one team goes there too;
+ * only someone with several teams and no scope chosen lands on the list to
+ * pick — /family for a parent, /teams for a coach, /my-teams for a player.
  */
 
 export const dynamic = "force-dynamic";
@@ -25,5 +27,8 @@ export default async function MyTeamPage() {
   if (view === "player" && capabilities.playerTeams.length === 1) {
     redirect(`/teams/${capabilities.playerTeams[0]!.id}`);
   }
-  redirect(view === "player" ? "/my-teams" : "/family");
+  if (view === "coach" && capabilities.staffTeams.length === 1) {
+    redirect(`/teams/${capabilities.staffTeams[0]!.id}`);
+  }
+  redirect(view === "player" ? "/my-teams" : view === "coach" ? "/teams" : "/family");
 }

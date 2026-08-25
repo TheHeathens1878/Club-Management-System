@@ -73,7 +73,7 @@ export const QUESTION_TYPE_LABELS: Record<QuestionType, string> = {
   date: "Date",
   phone: "Phone number",
   email: "Email address",
-  emergency_contact: "Emergency contact (built in)",
+  emergency_contact: "Emergency contact (retired — kept on the person's record)",
   medical: "Health questions (built in)",
   kit_size: "Kit size (built in)",
   player_photo: "Player photo (built in)",

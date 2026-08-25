@@ -19,16 +19,16 @@
  */
 
 import { createClient } from "@/lib/supabase/server";
+import { emergencyContactsFromFormData, noEmergencyContacts } from "@/lib/emergency-contacts";
+import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
+import { registrationFormFromFormData } from "@/lib/registration-form";
+import { questionFromRow, type RegistrationQuestion } from "@/lib/registration-questions";
 import {
-  PHOTO_NOTICE_VERSION,
-  registrationFormFromFormData,
-  REGISTRATION_FORM_VERSION,
-} from "@/lib/registration-form";
-import {
-  PHOTO_CONSENT_CHOICES,
-  questionFromRow,
-  type RegistrationQuestion,
-} from "@/lib/registration-questions";
+  attachUploads,
+  customQuestionsFrom,
+  idDocumentOwed,
+  submitTeamRegistration,
+} from "@/lib/registration-server";
 import { ageGroupFromDob, tidyRpcMessage } from "@/lib/waiting-list";
 
 import { MAX_HOUSEHOLD } from "./constants";
@@ -299,90 +299,6 @@ export type PlayerDetailsState = {
   outcome?: { personId: string; destination: "team" | "waiting_list" | "no_team" };
 };
 
-/**
- * The instant that is 23:59, Europe/London, on the season's last day.
- *
- * Photo consent expires with the season (P2.2 §3), and "the season ends on
- * 2027-05-31" is a local statement about a club in Cheshire, not a UTC one.
- * Formatting the same moment in both zones and taking the difference is the
- * offset, so this is right in May (BST) and right in January (GMT) without a
- * timezone dependency.
- */
-function seasonEndInstant(endsOn: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(endsOn)) return null;
-  const naive = new Date(`${endsOn}T23:59:00Z`);
-  if (Number.isNaN(naive.getTime())) return null;
-  const asUtc = new Date(naive.toLocaleString("en-US", { timeZone: "UTC" }));
-  const asLondon = new Date(naive.toLocaleString("en-US", { timeZone: "Europe/London" }));
-  const offsetMs = asLondon.getTime() - asUtc.getTime();
-  return new Date(naive.getTime() - offsetMs).toISOString();
-}
-
-/**
- * The SG-5 consent writes this flow has owed since P2.2 was specified.
- *
- * One `guardian_consents` row per TICKED box and NO ROW for an unticked one —
- * absence is refusal, which is the fail-closed position SG-5 requires and the
- * reason this cannot be a four-boolean column. Written through the caller's
- * own client so P1.7's guard sees the guardian, not the service role: it
- * checks the active guardianship and the granter's own adulthood itself, and
- * a refusal comes back verbatim.
- *
- * A failure here does NOT unwind the registration. The registration is the
- * thing the family came to do; a consent they can be asked for again is not
- * worth throwing it away over, and no row means no permission, so the failure
- * is safe in the only direction that matters.
- */
-async function writePhotoConsents(
-  formData: FormData,
-  childPersonId: string,
-  guardianPersonId: string,
-  expiresAt: string | null,
-): Promise<void> {
-  const wanted = PHOTO_CONSENT_CHOICES.filter(
-    (choice) => formData.get(choice.field) === "yes",
-  );
-  if (wanted.length === 0) return;
-
-  const supabase = await createClient();
-  await supabase.from("guardian_consents").insert(
-    wanted.map((choice) => ({
-      child_person_id: childPersonId,
-      guardian_person_id: guardianPersonId,
-      consent_type: choice.consentType,
-      notice_version: PHOTO_NOTICE_VERSION,
-      expires_at: expiresAt,
-    })),
-  );
-}
-
-/** The photo becomes the avatar; the ID document becomes a three-year record. */
-async function attachUploads(
-  formData: FormData,
-  personId: string,
-  registrationId: string | null,
-): Promise<void> {
-  const supabase = await createClient();
-
-  const photoPath = text(formData, "photo_path");
-  if (photoPath) {
-    await supabase.rpc("set_person_photo", { p_person_id: personId, p_path: photoPath });
-  }
-
-  const idPath = text(formData, "id_path");
-  const idKind = text(formData, "id_kind");
-  if (idPath && idKind) {
-    const { data: auth } = await supabase.auth.getUser();
-    await supabase.from("identity_documents").insert({
-      person_id: personId,
-      registration_id: registrationId,
-      kind: idKind,
-      storage_path: idPath,
-      uploaded_by: auth.user?.id ?? null,
-    });
-  }
-}
-
 export async function joinPlayerDetails(
   _prev: PlayerDetailsState,
   formData: FormData,
@@ -395,34 +311,28 @@ export async function joinPlayerDetails(
   const teamChoice = text(formData, "team_choice"); // team uuid | "waiting_list"
   if (!personId || !teamChoice) return { error: "Choose a team or the waiting list." };
 
-  const customQuestions = JSON.parse(text(formData, "custom_questions") || "[]") as {
-    qkey: string;
-    label: string;
-    qtype: string;
-    required: boolean;
-  }[];
-
+  // Everything is validated before anything is written.
   const built = registrationFormFromFormData(formData, {
     includePhotoPreferences: isSelf,
-    customQuestions,
+    customQuestions: customQuestionsFrom(formData),
     requireGdpr: formData.get("gdpr_asked") === "yes",
   });
   if ("error" in built) return { error: built.error };
+  const posted = emergencyContactsFromFormData(formData);
+  if ("error" in posted) return { error: posted.error };
+  if (noEmergencyContacts(posted)) {
+    return { error: "An emergency contact is required for everyone who plays." };
+  }
+  const owed = await idDocumentOwed(personId, formData);
+  if (owed) return { error: owed };
+
+  // Emergency contacts are the person's, not the form's (Adam, 2026-08-25):
+  // written to the record first, which is what the registration rule "at
+  // least one contact on record" then finds.
+  const saved = await saveEmergencyContacts(personId, posted);
+  if (saved.error) return { error: saved.error };
 
   const supabase = await createClient();
-
-  // The ID rule is re-asked here, not trusted from the browser: the screen can
-  // only ever be showing what was true when it was rendered.
-  const { data: stillNeedsId } = await supabase.rpc("needs_id_document", {
-    p_person_id: personId,
-  });
-  if (stillNeedsId === true && !text(formData, "id_path")) {
-    return {
-      error:
-        "The club needs to see proof of identity for this player — add a passport, birth certificate or driving licence.",
-    };
-  }
-
   const { data: season } = await supabase
     .from("seasons")
     .select("id,ends_on")
@@ -431,31 +341,17 @@ export async function joinPlayerDetails(
   if (!season) return { error: "The club has no current season set — please contact the club." };
 
   if (teamChoice !== "waiting_list") {
-    const { data: inserted, error } = await supabase
-      .from("registrations")
-      .insert({
-        person_id: personId,
-        season_id: season.id,
-        team_id: teamChoice,
-        form: JSON.parse(JSON.stringify(built.form)),
-        form_version: REGISTRATION_FORM_VERSION,
-      })
-      .select("id")
-      .maybeSingle();
-    if (error) return { error: tidyRpcMessage(error.message) };
-
-    await attachUploads(formData, personId, inserted?.id ?? null);
-    if (isMinor && !isSelf) {
-      const { data: guardianPersonId } = await supabase.rpc("current_person_id");
-      if (guardianPersonId) {
-        await writePhotoConsents(
-          formData,
-          personId,
-          guardianPersonId,
-          seasonEndInstant(season.ends_on),
-        );
-      }
-    }
+    const result = await submitTeamRegistration({
+      personId,
+      isSelf,
+      isMinor,
+      seasonId: season.id,
+      seasonEndsOn: season.ends_on,
+      teamId: teamChoice,
+      form: built.form,
+      formData,
+    });
+    if ("error" in result) return { error: result.error };
     return { outcome: { personId, destination: "team" } };
   }
 
@@ -498,33 +394,19 @@ export async function joinPlayerDetails(
     }
   }
 
-  const fallback = {
-    ...built.form,
+  const result = await submitTeamRegistration({
+    personId,
+    isSelf,
+    isMinor,
+    seasonId: season.id,
+    seasonEndsOn: season.ends_on,
+    teamId: null,
+    form: built.form,
+    formData,
     // Recorded so the admin queue can see why this row has no team.
-    previous_club: built.form.previous_club,
-  };
-  const { data: inserted, error } = await supabase
-    .from("registrations")
-    .insert({
-      person_id: personId,
-      season_id: season.id,
-      team_id: null,
-      form: JSON.parse(
-        JSON.stringify({ ...fallback, no_team_note: "No suitable team at joining; waiting list group not open." }),
-      ),
-      form_version: REGISTRATION_FORM_VERSION,
-    })
-    .select("id")
-    .maybeSingle();
-  if (error) return { error: tidyRpcMessage(error.message) };
-
-  await attachUploads(formData, personId, inserted?.id ?? null);
-  if (isMinor && !isSelf) {
-    const { data: guardianPersonId } = await supabase.rpc("current_person_id");
-    if (guardianPersonId) {
-      await writePhotoConsents(formData, personId, guardianPersonId, seasonEndInstant(season.ends_on));
-    }
-  }
+    extraForm: { no_team_note: "No suitable team at joining; waiting list group not open." },
+  });
+  if ("error" in result) return { error: result.error };
   return { outcome: { personId, destination: "no_team" } };
 }
 
