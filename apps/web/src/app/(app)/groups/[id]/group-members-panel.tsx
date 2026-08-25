@@ -12,6 +12,7 @@
  * SG-2: a removal stamps `left_at`. The row stays, and so does the history.
  */
 
+import Link from "next/link";
 import { useActionState } from "react";
 import { UserPlus, UserMinus } from "lucide-react";
 
@@ -91,11 +92,14 @@ export function GroupMembersPanel({
   conversationId,
   members,
   canEdit,
+  canOpenContacts = false,
   closed,
 }: {
   conversationId: string;
   members: GroupMemberRow[];
   canEdit: boolean;
+  /** The caller may open /people/[id] — the committee, and nobody else. */
+  canOpenContacts?: boolean;
   closed: boolean;
 }) {
   const [state, action, pending] = useActionState(addGroupMember, EMPTY);
@@ -116,7 +120,16 @@ export function GroupMembersPanel({
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium">{member.name}</span>
+                {canOpenContacts ? (
+                  <Link
+                    href={`/people/${member.personId}`}
+                    className="text-sm font-medium underline underline-offset-2 hover:text-primary"
+                  >
+                    {member.name}
+                  </Link>
+                ) : (
+                  <span className="text-sm font-medium">{member.name}</span>
+                )}
                 <Badge variant="muted">{BASIS_LABELS[member.basis] ?? member.basis}</Badge>
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
@@ -134,11 +147,19 @@ export function GroupMembersPanel({
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Previously in this group</p>
           <div className="flex flex-wrap gap-2">
-            {past.map((member) => (
-              <Badge key={`${member.personId}-${member.leftAt}`} variant="outline">
-                {member.name} · left {formatStamp(member.leftAt)}
-              </Badge>
-            ))}
+            {past.map((member) =>
+              canOpenContacts ? (
+                <Link key={`${member.personId}-${member.leftAt}`} href={`/people/${member.personId}`}>
+                  <Badge variant="outline" className="hover:bg-secondary">
+                    {member.name} · left {formatStamp(member.leftAt)}
+                  </Badge>
+                </Link>
+              ) : (
+                <Badge key={`${member.personId}-${member.leftAt}`} variant="outline">
+                  {member.name} · left {formatStamp(member.leftAt)}
+                </Badge>
+              ),
+            )}
           </div>
         </div>
       )}

@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSessionProfile } from "@/lib/auth";
+import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { groupAttachment, type AttachmentChoice } from "@/lib/group-scope";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
@@ -78,6 +78,12 @@ export default async function ManageGroupPage({
   const clubAdmin = await isClubAdmin();
   const isCreator = conversation.created_by_person_id === personId;
   const canEdit = clubAdmin || isCreator;
+  // Adam, 2026-08-25: "admins should be able to click on a member's name and
+  // it takes you to their contact page". /people/[id] admits the committee and
+  // nobody else, so the link is offered on exactly that answer — a group's
+  // creator who is not on the committee keeps the plain name rather than a
+  // link that would bounce them to the room diary.
+  const canOpenContacts = isCommittee(session.profile?.role);
 
   const { data: participantRows } = await supabase
     .from("conversation_participants")
@@ -213,6 +219,7 @@ export default async function ManageGroupPage({
               conversationId={conversation.id}
               members={members}
               canEdit={canEdit}
+              canOpenContacts={canOpenContacts}
               closed={!!conversation.closed_at}
             />
           </CardContent>

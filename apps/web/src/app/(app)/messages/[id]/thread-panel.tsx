@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { Eye } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { getSessionProfile, isCommittee } from "@/lib/auth";
 
 import { LeaveButton } from "./leave-button";
 import { MatchPostComposer, type FixtureOption } from "./match-post-composer";
@@ -16,7 +18,7 @@ import { MESSAGE_LIMIT, type ThreadData } from "./thread-data";
  * there is no code path that renders a supervised thread without it — that is
  * the acceptance criterion, wherever the thread is embedded.
  */
-export function ThreadPanel({
+export async function ThreadPanel({
   data,
   showParticipants = true,
   showLeave = true,
@@ -30,6 +32,11 @@ export function ThreadPanel({
   postFixtures?: FixtureOption[];
 }) {
   const { conversation, participants, personId, myLive } = data;
+  // Adam, 2026-08-25: an admin clicks a member's name and lands on their
+  // contact page. /people/[id] admits the committee and nobody else, so the
+  // chip is a link on exactly that answer and plain text for everyone else.
+  const session = await getSessionProfile();
+  const canOpenContacts = isCommittee(session?.profile?.role);
 
   return (
     <div className="space-y-4">
@@ -52,12 +59,26 @@ export function ThreadPanel({
       {showParticipants && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           <span>In this conversation:</span>
-          {participants.map((p) => (
-            <Badge key={`${p.person_id}-${p.joined_at}`} variant={p.left_at ? "muted" : "outline"}>
-              {p.person_id === personId ? "You" : (data.nameMap[p.person_id] ?? data.unnamedLabel)}
-              {p.left_at ? " (left)" : ""}
-            </Badge>
-          ))}
+          {participants.map((p) => {
+            const label = `${
+              p.person_id === personId ? "You" : (data.nameMap[p.person_id] ?? data.unnamedLabel)
+            }${p.left_at ? " (left)" : ""}`;
+            const chip = (
+              <Badge
+                variant={p.left_at ? "muted" : "outline"}
+                className={canOpenContacts ? "hover:bg-secondary" : undefined}
+              >
+                {label}
+              </Badge>
+            );
+            return canOpenContacts ? (
+              <Link key={`${p.person_id}-${p.joined_at}`} href={`/people/${p.person_id}`}>
+                {chip}
+              </Link>
+            ) : (
+              <span key={`${p.person_id}-${p.joined_at}`}>{chip}</span>
+            );
+          })}
         </div>
       )}
 
