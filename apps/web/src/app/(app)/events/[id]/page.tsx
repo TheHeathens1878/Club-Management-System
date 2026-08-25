@@ -54,6 +54,9 @@ type Detail = {
   booked: boolean;
   /** 'confirmed' | 'pending' | … from the linked booking, when there is one. */
   bookingStatus: string | null;
+  /** Set when the kickoff or venue changed after people started answering. */
+  detailsChangedAt: string | null;
+  changeNote: string | null;
   series: { title: string; weekday: string; time: string; repeatUntil: string; occurrences: number } | null;
 };
 
@@ -98,6 +101,8 @@ function parseDetail(value: Json | null): Detail | null {
     createdByName: str(record, "created_by_name") ?? "the club",
     booked: record["booked"] === true,
     bookingStatus: str(record, "booking_status"),
+    detailsChangedAt: str(record, "details_changed_at"),
+    changeNote: str(record, "change_note"),
     series,
   };
 }
@@ -111,6 +116,7 @@ type RosterRow = {
   responded_at: string | null;
   can_respond: boolean;
   note: string | null;
+  response_stale: boolean;
 };
 
 function asResponse(value: string | null): "accepted" | "declined" | null {
@@ -146,6 +152,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
       name: row.full_name,
       isSelf: false,
       response: asResponse(row.response),
+      stale: row.response_stale,
     }));
 
   const organisers = roster.filter((row) => row.is_organiser);
@@ -177,6 +184,14 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
           {cancelled ? (
             <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               This event has been cancelled.
+            </p>
+          ) : null}
+
+          {!cancelled && detail.detailsChangedAt ? (
+            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <span className="font-semibold">The details have changed.</span>{" "}
+              {detail.changeNote ?? "Check the time and venue below."} Answers given before the
+              change still stand — update yours if it no longer holds.
             </p>
           ) : null}
 
@@ -309,6 +324,15 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                       {accepted.map((row) => (
                         <li key={row.person_id}>
                           {row.full_name}
+                          {row.response_stale ? (
+                            <span
+                              className="text-amber-700"
+                              title="Answered before the details changed"
+                            >
+                              {" "}
+                              *
+                            </span>
+                          ) : null}
                           {isStaff && row.note ? (
                             <span className="text-muted-foreground"> — {row.note}</span>
                           ) : null}
@@ -327,6 +351,15 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                       {declined.map((row) => (
                         <li key={row.person_id}>
                           {row.full_name}
+                          {row.response_stale ? (
+                            <span
+                              className="text-amber-700"
+                              title="Answered before the details changed"
+                            >
+                              {" "}
+                              *
+                            </span>
+                          ) : null}
                           {isStaff && row.note ? (
                             <span className="text-muted-foreground"> — {row.note}</span>
                           ) : null}
@@ -353,6 +386,12 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                     <RemindButton eventId={detail.id} />
                   ) : null}
                 </div>
+
+                {players.some((row) => row.response_stale) ? (
+                  <p className="text-xs text-amber-700">
+                    * answered before the details changed
+                  </p>
+                ) : null}
               </CardContent>
             </Card>
           ) : null}

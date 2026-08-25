@@ -97,6 +97,9 @@ export default async function EventsPage() {
                     <Badge variant="outline">{event.team_name}</Badge>
                     <Badge variant="muted">{eventTypeLabel(event.type)}</Badge>
                     {cancelled ? <Badge variant="destructive">Cancelled</Badge> : null}
+                    {!cancelled && event.details_changed_at ? (
+                      <Badge variant="warning">Details changed</Badge>
+                    ) : null}
                     <span className="ml-auto flex items-center gap-1 text-xs text-muted-foreground">
                       <ChevronRight className="h-3.5 w-3.5" /> Details
                     </span>
