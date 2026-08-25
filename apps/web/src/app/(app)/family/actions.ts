@@ -153,7 +153,18 @@ export async function updateChildDetails(
   const preferred = String(formData.get("preferred_name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
-  const sameAsLead = String(formData.get("same_as_lead") ?? "") === "yes";
+  const line1 = String(formData.get("address_line1") ?? "").trim();
+  const line2 = String(formData.get("address_line2") ?? "").trim();
+  const town = String(formData.get("address_town") ?? "").trim();
+  const postcode = String(formData.get("address_postcode") ?? "").trim();
+  const anyAddress = !!(line1 || line2 || town || postcode);
+  // The four fields are only rendered while the box is UNTICKED, so an
+  // address arriving alongside a "yes" can only mean the browser reset the
+  // checkbox behind React's back (React 19 resets a form once its action
+  // completes). The typed address is the parent's clearer statement, so it
+  // wins and the tick is ignored — the lead's address never overwrites what
+  // was just typed.
+  const sameAsLead = String(formData.get("same_as_lead") ?? "") === "yes" && !anyAddress;
 
   const supabase = await createClient();
 
@@ -172,11 +183,6 @@ export async function updateChildDetails(
     }
     address = leadAddress;
   } else {
-    const line1 = String(formData.get("address_line1") ?? "").trim();
-    const line2 = String(formData.get("address_line2") ?? "").trim();
-    const town = String(formData.get("address_town") ?? "").trim();
-    const postcode = String(formData.get("address_postcode") ?? "").trim();
-    const anyAddress = !!(line1 || line2 || town || postcode);
     if (anyAddress && (!line1 || !town || !postcode)) {
       return { error: "An address needs at least the first line, the town and the postcode." };
     }
