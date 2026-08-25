@@ -48,7 +48,10 @@ function matchesFilter(item: RailItem, filter: Filter): boolean {
     case "teams":
       return item.teamBound;
     case "groups":
-      return item.kind === "group";
+      // Adam, 2026-08-25: "Teams are not groups so shouldn't show in there" —
+      // anything bound to a team (its room, its announcements, a group
+      // attached to it) lives under Teams; Groups is the rest.
+      return item.kind === "group" && !item.teamBound;
     case "direct":
       return item.kind === "dm";
     case "unread":
