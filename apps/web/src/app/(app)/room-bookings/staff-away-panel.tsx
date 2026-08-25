@@ -76,7 +76,7 @@ export function StaffAwayPanel({
     <div className="cal-no-print rounded-lg border bg-card">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/30 transition-colors rounded-lg"
+        className="flex min-h-[44px] w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/30 transition-colors rounded-lg"
       >
         <span className="flex items-center gap-2">
           <UserX className="h-4 w-4 text-muted-foreground" />
@@ -101,17 +101,17 @@ export function StaffAwayPanel({
                 <div key={e.id} className="flex items-center justify-between gap-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm">
                   <div className="min-w-0">
                     <span className="font-medium text-amber-900">{e.staffName}</span>
-                    <span className="text-amber-700 ml-2">
+                    <span className="text-amber-700 lg:ml-2 block lg:inline">
                       {formatDate(e.fromDate)}{e.fromDate !== e.toDate ? ` – ${formatDate(e.toDate)}` : ""}
                     </span>
-                    {e.note && <span className="text-amber-600 ml-2 text-xs">· {e.note}</span>}
+                    {e.note && <span className="text-amber-600 lg:ml-2 text-xs block lg:inline">· {e.note}</span>}
                   </div>
                   {(isCommittee || e.staffId === currentUserId) && (
                     <button
                       onClick={() => handleRemove(e.id)}
                       disabled={removing === e.id}
                       title="Remove"
-                      className="shrink-0 rounded p-1 text-amber-600 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                      className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded p-1 text-amber-600 hover:text-destructive hover:bg-destructive/10 transition-colors lg:min-h-0 lg:min-w-0"
                     >
                       {removing === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     </button>
@@ -144,14 +144,14 @@ export function StaffAwayPanel({
           {manageableStaff.length > 0 && (
             <form onSubmit={handleAdd} className="border-t pt-3 space-y-3">
               <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Record absence</p>
-              <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
                 {isCommittee && (
                   <div className="space-y-1">
                     <label className="text-xs text-muted-foreground">Staff member</label>
                     <select
                       value={selectedStaff}
                       onChange={(e) => setSelectedStaff(e.target.value)}
-                      className="rounded-md border bg-background px-3 py-1.5 text-sm"
+                      className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
                       required
                     >
                       {manageableStaff.map((s) => (
@@ -166,7 +166,7 @@ export function StaffAwayPanel({
                     type="date"
                     value={fromDate}
                     onChange={(e) => { setFromDate(e.target.value); if (toDate < e.target.value) setToDate(e.target.value); }}
-                    className="rounded-md border bg-background px-3 py-1.5 text-sm"
+                    className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
                     required
                   />
                 </div>
@@ -177,21 +177,21 @@ export function StaffAwayPanel({
                     value={toDate}
                     min={fromDate}
                     onChange={(e) => setToDate(e.target.value)}
-                    className="rounded-md border bg-background px-3 py-1.5 text-sm"
+                    className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
                     required
                   />
                 </div>
-                <div className="space-y-1 flex-1 min-w-[140px]">
+                <div className="space-y-1 lg:flex-1 lg:min-w-[140px]">
                   <label className="text-xs text-muted-foreground">Note (optional)</label>
                   <input
                     type="text"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="e.g. Holiday"
-                    className="w-full rounded-md border bg-background px-3 py-1.5 text-sm"
+                    className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0"
                   />
                 </div>
-                <Button type="submit" size="sm" disabled={saving}>
+                <Button type="submit" size="sm" disabled={saving} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                   {saving ? "Saving…" : "Add"}
                 </Button>

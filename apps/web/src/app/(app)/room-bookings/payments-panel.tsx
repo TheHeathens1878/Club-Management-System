@@ -141,7 +141,7 @@ export function PaymentsPanel({
                 <button
                   onClick={() => handleDelete(p.id)}
                   disabled={isPending}
-                  className="text-muted-foreground hover:text-destructive transition-colors p-1 shrink-0"
+                  className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:text-destructive lg:min-h-0 lg:min-w-0"
                   title="Delete payment"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -179,7 +179,7 @@ export function PaymentsPanel({
               <select
                 value={method}
                 onChange={(e) => setMethod(e.target.value)}
-                className="h-10 w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className="h-10 min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
               >
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
@@ -196,16 +196,16 @@ export function PaymentsPanel({
             <label className="text-xs font-medium text-muted-foreground uppercase">Note</label>
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" />
           </div>
-          <label className="flex items-center gap-2 text-sm">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
             <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
             Email the booker a payment confirmation
           </label>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={isPending}>
+            <Button type="submit" size="sm" disabled={isPending} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
               {isPending ? "Saving…" : "Record payment"}
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(false); setError(null); }}>
+            <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(false); setError(null); }} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
               Cancel
             </Button>
           </div>
@@ -213,7 +213,7 @@ export function PaymentsPanel({
       ) : (
         <>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="gap-1.5">
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="min-h-[44px] w-full gap-1.5 lg:min-h-0 lg:w-auto">
             <Plus className="h-4 w-4" /> Record payment
           </Button>
         </>

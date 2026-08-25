@@ -23,7 +23,7 @@ function TB({ onClick, active, title, children }: {
       type="button"
       onMouseDown={(e) => { e.preventDefault(); onClick(); }}
       title={title}
-      className={`rounded p-1.5 transition-colors ${active
+      className={`inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded p-1.5 transition-colors lg:min-h-0 lg:min-w-0 ${active
         ? "bg-primary/15 text-primary"
         : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
     >
@@ -67,7 +67,7 @@ export function TemplateEditor({
     },
     editorProps: {
       attributes: {
-        class: "min-h-[280px] px-3 py-2 text-sm focus:outline-none prose prose-sm max-w-none",
+        class: "min-h-[280px] px-3 py-2 text-sm focus:outline-none prose prose-sm max-w-none break-words",
       },
     },
   });
@@ -142,7 +142,7 @@ export function TemplateEditor({
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-6 lg:p-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Editor */}
         <div className="lg:col-span-2 space-y-4">
@@ -153,7 +153,7 @@ export function TemplateEditor({
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Email subject…"
-              className="font-medium"
+              className="h-11 font-medium lg:h-10"
             />
             <p className="text-xs text-muted-foreground">You can use variables like <code className="bg-muted px-1 rounded">{"{{name}}"}</code> in the subject too.</p>
           </div>
@@ -162,8 +162,9 @@ export function TemplateEditor({
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Body</label>
             <div className="rounded-md border bg-background">
-              {/* Toolbar */}
-              <div className="flex flex-wrap items-center gap-0.5 border-b px-2 py-1.5">
+              {/* Toolbar — one scrolling strip on a phone, wrapped as before
+                  from lg up, so it never stacks into three rows. */}
+              <div className="flex items-center gap-0.5 overflow-x-auto border-b px-2 py-1.5 lg:flex-wrap lg:overflow-visible">
                 {editor && (
                   <>
                     <TB onClick={() => editor.chain().focus().toggleBold().run()} active={editor.isActive("bold")} title="Bold">
@@ -175,7 +176,7 @@ export function TemplateEditor({
                     <TB onClick={() => editor.chain().focus().toggleUnderline().run()} active={editor.isActive("underline")} title="Underline">
                       <UnderlineIcon className="h-3.5 w-3.5" />
                     </TB>
-                    <div className="mx-1 h-4 w-px bg-border" />
+                    <div className="mx-1 h-4 w-px shrink-0 bg-border" />
                     <TB onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} active={editor.isActive("heading", { level: 2 })} title="Heading">
                       <Heading2 className="h-3.5 w-3.5" />
                     </TB>
@@ -188,7 +189,7 @@ export function TemplateEditor({
                     <TB onClick={handleSetLink} active={editor.isActive("link")} title="Insert link">
                       <Link2 className="h-3.5 w-3.5" />
                     </TB>
-                    <div className="mx-1 h-4 w-px bg-border" />
+                    <div className="mx-1 h-4 w-px shrink-0 bg-border" />
                     <TB onClick={() => editor.chain().focus().undo().run()} title="Undo">
                       <Undo className="h-3.5 w-3.5" />
                     </TB>
@@ -203,8 +204,12 @@ export function TemplateEditor({
           </div>
 
           {/* Actions */}
-          <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={handleSave} disabled={saving || resetting} className="gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+            <Button
+              onClick={handleSave}
+              disabled={saving || resetting}
+              className="min-h-[44px] w-full gap-2 sm:min-h-0 sm:w-auto"
+            >
               {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Save template
             </Button>
@@ -212,7 +217,7 @@ export function TemplateEditor({
               variant="outline"
               onClick={handlePreview}
               disabled={loadingPreview || saving}
-              className="gap-2"
+              className="min-h-[44px] w-full gap-2 sm:min-h-0 sm:w-auto"
             >
               {loadingPreview
                 ? <Loader2 className="h-4 w-4 animate-spin" />
@@ -225,7 +230,7 @@ export function TemplateEditor({
                 size="sm"
                 onClick={handleReset}
                 disabled={resetting || saving}
-                className="gap-2 text-muted-foreground"
+                className="min-h-[44px] w-full gap-2 text-muted-foreground sm:min-h-0 sm:w-auto"
               >
                 {resetting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5" />}
                 Reset to default
@@ -286,14 +291,18 @@ export function TemplateEditor({
           <p className="text-sm font-medium text-muted-foreground">
             Preview — rendered with example values
           </p>
+          {/* A club email is a 600px-wide table; below lg the preview keeps
+              that width and scrolls sideways in its own box. */}
           <div className="rounded-lg border overflow-hidden bg-muted/20">
-            <iframe
-              srcDoc={previewHtml}
-              title="Email preview"
-              className="w-full"
-              style={{ height: 600, border: "none" }}
-              sandbox="allow-same-origin"
-            />
+            <div className="overflow-x-auto">
+              <iframe
+                srcDoc={previewHtml}
+                title="Email preview"
+                className="w-full min-w-[600px] lg:min-w-0"
+                style={{ height: 600, border: "none" }}
+                sandbox="allow-same-origin"
+              />
+            </div>
           </div>
         </div>
       )}

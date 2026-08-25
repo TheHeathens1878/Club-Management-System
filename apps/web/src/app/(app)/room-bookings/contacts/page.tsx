@@ -75,13 +75,13 @@ export default async function BookingContactsPage({
         action={
           <Link
             href="/room-bookings/new"
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"}
           >
             <CalendarPlus className="h-4 w-4" /> New booking
           </Link>
         }
       />
-      <div className="space-y-4 p-6">
+      <div className="space-y-4 p-4 lg:p-6">
         <form method="get" className="max-w-sm">
           <Label htmlFor="contact-search" className="sr-only">
             Search contacts
@@ -93,7 +93,7 @@ export default async function BookingContactsPage({
               name="q"
               defaultValue={term}
               placeholder="Search by name or email"
-              className="pl-9"
+              className="min-h-[44px] pl-9 lg:min-h-0"
             />
           </div>
         </form>
@@ -111,7 +111,38 @@ export default async function BookingContactsPage({
             </CardContent>
           </Card>
         ) : (
-          <div className="overflow-x-auto rounded-xl border bg-card shadow-sm">
+          <>
+          {/* Phone: one card per contact — name and email as the title block,
+              the hire history as the right-hand pill. */}
+          <div className="space-y-2 lg:hidden">
+            {(contacts ?? []).map((contact) => {
+              const hire = hires.get(contact.id) ?? null;
+              return (
+                <div key={contact.id} className="rounded-xl border bg-card p-3 shadow-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="min-w-0 flex-1 font-medium">{contact.name}</p>
+                    <span className="shrink-0 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                      {hire?.count ?? 0} {hire?.count === 1 ? "hire" : "hires"}
+                    </span>
+                  </div>
+                  {contact.email && (
+                    <p className="mt-0.5 break-words text-xs text-muted-foreground">{contact.email}</p>
+                  )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {contact.phone ?? "No phone"}
+                    {hire?.last
+                      ? ` · last hire ${formatBookingDateShort(instantToLocal(hire.last).date)}`
+                      : ""}
+                  </p>
+                  {contact.notes && (
+                    <p className="mt-1 text-xs text-muted-foreground">{contact.notes}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-xl border bg-card shadow-sm lg:block">
             <table className="w-full text-left text-sm">
               <thead className="border-b bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
@@ -152,6 +183,7 @@ export default async function BookingContactsPage({
               </tbody>
             </table>
           </div>
+          </>
         )}
 
         <p className="text-xs text-muted-foreground">

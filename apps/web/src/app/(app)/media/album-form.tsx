@@ -9,7 +9,8 @@ import { Input, Label } from "@/components/ui/input";
 import { createAlbum, type ActionState } from "./actions";
 
 const EMPTY: ActionState = {};
-const selectClass = "flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm";
+const selectClass =
+  "flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm lg:h-10";
 
 export type Option = { id: string; name: string };
 
@@ -25,10 +26,16 @@ export function AlbumForm({ teams, seasons }: { teams: Option[]; seasons: Option
 
   return (
     <form action={action} className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="album-title">Title *</Label>
-          <Input id="album-title" name="title" placeholder="e.g. U12s v Sale, 14 Sept" required />
+          <Input
+            id="album-title"
+            name="title"
+            placeholder="e.g. U12s v Sale, 14 Sept"
+            required
+            className="h-11 lg:h-10"
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="album-visibility">Visibility *</Label>
@@ -88,7 +95,7 @@ export function AlbumForm({ teams, seasons }: { teams: Option[]; seasons: Option
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:min-h-0 sm:w-auto sm:justify-start"
       >
         <Plus className="h-4 w-4" /> Create album
       </button>

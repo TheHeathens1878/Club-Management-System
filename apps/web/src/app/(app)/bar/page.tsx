@@ -21,27 +21,27 @@ export default async function BarPage() {
     <>
       <PageHeader title="Bar" subtitle="Manage external staff and FAQs" />
 
-      <div className="p-6 space-y-6 max-w-2xl">
+      <div className="p-4 space-y-4 max-w-2xl lg:p-6 lg:space-y-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>External / non-system staff</CardTitle>
             <p className="text-sm text-muted-foreground">
               Staff members without a system account, for tracking availability.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <NonUserStaffClient initial={nonUserStaff ?? []} />
           </CardContent>
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>FAQs</CardTitle>
             <p className="text-sm text-muted-foreground">
               These appear on the public booking page.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <FaqsClient faqs={faqs ?? []} />
           </CardContent>
         </Card>
