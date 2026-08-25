@@ -33,7 +33,7 @@ export default async function ManagePitchesPage() {
   const { data, error } = await supabase
     .from("resources")
     .select(
-      "id,name,description,information,capacity,active,sort_order,default_pre_buffer_minutes,default_post_buffer_minutes,legacy_neon_pitch_id",
+      "id,name,description,address,information,capacity,active,sort_order,default_pre_buffer_minutes,default_post_buffer_minutes,legacy_neon_pitch_id",
     )
     .eq("type", "pitch")
     .order("sort_order")
@@ -59,6 +59,7 @@ export default async function ManagePitchesPage() {
     id: row.id,
     name: row.name,
     description: row.description,
+    address: row.address,
     information: row.information,
     capacity: row.capacity,
     active: row.active,
