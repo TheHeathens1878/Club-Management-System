@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(116);
+select plan(117);
 
 -- SG-6 tier-1 enforcement is OFF in production (SAFEGUARDING.md amendment
 -- 2026-08-23); this suite exercises the pending-queue + exemption machinery,
@@ -275,12 +275,17 @@ select lives_ok($$update public.waiting_list_entries set status = 'contacted' wh
 reset role;
 set local request.jwt.claims to '{"sub":"a3a3a3a3-1111-4111-8111-000000000007","role":"authenticated"}';
 set local role authenticated;
--- 20260825070000: the U07 grant plus the AUTOMATIC scope — this coach staffs
--- U05 Lions by now, so the U05 team application shows too (own band + below).
-select is((select count(*) from public.waiting_list_entries), 2::bigint, 'coach sees the U07 grant plus his own U05 band');
+-- 20260825290000: the AUTOMATIC scope and nothing else — this coach staffs U05
+-- Lions, so he sees U05 and U04. His imported U07 grant used to widen him and
+-- no longer does (Adam, 2026-08-25: "all coaches should ONLY be able to see
+-- their age group and the age group below"), so the U05 team application is
+-- the whole of his list and Wendy at U07 is not on it.
+select is((select count(*) from public.waiting_list_entries), 1::bigint,
+  'coach sees his own U05 band only — the imported U07 grant no longer widens him');
+select is((select count(*) from public.waiting_list_entries where age_group = 'U07'), 0::bigint, '… not the U07 he holds a grant for');
 select is((select count(*) from public.waiting_list_entries where age_group = 'U09'), 0::bigint, '… not U09');
 select lives_ok($$insert into public.waiting_list_notes (entry_id, author_person_id, body)
-  values ((select id from public.waiting_list_entries where legacy_neon_entry_id = 'w1'), public.current_person_id(), 'Trial Tuesday')$$,
+  values ((select id from public.waiting_list_entries where legacy_neon_entry_id = 'app:ap1'), public.current_person_id(), 'Trial Tuesday')$$,
   'coach adds a note on an entry he can see');
 select throws_ok($$insert into public.waiting_list_notes (entry_id, author_person_id, body)
   values ((select id from public.waiting_list_entries where legacy_neon_entry_id = 'w2'), public.current_person_id(), 'x')$$,

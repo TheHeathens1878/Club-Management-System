@@ -20,9 +20,10 @@ const KNOWN_AGE_GROUPS = Object.keys(AGE_GROUP_TO_SCHOOL_YEAR).sort((a, b) =>
 );
 
 /**
- * Open, close and advertise age groups. Club administrators only — the RLS
- * policy refuses anyone else, and the page does not render this at all unless
- * `is_club_admin()` said yes.
+ * Open, close and advertise age groups. Club administrators only — the page
+ * does not render this at all unless `is_club_admin()` said yes, and the one
+ * write path, `set_waiting_list_age_group()`, refuses anyone else with a
+ * readable 42501 (a coach cannot set these: Adam, 2026-08-25).
  *
  * "Open" is what the public form checks: a group that is not open is not
  * offered and `submit_waiting_list_entry()` refuses it outright.

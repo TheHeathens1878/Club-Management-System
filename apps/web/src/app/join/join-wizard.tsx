@@ -14,6 +14,7 @@ import {
   stageRegistrationUploads,
 } from "@/components/registration-question-block";
 import type { RegistrationQuestion } from "@/lib/registration-questions";
+import { NO_WAITING_LIST_MESSAGE } from "@/lib/waiting-list";
 
 import { MAX_HOUSEHOLD } from "./constants";
 import {
@@ -532,7 +533,15 @@ function PlayerPanel({
                   {team.name}
                 </option>
               ))}
-              <option value="waiting_list">No team yet — join the waiting list</option>
+              {/* No open age group means no waiting list to join (Adam,
+                  2026-08-25). The choice stays — it is also "no team yet",
+                  which lands as a team-less registration the club follows up —
+                  but it stops offering a list the club is not operating. */}
+              <option value="waiting_list">
+                {openAgeGroups.length > 0
+                  ? "No team yet — join the waiting list"
+                  : "No team yet — the club will be in touch"}
+              </option>
             </select>
             {player.minor && !showAllTeams && (
               <button
@@ -557,11 +566,11 @@ function PlayerPanel({
                 <option value="FEMALE">Female</option>
               </select>
             </div>
-            {openAgeGroups.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Waiting list currently open for: {openAgeGroups.join(", ")}
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground">
+              {openAgeGroups.length > 0
+                ? `Waiting list currently open for: ${openAgeGroups.join(", ")}`
+                : NO_WAITING_LIST_MESSAGE}
+            </p>
           </fieldset>
 
           {/* Emergency contacts are the person's, not the form's (Adam,

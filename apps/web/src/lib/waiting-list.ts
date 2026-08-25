@@ -115,6 +115,37 @@ export function ageGroupSortKey(ageGroup: string): string {
   return digits ? `0${digits.padStart(2, "0")}` : `1${ageGroup}`;
 }
 
+/**
+ * What the club says when no age group is ticked "open for new entries"
+ * (Adam, 2026-08-25). One sentence, plainly — the public form, /recruitment
+ * and the /join wizard all say exactly this, and none of them offers a
+ * waiting list alongside it.
+ *
+ * `waiting_list_open_age_groups()` is the only source of truth for whether
+ * that is the case. There is no separate "we run a waiting list" flag.
+ */
+export const NO_WAITING_LIST_MESSAGE = "We aren't operating a waiting list at the moment.";
+
+/** The open age group names from `waiting_list_open_age_groups()`, U05 … U18. */
+export function sortedOpenAgeGroups(
+  rows: readonly { age_group: string }[] | null | undefined,
+): string[] {
+  const names = new Set<string>();
+  for (const row of rows ?? []) {
+    const name = row.age_group?.trim();
+    if (name) names.add(name);
+  }
+  return Array.from(names).sort((a, b) => ageGroupSortKey(a).localeCompare(ageGroupSortKey(b)));
+}
+
+/** The desk's one-line answer to "which age groups are open?" */
+export function openAgeGroupsSummary(open: readonly string[]): string {
+  if (open.length === 0) {
+    return `No age group is open for new entries, so the public pages say: ${NO_WAITING_LIST_MESSAGE}`;
+  }
+  return `Open for new entries: ${open.join(", ")}.`;
+}
+
 export const TEAM_PREFERENCE_LABELS: Record<string, string> = {
   MIXED: "Happy to play in a mixed team",
   GIRLS_ONLY: "Girls only team preferred",
