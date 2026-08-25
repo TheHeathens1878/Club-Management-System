@@ -254,9 +254,11 @@ export function slotKeys(formation: Formation): string[] {
  * bench. Bench keys are deliberately outside every formation's slot list, so
  * changing shape leaves the bench alone.
  *
- * Seven is the FA's limit for youth football and the most places a phone can
- * show in one strip. It must stay a single digit: the column's CHECK admits
- * `^[A-Z]{2,4}[0-9]?$`, so "SUB10" would be refused.
+ * Seven places, because seven 44px targets are what a 390px phone fits across
+ * one strip without a sideways scroll a coach cannot reach mid-drag, and no
+ * format the club fields names more. If a league ever wants more, raise this —
+ * but it must stay a single digit, because the column's CHECK admits
+ * `^[A-Z]{2,4}[0-9]?$` and would refuse "SUB10".
  */
 export const BENCH_SIZE = 7;
 
