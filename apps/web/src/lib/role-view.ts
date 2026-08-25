@@ -58,13 +58,15 @@ export const ROLE_VIEW_BLURBS: Record<RoleView, string> = {
 
 /**
  * Where each view lands. Picking a tile goes straight here; so does a signed-in
- * hit on `/`.
+ * hit on `/`. Adam, 2026-08-25: the lobby is the club's front door — players
+ * and parents land there; admins land on the overview. A TEAM-SCOPED parent or
+ * player pick overrides this and goes to that team's page (see `setRoleView`).
  */
 export const ROLE_VIEW_HOME: Record<RoleView, string> = {
-  player: "/my-teams",
-  parent: "/family",
+  player: "/lobby",
+  parent: "/lobby",
   coach: "/teams",
-  admin: "/teams",
+  admin: "/overview",
   function_room: "/room-bookings",
 };
 
@@ -129,10 +131,13 @@ export function qualifiesForView(view: RoleView, c: Capabilities): boolean {
 
 /**
  * Precedence when nothing has been chosen, or when a cookie names a view the
- * person does not hold: the widest hat first. Distinct from {@link ROLE_VIEWS},
+ * person does not hold: the MEMBER hat first (Adam, 2026-08-25 — a first
+ * sign-in gets the Me page and the lobby, whatever else they hold; the
+ * switcher is where the wider hats live). Function-room staff keep their diary
+ * as the fallback when they hold no club hat. Distinct from {@link ROLE_VIEWS},
  * which is the order the tiles are drawn in.
  */
-const VIEW_PRECEDENCE = ["admin", "function_room", "coach", "parent", "player"] as const;
+const VIEW_PRECEDENCE = ["parent", "player", "coach", "admin", "function_room"] as const;
 
 /** Every view this person holds, in tile order. */
 export function qualifiedViews(c: Capabilities): RoleView[] {

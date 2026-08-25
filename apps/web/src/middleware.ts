@@ -95,12 +95,10 @@ export async function middleware(request: NextRequest) {
       const stored = request.cookies.get(ROLE_VIEW_COOKIE)?.value;
       const url = request.nextUrl.clone();
       url.search = "";
-      if (isRoleView(stored)) {
-        url.pathname = ROLE_VIEW_HOME[stored];
-      } else {
-        url.pathname = "/welcome";
-        url.searchParams.set("first", "1");
-      }
+      // Adam, 2026-08-25: a first sign-in defaults to the Club Lobby — the
+      // one place everyone can see — rather than being made to pick a hat.
+      // The switcher in the sidebar is where the hats live now.
+      url.pathname = isRoleView(stored) ? ROLE_VIEW_HOME[stored] : "/lobby";
       const redirectResponse = NextResponse.redirect(url);
       for (const cookie of response.cookies.getAll()) redirectResponse.cookies.set(cookie);
       return redirectResponse;
