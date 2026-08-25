@@ -17,7 +17,7 @@ import { RoleSwitcher } from "@/components/role-switcher";
  *
  *   · the person's CAPABILITIES, read from the database under their own RLS —
  *     an item whose capability is false is never rendered, in any view;
- *   · the chosen VIEW, one of the five kinds of user the club recognises. The
+ *   · the chosen VIEW, one of the six kinds of user the club recognises. The
  *     scope is hard: the menu is that view's items and nothing else's, and a
  *     person with more than one hat switches between menus rather than seeing
  *     them merged.
