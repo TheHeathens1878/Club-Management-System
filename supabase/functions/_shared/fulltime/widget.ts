@@ -326,6 +326,36 @@ export function foldTeamName(name: string): string {
   return normaliseTeamName(name).replace(/\bu0(\d)\b/g, "u$1");
 }
 
+/**
+ * Optional league names for widget codes. The club settings hold several
+ * codes per field and each code is ONE league's widget, so a name written
+ * next to a code — "Timperley & District JFL: 885630049" — labels the league
+ * that code covers, and the importer can stamp it onto the teams that code
+ * feeds. Both code parsers split on non-digits and ignore the words, so
+ * labelling is optional and changes nothing else.
+ *
+ * A segment is one comma/semicolon/line-separated piece. Pasted snippet HTML
+ * is never a label (any `<` skips the segment), URLs are stripped, and a
+ * label must keep at least three characters including a letter.
+ */
+export function widgetCodeLabels(input: string): Map<string, string> {
+  const labels = new Map<string, string>();
+  for (const segment of input.split(/[,;\n]+/)) {
+    if (segment.includes("<")) continue;
+    const code = /(\d{6,12})/.exec(segment)?.[1];
+    if (code === undefined) continue;
+    const label = segment
+      .replace(/https?:\/\/\S+/gi, " ")
+      .replace(code, " ")
+      .replace(/lrcode|lrep|[?&]cs=/gi, " ")
+      .replace(/['"=:–—]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (label.length >= 3 && /[a-z]/i.test(label) && !labels.has(code)) labels.set(code, label);
+  }
+  return labels;
+}
+
 /** Every widget code in a paste that may hold several snippets. */
 export function widgetCodesFrom(input: string): string[] {
   const codes = new Set<string>();

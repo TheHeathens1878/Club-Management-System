@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   matchClubTeam,
+  widgetCodeLabels,
   widgetCodesFrom,
   parseWidgetDate,
   parseWidgetHtml,
@@ -193,5 +194,33 @@ describe("club widgets", () => {
     expect(widgetCodesFrom(paste)).toEqual(["885630049", "442066767"]);
     expect(widgetCodesFrom("885630049 442066767")).toEqual(["885630049", "442066767"]);
     expect(widgetCodesFrom("nothing here")).toEqual([]);
+  });
+});
+
+describe("widgetCodeLabels", () => {
+  it("reads a league name written before its code", () => {
+    const labels = widgetCodeLabels("Timperley & District JFL: 885630049, SMGFL: 442066767");
+    expect(labels.get("885630049")).toBe("Timperley & District JFL");
+    expect(labels.get("442066767")).toBe("SMGFL");
+  });
+
+  it("accepts newline-separated pairs and dash separators", () => {
+    const labels = widgetCodeLabels("South Manchester Girls FL – 442066767\nTimperley 885630049");
+    expect(labels.get("442066767")).toBe("South Manchester Girls FL");
+    expect(labels.get("885630049")).toBe("Timperley");
+  });
+
+  it("labels nothing for bare codes, URLs and pasted snippets", () => {
+    expect(widgetCodeLabels("885630049, 442066767").size).toBe(0);
+    expect(widgetCodeLabels("https://fulltime.thefa.com/js/cs1.html?cs=885630049").size).toBe(0);
+    expect(
+      widgetCodeLabels(`<div id="lrep885630049">…</div>\n<script>var lrcode = '885630049'</script>`).size,
+    ).toBe(0);
+  });
+
+  it("keeps the first label when a code appears twice", () => {
+    const labels = widgetCodeLabels("Timperley: 885630049, Other name: 885630049");
+    expect(labels.get("885630049")).toBe("Timperley");
+    expect(labels.size).toBe(1);
   });
 });
