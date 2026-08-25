@@ -9,13 +9,15 @@ import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import type { Headcount } from "@/lib/headcount";
 
 import { googleMapsUrl } from "../../events/shared";
-import { fixtureStatusVariant } from "./fixtures-shared";
+import { fixtureHref, fixtureStatusVariant } from "./fixtures-shared";
 
 /**
  * The whole row is the link (Adam, 2026-08-24: "you should be able to click
  * into the fixture anywhere on the card") — except clicks that land on a real
  * anchor inside it, which keep their own destination (the maps pin, the
- * attendance link).
+ * attendance link). The row opens the Event & RSVP page (Adam, 2026-08-25:
+ * "it should take you directly to the Event & RSVP page"); only the staff
+ * Attendance link still goes to the fixture's own marker page.
  */
 function rowClick(router: ReturnType<typeof useRouter>, href: string) {
   return (event: React.MouseEvent<HTMLElement>) => {
@@ -71,6 +73,8 @@ export type TeamFixture = {
   pitchAddress: string | null;
   /** Squad availability counts — staff and admin view only. */
   headcount: Headcount | null;
+  /** The RSVP event mirroring this fixture, when the events module has one. */
+  eventId: string | null;
 };
 
 /** `✓ 5 · ✗ 2 · ? 5` — the marker at a glance; unanswered fold into "?". */
@@ -128,7 +132,7 @@ export function FixturesTable({
           return (
             <li
               key={fixture.id}
-              onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
+              onClick={rowClick(router, fixtureHref(teamId, fixture))}
               className="flex min-h-[44px] cursor-pointer items-start justify-between gap-3 py-3 first:pt-0"
             >
               <div className="min-w-0">
@@ -188,7 +192,7 @@ export function FixturesTable({
             return (
               <tr
                 key={fixture.id}
-                onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
+                onClick={rowClick(router, fixtureHref(teamId, fixture))}
                 className="cursor-pointer border-b transition-colors last:border-0 hover:bg-secondary/60"
               >
                 <td className="whitespace-nowrap py-2 pr-3">
@@ -263,7 +267,7 @@ export function FixturesSummary({
           return (
             <li
               key={fixture.id}
-              onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
+              onClick={rowClick(router, fixtureHref(teamId, fixture))}
               className="flex min-h-[44px] cursor-pointer flex-wrap items-start justify-between gap-2 rounded-md py-3 transition-colors first:pt-0 hover:bg-secondary/60"
             >
               <div className="min-w-0">
