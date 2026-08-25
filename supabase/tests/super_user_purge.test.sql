@@ -201,15 +201,24 @@ select throws_ok(
 select throws_ok(
   $$select public.purge_message('d5d5d5d5-3535-4111-8111-000000000001', '   ')$$,
   '22023', null, 'a purge with no reason is refused: the reason is the audit row');
+-- Counted as the OWNER, not as the caller: `messages` RLS is participant-scoped,
+-- and the super user is deliberately not a participant of the held room, so her
+-- own client cannot see the message she was just refused. The question here is
+-- what the TABLE holds after five refusals, which is the owner's answer.
+reset role;
 select is(
   (select count(*) from public.messages
     where id between 'd5d5d5d5-3535-4111-8111-000000000001' and 'd5d5d5d5-3535-4111-8111-000000000006'),
-  6::bigint, 'nothing has been destroyed yet');
+  6::bigint, 'nothing has been destroyed yet — every refusal refused');
 
 
 -- =============================================================================
 -- E. A super user purges an ordinary message
 -- =============================================================================
+-- `reset role` above left the previous claims in place; set them again anyway,
+-- because relying on that is how a test starts asserting the wrong caller.
+set local request.jwt.claims to '{"sub":"5b5b5b5b-3535-4111-8111-000000000001","role":"authenticated"}';
+set local role authenticated;
 select lives_ok(
   $$select public.purge_message('d5d5d5d5-3535-4111-8111-000000000001', 'duplicate test account, cleared at the owner''s request')$$,
   'the super user purges an ordinary message');
