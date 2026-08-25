@@ -24,10 +24,15 @@ function rowClick(router: ReturnType<typeof useRouter>, href: string) {
   };
 }
 
-/** Where a fixture is played, as a maps link — the venue text or the pitch. */
+/**
+ * Where a fixture is played, as a maps link. A home match pins the venue's
+ * street address from Manage venues when one is recorded (Adam, 2026-08-25) —
+ * a pitch NAME like "Ashton Park – Pitch 2" is a poor search term, the
+ * address is the real place — falling back to the pitch name as before.
+ */
 function MapsLink({ fixture }: { fixture: TeamFixture }) {
   const place = fixture.isHome
-    ? (fixture.pitchName ?? fixture.venueText)
+    ? (fixture.pitchAddress ?? fixture.pitchName ?? fixture.venueText)
     : (fixture.venueText ?? fixture.opponent);
   if (!place) return null;
   return (
@@ -62,6 +67,8 @@ export type TeamFixture = {
   allocationConflict: boolean;
   seasonName: string | null;
   pitchName: string | null;
+  /** The home pitch's street address (Manage venues) — the maps pin when set. */
+  pitchAddress: string | null;
   /** Squad availability counts — staff and admin view only. */
   headcount: Headcount | null;
 };
