@@ -151,7 +151,18 @@ export async function setShirtNumber(
   return { notice: "Shirt number saved." };
 }
 
-/** Leaving a team is a soft end: `left_at`, never a delete. */
+/**
+ * Leaving a team is a soft end: `left_at`, never a delete.
+ *
+ * club_admin only, and the database is what says so:
+ * `team_memberships_admin_update` is the table's only UPDATE policy. Note how
+ * that reads on the wire — an UPDATE policy's USING clause is a ROW FILTER, so
+ * a coach's update matches nothing and comes back with `error: null` and zero
+ * rows. It is a real refusal (nothing changed) that looks exactly like a
+ * success, which is why this asks for the rows back and treats "none" as the
+ * refusal it is. Reporting "Membership ended." to someone who changed nothing
+ * is worse than reporting the refusal.
+ */
 export async function endMembership(
   _prev: MembershipActionState,
   formData: FormData,
@@ -161,13 +172,65 @@ export async function endMembership(
   if (!membershipId) return { error: "No membership given." };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("team_memberships")
     .update({ left_at: new Date().toISOString() })
     .eq("id", membershipId)
-    .is("left_at", null);
+    .is("left_at", null)
+    .select("id");
   if (error) return { error: friendlyDbError(error, NOT_ADMIN) };
+  if (!data || data.length === 0) {
+    return {
+      error:
+        "Nothing changed. Either that membership had already ended, or you are not a club administrator — " +
+        "use “This player has left” and a club administrator will decide it.",
+    };
+  }
 
   revalidatePath(teamPath(teamId));
   return { notice: "Membership ended. The row is kept as history." };
+}
+
+/**
+ * "This player has left" (Adam, 2026-08-25).
+ *
+ * A coach cannot end a membership — see `endMembership` above — so this is how
+ * they say one should end. The insert goes through the caller's own client, so
+ * `team_membership_leave_requests_staff_insert` (`is_team_staff(team_id)`) is
+ * what decides, and `leave_request_fill()` derives the person and the team from
+ * the membership: nothing here is trusted to name them correctly.
+ *
+ * Only `team_membership_id` and the note are sent. Everything else on the row
+ * is the database's to write.
+ */
+export async function requestMemberLeave(
+  _prev: MembershipActionState,
+  formData: FormData,
+): Promise<MembershipActionState> {
+  const teamId = String(formData.get("team_id") ?? "").trim();
+  const membershipId = String(formData.get("membership_id") ?? "").trim();
+  const note = String(formData.get("note") ?? "").trim();
+  if (!membershipId) return { error: "No membership given." };
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("team_membership_leave_requests")
+    .insert({ team_membership_id: membershipId, ...(note ? { note } : {}) });
+
+  if (error) {
+    // 23505 is the one-open-request-per-membership index: someone already
+    // asked, which is not a failure worth alarming anyone about.
+    if (error.code === "23505") {
+      return { notice: "That has already been reported — it is waiting for a club administrator." };
+    }
+    return {
+      error: friendlyDbError(
+        error,
+        "Only this team's coaches and the club can report that a player has left.",
+      ),
+    };
+  }
+
+  revalidatePath(teamPath(teamId));
+  return { notice: "Sent to the club for approval. The player stays in the squad until it is approved." };
 }
