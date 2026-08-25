@@ -91,11 +91,17 @@ export const AGE_GROUP_TO_SCHOOL_YEAR: Record<string, string> = Object.fromEntri
 /**
  * The age group a date of birth falls into for the current season.
  *
- * A season runs September to August, so anyone born on or after 1 September
- * belongs to the cohort of that year; before it, the previous one.
+ * Two different boundaries, deliberately:
+ *
+ *   · The CLUB SEASON runs 1 July to 30 June (Adam, 2026-08-25), so from
+ *     1 July everyone is computed against the season about to be played —
+ *     matching the summer rollover that bumps every team's age group. Using
+ *     1 September here was the bug that classed a U14 as U13 all August.
+ *   · The BIRTH COHORT cutoff stays 31 August — that is the FA's rule for
+ *     which cohort a child belongs to, and it is not the club's to move.
  */
 export function ageGroupFromDob(dob: Date, now: Date = new Date()): string {
-  const seasonYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  const seasonYear = now.getMonth() >= 6 ? now.getFullYear() : now.getFullYear() - 1;
   const cohortYear = dob.getMonth() >= 8 ? dob.getFullYear() : dob.getFullYear() - 1;
   const n = seasonYear - cohortYear;
   if (n < 5) return "U05";

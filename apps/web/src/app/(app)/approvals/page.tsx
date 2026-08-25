@@ -79,14 +79,35 @@ export default async function ApprovalsPage({
   const personIds = Array.from(new Set(requests.map((r) => r.person_id)));
   const teamIds = Array.from(new Set(requests.map((r) => r.team_id).filter((id): id is string => !!id)));
 
-  const [{ data: peopleRows }, { data: teamRows }] = await Promise.all([
-    personIds.length
-      ? supabase.from("people").select("id,first_name,last_name,preferred_name,email,dob").in("id", personIds)
-      : Promise.resolve({ data: [] as PersonRow[] }),
-    teamIds.length
-      ? supabase.from("teams").select("id,name").in("id", teamIds)
-      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
-  ]);
+  // Team applications live on the registrations desk, but an administrator who
+  // opens THIS page looking for "the approval" must not be met with silence —
+  // Adam applied for a player and found nothing here. Count them and say so.
+  const [{ data: peopleRows }, { data: teamRows }, { data: pendingRegistrations }] =
+    await Promise.all([
+      personIds.length
+        ? supabase.from("people").select("id,first_name,last_name,preferred_name,email,dob").in("id", personIds)
+        : Promise.resolve({ data: [] as PersonRow[] }),
+      teamIds.length
+        ? supabase.from("teams").select("id,name").in("id", teamIds)
+        : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+      supabase
+        .from("registrations")
+        .select("id,person_id,team_id")
+        .eq("status", "pending")
+        .limit(50),
+    ]);
+
+  const registrationCount = (pendingRegistrations ?? []).length;
+  const registrationNames = registrationCount
+    ? await (async () => {
+        const ids = Array.from(new Set((pendingRegistrations ?? []).map((r) => r.person_id)));
+        const { data } = await supabase
+          .from("people")
+          .select("id,first_name,last_name")
+          .in("id", ids);
+        return (data ?? []).map((p) => `${p.first_name} ${p.last_name}`);
+      })()
+    : [];
 
   const people = new Map((peopleRows ?? []).map((p) => [p.id, p]));
   const teamNames = new Map((teamRows ?? []).map((t) => [t.id, t.name]));
@@ -116,6 +137,34 @@ export default async function ApprovalsPage({
       />
 
       <div className="space-y-6 p-8">
+        {registrationCount > 0 ? (
+          <Card className="border-primary/30 bg-primary/5">
+            <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+              <p className="text-sm">
+                <span className="font-semibold">
+                  {registrationCount === 1
+                    ? "1 team application is waiting"
+                    : `${registrationCount} team applications are waiting`}
+                </span>
+                {registrationNames.length > 0 ? (
+                  <span className="text-muted-foreground">
+                    {" "}
+                    — {registrationNames.slice(0, 4).join(", ")}
+                    {registrationNames.length > 4 ? ` and ${registrationNames.length - 4} more` : ""}
+                  </span>
+                ) : null}
+                <span className="block text-xs text-muted-foreground">
+                  Applications to join a team are decided on the registrations desk — approving one
+                  writes the player&apos;s team membership for the season.
+                </span>
+              </p>
+              <Link href="/registrations" className={buttonVariants({ size: "sm" })}>
+                Review registrations
+              </Link>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <div className="flex gap-2">
           <Link
             href="/approvals"

@@ -48,6 +48,8 @@ type Detail = {
   fixtureId: string | null;
   startsAt: string;
   endsAt: string | null;
+  /** When to arrive — starts_at minus meet_minutes_before (Adam, 2026-08-25). */
+  meetAt: string | null;
   venue: string | null;
   notes: string | null;
   createdByName: string;
@@ -96,6 +98,7 @@ function parseDetail(value: Json | null): Detail | null {
     fixtureId: str(record, "fixture_id"),
     startsAt,
     endsAt: str(record, "ends_at"),
+    meetAt: str(record, "meet_at"),
     venue: str(record, "venue"),
     notes: str(record, "notes"),
     createdByName: str(record, "created_by_name") ?? "the club",
@@ -178,7 +181,7 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
         }
       />
 
-      <div className="grid max-w-5xl gap-6 p-6 lg:grid-cols-[1fr_20rem]">
+      <div className="grid gap-6 p-6 lg:grid-cols-[1fr_20rem]">
         {/* ------------------------------------------------ the event itself */}
         <div className="space-y-4">
           {cancelled ? (
@@ -215,6 +218,8 @@ export default async function EventPage({ params }: { params: Promise<{ id: stri
                 <CalendarDays className="h-4 w-4 text-muted-foreground" />
                 <span className="font-medium">{formatEventDate(detail.startsAt)}</span>
                 <span className="text-muted-foreground">
+                  {detail.meetAt ? `Meet ${formatEventTime(detail.meetAt)} · ` : ""}
+                  {detail.meetAt ? "Start " : ""}
                   {formatEventTime(detail.startsAt)}
                   {detail.endsAt ? `–${formatEventTime(detail.endsAt)}` : ""}
                 </span>
