@@ -71,7 +71,7 @@ export function FaqsClient({ faqs: initial }: { faqs: Faq[] }) {
             <div className="p-4 space-y-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground uppercase">Question</label>
-                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. What is included in the hire?" />
+                <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. What is included in the hire?" className="min-h-[44px] lg:min-h-0" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground uppercase">Answer</label>
@@ -85,11 +85,11 @@ export function FaqsClient({ faqs: initial }: { faqs: Faq[] }) {
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}
               <div className="flex gap-2">
-                <Button size="sm" onClick={handleSave} disabled={saving}>
+                <Button size="sm" onClick={handleSave} disabled={saving} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
                   Save
                 </Button>
-                <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving}>
+                <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
                   <X className="h-3.5 w-3.5" /> Cancel
                 </Button>
               </div>
@@ -100,11 +100,11 @@ export function FaqsClient({ faqs: initial }: { faqs: Faq[] }) {
                 <p className="text-sm font-medium">{faq.question}</p>
                 <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">{faq.answer}</p>
               </div>
-              <div className="flex gap-1 shrink-0">
-                <button onClick={() => startEdit(faq)} className="p-1.5 text-muted-foreground hover:text-foreground transition-colors rounded" title="Edit">
+              <div className="-mr-1 flex gap-1 shrink-0 lg:mr-0">
+                <button onClick={() => startEdit(faq)} className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-foreground transition-colors rounded lg:h-auto lg:w-auto lg:p-1.5" title="Edit">
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => handleDelete(faq.id, faq.question)} className="p-1.5 text-muted-foreground hover:text-destructive transition-colors rounded" title="Delete">
+                <button onClick={() => handleDelete(faq.id, faq.question)} className="flex h-11 w-11 items-center justify-center text-muted-foreground hover:text-destructive transition-colors rounded lg:h-auto lg:w-auto lg:p-1.5" title="Delete">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -118,7 +118,7 @@ export function FaqsClient({ faqs: initial }: { faqs: Faq[] }) {
           <p className="text-xs font-medium text-muted-foreground uppercase">New FAQ</p>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground uppercase">Question</label>
-            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. What is included in the hire?" autoFocus />
+            <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="e.g. What is included in the hire?" autoFocus className="min-h-[44px] lg:min-h-0" />
           </div>
           <div className="space-y-1">
             <label className="text-xs font-medium text-muted-foreground uppercase">Answer</label>
@@ -132,11 +132,11 @@ export function FaqsClient({ faqs: initial }: { faqs: Faq[] }) {
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button size="sm" onClick={handleSave} disabled={saving}>
+            <Button size="sm" onClick={handleSave} disabled={saving} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
               {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
               Save
             </Button>
-            <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving}>
+            <Button size="sm" variant="outline" onClick={cancelEdit} disabled={saving} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
               <X className="h-3.5 w-3.5" /> Cancel
             </Button>
           </div>
@@ -144,7 +144,7 @@ export function FaqsClient({ faqs: initial }: { faqs: Faq[] }) {
       )}
 
       {editingId !== "new" && (
-        <Button variant="outline" size="sm" onClick={startNew} className="gap-1.5">
+        <Button variant="outline" size="sm" onClick={startNew} className="min-h-[44px] w-full gap-1.5 lg:min-h-0 lg:w-auto">
           <Plus className="h-3.5 w-3.5" /> Add FAQ
         </Button>
       )}

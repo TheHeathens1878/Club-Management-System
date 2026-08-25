@@ -148,26 +148,33 @@ export default async function RoomBookingsPage({
         title="Room Bookings"
         subtitle="Function room hire requests"
         action={
-          <div className="flex gap-2">
+          /* Phone: the header actions become a 2-up grid of 44px targets — the
+             block form takes a full row because it expands into a card. */
+          <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto">
             <Link
               href="/book"
               target="_blank"
-              className={buttonVariants({ variant: "outline", size: "sm" })}
+              className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"}
             >
               <ExternalLink className="h-4 w-4" /> Public page
             </Link>
             <Link
               href="/room-bookings/new"
-              className={buttonVariants({ size: "sm" })}
+              className={buttonVariants({ size: "sm" }) + " min-h-[44px] lg:min-h-0"}
             >
               <Plus className="h-4 w-4" /> New booking
             </Link>
             {isCommittee(session.profile?.role) && (
               <>
-                <BlockBookingForm rooms={rooms ?? []} />
+                <div className="col-span-2 lg:col-span-1 [&>button]:min-h-[44px] [&>button]:w-full lg:[&>button]:min-h-0 lg:[&>button]:w-auto">
+                  <BlockBookingForm rooms={rooms ?? []} />
+                </div>
                 <Link
                   href="/room-bookings/rooms"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "outline", size: "sm" }) +
+                    " col-span-2 min-h-[44px] lg:col-span-1 lg:min-h-0"
+                  }
                 >
                   <Settings className="h-4 w-4" /> Manage rooms
                 </Link>
@@ -177,14 +184,15 @@ export default async function RoomBookingsPage({
         }
       />
 
-      <div className="p-6 space-y-3">
-        {/* View toggle + list filters */}
-        <div className="flex flex-wrap items-center gap-3">
+      <div className="space-y-3 p-4 lg:p-6">
+        {/* View toggle + list filters. On a phone the whole strip scrolls
+            sideways in its own lane rather than wrapping into four rows. */}
+        <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:gap-3 lg:overflow-visible lg:px-0 lg:pb-0">
           {/* View toggle */}
-          <div className="flex rounded-lg border bg-muted/30 p-1 gap-0.5">
+          <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
             <Link
               href={filterHref({ view: undefined })}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
                 isCalendar ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -192,7 +200,7 @@ export default async function RoomBookingsPage({
             </Link>
             <Link
               href={filterHref({ view: "list" })}
-              className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              className={`flex min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
                 !isCalendar ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -203,12 +211,12 @@ export default async function RoomBookingsPage({
           {!isCalendar && (
             <>
               {/* Period */}
-              <div className="flex rounded-lg border bg-muted/30 p-1 gap-0.5">
+              <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
                 {(["upcoming", "past", "all"] as const).map((p) => (
                   <Link
                     key={p}
                     href={filterHref({ period: p, status: undefined })}
-                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors capitalize ${
+                    className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors lg:min-h-0 ${
                       effectivePeriod === p
                         ? "bg-background shadow-sm text-foreground"
                         : "text-muted-foreground hover:text-foreground"
@@ -220,12 +228,12 @@ export default async function RoomBookingsPage({
               </div>
 
               {/* Status */}
-              <div className="flex rounded-lg border bg-muted/30 p-1 gap-0.5">
+              <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
                 {(["all", "pending", "confirmed", "cancelled"] as const).map((s) => (
                   <Link
                     key={s}
                     href={filterHref({ status: s === "all" ? undefined : s })}
-                    className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors capitalize ${
+                    className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors lg:min-h-0 ${
                       (s === "all" && !statusFilter) || statusFilter === s
                         ? "bg-background shadow-sm text-foreground"
                         : "text-muted-foreground hover:text-foreground"
@@ -238,12 +246,12 @@ export default async function RoomBookingsPage({
 
               {/* Room */}
               {(rooms ?? []).length > 1 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Room:</span>
+                <div className="flex shrink-0 items-center gap-2">
+                  <span className="whitespace-nowrap text-sm text-muted-foreground">Room:</span>
                   <div className="flex rounded-lg border bg-muted/30 p-1 gap-0.5">
                     <Link
                       href={filterHref({ room: undefined })}
-                      className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                      className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
                         !roomFilter ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
@@ -253,7 +261,7 @@ export default async function RoomBookingsPage({
                       <Link
                         key={r.id}
                         href={filterHref({ room: r.id })}
-                        className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                        className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
                           roomFilter === r.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                         }`}
                       >

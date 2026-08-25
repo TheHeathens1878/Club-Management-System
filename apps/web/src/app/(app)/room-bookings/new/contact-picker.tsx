@@ -36,7 +36,7 @@ export function ContactPicker({ contacts }: { contacts: ContactOption[] }) {
           fill("booker_email", contact.email ?? "");
           fill("booker_phone", contact.phone ?? "");
         }}
-        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+        className="min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
       >
         <option value="">Start from a previous hirer…</option>
         {contacts.map((contact) => (

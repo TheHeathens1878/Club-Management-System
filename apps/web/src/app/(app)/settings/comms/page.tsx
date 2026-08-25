@@ -88,23 +88,23 @@ export default async function CommsSettingsPage() {
         subtitle="How the club contacts you, and who it must not contact"
         action={
           committee ? (
-            <Link href="/settings" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+            <Link href="/settings" className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0">
               <ChevronLeft className="h-4 w-4" /> Settings
             </Link>
           ) : undefined
         }
       />
 
-      <div className="p-6 space-y-6 max-w-3xl">
+      <div className="p-4 space-y-4 max-w-3xl lg:p-6 lg:space-y-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Your channels</CardTitle>
             <p className="text-sm text-muted-foreground">
               Every message the club sends goes through one place, and that place checks these
               settings before anything leaves. As a parent or guardian you also set your children&apos;s.
             </p>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
             {!personId && (
               <p className="text-sm text-muted-foreground">
                 Your sign-in is not linked to a member record yet, so there are no preferences to set.
@@ -118,14 +118,14 @@ export default async function CommsSettingsPage() {
 
         {committee && (
           <Card>
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle className="text-base">Suppression list</CardTitle>
               <p className="text-sm text-muted-foreground">
                 A hard block, above preferences: nothing is sent to a suppressed address, not even
                 transactional mail. Use it for bounces and complaints.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <SuppressionsPanel suppressions={suppressions} />
             </CardContent>
           </Card>

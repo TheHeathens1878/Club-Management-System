@@ -36,7 +36,10 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ k
         title={def.name}
         subtitle={def.description}
         action={
-          <Link href="/email-templates" className="text-sm text-primary hover:underline">
+          <Link
+            href="/email-templates"
+            className="inline-flex min-h-[44px] items-center text-sm text-primary hover:underline lg:min-h-0"
+          >
             ← All templates
           </Link>
         }

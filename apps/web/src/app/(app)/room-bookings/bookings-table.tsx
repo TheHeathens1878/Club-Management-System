@@ -151,6 +151,7 @@ export function BookingsTable({
                 size="sm"
                 disabled={deleting}
                 onClick={handleDeleteSelected}
+                className="min-h-[44px] lg:min-h-0"
               >
                 <Trash2 className="h-3.5 w-3.5" />
                 Delete {selected.size} selected
@@ -161,6 +162,7 @@ export function BookingsTable({
                   size="sm"
                   disabled={deleting}
                   onClick={handleDeleteSeries}
+                  className="min-h-[44px] lg:min-h-0"
                 >
                   <Repeat className="h-3.5 w-3.5" />
                   Delete whole series
@@ -171,12 +173,13 @@ export function BookingsTable({
           {error && <p className="text-sm text-destructive">{error}</p>}
         </div>
 
-        <div className="flex items-center gap-2 ml-auto">
+        <div className="flex w-full items-center gap-2 lg:ml-auto lg:w-auto">
           <BookingsExportButtons bookings={bookings} roomName={roomName} visibleCols={visible} />
 
-          {/* Column picker */}
+          {/* Column picker — governs the table columns on lg+ and the export
+              column set everywhere. */}
           <div className="relative" ref={pickerRef}>
-            <Button variant="outline" size="sm" onClick={() => setPickerOpen((v) => !v)}>
+            <Button variant="outline" size="sm" onClick={() => setPickerOpen((v) => !v)} className="min-h-[44px] lg:min-h-0">
               <Columns className="h-3.5 w-3.5" /> Columns <ChevronDown className="h-3 w-3 ml-0.5 opacity-60" />
             </Button>
             {pickerOpen && (
@@ -210,7 +213,71 @@ export function BookingsTable({
           No bookings match the current filters.
         </div>
       ) : (
-        <div className="rounded-lg border overflow-x-auto">
+        <>
+        {/* Phone: one card per booking — the row's fields as title, muted
+            second line and a right-aligned status pill. */}
+        <div className="space-y-2 lg:hidden">
+          {bookings.map((b) => {
+            const detail = [
+              b.occasion,
+              b.estimated_guests === null ? null : `${b.estimated_guests} guests`,
+              b.total_pence ? formatCurrency(b.total_pence) : null,
+            ].filter(Boolean).join(" · ");
+            return (
+              <div
+                key={b.id}
+                className={`flex items-start gap-2 rounded-xl border bg-card p-3 ${selected.has(b.id) ? "border-primary/40 bg-primary/5" : ""}`}
+              >
+                {canDelete && (
+                  <label className="flex min-h-[44px] shrink-0 items-center pr-1">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(b.id)}
+                      onChange={() => toggleRow(b.id)}
+                      aria-label={`Select booking for ${b.booker_name}`}
+                      className="h-4 w-4 accent-primary"
+                    />
+                  </label>
+                )}
+                <Link href={`/room-bookings/${b.id}`} className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      {formatBookingDateShort(b.date)}
+                      {b.recurrence_group_id && (
+                        <Repeat className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Repeating booking" />
+                      )}
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end gap-1">
+                      <Badge variant={statusVariant(b.status, b.kind)} className="capitalize">
+                        {b.kind === "block" ? "Blocked" : b.status}
+                      </Badge>
+                      {b.kind !== "block" && b.payment_status === "paid" && (
+                        <Badge variant="success" className="text-[10px]">Paid</Badge>
+                      )}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-xs tabular-nums text-muted-foreground">
+                    {roomName[b.resource_id] ?? "—"} · {b.start_time}–{b.end_time}
+                  </p>
+                  <p className="mt-1 truncate text-sm">{b.booker_name}</p>
+                  {detail && <p className="mt-0.5 truncate text-xs text-muted-foreground">{detail}</p>}
+                </Link>
+                {canDelete && (
+                  <button
+                    onClick={() => handleDeleteOne(b.id)}
+                    disabled={deleting}
+                    title="Delete booking"
+                    className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="hidden rounded-lg border overflow-x-auto lg:block">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs uppercase text-muted-foreground">
               <tr>
@@ -334,6 +401,7 @@ export function BookingsTable({
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

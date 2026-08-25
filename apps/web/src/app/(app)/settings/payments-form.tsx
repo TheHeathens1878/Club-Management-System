@@ -56,13 +56,13 @@ export function PaymentsForm({ settings }: { settings: SiteSettings }) {
       </div>
 
       <div className="rounded-md border p-3">
-        <label className="flex items-start gap-2 text-sm">
+        <label className="flex min-h-[44px] items-start gap-3 text-sm lg:min-h-0 lg:gap-2">
           <input
             type="checkbox"
             name="auto_cancel_unpaid"
             value="1"
             defaultChecked={settings.auto_cancel_unpaid !== "false"}
-            className="mt-0.5"
+            className="mt-0.5 shrink-0"
           />
           <span>
             <span className="font-medium">Auto-cancel unpaid deposits</span>
@@ -74,8 +74,10 @@ export function PaymentsForm({ settings }: { settings: SiteSettings }) {
         </label>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit">Save payment settings</Button>
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
+        <Button type="submit" className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
+          Save payment settings
+        </Button>
         {ok && <span className="text-sm text-green-600">Saved.</span>}
       </div>
     </form>

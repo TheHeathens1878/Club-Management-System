@@ -64,14 +64,20 @@ export function UploadPanel({ albumId }: { albumId: string }) {
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="media-file">Photo or video</Label>
-          <Input id="media-file" ref={fileRef} type="file" accept="image/*,video/mp4" />
+          <Input
+            id="media-file"
+            ref={fileRef}
+            type="file"
+            accept="image/*,video/mp4"
+            className="h-11 lg:h-10"
+          />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="media-caption">Caption</Label>
-          <Input id="media-caption" ref={captionRef} placeholder="Optional" />
+          <Input id="media-caption" ref={captionRef} placeholder="Optional" className="h-11 lg:h-10" />
         </div>
       </div>
 
@@ -90,7 +96,7 @@ export function UploadPanel({ albumId }: { albumId: string }) {
         type="button"
         onClick={() => startTransition(upload)}
         disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:min-h-0 sm:w-auto sm:justify-start"
       >
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
         Upload
@@ -120,7 +126,7 @@ export function TagForm({
     <form action={action} className="space-y-2">
       <input type="hidden" name="album_id" value={albumId} />
       <input type="hidden" name="item_id" value={itemId} />
-      <div className="max-h-40 space-y-1 overflow-y-auto rounded-md border p-2">
+      <div className="max-h-52 space-y-1 overflow-y-auto rounded-md border p-2 sm:max-h-40">
         {candidates.length === 0 && (
           <p className="p-1 text-xs text-muted-foreground">
             No team members to choose from. Confirming with nobody selected records that there is
@@ -128,13 +134,16 @@ export function TagForm({
           </p>
         )}
         {candidates.map((person) => (
-          <label key={person.id} className="flex items-center gap-2 text-xs">
+          <label
+            key={person.id}
+            className="flex min-h-[36px] items-center gap-2 text-xs sm:min-h-0"
+          >
             <input
               type="checkbox"
               name="person_id"
               value={person.id}
               defaultChecked={selected.includes(person.id)}
-              className="h-3.5 w-3.5"
+              className="h-3.5 w-3.5 shrink-0"
             />
             {person.name}
           </label>
@@ -145,7 +154,7 @@ export function TagForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md border px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-60 sm:min-h-0 sm:w-auto"
       >
         Confirm subjects
       </button>
