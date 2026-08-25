@@ -178,12 +178,15 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
   {
+    // Admin view only (Adam, 2026-08-25: "when I am selecting the coach role,
+    // it shouldn't show the teams menu item") — a coach pick is team-scoped
+    // and lands straight on that team's page, the same rule as parent/player.
     href: "/teams",
     label: "Teams",
     icon: Users,
     group: "Club",
     allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: ["coach", "admin"],
+    views: ["admin"],
   },
   {
     href: "/people",
