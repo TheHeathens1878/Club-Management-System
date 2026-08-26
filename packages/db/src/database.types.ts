@@ -5976,6 +5976,7 @@ export type Database = {
           venue: string
         }[]
       }
+      my_family_tree: { Args: never; Returns: Json }
       my_household: {
         Args: never
         Returns: {
