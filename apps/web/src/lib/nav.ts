@@ -101,6 +101,50 @@ export type NavEntry = {
 };
 
 export const NAV: readonly NavEntry[] = [
+  // --- Membership Flow (Adam, 2026-08-26) ----------------------------------
+  // The ME view leads with the order a new member does things in, numbered so
+  // it reads as a sequence rather than three unrelated screens: your own
+  // details first, then the adults the club should know about, then the
+  // children. It sits ABOVE the Club section because it is what somebody who
+  // has just signed up came here to finish. The parent view does not carry
+  // these — the switcher's Me is the way to them.
+  {
+    href: "/profile",
+    label: "My Profile (1)",
+    icon: UserCircle,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    // The adults in the caller's household without a login of their own —
+    // added at /join or on this page, read back through my_household().
+    href: "/connected-adults",
+    label: "Connect Adults (2)",
+    icon: Contact,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    href: "/family",
+    label: "Connect Children (3)",
+    icon: Baby,
+    group: "Membership Flow",
+    allowed: (c) => c.isGuardian || c.hasParentRole,
+    views: ["me"],
+  },
+  {
+    // The end of the flow: register whoever plays — yourself, a connected
+    // adult or a child (Adam, 2026-08-26).
+    href: "/my-registrations",
+    label: "Register Players (4)",
+    icon: ClipboardCheck,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+
   // --- Club (the design's first section) -----------------------------------
   {
     href: "/lobby",
@@ -144,13 +188,14 @@ export const NAV: readonly NavEntry[] = [
     // Registering somebody, and where the household's registrations stand —
     // not the admin queue at /registrations, which keeps its own entry below.
     // Adam, 2026-08-25: "change the name of registrations to register a
-    // player", because that is the thing a member comes here to do.
+    // player", because that is the thing a member comes here to do. The ME
+    // view carries it as step 4 of the Membership Flow instead.
     href: "/my-registrations",
     label: "Register a player",
     icon: ClipboardCheck,
     group: "Club",
     allowed: () => true,
-    views: ME_VIEWS,
+    views: ["parent"],
   },
   {
     href: "/messages",
@@ -459,35 +504,6 @@ export const NAV: readonly NavEntry[] = [
     group: "Money",
     allowed: () => true,
     views: ["player", "admin"],
-  },
-
-  // --- Me (the ME view only — Adam, 2026-08-25 evening: the parent menu
-  // drops the person-level items; they belong to the Me view) ---------------
-  {
-    href: "/profile",
-    label: "My Profile",
-    icon: UserCircle,
-    group: "Me",
-    allowed: () => true,
-    views: ["me"],
-  },
-  {
-    // The adults in the caller's household without a login of their own —
-    // added at /join or on this page, read back through my_household().
-    href: "/connected-adults",
-    label: "Connected Adults",
-    icon: Contact,
-    group: "Me",
-    allowed: () => true,
-    views: ["me"],
-  },
-  {
-    href: "/family",
-    label: "My Children",
-    icon: Baby,
-    group: "Me",
-    allowed: (c) => c.isGuardian || c.hasParentRole,
-    views: ["me"],
   },
 
   // --- Finance (the Me view's name for their own money) --------------------
