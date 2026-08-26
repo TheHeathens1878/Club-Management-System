@@ -746,6 +746,15 @@ export).
 
 ### SG-6 — Certification currency gates work with children
 
+> **RETIRED IN THE APP — SG-6.1 (Adam, 2026-08-26, migration
+> `20260825440000_retire_sg6_in_app_tier.sql`).** See SG-6.1 immediately
+> below. The statement, enforcement tiers and tests set out in this section
+> describe machinery that is still present in the database and still tested,
+> but is **dormant**: the app neither shows, edits nor reasons about a
+> certification, and no signed-in user can write one. Read this section as the
+> specification of what would come back if the club ever re-enabled it, not as
+> a description of what the app does today.
+
 > **Amendment (Adam, 2026-08-23, migration `20260824240000_sg6_enforcement_off.sql`).**
 > Tier-1 enforcement is now a switch —
 > `site_settings['safeguarding.sg6_enforcement']` (integer, `1` = enforce,
@@ -864,6 +873,83 @@ directions, and the shared evaluation function), P4.3 (`certifications`,
 `certification_exemptions`, scheduler). The `people.dob` trigger is created in
 P2.1 carrying the SG-6 check and extended in P5.2 to carry SG-1.2 as well — one
 trigger, two invariants, never two competing triggers on the same column.
+
+---
+
+#### SG-6.1 — The in-app tier is retired; the FA Clubs Portal is the record
+
+**The weakening, and who owns it.** Adam, club owner, 2026-08-26: *"remove all
+DBS, Safeguarding and Coaching qualifications from the App. We use the FA's Club
+Portal for this."* This is a weakening of SG-6 and is recorded here under §6.2
+with its reason and its owner; the §6.1 review log carries the same entry, and
+`DECISIONS.md` carries the decision row. The request is Adam's, and this
+subsection is that record.
+
+**What it means.** SG-6 above is unchanged as a *statement about the club* — a
+coach working with children must hold an in-date DBS check and the safeguarding
+qualification C3 requires. What has changed is **where that is recorded and
+enforced**. It is the FA Clubs Portal, and only the FA Clubs Portal. This
+application:
+
+- does not display a certification, a DBS status, a safeguarding or coaching
+  qualification, a compliance status or an exemption, anywhere;
+- has no screen for recording, verifying, revoking or exempting one;
+- sends no expiry nudge and no daily compliance report;
+- cannot write to `certifications` or `certification_exemptions` at all —
+  `INSERT`, `UPDATE` and `DELETE` on both tables are revoked from
+  `authenticated`, so the refusal is a grant, not a policy anyone could relax
+  by editing a `WHERE` clause.
+
+**Why the app stopping is the honest position.** The 2026-08-23 amendment above
+already turned the hard block off, for the good reason that the block refused
+approvals for paperwork the FA had already verified. What it left behind was
+worse than either state: screens showing a DBS status nobody in the club
+maintains, next to an "expiring" badge nobody acts on, next to an exemption
+button for a rule that no longer refuses anything. A safeguarding screen that
+is decorative teaches people to ignore safeguarding screens. Removing it says
+plainly where the answer lives.
+
+**What is KEPT, and why.** `certifications`,
+`certification_exemptions`, `child_facing_roles`, the shared evaluator
+`is_child_facing_compliant()`, the tier-1 triggers, the tier-2 functions
+(`due_certification_nudges()`, `compliance_report()`,
+`person_compliance_status()`) and every SG-7 audit row they ever wrote all
+remain in the database, with their RLS policies and their SG-2 delete/truncate
+guards intact. `authenticated` still **reads** them under exactly the policies
+it always had. These rows are the evidence of what the club held and when — a
+DBS the club recorded in 2026, an exemption a safeguarding lead granted and
+signed for — and destroying that is not what "stop using it" means. Dropping
+the tables is a separate, irreversible step, available on request and not taken
+here.
+
+**The switch stays off, and the migration asserts it.** With the app unable to
+write a certification, a tier-1 guard that started refusing again would block
+every child-facing team assignment with no way in the app to satisfy it. So
+`20260825440000` does not assume the state it inherits: it verifies that
+`sg6_enforcement_enabled()` still reads
+`site_settings['safeguarding.sg6_enforcement']`, ensures that key is `'0'`,
+and fails the migration if the function then still reports enforcement on.
+
+**Re-enabling, in full.** Nothing here is destructive, so the rollback is the
+forward path run backwards:
+
+1. `grant insert, update on public.certifications, public.certification_exemptions to authenticated;`
+2. restore the app's certification panels and the two retired
+   `safeguarding-nudges` jobs;
+3. `update public.site_settings set value = '1' where key = 'safeguarding.sg6_enforcement';`
+
+**Test.** `supabase/tests/certifications_retired.test.sql` states this
+subsection: the app cannot write (as club_admin, as the safeguarding lead),
+nothing was destroyed (tables, rows, reads, policies, functions), and the
+switch is off. Every tier-1 test named in SG-6 above still runs in
+`teams_seasons.test.sql` with the switch flipped on, except the three that
+went through `authenticated` — those now assert the 42501 refusal instead,
+because no signed-in user reaches the trigger any more; the trigger rules
+themselves are still proved as the owner. Nothing named in SG-6 has been
+deleted or skipped (§6.3).
+
+**Implemented by.** `20260825440000_retire_sg6_in_app_tier.sql` and the app
+change in the same commit.
 
 ---
 
@@ -1344,6 +1430,23 @@ invariants above *require to exist*.
 
 ### 6.1 Review log
 
+- **2026-08-26 — SG-6's in-app tier retired (Adam's decision, §6.2 record):**
+  "remove all DBS, Safeguarding and Coaching qualifications from the App. We
+  use the FA's Club Portal for this." Written up as **SG-6.1**: every screen,
+  action and scheduled mail that showed, edited or reasoned about a
+  certification, a DBS check, a safeguarding or coaching qualification or a
+  certification exemption is deleted, and `INSERT`/`UPDATE`/`DELETE` on
+  `certifications` and `certification_exemptions` are revoked from
+  `authenticated` so nothing in the app can add to records nobody maintains
+  here any more. The FA Clubs Portal is the system of record. **Nothing is
+  dropped:** both tables, their rows, their reads, their policies, their SG-2
+  guards, the shared evaluator and the tier-2 functions all stay, because they
+  are the evidence of what the club held and when; dropping them is a separate,
+  irreversible step available on request. The tier-1 switch stays at `0` and
+  the migration asserts it rather than assuming it. This is a weakening of SG-6
+  and needs Adam's explicit agreement on the record — the request is his, and
+  this entry is that record. The SAFEGUARDING module itself (concerns, reports,
+  oversight, SG-1/3/7/9) is untouched.
 - **2026-08-25 — the super-user purge (Adam's decision, §6.2 record):** "allow
   super users to hard delete users and messages." SG-2 gains its first and only
   exception, written up as **SG-2.1**: two named, audited, super-user-only

@@ -29,9 +29,8 @@ export type TeamRole = Database["public"]["Enums"]["team_role"];
 
 /**
  * The `team_memberships` roles that make someone a team's staff for booking
- * purposes. `is_team_staff()` asks `child_facing_roles` instead, which is the
- * safeguarding question; these three are the club's answer to "who runs this
- * team", and the database still has the final word on every write.
+ * purposes. These three are the club's answer to "who runs this team", and the
+ * database still has the final word on every write.
  */
 export const STAFF_TEAM_ROLES: TeamRole[] = ["coach", "assistant_coach", "manager"];
 

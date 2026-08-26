@@ -1,12 +1,12 @@
 "use server";
 
 /**
- * Who holds the `safeguarding_lead` role (SAFEGUARDING.md SG-3/SG-6/SG-9).
+ * Who holds the `safeguarding_lead` role (SAFEGUARDING.md SG-3/SG-9).
  *
  * User-scoped: `person_roles` RLS lets only a club_admin insert or revoke,
  * and the table's audit trigger records every change. There is exactly one
- * lead at a time by club policy (the exemption guard and the concern
- * accessors work with any number, but the committee wants one named person),
+ * lead at a time by club policy (the concern accessors work with any number,
+ * but the committee wants one named person),
  * so appointing a new lead revokes the previous one in the same action.
  */
 

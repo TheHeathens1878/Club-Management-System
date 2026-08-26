@@ -48,9 +48,10 @@ update public.people set dob = '1985-05-05'
               current_setting('lr.admin2')::uuid);
 -- The coach's SG-6 paperwork, so the team may hold minors without the guard
 -- refusing anything this test does.
-insert into public.certifications (person_id, type, expires_on, verified_at) values
-  (current_setting('lr.coach')::uuid, 'fa_dbs', current_date + 300, now()),
-  (current_setting('lr.coach')::uuid, 'safeguarding_children', current_date + 300, now());
+-- The coach's DBS + safeguarding certificates used to be inserted here so the
+-- SG-6 tier-1 guard would let them onto a team with minors. That tier was
+-- retired by 20260825440000 (SAFEGUARDING.md SG-6): the FA Clubs Portal holds
+-- the paperwork, and the app can no longer write a certification at all.
 
 -- Two players: one the coach reports as having left, one for the reject path.
 -- SG-1: a team conversation may not hold exactly one adult and one minor with

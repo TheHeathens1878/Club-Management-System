@@ -7,7 +7,7 @@ import { signPeoplePhotos } from "@/lib/avatars";
 import { emergencyContactLine } from "@/lib/emergency-contacts";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
-import { isClubAdmin, isSafeguardingLead, nameOf, resolveNames } from "@/lib/person";
+import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { resolveRoleView } from "@/lib/role-view";
 import { personLabel } from "@/lib/people-display";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -21,12 +21,6 @@ import { bookingHeadcounts, fixtureHeadcounts, teamPlayerIds } from "@/lib/event
 import type { Headcount } from "@/lib/headcount";
 import type { PitchBookingItem } from "@/lib/pitch-booking";
 
-import {
-  CertificationsPanel,
-  type CertificationRow,
-  type ExemptionRow,
-  type StaffMember,
-} from "./certifications-panel";
 import { FullTimePanel, type ClubSeasonView, type FullTimeLinkView } from "./fulltime-panel";
 import { ManualImportPanel, type ImportRunView } from "./import-panel";
 import {
@@ -36,7 +30,6 @@ import {
   type SquadAvailability,
   type SquadLeave,
   type SquadSubs,
-  type TeamRoleValue,
 } from "./members-panel";
 import { MatchDayPanel, type MatchDayPitch } from "./matchday-panel";
 import { AllocateAllPanel } from "./allocate-all-panel";
@@ -273,8 +266,7 @@ export default async function TeamPage({
   let bookingCounts: Record<string, Headcount> = {};
 
   // --------------------------------------------------------------------
-  // Members — the season's roster, the held-back imports, and (committee
-  // only) the SG-6 paperwork for everyone in a child-facing role.
+  // Members — the season's roster and the held-back imports.
   //
   // The roster is read through the caller's own client, so `team_memberships`
   // RLS decides: `_admin_read` for a club_admin or the safeguarding lead,
@@ -296,10 +288,6 @@ export default async function TeamPage({
   let squadSubs: SquadSubs | null = null;
   let clubAdmin = false;
   let memberSeason: { id: string; name: string } | null = null;
-  let staff: StaffMember[] = [];
-  let certifications: CertificationRow[] = [];
-  let exemptions: ExemptionRow[] = [];
-  let lead = false;
 
   // The roster is the coach's and the club's screen. Adam, 2026-08-25:
   // "parents should not see emergency contacts in the Squad page" — so the
@@ -307,17 +295,10 @@ export default async function TeamPage({
   // parent, looking at the team as a parent, gets the team's life and not
   // its management, and `?tab=squad` typed by hand lands on Overview.
   if (tab === "squad" && staffTools) {
-    const [
-      seasonsResult,
-      childFacingResult,
-      pendingResult,
-      adminAnswer,
-      leadAnswer,
-    ] = await Promise.all([
+    const [seasonsResult, pendingResult, adminAnswer] = await Promise.all([
       userClient.from("seasons").select("id,name,is_current").order("starts_on", {
         ascending: false,
       }),
-      userClient.from("child_facing_roles").select("role,child_facing"),
       // Imported memberships the SG-0 gate is holding back.
       // `neon_import_pending` RLS is club_admin (or the subject), so a
       // non-admin simply gets no rows — which is the right answer, not a
@@ -332,20 +313,12 @@ export default async function TeamPage({
         .is("applied_at", null)
         .order("created_at"),
       isClubAdmin(),
-      committee ? isSafeguardingLead() : Promise.resolve(false),
     ]);
 
     clubAdmin = adminAnswer;
-    lead = leadAnswer;
 
     const currentSeason = (seasonsResult.data ?? []).find((season) => season.is_current) ?? null;
     memberSeason = currentSeason ? { id: currentSeason.id, name: currentSeason.name } : null;
-
-    const childFacingByRole = new Map(
-      (childFacingResult.data ?? []).map((row) => [row.role, row.child_facing]),
-    );
-    // Fail closed, exactly as `is_child_facing_role()` does with its coalesce.
-    const isChildFacing = (role: TeamRoleValue): boolean => childFacingByRole.get(role) ?? true;
 
     if (currentSeason) {
       const { data: membershipRows } = await userClient
@@ -404,22 +377,7 @@ export default async function TeamPage({
 
       members = await Promise.all(
         (membershipRows ?? []).map(async (row) => {
-          const childFacing = isChildFacing(row.role);
-          const [minor, dbs, safeguarding] = await Promise.all([
-            userClient.rpc("is_minor", { person_id: row.person_id }),
-            childFacing
-              ? userClient.rpc("person_compliance_status", {
-                  p_person_id: row.person_id,
-                  p_type: "fa_dbs",
-                })
-              : Promise.resolve({ data: null }),
-            childFacing
-              ? userClient.rpc("person_compliance_status", {
-                  p_person_id: row.person_id,
-                  p_type: "safeguarding_children",
-                })
-              : Promise.resolve({ data: null }),
-          ]);
+          const minor = await userClient.rpc("is_minor", { person_id: row.person_id });
           return {
             id: row.id,
             personId: row.person_id,
@@ -428,9 +386,6 @@ export default async function TeamPage({
             shirtNumber: row.shirt_number,
             joinedAt: row.joined_at,
             isMinor: minor.data === true,
-            childFacing,
-            dbs: dbs.data ?? (childFacing ? "missing" : null),
-            safeguarding: safeguarding.data ?? (childFacing ? "missing" : null),
             photoUrl: memberPhotos.get(row.person_id) ?? null,
             emergencyContacts: (memberContacts.get(row.person_id) ?? []).map(emergencyContactLine),
           } satisfies MemberRow;
@@ -523,73 +478,6 @@ export default async function TeamPage({
         attempts: row.attempts,
         lastError: row.last_error,
       }));
-
-    // ------------------------------------------------------------------
-    // SG-6: the team's child-facing staff and their paperwork.
-    //
-    // The roster comes from the admin client, as the rest of this page does.
-    // The safeguarding rows do NOT: `certifications`,
-    // `certification_exemptions` and `person_compliance_status()` are read
-    // through the signed-in user's own client so that RLS and the lead-only
-    // policies are what decide, not the service key.
-    // ------------------------------------------------------------------
-    if (committee) {
-      const { data: staffRows } = await admin
-        .from("team_memberships")
-        .select("person_id,role,people(first_name,last_name,preferred_name)")
-        .eq("team_id", id)
-        .is("left_at", null)
-        .neq("role", "player");
-
-      const staffIds = (staffRows ?? []).map((member) => member.person_id);
-      const [{ data: certRows }, { data: exemptionRows }, complianceRows] = await Promise.all([
-        userClient
-          .from("certifications")
-          .select("id,person_id,type,reference,issued_on,expires_on,verified_at,revoked_at")
-          .in("person_id", staffIds)
-          .order("expires_on", { nullsFirst: false }),
-        userClient
-          .from("certification_exemptions")
-          .select("id,person_id,reason,expires_on,revoked_at")
-          .eq("team_id", id),
-        Promise.all(
-          staffIds.map(async (personId) => {
-            const [dbs, safeguarding] = await Promise.all([
-              userClient.rpc("person_compliance_status", {
-                p_person_id: personId,
-                p_type: "fa_dbs",
-              }),
-              userClient.rpc("person_compliance_status", {
-                p_person_id: personId,
-                p_type: "safeguarding_children",
-              }),
-            ]);
-            return {
-              personId,
-              dbs: dbs.data ?? "missing",
-              safeguarding: safeguarding.data ?? "missing",
-            };
-          }),
-        ),
-      ]);
-
-      const complianceByPerson = new Map(complianceRows.map((row) => [row.personId, row]));
-      staff = (staffRows ?? []).map((member) => {
-        const person = member.people;
-        const compliance = complianceByPerson.get(member.person_id);
-        return {
-          personId: member.person_id,
-          name: person
-            ? `${person.preferred_name || person.first_name} ${person.last_name}`.trim()
-            : "Club member",
-          role: member.role,
-          dbs: compliance?.dbs ?? "missing",
-          safeguarding: compliance?.safeguarding ?? "missing",
-        };
-      });
-      certifications = certRows ?? [];
-      exemptions = exemptionRows ?? [];
-    }
   }
 
   // --------------------------------------------------------------------
@@ -1084,10 +972,9 @@ export default async function TeamPage({
                   Everyone in this team for the current season, players included — a card each,
                   with the next match&apos;s answer and the person to ring. Adding someone,
                   changing their role or ending their membership (under <strong>Manage</strong> on
-                  the card) goes straight to{" "}
-                  <code>team_memberships</code> as you — so the SG-6 guard runs, and if it refuses
-                  it tells you exactly which certification is missing. Memberships end; they are
-                  never deleted.
+                  the card) goes straight to <code>team_memberships</code> as you, so the database
+                  decides and any refusal is shown as it arrived. Memberships end; they are never
+                  deleted.
                 </p>
               </CardHeader>
               <CardContent>
@@ -1105,29 +992,6 @@ export default async function TeamPage({
                 />
               </CardContent>
             </Card>
-
-            {committee && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Certifications</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    DBS checks, safeguarding and coaching qualifications for everyone in a
-                    child-facing role on this team (SG-6). A certification counts once it has been
-                    verified; expiry nudges go out at 90, 30 and 7 days. Only the club&apos;s
-                    safeguarding lead can grant a short exemption while paperwork clears.
-                  </p>
-                </CardHeader>
-                <CardContent>
-                  <CertificationsPanel
-                    teamId={team.id}
-                    staff={staff}
-                    certifications={certifications}
-                    exemptions={exemptions}
-                    isLead={lead}
-                  />
-                </CardContent>
-              </Card>
-            )}
 
             {/* Gap 10: what the public /recruitment page says about this team.
                 Written through the caller's own client, so `teams_staff_update`

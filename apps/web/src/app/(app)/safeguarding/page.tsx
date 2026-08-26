@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { AlertTriangle, ChevronRight, FileWarning, ShieldAlert } from "lucide-react";
+import { ChevronRight, FileWarning, ShieldAlert } from "lucide-react";
 
 import type { Database } from "@club/db";
 
@@ -36,13 +36,6 @@ function severityVariant(severity: string | null): "destructive" | "warning" | "
   return "muted";
 }
 
-function complianceVariant(status: string): "success" | "warning" | "destructive" | "muted" {
-  if (status === "valid") return "success";
-  if (status === "expiring") return "warning";
-  if (status === "expired") return "destructive";
-  return "muted";
-}
-
 function formatStamp(iso: string | null): string {
   if (!iso) return "—";
   const at = new Date(iso);
@@ -73,10 +66,9 @@ export default async function SafeguardingPage({
   const filter = STATUSES.includes(status as ConcernStatus) ? (status as ConcernStatus) : undefined;
 
   const supabase = await createClient();
-  const [{ data: concerns, error: concernsError }, { data: compliance }, admin, { data: leadRoles }] =
+  const [{ data: concerns, error: concernsError }, admin, { data: leadRoles }] =
     await Promise.all([
       supabase.rpc("read_concerns", { p_status: filter }),
-      supabase.rpc("compliance_report"),
       isClubAdmin(),
       supabase
         .from("person_roles")
@@ -112,7 +104,7 @@ export default async function SafeguardingPage({
     <>
       <PageHeader
         title="Safeguarding"
-        subtitle="Concerns, oversight and compliance"
+        subtitle="Concerns and oversight"
         action={
           <Link
             href="/safeguarding/report"
@@ -130,9 +122,8 @@ export default async function SafeguardingPage({
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">Safeguarding lead</CardTitle>
             <p className="text-sm text-muted-foreground">
-              The named person who reviews concerns, may open a young person&apos;s conversation
-              with a reason, and is the only one who can grant a certification exemption. Changing
-              the lead is recorded in the audit log.
+              The named person who reviews concerns and may open a young person&apos;s
+              conversation with a reason. Changing the lead is recorded in the audit log.
             </p>
           </CardHeader>
           <CardContent>
@@ -223,96 +214,6 @@ export default async function SafeguardingPage({
           </CardHeader>
           <CardContent>
             <OversightForm />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <AlertTriangle className="h-4 w-4" /> Compliance (SG-6)
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              People in child-facing roles on teams with young players whose DBS or safeguarding
-              certification is not current.
-            </p>
-          </CardHeader>
-          <CardContent>
-            {(compliance ?? []).length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Everyone in a child-facing role is compliant.
-              </p>
-            ) : (
-              <>
-              {/* Phone: a card per person, the two certification states as
-                  pills. The desk keeps the six-column table below. */}
-              <div className="space-y-3 lg:hidden">
-                {(compliance ?? []).map((row) => (
-                  <div
-                    key={`card-${row.team_id}-${row.person_id}`}
-                    className="rounded-xl border bg-card p-4"
-                  >
-                    <p className="text-[15px] font-semibold leading-tight">{row.person_name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      <Link href={`/teams/${row.team_id}`} className="hover:underline">
-                        {row.team_name}
-                      </Link>{" "}
-                      · {row.role}
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                      <Badge variant={complianceVariant(row.dbs_status)}>
-                        DBS: {row.dbs_status}
-                      </Badge>
-                      <Badge variant={complianceVariant(row.safeguarding_status)}>
-                        Safeguarding: {row.safeguarding_status}
-                      </Badge>
-                      {row.exemption_expires_on && (
-                        <Badge variant="muted">Exempt until {row.exemption_expires_on}</Badge>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="hidden overflow-x-auto lg:block">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b text-left text-xs uppercase text-muted-foreground">
-                      <th className="py-2 pr-3 font-medium">Person</th>
-                      <th className="py-2 pr-3 font-medium">Team</th>
-                      <th className="py-2 pr-3 font-medium">Role</th>
-                      <th className="py-2 pr-3 font-medium">DBS</th>
-                      <th className="py-2 pr-3 font-medium">Safeguarding</th>
-                      <th className="py-2 font-medium">Exemption</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(compliance ?? []).map((row) => (
-                      <tr key={`${row.team_id}-${row.person_id}`} className="border-b last:border-0">
-                        <td className="py-2 pr-3">{row.person_name}</td>
-                        <td className="py-2 pr-3">
-                          <Link href={`/teams/${row.team_id}`} className="hover:underline">
-                            {row.team_name}
-                          </Link>
-                        </td>
-                        <td className="py-2 pr-3 text-muted-foreground">{row.role}</td>
-                        <td className="py-2 pr-3">
-                          <Badge variant={complianceVariant(row.dbs_status)}>{row.dbs_status}</Badge>
-                        </td>
-                        <td className="py-2 pr-3">
-                          <Badge variant={complianceVariant(row.safeguarding_status)}>
-                            {row.safeguarding_status}
-                          </Badge>
-                        </td>
-                        <td className="py-2 text-muted-foreground">
-                          {row.exemption_expires_on ? `until ${row.exemption_expires_on}` : "none"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              </>
-            )}
           </CardContent>
         </Card>
       </div>
