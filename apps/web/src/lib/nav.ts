@@ -135,10 +135,22 @@ export const NAV: readonly NavEntry[] = [
     views: ["me"],
   },
   {
+    // Who the club has you connected to, drawn as a family tree (Adam,
+    // 2026-08-26). Read-only, and scoped to the caller's OWN links: an
+    // ex-spouse who shares the children sees the children and the people who
+    // guard them, never the other household's adults or their children.
+    href: "/family-linking",
+    label: "Family Linking (4)",
+    icon: UsersRound,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
     // The end of the flow: register whoever plays — yourself, a connected
     // adult or a child (Adam, 2026-08-26).
     href: "/my-registrations",
-    label: "Register Players (4)",
+    label: "Register Players (5)",
     icon: ClipboardCheck,
     group: "Membership Flow",
     allowed: () => true,
