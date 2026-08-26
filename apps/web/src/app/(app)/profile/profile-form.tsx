@@ -19,6 +19,8 @@ import { updateContactDetails, updateEmergencyContacts, type ProfileActionState 
 export type ContactDetails = {
   preferredName: string;
   phone: string;
+  /** Adam, 2026-08-26: their own statement that they play for the club. */
+  isPlayer: boolean;
   line1: string;
   line2: string;
   town: string;
@@ -57,6 +59,27 @@ export function ContactDetailsForm({ initial }: { initial: ContactDetails }) {
           />
         </div>
       </div>
+
+      {/* Adam, 2026-08-26: "there should be a tick box on My Profile saying I
+          am a player". It decides which questions the club asks you — the
+          emergency contacts below, and whether you are offered on Register a
+          player — and nothing else. */}
+      <label className="flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+        <input
+          type="checkbox"
+          name="is_player"
+          value="yes"
+          defaultChecked={initial.isPlayer}
+          className="mt-0.5 h-4 w-4 accent-primary"
+        />
+        <span>
+          I am a player
+          <span className="block text-xs text-muted-foreground">
+            Tick this if you play for the club yourself. It is what puts you on Register a player
+            and what makes the club ask you for an emergency contact.
+          </span>
+        </span>
+      </label>
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold">Home address</legend>

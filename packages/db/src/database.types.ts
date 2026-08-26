@@ -3118,6 +3118,7 @@ export type Database = {
           email: string | null
           first_name: string
           id: string
+          is_player: boolean
           id_verified: boolean
           id_verified_at: string | null
           id_verified_by: string | null
@@ -3141,6 +3142,7 @@ export type Database = {
           email?: string | null
           first_name: string
           id?: string
+          is_player?: boolean
           id_verified?: boolean
           id_verified_at?: string | null
           id_verified_by?: string | null
@@ -3164,6 +3166,7 @@ export type Database = {
           email?: string | null
           first_name?: string
           id?: string
+          is_player?: boolean
           id_verified?: boolean
           id_verified_at?: string | null
           id_verified_by?: string | null
@@ -6492,7 +6495,12 @@ export type Database = {
         Returns: undefined
       }
       update_own_contact: {
-        Args: { p_address?: Json; p_phone?: string; p_preferred_name?: string }
+        Args: {
+          p_address?: Json
+          p_is_player?: boolean
+          p_phone?: string
+          p_preferred_name?: string
+        }
         Returns: undefined
       }
       update_team_event: {
