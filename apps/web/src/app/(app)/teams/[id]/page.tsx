@@ -59,7 +59,7 @@ const RUN_LIMIT = 10;
  * from the select text, and only a literal carries that type.
  */
 const FIXTURE_SELECT =
-  "id,booking_id,kickoff_at,is_home,opponent,competition,status,venue_text,allocation_conflict,seasons(name),resources!fixtures_venue_resource_id_fkey(name,address)";
+  "id,booking_id,kickoff_at,no_longer_published_at,is_home,opponent,competition,status,venue_text,allocation_conflict,seasons(name),resources!fixtures_venue_resource_id_fkey(name,address)";
 
 /** The payload `migrate_neon()` queues for a held-back membership. */
 function pendingMembershipPayload(payload: unknown): {
@@ -576,6 +576,7 @@ export default async function TeamPage({
       pitchAddress: row.resources?.address ?? null,
       headcount: fixtureCounts.get(row.id) ?? null,
       eventId: eventByFixture.get(row.id) ?? null,
+      noLongerPublishedAt: row.no_longer_published_at,
     }));
 
     // The Availability card: the squad by name against the next match, the

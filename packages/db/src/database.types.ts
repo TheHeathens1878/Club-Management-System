@@ -2011,6 +2011,7 @@ export type Database = {
           kickoff_at: string
           last_seen_at: string | null
           mirror_fixture_id: string | null
+          no_longer_published_at: string | null
           notes: string | null
           opponent: string
           season_id: string
@@ -2039,6 +2040,7 @@ export type Database = {
           kickoff_at: string
           last_seen_at?: string | null
           mirror_fixture_id?: string | null
+          no_longer_published_at?: string | null
           notes?: string | null
           opponent: string
           season_id: string
@@ -2067,6 +2069,7 @@ export type Database = {
           kickoff_at?: string
           last_seen_at?: string | null
           mirror_fixture_id?: string | null
+          no_longer_published_at?: string | null
           notes?: string | null
           opponent?: string
           season_id?: string

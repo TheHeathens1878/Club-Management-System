@@ -47,7 +47,7 @@ export default async function FixtureAttendancePage({
   const { data: fixture } = await supabase
     .from("fixtures")
     .select(
-      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,mirror_fixture_id,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
+      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,mirror_fixture_id,no_longer_published_at,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
     )
     .eq("id", fixtureId)
     .eq("team_id", teamId)
@@ -330,6 +330,36 @@ export default async function FixtureAttendancePage({
                   emptyText="No other players in the squad yet."
                 />
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Full-Time has stopped publishing this game and the importer would
+            not remove it on its own, because something is built on it. Said
+            to anyone who can manage the team, not only to administrators —
+            the coach is the person who knows whether it is still being
+            played (Adam, 2026-08-26). */}
+        {canManage && fixture.no_longer_published_at && (
+          <Card className="border-warning/40">
+            <CardHeader className="p-4 lg:p-6">
+              <CardTitle className="text-base">Not in Full-Time any more</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 text-sm text-muted-foreground lg:p-6 lg:pt-0">
+              <p>
+                The league's fixture list stopped including this game on{" "}
+                {new Date(fixture.no_longer_published_at).toLocaleDateString("en-GB", {
+                  timeZone: "Europe/London",
+                  day: "numeric",
+                  month: "long",
+                })}
+                . It has been left alone because a pitch, a team sheet or match stats hang off it.
+              </p>
+              <p className="mt-2">
+                Either the league withdrew it, or it was re-issued under a new id and the
+                replacement has already imported — worth checking the team&apos;s fixture list for
+                another game in the same slot. If the club is still playing it, leave it; the note
+                goes as soon as Full-Time lists it again.
+              </p>
             </CardContent>
           </Card>
         )}

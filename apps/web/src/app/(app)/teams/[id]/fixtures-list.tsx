@@ -75,6 +75,13 @@ export type TeamFixture = {
   headcount: Headcount | null;
   /** The RSVP event mirroring this fixture, when the events module has one. */
   eventId: string | null;
+  /**
+   * `fixtures.no_longer_published_at` — Full-Time has stopped publishing this
+   * game, and the importer left it alone because a pitch, a team sheet or
+   * stats hang off it. Somebody has to decide whether the club is still
+   * playing it (20260826110000).
+   */
+  noLongerPublishedAt: string | null;
 };
 
 /** `✓ 5 · ✗ 2 · ? 5` — the marker at a glance; unanswered fold into "?". */
@@ -162,6 +169,11 @@ export function FixturesTable({
                   {fixture.status}
                 </Badge>
                 {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
+                {fixture.noLongerPublishedAt && (
+                  <Badge variant="warning" title="Full-Time has stopped publishing this game. Open it to decide whether the club is still playing it.">
+                    Not in Full-Time
+                  </Badge>
+                )}
                 {canManage && fixture.headcount && (
                   <HeadcountChips headcount={fixture.headcount} />
                 )}
@@ -218,6 +230,11 @@ export function FixturesTable({
                       {fixture.status}
                     </Badge>
                     {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
+                {fixture.noLongerPublishedAt && (
+                  <Badge variant="warning" title="Full-Time has stopped publishing this game. Open it to decide whether the club is still playing it.">
+                    Not in Full-Time
+                  </Badge>
+                )}
                   </div>
                 </td>
                 {canManage && (
@@ -288,6 +305,11 @@ export function FixturesSummary({
                   {fixture.status}
                 </Badge>
                 {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
+                {fixture.noLongerPublishedAt && (
+                  <Badge variant="warning" title="Full-Time has stopped publishing this game. Open it to decide whether the club is still playing it.">
+                    Not in Full-Time
+                  </Badge>
+                )}
               </div>
             </li>
           );
