@@ -42,6 +42,13 @@
 --   nobody playing is an individual, not an error: the lead contact may be
 --   registering ahead of the season opening.
 --
+--   NOT `people.is_player` (20260825480000), deliberately, though the two
+--   definitions agree on what a player looks like. That column is a person's
+--   own statement about themselves and is what SCREENS ask; its own header
+--   says it "decides which questions a screen asks — never who may read or do
+--   anything". What the club charges a household is not a self-service tick,
+--   and it is per SEASON, which a boolean on `people` cannot be.
+--
 -- ONE PLACE, AND IT STAYS TRUE
 --   `public.membership_kind_for(membership_id)` is the only place the rule is
 --   written. `create_membership()` asks it instead of counting people, and
