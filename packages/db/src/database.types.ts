@@ -3169,6 +3169,7 @@ export type Database = {
           photo_path: string | null
           preferred_name: string | null
           pseudonymised_at: string | null
+          sex: string | null
           updated_at: string
         }
         Insert: {
@@ -3193,6 +3194,7 @@ export type Database = {
           photo_path?: string | null
           preferred_name?: string | null
           pseudonymised_at?: string | null
+          sex?: string | null
           updated_at?: string
         }
         Update: {
@@ -3217,6 +3219,7 @@ export type Database = {
           photo_path?: string | null
           preferred_name?: string | null
           pseudonymised_at?: string | null
+          sex?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -5628,6 +5631,8 @@ export type Database = {
         }
         Returns: string
       }
+      fa_age_band: { Args: { p_dob: string; p_on: string }; Returns: number }
+      fa_age_band_today: { Args: { p_dob: string }; Returns: number }
       current_person_id: { Args: never; Returns: string }
       decide_leave_request: {
         Args: { p_approve: boolean; p_note?: string; p_request_id: string }
@@ -6104,6 +6109,10 @@ export type Database = {
       }
       my_waiting_list_age_groups: { Args: never; Returns: string[] }
       my_waiting_list_coach_bands: { Args: never; Returns: number[] }
+      may_register_for_team: {
+        Args: { p_person_id: string; p_team_id: string }
+        Returns: boolean
+      }
       needs_dob_completion: { Args: never; Returns: boolean }
       needs_id_document: { Args: { p_person_id: string }; Returns: boolean }
       neon_auth_import_candidates: {
@@ -6307,6 +6316,14 @@ export type Database = {
         }
         Returns: number
       }
+      registration_subjects: {
+        Args: { p_person_ids: string[] }
+        Returns: {
+          dob: string
+          person_id: string
+          sex: string
+        }[]
+      }
       recruiting_teams: {
         Args: never
         Returns: {
@@ -6406,6 +6423,10 @@ export type Database = {
       }
       set_person_photo: {
         Args: { p_path: string; p_person_id: string }
+        Returns: undefined
+      }
+      set_person_sex: {
+        Args: { p_person_id: string; p_sex: string }
         Returns: undefined
       }
       set_registration_question_order: {
@@ -6588,6 +6609,10 @@ export type Database = {
       venue_label: {
         Args: { p_resource_id: string; p_venue_text: string }
         Returns: string
+      }
+      team_admits_sex: {
+        Args: { p_sex: string; p_team_gender: string }
+        Returns: boolean
       }
       waiting_list_age_number: {
         Args: { p_age_group: string }

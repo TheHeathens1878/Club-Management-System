@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSessionProfile } from "@/lib/auth";
+import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { formatStamp, personLabel } from "@/lib/people-display";
 import { getCurrentPersonId } from "@/lib/person";
@@ -89,7 +89,7 @@ export default async function RegisterPlayerPage() {
     supabase.rpc("my_household"),
     supabase
       .from("teams")
-      .select("id,name,age_group,sort_order")
+      .select("id,name,age_group,gender,sort_order")
       .eq("active", true)
       .order("sort_order")
       .order("name"),
@@ -121,6 +121,7 @@ export default async function RegisterPlayerPage() {
     id: team.id,
     name: team.name,
     ageGroup: team.age_group,
+    gender: team.gender,
   }));
   const currentSeason = (seasonsResult.data ?? []).find((season) => season.is_current) ?? null;
   const questions: RegistrationQuestion[] = (questionsResult.data ?? [])
@@ -175,6 +176,19 @@ export default async function RegisterPlayerPage() {
       }),
     ),
   );
+
+  // The date of birth the age band comes from and the sex already on record,
+  // for everyone this account may register — including the login-less
+  // household adults, whose `people` rows the caller cannot read directly.
+  const { data: subjectFacts } = await supabase.rpc("registration_subjects", {
+    p_person_ids: subjectIds,
+  });
+  const factsByPerson = new Map(
+    (subjectFacts ?? []).map((row) => [row.person_id, { dob: row.dob, sex: row.sex }] as const),
+  );
+  // "Show all teams" is a club administrator's escape and nobody else's
+  // (Adam, 2026-08-26).
+  const isAdmin = isCommittee(session.profile?.role);
 
   const childIds = new Set(children.map((child) => child.person_id));
 
@@ -304,6 +318,9 @@ export default async function RegisterPlayerPage() {
                     seasonName={currentSeason?.name ?? null}
                     teams={teams}
                     questions={questions}
+                    dob={factsByPerson.get(person.personId)?.dob ?? null}
+                    recordedSex={factsByPerson.get(person.personId)?.sex ?? null}
+                    isAdmin={isAdmin}
                     isSelf={person.kind === "self"}
                   />
                 </div>

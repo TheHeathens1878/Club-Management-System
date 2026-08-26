@@ -14,6 +14,7 @@ import {
   customQuestionsPayload,
   stageRegistrationUploads,
 } from "@/components/registration-question-block";
+import { TeamChoiceFields } from "@/components/registration-team-choice";
 import type { RegistrationQuestion } from "@/lib/registration-questions";
 import { NO_WAITING_LIST_MESSAGE } from "@/lib/waiting-list";
 
@@ -38,6 +39,8 @@ type HouseholdPerson = {
   minor: boolean;
   isSelf: boolean;
   needsId: boolean;
+  /** `people.sex` if the club already holds it, so the form defaults to it. */
+  sex: string | null;
 };
 
 type PlayerOutcome = "team" | "waiting_list" | "no_team";
@@ -65,6 +68,8 @@ export function JoinWizard({ signedIn, defaults }: {
   const [registrant, setRegistrant] = useState<StartState["registrant"] | null>(null);
   const [teams, setTeams] = useState<JoinTeamOption[]>([]);
   const [openAgeGroups, setOpenAgeGroups] = useState<string[]>([]);
+  /** Only a club administrator gets the "show all teams" escape (Adam, 2026-08-26). */
+  const [isAdmin, setIsAdmin] = useState(false);
   const [questions, setQuestions] = useState<RegistrationQuestion[]>([]);
   const [people, setPeople] = useState<HouseholdPerson[]>([]);
   const [registrantContact, setRegistrantContact] = useState({ email: defaults.email, phone: defaults.phone });
@@ -101,6 +106,7 @@ export function JoinWizard({ signedIn, defaults }: {
       setRegistrant(result.registrant);
       setTeams(result.teams ?? []);
       setOpenAgeGroups(result.openAgeGroups ?? []);
+      setIsAdmin(result.isAdmin === true);
       setQuestions(result.questions ?? []);
       const [firstName, ...rest] = result.registrant.fullName.split(" ");
       setRegistrantContact({
@@ -117,6 +123,7 @@ export function JoinWizard({ signedIn, defaults }: {
           minor: false,
           isSelf: true,
           needsId: result.registrant.needsId,
+          sex: result.registrant.sex,
         },
       ]);
       setStep(result.registrant.registeringOthers ? 2 : result.registrant.playing ? 3 : 2);
@@ -139,7 +146,7 @@ export function JoinWizard({ signedIn, defaults }: {
       }
       setAddError(null);
       setAddConfirm(null);
-      setPeople((current) => [...current, { ...result.added!, isSelf: false }]);
+      setPeople((current) => [...current, { ...result.added!, isSelf: false, sex: null }]);
     });
   }
 
@@ -431,6 +438,7 @@ export function JoinWizard({ signedIn, defaults }: {
               questions={questions}
               teams={teams}
               openAgeGroups={openAgeGroups}
+              isAdmin={isAdmin}
               outcome={outcomes[player.personId]}
               error={playerErrors[player.personId]}
               pending={pending}
@@ -528,6 +536,7 @@ function PlayerPanel({
   questions,
   teams,
   openAgeGroups,
+  isAdmin,
   outcome,
   error,
   pending,
@@ -539,28 +548,12 @@ function PlayerPanel({
   questions: RegistrationQuestion[];
   teams: JoinTeamOption[];
   openAgeGroups: string[];
+  isAdmin: boolean;
   outcome?: PlayerOutcome;
   error?: string;
   pending: boolean;
   onSubmit: (formData: FormData) => void;
 }) {
-  const [showAllTeams, setShowAllTeams] = useState(false);
-
-  // A child's plausible teams first; "show all" reveals the rest. Adults see
-  // every team straight away.
-  const suggested = useMemo(() => {
-    if (!player.minor || showAllTeams) return teams;
-    const yearOfBirth = Number(player.dob.slice(0, 4));
-    return teams.filter((team) => {
-      const match = /U(\d{1,2})/i.exec(team.ageGroup ?? "");
-      if (!match) return false;
-      const under = Number(match[1]);
-      const seasonYear = new Date().getFullYear();
-      const roughAge = seasonYear - yearOfBirth;
-      return under >= roughAge && under <= roughAge + 2;
-    });
-  }, [player, showAllTeams, teams]);
-
   if (outcome) {
     return (
       <Card>
@@ -587,62 +580,34 @@ function PlayerPanel({
       </CardHeader>
       <CardContent>
         <form action={onSubmit} className="space-y-4">
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Team</legend>
-            <select
-              name="team_choice"
-              required
-              defaultValue=""
-              className="block w-full rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              <option value="" disabled>
-                Choose a team…
-              </option>
-              {suggested.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.ageGroup ? `${team.ageGroup} — ` : ""}
-                  {team.name}
-                </option>
-              ))}
-              {/* No open age group means no waiting list to join (Adam,
-                  2026-08-25). The choice stays — it is also "no team yet",
-                  which lands as a team-less registration the club follows up —
-                  but it stops offering a list the club is not operating. */}
-              <option value="waiting_list">
-                {openAgeGroups.length > 0
+          {/* The two bands and the sex rule, applied where the choice is
+              made (Adam, 2026-08-26) — and re-applied by
+              `registrations_guard()` when the row is written. The "no team
+              yet" line is not a team, so it survives the narrowing: no open
+              age group means no waiting list to join (Adam, 2026-08-25), but
+              the choice still lands as a team-less registration the club
+              follows up. */}
+          <TeamChoiceFields
+            idPrefix={`join-${player.personId}`}
+            teamFieldName="team_choice"
+            teams={teams}
+            dob={player.dob || null}
+            recordedSex={player.sex}
+            isAdmin={isAdmin}
+            firstName={player.firstName}
+            extraOption={{
+              value: "waiting_list",
+              label:
+                openAgeGroups.length > 0
                   ? "No team yet — join the waiting list"
-                  : "No team yet — the club will be in touch"}
-              </option>
-            </select>
-            {player.minor && !showAllTeams && (
-              <button
-                type="button"
-                onClick={() => setShowAllTeams(true)}
-                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-              >
-                Show all teams
-              </button>
-            )}
-            <div className="space-y-1">
-              <Label htmlFor={`sex-${player.personId}`}>
-                Biological sex (used for waiting-list and league age groups)
-              </Label>
-              <select
-                id={`sex-${player.personId}`}
-                name="biological_sex"
-                defaultValue="MALE"
-                className="block w-48 rounded-md border bg-background px-3 py-2 text-sm"
-              >
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-              </select>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              {openAgeGroups.length > 0
-                ? `Waiting list currently open for: ${openAgeGroups.join(", ")}`
-                : NO_WAITING_LIST_MESSAGE}
-            </p>
-          </fieldset>
+                  : "No team yet — the club will be in touch",
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            {openAgeGroups.length > 0
+              ? `Waiting list currently open for: ${openAgeGroups.join(", ")}`
+              : NO_WAITING_LIST_MESSAGE}
+          </p>
 
           {/* Emergency contacts are the person's, not the form's (Adam,
               2026-08-25): a fixed block written to the player's record, ahead

@@ -32,7 +32,7 @@ import {
   submitTeamRegistration,
 } from "@/lib/registration-server";
 import { getSiteUrl } from "@/lib/utils";
-import { ageGroupFromDob, tidyRpcMessage } from "@/lib/waiting-list";
+import { ageGroupFromDobString, tidyRpcMessage } from "@/lib/waiting-list";
 
 import { MAX_HOUSEHOLD } from "./constants";
 
@@ -53,7 +53,14 @@ function validDob(dob: string): boolean {
 // Step 1 — about you
 // ---------------------------------------------------------------------------
 
-export type JoinTeamOption = { id: string; name: string; ageGroup: string | null };
+export type JoinTeamOption = {
+  id: string;
+  name: string;
+  ageGroup: string | null;
+  /** `teams.gender`: null | "mixed" | "boys" | "girls". A girls' team is for
+   *  female players only (Adam, 2026-08-26). */
+  gender: string | null;
+};
 
 export type StartState = {
   error?: string;
@@ -68,9 +75,13 @@ export type StartState = {
     registeringOthers: boolean;
     /** True when the club has neither seen their ID nor holds a document. */
     needsId: boolean;
+    /** `people.sex` if the club already holds it. */
+    sex: string | null;
   };
   teams?: JoinTeamOption[];
   openAgeGroups?: string[];
+  /** Only a club administrator is offered "show all teams" (Adam, 2026-08-26). */
+  isAdmin?: boolean;
   /** The form, as the club currently asks it (live rows, in position order). */
   questions?: RegistrationQuestion[];
 };
@@ -97,27 +108,31 @@ async function loadJoinContext(): Promise<{
   teams: JoinTeamOption[];
   openAgeGroups: string[];
   questions: RegistrationQuestion[];
+  isAdmin: boolean;
 }> {
   const supabase = await createClient();
-  const [teamsResult, groupsResult, questionsResult] = await Promise.all([
-    supabase.from("teams").select("id,name,age_group").eq("active", true).order("name"),
+  const [teamsResult, groupsResult, questionsResult, adminResult] = await Promise.all([
+    supabase.from("teams").select("id,name,age_group,gender").eq("active", true).order("name"),
     supabase.rpc("waiting_list_open_age_groups"),
     supabase
       .from("registration_questions")
       .select("id,qkey,label,help_text,qtype,options,required,system,locked,position,archived_at")
       .is("archived_at", null)
       .order("position"),
+    supabase.rpc("is_club_admin"),
   ]);
   return {
     teams: (teamsResult.data ?? []).map((row) => ({
       id: row.id,
       name: row.name,
       ageGroup: row.age_group,
+      gender: row.gender,
     })),
     openAgeGroups: (groupsResult.data ?? []).map((row) => row.age_group),
     questions: (questionsResult.data ?? [])
       .map((row) => questionFromRow(row))
       .filter((question): question is RegistrationQuestion => question !== null),
+    isAdmin: adminResult.data === true,
   };
 }
 
@@ -159,7 +174,7 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     if (!personId) return { error: "Your account is not linked to a member record yet." };
     const { data: person } = await supabase
       .from("people")
-      .select("first_name,last_name,dob")
+      .select("first_name,last_name,dob,sex")
       .eq("id", personId)
       .maybeSingle();
     if (!person) return { error: "Your member record could not be read." };
@@ -175,6 +190,7 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
         playing,
         registeringOthers,
         needsId: await needsIdDocument(personId),
+        sex: person.sex,
       },
       ...context,
     };
@@ -235,6 +251,8 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
       playing,
       registeringOthers,
       needsId: await needsIdDocument(personId),
+      // A brand-new account: nothing on record yet, so the form asks.
+      sex: null,
     },
     ...context,
   };
@@ -336,6 +354,9 @@ export async function joinPlayerDetails(
   const isMinor = formData.get("is_minor") === "yes";
   const teamChoice = text(formData, "team_choice"); // team uuid | "waiting_list"
   if (!personId || !teamChoice) return { error: "Choose a team or the waiting list." };
+  if (!text(formData, "biological_sex")) {
+    return { error: "Choose whether this player is male or female — the league needs it." };
+  }
 
   // Everything is validated before anything is written.
   const built = registrationFormFromFormData(formData, {
@@ -384,8 +405,11 @@ export async function joinPlayerDetails(
   // Waiting list. The public entry point needs an OPEN age group; when the
   // player's group is not open the person still becomes a team-less pending
   // registration — the club follows up, nobody is dropped.
-  const ageGroup = validDob(dob) ? ageGroupFromDob(new Date(`${dob}T00:00:00Z`)) : null;
-  const sex = text(formData, "biological_sex") || "MALE";
+  const ageGroup = ageGroupFromDobString(dob);
+  // `submit_waiting_list_entry()` has always taken the legacy MALE/FEMALE
+  // shape; the form now posts lower case, so it is upper-cased here rather
+  // than changing an RPC three screens share.
+  const sex = (text(formData, "biological_sex") || "male").toUpperCase();
   const parentName = text(formData, "registrant_name");
   const parentEmail = text(formData, "registrant_email");
   const parentPhone = text(formData, "registrant_phone");

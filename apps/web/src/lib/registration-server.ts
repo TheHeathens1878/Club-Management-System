@@ -184,7 +184,11 @@ function registrationErrorMessage(error: { code?: string; message: string }): st
   if (error.code === "42501") {
     return "The club's records do not show you as able to register this player — only they, an active guardian or a club administrator can.";
   }
-  return tidyRpcMessage(error.message);
+  // `registrations_guard()` raises its refusals as `registrations: <reason>`,
+  // and the reason is a whole sentence meant for the family. Show the
+  // sentence, not the prefix (the same courtesy `tidyRpcMessage` does for the
+  // waiting list).
+  return tidyRpcMessage(error.message.replace(/^registrations:\s*/i, ""));
 }
 
 /**
@@ -202,6 +206,18 @@ export async function submitTeamRegistration(
   }
 
   const supabase = await createClient();
+
+  // The sex the form asked for is a fact about the PERSON, not about one
+  // registration, and `registrations_guard()` reads it from `people` when it
+  // decides whether a girls' team may take this player — so it is written
+  // first (Adam, 2026-08-26). A refusal here is not fatal: the guard then sees
+  // no sex on record, which it treats as "cannot prove a breach" and lets the
+  // registration through for the club to sort out by hand.
+  const sex = text(input.formData, "biological_sex").toLowerCase();
+  if (sex === "male" || sex === "female") {
+    await supabase.rpc("set_person_sex", { p_person_id: input.personId, p_sex: sex });
+  }
+
   const form = input.extraForm ? { ...input.form, ...input.extraForm } : input.form;
   const { data: inserted, error } = await supabase
     .from("registrations")
