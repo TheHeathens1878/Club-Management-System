@@ -444,7 +444,7 @@ end $backfill$;
 
 insert into public.audit_log (actor_email, action, entity, detail)
 values ('migration', 'migration.schema', 'memberships',
-        jsonb_build_object('migration', '20260825500000_membership_kind_by_players',
+        jsonb_build_object('migration', '20260825520000_membership_kind_by_players',
                            'changes', array[
                              'membership_kind_for() derives the kind from players, not people',
                              'refresh_membership_kind() re-derives on membership_people, registrations and team_memberships',

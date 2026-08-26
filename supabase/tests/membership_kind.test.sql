@@ -1,5 +1,5 @@
 -- =============================================================================
--- Membership kind is counted in PLAYERS (20260825500000)
+-- Membership kind is counted in PLAYERS (20260825520000)
 -- =============================================================================
 --   A  a parent and one playing child is an INDIVIDUAL membership;
 --      a parent and two playing children is a FAMILY
