@@ -49,7 +49,7 @@ export default async function ProfilePage() {
   const { data: person, error } = personId
     ? await supabase
         .from("people")
-        .select("first_name,last_name,preferred_name,email,phone,dob,address")
+        .select("first_name,last_name,preferred_name,email,phone,dob,address,is_player")
         .eq("id", personId)
         .maybeSingle()
     : { data: null, error: null };
@@ -63,6 +63,7 @@ export default async function ProfilePage() {
     ? {
         preferredName: person.preferred_name ?? "",
         phone: person.phone ?? "",
+        isPlayer: person.is_player === true,
         line1: addressField(person.address, "line1"),
         line2: addressField(person.address, "line2"),
         town: addressField(person.address, "town"),
@@ -133,6 +134,10 @@ export default async function ProfilePage() {
               </CardContent>
             </Card>
 
+            {/* Only a player is asked for one (Adam, 2026-08-26): the club
+                rings an emergency contact about somebody on a pitch. Tick "I
+                am a player" above and the card appears. */}
+            {person.is_player === true && (
             <Card>
               <CardHeader className="p-4 lg:p-6">
                 <CardTitle className="text-base">Emergency contacts</CardTitle>
@@ -148,6 +153,7 @@ export default async function ProfilePage() {
                 />
               </CardContent>
             </Card>
+            )}
           </>
         )}
       </div>

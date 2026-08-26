@@ -28,6 +28,9 @@ export async function updateContactDetails(
 ): Promise<ProfileActionState> {
   const preferred = String(formData.get("preferred_name") ?? "").trim();
   const phone = String(formData.get("phone") ?? "").trim();
+  // A tick box posts nothing when it is clear, so its absence IS the answer:
+  // false, not "leave it alone". Every save from this form states it.
+  const isPlayer = formData.get("is_player") === "yes";
   const line1 = String(formData.get("address_line1") ?? "").trim();
   const line2 = String(formData.get("address_line2") ?? "").trim();
   const town = String(formData.get("address_town") ?? "").trim();
@@ -50,6 +53,7 @@ export async function updateContactDetails(
     p_address: anyAddress
       ? { line1, line2: line2 || null, town, county: county || null, postcode }
       : undefined,
+    p_is_player: isPlayer,
   });
 
   if (error) {
