@@ -19,8 +19,7 @@
  *
  * The club administrator's four edits are folded into a "Manage" disclosure
  * inside the card, so the grid stays a grid. A refusal from the database is
- * shown as it arrived: the SG-6 trigger's message names the person and the
- * certification that is missing, which is exactly the sentence the
+ * shown as it arrived, because the database's own words are the sentence the
  * administrator needs.
  *
  * Dates of birth are deliberately absent. The server sends a minor flag (from
@@ -81,11 +80,6 @@ export type MemberRow = {
   joinedAt: string;
   /** `is_minor()` — a boolean, never the date behind it. */
   isMinor: boolean;
-  /** Whether this role is one the SG-6 lookup calls child-facing. */
-  childFacing: boolean;
-  /** `person_compliance_status()` for the two SG-6 certifications, null for a player. */
-  dbs: string | null;
-  safeguarding: string | null;
   /** Short-lived signed URL from `signPeoplePhotos`; null falls back to initials. */
   photoUrl: string | null;
   /** "Mary · 07700 900001 · Mother" lines — only what the reader's policies returned. */
@@ -144,13 +138,6 @@ export type PendingRow = {
 
 /** How many cards a group shows before "Show the other N". */
 const CARD_LIMIT = 11;
-
-/** `person_compliance_status()` in the design's three colours. */
-function complianceTone(status: string | null): SquadTone {
-  if (status === "valid") return "good";
-  if (status === "expiring") return "warn";
-  return "bad";
-}
 
 /** The design's colour-coded values, in the app's own palette. */
 const TONE_CLASS: Record<SquadTone, string> = {
@@ -346,23 +333,6 @@ function MemberCard({
           <CardRow label={dayLabel} cell={availabilityCell(availability)} />
         ) : null}
         {showSubs && isPlayer ? <CardRow label="Subs" cell={subsCell(sub)} /> : null}
-        {member.childFacing ? (
-          <>
-            <CardRow
-              label="DBS"
-              cell={{ label: member.dbs ?? "missing", tone: complianceTone(member.dbs) }}
-            />
-            <CardRow
-              label="Safeguarding"
-              cell={{
-                label: member.safeguarding ?? "missing",
-                tone: complianceTone(member.safeguarding),
-              }}
-            />
-          </>
-        ) : isPlayer ? null : (
-          <CardRow label="Safeguarding" cell={{ label: "Not child-facing", tone: "plain" }} />
-        )}
         <CardRow label="Joined" cell={{ label: formatStamp(member.joinedAt), tone: "plain" }} />
       </dl>
 

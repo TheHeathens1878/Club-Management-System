@@ -26,8 +26,7 @@ export function LeadPanel({
         <p className="text-xs uppercase text-muted-foreground">Current lead</p>
         {current.length === 0 ? (
           <p className="text-sm text-destructive">
-            Nobody holds the role. Until someone does, no certification exemptions can be granted and
-            concerns have no reviewer.
+            Nobody holds the role. Until someone does, concerns have no reviewer.
           </p>
         ) : (
           <ul className="text-sm">

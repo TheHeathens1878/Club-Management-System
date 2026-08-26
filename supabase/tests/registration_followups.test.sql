@@ -55,9 +55,10 @@ insert into public.seasons (id, name, starts_on, ends_on) values
 insert into public.teams (id, name) values ('79797979-9999-4111-8111-000000000001', 'RF U10s');
 -- A certified coach on the team the child will join, so the coach is genuinely
 -- team staff (and SG-6 has nothing to say when the child is approved onto it).
-insert into public.certifications (person_id, type, expires_on, verified_at) values
-  (current_setting('rf.coach')::uuid, 'fa_dbs', current_date + 300, now()),
-  (current_setting('rf.coach')::uuid, 'safeguarding_children', current_date + 300, now());
+-- The coach's DBS + safeguarding certificates used to be inserted here so the
+-- SG-6 tier-1 guard would let them onto a team with minors. That tier was
+-- retired by 20260825440000 (SAFEGUARDING.md SG-6): the FA Clubs Portal holds
+-- the paperwork, and the app can no longer write a certification at all.
 insert into public.team_memberships (person_id, team_id, season_id, role) values
   (current_setting('rf.coach')::uuid, '79797979-9999-4111-8111-000000000001',
    '59595959-9999-4111-8111-000000000001', 'coach');

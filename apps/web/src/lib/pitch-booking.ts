@@ -29,9 +29,8 @@ export type TeamRole = Database["public"]["Enums"]["team_role"];
 
 /**
  * The `team_memberships` roles that make someone a team's staff for booking
- * purposes. `is_team_staff()` asks `child_facing_roles` instead, which is the
- * safeguarding question; these three are the club's answer to "who runs this
- * team", and the database still has the final word on every write.
+ * purposes. These three are the club's answer to "who runs this team", and the
+ * database still has the final word on every write.
  */
 export const STAFF_TEAM_ROLES: TeamRole[] = ["coach", "assistant_coach", "manager"];
 
@@ -86,11 +85,23 @@ export type PitchBookingItem = {
   teamId: string | null;
   teamName: string | null;
   /**
-   * Set only on the allocator's own slots (`allocate_fixture()`). A coach may
-   * not touch one — `bookings_team_guard()` refuses — so the lists use it to
-   * decide whether to offer Cancel at all.
+   * Set on the allocator's own slots (`allocate_fixture()`) and, since
+   * 20260825410000, on a confirmed internal match's home fixture. A coach may
+   * not touch either — `bookings_team_guard()` refuses — so the lists use it
+   * together with {@link PitchBookingItem.opponentTeamId} to decide whether to
+   * offer Cancel at all.
    */
   fixtureId: string | null;
+  /**
+   * `bookings.opponent_team_id` — the club team this match is against when the
+   * opposition is internal; null for a club from outside and for everything
+   * that is not a match. It is what tells an internal match apart from a
+   * league fixture's allocated slot: the league fixture exists whether or not
+   * the pitch does and is unallocated on /pitches, whereas an internal match's
+   * booking IS the match, so cancelling it calls the game off on both teams'
+   * pages.
+   */
+  opponentTeamId: string | null;
   bookerName: string | null;
   bookerEmail: string | null;
   recurrenceGroupId: string | null;

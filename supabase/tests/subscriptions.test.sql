@@ -27,9 +27,10 @@ insert into public.people (id, first_name, last_name, dob) values
   ('c7c7c7c7-1111-4111-8111-000000000001', 'Kid', 'Subs', current_date - interval '10 years');
 insert into public.guardianships (guardian_person_id, child_person_id, relationship)
   values (current_setting('s.parent')::uuid, 'c7c7c7c7-1111-4111-8111-000000000001', 'parent');
-insert into public.certifications (person_id, type, expires_on, verified_at) values
-  (current_setting('s.coach')::uuid, 'fa_dbs', current_date + 300, now()),
-  (current_setting('s.coach')::uuid, 'safeguarding_children', current_date + 300, now());
+-- The coach's DBS + safeguarding certificates used to be inserted here so the
+-- SG-6 tier-1 guard would let them onto a team with minors. That tier was
+-- retired by 20260825440000 (SAFEGUARDING.md SG-6): the FA Clubs Portal holds
+-- the paperwork, and the app can no longer write a certification at all.
 insert into public.seasons (id, name, starts_on, ends_on) values ('5d5d5d5d-1111-4111-8111-000000000001', 'Subs 2036/37', '2036-08-01', '2037-05-31');
 insert into public.teams (id, name) values ('7d7d7d7d-1111-4111-8111-000000000001', 'Subs U11s'), ('7d7d7d7d-1111-4111-8111-000000000002', 'Subs Vets');
 insert into public.team_memberships (person_id, team_id, season_id, role) values

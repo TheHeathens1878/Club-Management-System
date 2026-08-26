@@ -104,7 +104,7 @@ export default async function RegisterPlayerPage() {
     personId
       ? supabase
           .from("people")
-          .select("first_name,last_name,preferred_name")
+          .select("first_name,last_name,preferred_name,is_player")
           .eq("id", personId)
           .maybeSingle()
       : Promise.resolve({ data: null }),
@@ -129,7 +129,10 @@ export default async function RegisterPlayerPage() {
 
   // Everyone this account may register, in the order the workflow adds them.
   const people: Registerable[] = [];
-  if (personId && meResult.data) {
+  // Adam, 2026-08-26: you appear here only if you have said you play. The tick
+  // is on My Profile; children and connected adults are registered by somebody
+  // else and are listed whatever the caller ticked about themselves.
+  if (personId && meResult.data?.is_player === true) {
     const me = meResult.data;
     people.push({
       personId,
@@ -277,8 +280,11 @@ export default async function RegisterPlayerPage() {
           <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
             {people.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                Your sign-in is not linked to a member record yet, so there is nobody to register.
-                Ask the club to link your account.
+                Nobody to register yet. If you play yourself, tick{" "}
+                <Link href="/profile" className="underline underline-offset-2">
+                  I am a player
+                </Link>{" "}
+                on My profile; otherwise add a child or a connected adult below.
               </p>
             ) : (
               people.map((person) => (

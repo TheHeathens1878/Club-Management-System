@@ -39,12 +39,10 @@ import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import {
   EmergencyContactsPanel,
   GuardianshipsPanel,
-  PersonCertificationsPanel,
   PurgePanel,
   RetirePanel,
   RolesPanel,
   type GuardianshipRow,
-  type PersonCertificationRow,
   type RoleRow,
 } from "./panels";
 
@@ -107,7 +105,6 @@ export default async function PersonPage({
     { data: roleRows },
     { data: guardianshipRows },
     { data: membershipRows },
-    { data: certificationRows },
     { data: registration },
     { data: pendingRows },
     { data: profileRow },
@@ -128,11 +125,6 @@ export default async function PersonPage({
       .select("id,team_id,role,shirt_number,joined_at,left_at,teams(name),seasons(name,is_current)")
       .eq("person_id", id)
       .order("joined_at", { ascending: false }),
-    supabase
-      .from("certifications")
-      .select("id,type,reference,issued_on,expires_on,verified_at,revoked_at")
-      .eq("person_id", id)
-      .order("expires_on", { nullsFirst: false }),
     supabase
       .from("registrations")
       .select("id,status,submitted_at,seasons(name)")
@@ -174,16 +166,6 @@ export default async function PersonPage({
       endedAt: row.ended_at,
     };
   });
-
-  const certifications: PersonCertificationRow[] = (certificationRows ?? []).map((row) => ({
-    id: row.id,
-    type: row.type,
-    reference: row.reference,
-    issuedOn: row.issued_on,
-    expiresOn: row.expires_on,
-    verifiedAt: row.verified_at,
-    revokedAt: row.revoked_at,
-  }));
 
   const pending = pendingRows ?? [];
   const name = personLabel(person);
@@ -472,19 +454,6 @@ export default async function PersonPage({
                 </p>
               )
             )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Certifications</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              DBS checks, safeguarding and coaching qualifications. A certification counts towards
-              SG-6 only once it has been verified, and it is revoked, never deleted.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <PersonCertificationsPanel personId={person.id} certifications={certifications} />
           </CardContent>
         </Card>
 

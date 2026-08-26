@@ -15,8 +15,6 @@
  *     SG-4 rule it enforces (guardian must be a known adult, child must be a
  *     minor, no self-guardianship, no duplicate live link). Those sentences are
  *     passed through untouched.
- *   * `certifications` — club_admin or safeguarding_lead, soft-revoke only:
- *     the table has no DELETE grant and a `deny_hard_delete` trigger.
  */
 
 import { revalidatePath } from "next/cache";
@@ -34,7 +32,6 @@ export type PersonDetailState = { error?: string; notice?: string };
 
 type AppRole = Database["public"]["Enums"]["app_role"];
 type GuardianRelationship = Database["public"]["Enums"]["guardian_relationship"];
-type CertificationType = Database["public"]["Enums"]["certification_type"];
 
 const APP_ROLES: AppRole[] = [
   "club_admin",
@@ -54,13 +51,6 @@ const RELATIONSHIPS: GuardianRelationship[] = [
   "legal_guardian",
   "other",
 ];
-const CERTIFICATION_TYPES: CertificationType[] = [
-  "fa_dbs",
-  "safeguarding_children",
-  "first_aid",
-  "coaching_badge",
-];
-
 const NOT_ADMIN = "Only a club administrator can grant or revoke a role.";
 const NOT_SAFEGUARDING =
   "Only a club administrator or the safeguarding lead can change this. Ask one of them.";
@@ -209,91 +199,6 @@ export async function endGuardianship(
 
   revalidatePath(personPath(personId));
   return { notice: "Guardianship ended. The link stays on the record." };
-}
-
-// ---------------------------------------------------------------------------
-// Certifications
-// ---------------------------------------------------------------------------
-
-export async function addPersonCertification(
-  _prev: PersonDetailState,
-  formData: FormData,
-): Promise<PersonDetailState> {
-  await requireCommittee();
-
-  const personId = text(formData, "person_id");
-  const type = text(formData, "type");
-  const reference = text(formData, "reference") || null;
-  const issuedOn = text(formData, "issued_on") || null;
-  const expiresOn = text(formData, "expires_on") || null;
-
-  if (!personId) return { error: "No person given." };
-  if (!CERTIFICATION_TYPES.includes(type as CertificationType)) {
-    return { error: "Choose a certification type." };
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase.from("certifications").insert({
-    person_id: personId,
-    type: type as CertificationType,
-    reference,
-    issued_on: issuedOn,
-    expires_on: expiresOn,
-  });
-  if (error) return { error: friendlyDbError(error, NOT_SAFEGUARDING) };
-
-  revalidatePath(personPath(personId));
-  return { notice: "Certification recorded. It counts towards SG-6 once it has been verified." };
-}
-
-export async function verifyPersonCertification(
-  _prev: PersonDetailState,
-  formData: FormData,
-): Promise<PersonDetailState> {
-  await requireCommittee();
-
-  const personId = text(formData, "person_id");
-  const certificationId = text(formData, "certification_id");
-  if (!certificationId) return { error: "No certification given." };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { error } = await supabase
-    .from("certifications")
-    .update({ verified_at: new Date().toISOString(), verified_by: user?.id ?? null })
-    .eq("id", certificationId);
-  if (error) return { error: friendlyDbError(error, NOT_SAFEGUARDING) };
-
-  revalidatePath(personPath(personId));
-  return { notice: "Verified." };
-}
-
-/** Soft revoke: `certifications` has no DELETE grant and refuses a hard delete. */
-export async function revokePersonCertification(
-  _prev: PersonDetailState,
-  formData: FormData,
-): Promise<PersonDetailState> {
-  await requireCommittee();
-
-  const personId = text(formData, "person_id");
-  const certificationId = text(formData, "certification_id");
-  if (!certificationId) return { error: "No certification given." };
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { error } = await supabase
-    .from("certifications")
-    .update({ revoked_at: new Date().toISOString(), revoked_by: user?.id ?? null })
-    .eq("id", certificationId)
-    .is("revoked_at", null);
-  if (error) return { error: friendlyDbError(error, NOT_SAFEGUARDING) };
-
-  revalidatePath(personPath(personId));
-  return { notice: "Revoked." };
 }
 
 // ---------------------------------------------------------------------------

@@ -4,9 +4,8 @@
  * Approve / reject for one pending registration (gap 9).
  *
  * `blocked` is not an error to tidy away: the database refused because a
- * safeguarding requirement is not met (most often SG-6 — a coach on that team
- * without an in-date DBS or safeguarding certificate), the registration is
- * still pending, and the message names the fix. It is shown in full.
+ * safeguarding requirement is not met, the registration is still pending, and
+ * the message names the fix. It is shown in full.
  */
 
 import { useActionState, useState } from "react";

@@ -56,7 +56,7 @@ describe("routeForPushData", () => {
   });
 
   it("stays put for anything else", () => {
-    expect(routeForPushData({ entity: "certifications", entity_id: ID })).toBeNull();
+    expect(routeForPushData({ entity: "subscriptions", entity_id: ID })).toBeNull();
   });
 });
 

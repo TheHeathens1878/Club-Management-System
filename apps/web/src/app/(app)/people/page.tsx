@@ -380,11 +380,10 @@ export default async function PeoplePage({
   const withLogin = new Set((profilesResult.data ?? []).map((p) => p.person_id));
 
   // The design's row details: a minor's contact goes through their guardian
-  // ("via Kate Ashworth"), a pending account request reads Needs review, and a
-  // staff DBS inside 90 days of expiry reads DBS due. Three more bulk reads
-  // for the page's rows only.
+  // ("via Kate Ashworth") and a pending account request reads Needs review.
+  // Two more bulk reads for the page's rows only.
   const minorIds = people.filter((p) => isMinorDob(p.dob)).map((p) => p.id);
-  const [guardiansResult, requestsResult, dbsResult] = await Promise.all([
+  const [guardiansResult, requestsResult] = await Promise.all([
     minorIds.length > 0
       ? supabase
           .from("guardianships")
@@ -399,14 +398,6 @@ export default async function PeoplePage({
           .in("person_id", ids)
           .eq("status", "pending")
       : Promise.resolve({ data: [] as { person_id: string }[] }),
-    ids.length > 0
-      ? supabase
-          .from("certifications")
-          .select("person_id,expires_on")
-          .in("person_id", ids)
-          .eq("type", "fa_dbs")
-          .is("revoked_at", null)
-      : Promise.resolve({ data: [] as { person_id: string; expires_on: string | null }[] }),
   ]);
 
   const guardianOf = new Map<string, string>();
@@ -433,12 +424,6 @@ export default async function PeoplePage({
   }
 
   const needsReview = new Set((requestsResult.data ?? []).map((r) => r.person_id));
-  const dbsDue = new Set<string>();
-  const dbsSoon = new Date();
-  dbsSoon.setDate(dbsSoon.getDate() + 90);
-  for (const cert of dbsResult.data ?? []) {
-    if (cert.expires_on && new Date(cert.expires_on) <= dbsSoon) dbsDue.add(cert.person_id);
-  }
 
   const chips: { key: string; label: string; href: string; active: boolean }[] = [
     {
@@ -666,13 +651,11 @@ export default async function PeoplePage({
                     // never drift apart.
                     const status = needsReview.has(person.id)
                       ? { label: "Needs review", variant: "destructive" as const }
-                      : dbsDue.has(person.id)
-                        ? { label: "DBS due", variant: "warning" as const }
-                        : minor
-                          ? { label: "Registered", variant: "success" as const }
-                          : linked
-                            ? { label: "Active", variant: "success" as const }
-                            : { label: "No login", variant: "muted" as const };
+                      : minor
+                        ? { label: "Registered", variant: "success" as const }
+                        : linked
+                          ? { label: "Active", variant: "success" as const }
+                          : { label: "No login", variant: "muted" as const };
                     const href = personHref(person.id, params, page);
                     return (
                       <li key={person.id}>

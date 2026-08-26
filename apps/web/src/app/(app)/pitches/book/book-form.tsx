@@ -29,6 +29,7 @@
 
 import Link from "next/link";
 import { useActionState, useState } from "react";
+import { ChevronDown } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -97,9 +98,18 @@ export function BookForm({
   const [label, setLabel] = useState("");
   const [suggestion, setSuggestion] = useState("");
 
-  const sharingCandidates = teams.filter((team) => team.id !== teamId);
+  // Adam, 2026-08-26: the teams that can share a session are ANY of the
+  // club's, not only the ones this person runs — an U14 coach putting the U9s
+  // on the same hour does not staff the U9s. `allTeams` is the same
+  // `teams_read` list the opposition picker uses; a team's name is not
+  // private.
+  const sharingCandidates = allTeams.filter((team) => team.id !== teamId);
+  const [sharing, setSharing] = useState<string[]>([]);
+  const [sharingOpen, setSharingOpen] = useState(false);
   /** You cannot play yourself: the booking's own team is never the opposition. */
   const oppositionTeams = allTeams.filter((team) => team.id !== teamId);
+  const sharingSelected = sharing.filter((id) => id !== teamId);
+  if (sharingSelected.length !== sharing.length) setSharing(sharingSelected);
 
   /**
    * Re-offer the label after anything it is built from moves.
@@ -275,28 +285,15 @@ export function BookForm({
           </Select>
         </div>
 
-        <div className="space-y-1">
-          <Label htmlFor="occasion">Label</Label>
-          <Input
-            id="occasion"
-            name="occasion"
-            maxLength={120}
-            placeholder={kind === "fixture" ? "e.g. U14 Mavericks v Sale Sharks" : "e.g. Tuesday training"}
-            value={label}
-            onChange={(event) => setLabel(event.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            {kind === "fixture"
-              ? "What the club calendar shows. Filled in from the teams above — change it if you want it to read differently."
-              : "What the club calendar shows. Left blank, it shows the team name."}
-          </p>
-        </div>
       </div>
 
       {/* Adam, 2026-08-25: "if match is selected, it should ask if the
           opposition is internal (and then choose the team) or external (free
-          type)". No opposition column exists and none is added — the answer
-          becomes the label, which is what the pitch diary shows. */}
+          type)". The answer becomes the label the pitch diary shows, and — for
+          an internal opposition since 20260825410000 — `bookings.opponent_team_id`,
+          which is what `create_internal_match_fixtures()` builds the two
+          mirrored fixture rows from when the request is confirmed. An external
+          club has no team row and so still creates no fixture at all. */}
       {kind === "fixture" && (
         <fieldset className="space-y-3 rounded-lg border bg-secondary/40 p-3">
           <legend className="px-1 text-sm font-medium">Who is the match against?</legend>
@@ -346,6 +343,8 @@ export function BookForm({
               </Select>
               <p className="text-xs text-muted-foreground">
                 Both teams are the club&apos;s, so this books the pitch once, for the team above.
+                When a club administrator confirms it, the match appears on both teams&apos;
+                pages — the team above at home, the opposition away.
               </p>
             </div>
           ) : (
@@ -368,30 +367,95 @@ export function BookForm({
         </fieldset>
       )}
 
+      {/* The label sits below the match box (Adam, 2026-08-26): what fills it
+          in is above it, so the pre-filled value makes sense when it appears. */}
+      <div className="space-y-1">
+        <Label htmlFor="occasion">Label</Label>
+        <Input
+          id="occasion"
+          name="occasion"
+          maxLength={120}
+          placeholder={kind === "fixture" ? "e.g. U14 Mavericks v Sale Sharks" : "e.g. Tuesday training"}
+          value={label}
+          onChange={(event) => setLabel(event.target.value)}
+        />
+        <p className="text-xs text-muted-foreground">
+          {kind === "fixture"
+            ? "What the club calendar shows. Filled in from the teams above — change it if you want it to read differently."
+            : "What the club calendar shows. Left blank, it shows the team name."}
+        </p>
+      </div>
+
       {sharingCandidates.length > 0 && (
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Other teams sharing this session</legend>
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            {sharingCandidates.map((team) => (
-              <label
-                key={team.id}
-                className="flex min-h-[44px] items-center gap-2 text-sm sm:min-h-0"
+        <div className="space-y-2">
+          <Label htmlFor="sharing-toggle">Other teams sharing this session</Label>
+          {/* A dropdown of tick boxes (Adam, 2026-08-26): the club has more
+              teams than fit as a row of checkboxes, and most sessions share
+              with none of them. The chosen ids are posted as hidden inputs so
+              the form still submits plain `extra_team_ids` values. */}
+          <div className="relative">
+            <button
+              id="sharing-toggle"
+              type="button"
+              aria-expanded={sharingOpen}
+              aria-haspopup="listbox"
+              onClick={() => setSharingOpen((open) => !open)}
+              className="flex min-h-[44px] w-full items-center justify-between gap-2 rounded-md border border-input bg-card px-3 text-left text-sm lg:min-h-[2.25rem]"
+            >
+              <span className={sharing.length === 0 ? "text-muted-foreground" : undefined}>
+                {sharing.length === 0
+                  ? "No other teams"
+                  : sharing.length === 1
+                    ? teamLabel(sharingCandidates.find((team) => team.id === sharing[0]) ?? sharingCandidates[0]!)
+                    : `${sharing.length} teams`}
+              </span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+            </button>
+
+            {sharingOpen && (
+              <div
+                role="listbox"
+                aria-multiselectable
+                className="absolute z-20 mt-1 max-h-[50dvh] w-full overflow-y-auto rounded-md border bg-card p-1 shadow-lg"
               >
-                <input
-                  type="checkbox"
-                  name="extra_team_ids"
-                  value={team.id}
-                  className="h-4 w-4 rounded border-input"
-                />
-                {teamLabel(team)}
-              </label>
-            ))}
+                {sharingCandidates.map((team) => {
+                  const picked = sharing.includes(team.id);
+                  return (
+                    <label
+                      key={team.id}
+                      role="option"
+                      aria-selected={picked}
+                      className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded px-2 text-sm hover:bg-secondary lg:min-h-[2rem]"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={picked}
+                        onChange={(event) =>
+                          setSharing((current) =>
+                            event.target.checked
+                              ? [...current, team.id]
+                              : current.filter((id) => id !== team.id),
+                          )
+                        }
+                        className="h-4 w-4 rounded border-input"
+                      />
+                      {teamLabel(team)}
+                    </label>
+                  );
+                })}
+              </div>
+            )}
           </div>
+
+          {sharing.map((id) => (
+            <input key={id} type="hidden" name="extra_team_ids" value={id} />
+          ))}
+
           <p className="text-xs text-muted-foreground">
             Shared teams see the session on their own team page. The team above stays the one
             responsible for it.
           </p>
-        </fieldset>
+        </div>
       )}
 
       {kind === "training" && (

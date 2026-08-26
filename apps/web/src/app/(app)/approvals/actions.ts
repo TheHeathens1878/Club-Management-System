@@ -12,10 +12,10 @@
  * `approve` has three outcomes and all three matter:
  *   · `approved`       — done.
  *   · `already_decided` — someone else got there first; `detail` is the status.
- *   · `blocked`        — the SG-6 guard refused, most often a missing or
- *                        expired DBS / safeguarding certificate. The request
- *                        stays pending, the reason is recorded on it, and it
- *                        is shown here verbatim with a way to go and fix it.
+ *   · `blocked`        — a safeguarding guard in the database refused. The
+ *                        request stays pending, the reason is recorded on it,
+ *                        and it is shown here verbatim with a way to go and
+ *                        fix it.
  */
 
 import { revalidatePath } from "next/cache";

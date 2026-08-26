@@ -720,6 +720,7 @@ export type Database = {
           membership_type: string | null
           notes: string | null
           occasion: string | null
+          opponent_team_id: string | null
           payment_method: string | null
           payment_received_at: string | null
           payment_received_by: string | null
@@ -787,6 +788,7 @@ export type Database = {
           membership_type?: string | null
           notes?: string | null
           occasion?: string | null
+          opponent_team_id?: string | null
           payment_method?: string | null
           payment_received_at?: string | null
           payment_received_by?: string | null
@@ -854,6 +856,7 @@ export type Database = {
           membership_type?: string | null
           notes?: string | null
           occasion?: string | null
+          opponent_team_id?: string | null
           payment_method?: string | null
           payment_received_at?: string | null
           payment_received_by?: string | null
@@ -926,6 +929,13 @@ export type Database = {
           {
             foreignKeyName: "bookings_team_id_fkey"
             columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_opponent_team_id_fkey"
+            columns: ["opponent_team_id"]
             isOneToOne: false
             referencedRelation: "teams"
             referencedColumns: ["id"]
@@ -1994,6 +2004,7 @@ export type Database = {
           is_home: boolean
           kickoff_at: string
           last_seen_at: string | null
+          mirror_fixture_id: string | null
           notes: string | null
           opponent: string
           season_id: string
@@ -2021,6 +2032,7 @@ export type Database = {
           is_home: boolean
           kickoff_at: string
           last_seen_at?: string | null
+          mirror_fixture_id?: string | null
           notes?: string | null
           opponent: string
           season_id: string
@@ -2048,6 +2060,7 @@ export type Database = {
           is_home?: boolean
           kickoff_at?: string
           last_seen_at?: string | null
+          mirror_fixture_id?: string | null
           notes?: string | null
           opponent?: string
           season_id?: string
@@ -2064,6 +2077,13 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: true
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fixtures_mirror_fixture_id_fkey"
+            columns: ["mirror_fixture_id"]
+            isOneToOne: false
+            referencedRelation: "fixtures"
             referencedColumns: ["id"]
           },
           {
@@ -3137,6 +3157,7 @@ export type Database = {
           email: string | null
           first_name: string
           id: string
+          is_player: boolean
           id_verified: boolean
           id_verified_at: string | null
           id_verified_by: string | null
@@ -3160,6 +3181,7 @@ export type Database = {
           email?: string | null
           first_name: string
           id?: string
+          is_player?: boolean
           id_verified?: boolean
           id_verified_at?: string | null
           id_verified_by?: string | null
@@ -3183,6 +3205,7 @@ export type Database = {
           email?: string | null
           first_name?: string
           id?: string
+          is_player?: boolean
           id_verified?: boolean
           id_verified_at?: string | null
           id_verified_by?: string | null
@@ -5576,6 +5599,14 @@ export type Database = {
           series_id: string
         }[]
       }
+      create_internal_match_fixtures: {
+        Args: { p_booking_id: string }
+        Returns: {
+          at_home: boolean
+          match_fixture_id: string
+          match_team_id: string
+        }[]
+      }
       create_membership: {
         Args: { p_person_ids: string[] }
         Returns: {
@@ -6042,6 +6073,7 @@ export type Database = {
           venue: string
         }[]
       }
+      my_family_tree: { Args: never; Returns: Json }
       my_household: {
         Args: never
         Returns: {
@@ -6329,6 +6361,7 @@ export type Database = {
           p_kind: Database["public"]["Enums"]["booking_kind"]
           p_notes?: string | null
           p_occasion?: string | null
+          p_opponent_team_id?: string | null
           p_recurrence_group_id?: string | null
           p_resource_id: string
           p_starts: string[]
@@ -6530,7 +6563,12 @@ export type Database = {
         Returns: undefined
       }
       update_own_contact: {
-        Args: { p_address?: Json; p_phone?: string; p_preferred_name?: string }
+        Args: {
+          p_address?: Json
+          p_is_player?: boolean
+          p_phone?: string
+          p_preferred_name?: string
+        }
         Returns: undefined
       }
       update_team_event: {
