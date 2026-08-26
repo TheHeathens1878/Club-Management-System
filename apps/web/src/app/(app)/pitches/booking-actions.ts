@@ -165,6 +165,43 @@ function readOccurrences(
 }
 
 /**
+ * Who the match is against, as the form put it.
+ *
+ * `opponentTeamId` is the only part the database keeps as data
+ * (`bookings.opponent_team_id`, 20260825410000) and it is the thing
+ * `create_internal_match_fixtures()` builds the away mirror from. It is set
+ * for an internal opposition and nothing else: an external club has no team
+ * row, and a training or block booking has no opposition at all — a CHECK
+ * constraint refuses one, so the null here is not a nicety.
+ */
+type Opposition = {
+  side: OppositionSide;
+  /** Null unless this is a match against another of the club's own teams. */
+  opponentTeamId: string | null;
+  /** The free-typed name, which only an external opposition ever has. */
+  opponentTyped: string;
+};
+
+function readOpposition(formData: FormData, kind: PitchBookingKind, teamId: string): Opposition {
+  if (kind !== "fixture") return { side: "external", opponentTeamId: null, opponentTyped: "" };
+
+  const posted = text(formData, "opponent_team_id", 40);
+  const opponentTyped = text(formData, "opponent_name", 80);
+  const sideRaw = text(formData, "opposition", 20);
+  const side: OppositionSide = isOppositionSide(sideRaw)
+    ? sideRaw
+    : posted
+      ? "internal"
+      : "external";
+
+  // A team cannot play itself — the form filters its own team out of the
+  // select, and a hand-made POST is held to the same rule the database's
+  // `bookings_opponent_team_not_self` CHECK would apply.
+  const opponentTeamId = side === "internal" && posted && posted !== teamId ? posted : null;
+  return { side, opponentTeamId, opponentTyped };
+}
+
+/**
  * The label the pitch diary will show, "U14 Mavericks v Sale Sharks" and all.
  *
  * Whatever was typed wins — Adam asked for a pre-filled label that is "still
@@ -178,19 +215,13 @@ async function pitchBookingLabel(
   formData: FormData,
   kind: PitchBookingKind,
   teamId: string,
+  opposition: Opposition,
 ): Promise<string | null> {
   const typed = text(formData, "occasion", 120);
   if (typed) return typed;
   if (kind !== "fixture") return null;
 
-  const opponentTeamId = text(formData, "opponent_team_id", 40);
-  const opponentTyped = text(formData, "opponent_name", 80);
-  const sideRaw = text(formData, "opposition", 20);
-  const side: OppositionSide = isOppositionSide(sideRaw)
-    ? sideRaw
-    : opponentTeamId
-      ? "internal"
-      : "external";
+  const { side, opponentTeamId, opponentTyped } = opposition;
 
   // An internal opponent is named by the club, not by the form: the id is what
   // was posted, and the name comes from `teams` (readable by any member —
@@ -200,8 +231,31 @@ async function pitchBookingLabel(
   const { data } = await supabase.from("teams").select("id,name").in("id", wantedIds);
   const nameById = new Map((data ?? []).map((row) => [row.id, row.name]));
   const opponent =
-    side === "internal" ? (nameById.get(opponentTeamId) ?? null) : opponentTyped;
+    side === "internal" ? (opponentTeamId ? (nameById.get(opponentTeamId) ?? null) : null) : opponentTyped;
   return matchLabel(nameById.get(teamId) ?? null, opponent) || null;
+}
+
+/**
+ * An internal match becomes TWO fixture rows — one on each team's page.
+ *
+ * `fixtures.booking_id` and `bookings.fixture_id` are both UNIQUE, so the two
+ * sides cannot both hold the pitch booking: the booking's own team is home and
+ * keeps the link, the opposition gets the away mirror, and
+ * `fixtures.mirror_fixture_id` joins them so a cancellation moves both.
+ * `create_internal_match_fixtures()` (20260825410000) does all of it in one
+ * transaction, is club_admin only, and is idempotent — a second click returns
+ * the pair it already made rather than creating four rows — so this action
+ * does not have to guard against being called twice.
+ */
+async function mirrorInternalMatch(
+  supabase: SupabaseClient<Database>,
+  bookingId: string,
+): Promise<{ created: boolean; error?: string }> {
+  const { data, error } = await supabase.rpc("create_internal_match_fixtures", {
+    p_booking_id: bookingId,
+  });
+  if (error) return { created: false, error: friendlyDbError(error, NOT_ALLOWED) };
+  return { created: (data ?? []).length === 2 };
 }
 
 /** Every occurrence `booking_has_conflict()` says is already taken. */
@@ -297,7 +351,8 @@ export async function createPitchBooking(
   }
 
   const recurrenceGroupId = occurrences.length > 1 ? crypto.randomUUID() : null;
-  const occasion = await pitchBookingLabel(supabase, formData, kind, teamId);
+  const opposition = readOpposition(formData, kind, teamId);
+  const occasion = await pitchBookingLabel(supabase, formData, kind, teamId, opposition);
   const notes = text(formData, "notes") || null;
 
   // Two paths, one for each hat, and the difference is which of them the
@@ -330,6 +385,7 @@ export async function createPitchBooking(
       occasion,
       notes,
       recurrence_group_id: recurrenceGroupId,
+      opponent_team_id: opposition.opponentTeamId,
     }));
     const result = await supabase.from("bookings").insert(rows).select("id");
     created = result.data;
@@ -346,6 +402,7 @@ export async function createPitchBooking(
       p_occasion: occasion,
       p_notes: notes,
       p_recurrence_group_id: recurrenceGroupId,
+      p_opponent_team_id: opposition.opponentTeamId,
     });
     created = (result.data ?? []).map((row) => ({ id: row.booking_id }));
     error = result.error;
@@ -388,6 +445,23 @@ export async function createPitchBooking(
     }
   }
 
+  // An internal match that is already CONFIRMED gets its two fixtures now —
+  // this is an administrator booking as an administrator, which is the same
+  // decision the requests desk makes, just made a step earlier. A request lands
+  // pending and gets nothing yet, by design: a pending slot must not put a game
+  // on the opposition's matchday tab.
+  let matchNotice = "";
+  const matchBookingId = bookingIds.length === 1 ? bookingIds[0] : undefined;
+  if (status === "confirmed" && opposition.opponentTeamId && matchBookingId) {
+    const mirrored = await mirrorInternalMatch(supabase, matchBookingId);
+    matchNotice = mirrored.error
+      ? ` The booking is saved, but the fixtures could not be created: ${mirrored.error}`
+      : " The fixture is on both teams' pages.";
+    revalidatePath(`/teams/${opposition.opponentTeamId}`);
+  } else if (opposition.opponentTeamId) {
+    matchNotice = " Once it is confirmed, the fixture appears on both teams' pages.";
+  }
+
   revalidatePitchPaths(teamId);
   for (const extraTeamId of extraTeamIds) revalidatePath(`/teams/${extraTeamId}`);
 
@@ -403,7 +477,7 @@ export async function createPitchBooking(
         ? `${what} saved as pending. It is on the requests desk for a decision.`
         : `${what} requested. It has gone to a club administrator for approval — the slot is held for you and you will be told when it is decided.`;
 
-  return { notice: `${outcome}${sharingWarning}`, teamId };
+  return { notice: `${outcome}${matchNotice}${sharingWarning}`, teamId };
 }
 
 // ---------------------------------------------------------------------------
@@ -432,6 +506,18 @@ export async function cancelPitchBooking(
   const teamId = text(formData, "team_id", 40) || null;
 
   const supabase = await createClient();
+  // Read first, so the notice can say what actually happened. An internal
+  // match's booking IS the match: `bookings_cancel_internal_match()` and
+  // `fixtures_cancel_mirror()` cancel BOTH fixture rows in the same
+  // transaction as the update below, and a "the pitch is free again" that says
+  // nothing about the game would be the smaller half of the truth.
+  const { data: before } = await supabase
+    .from("bookings")
+    .select("opponent_team_id,fixture_id")
+    .eq("id", bookingId)
+    .maybeSingle();
+  const wasInternalMatch = Boolean(before?.opponent_team_id && before?.fixture_id);
+
   const { data, error } = await supabase
     .from("bookings")
     .update({ status: "cancelled" })
@@ -442,7 +528,12 @@ export async function cancelPitchBooking(
   if (!data || data.length === 0) return { error: CANCEL_REFUSED };
 
   revalidatePitchPaths(teamId);
-  return { notice: "Booking cancelled. The pitch is free again." };
+  if (before?.opponent_team_id) revalidatePath(`/teams/${before.opponent_team_id}`);
+  return {
+    notice: wasInternalMatch
+      ? "Match cancelled. It is off both teams' pages and the pitch is free again."
+      : "Booking cancelled. The pitch is free again.",
+  };
 }
 
 /** The whole weekly series, for a repeat that should not have been made. */
@@ -536,6 +627,13 @@ export async function updatePitchBooking(
  * Confirming brings a pending row under `bookings_no_overlap` against every
  * other live booking, so this update can collide even though the request was
  * accepted — hence `conflictOrMessage`.
+ *
+ * Confirming is also the moment an INTERNAL match becomes two fixtures, one on
+ * each team's page (Adam, 2026-08-26). Not a moment earlier: a pending request
+ * on two teams' matchday tabs would have the opposition's coach asking for
+ * availability against a game nobody has agreed to. The fixtures are created
+ * only after the status update has actually landed — the RPC refuses a booking
+ * that is not confirmed, so the order here is the same rule said twice.
  */
 export async function confirmPitchBooking(
   _prev: PitchBookingActionState,
@@ -555,8 +653,26 @@ export async function confirmPitchBooking(
     return { error: friendlyDbError(error, NOT_ALLOWED) };
   }
 
+  // Only a match against another of the club's OWN teams has a second page to
+  // appear on. An external opponent has no team row, creates no fixture today
+  // and creates none now.
+  const { data: booking } = await supabase
+    .from("bookings")
+    .select("kind,opponent_team_id")
+    .eq("id", bookingId)
+    .maybeSingle();
+
+  let matchNotice = "";
+  if (booking?.kind === "fixture" && booking.opponent_team_id) {
+    const mirrored = await mirrorInternalMatch(supabase, bookingId);
+    matchNotice = mirrored.error
+      ? ` The pitch is booked, but the fixtures could not be created: ${mirrored.error}`
+      : " The fixture is on both teams' pages.";
+    revalidatePath(`/teams/${booking.opponent_team_id}`);
+  }
+
   revalidatePitchPaths(teamId);
-  return { notice: "Booking confirmed." };
+  return { notice: `Confirmed.${matchNotice || " The pitch is theirs."}` };
 }
 
 /** Declining is a cancellation with the reason kept where staff can read it. */

@@ -37,7 +37,7 @@ import { createClient } from "@/lib/supabase/server";
  * only a literal carries that type.
  */
 const BOOKING_SELECT =
-  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,internal_notes,team_id,fixture_id,booker_name,booker_email,recurrence_group_id,resources!inner(name,type),teams!bookings_team_id_fkey(name)";
+  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,internal_notes,team_id,fixture_id,opponent_team_id,booker_name,booker_email,recurrence_group_id,resources!inner(name,type),teams!bookings_team_id_fkey(name)";
 
 type BookingSelectRow = {
   id: string;
@@ -51,6 +51,7 @@ type BookingSelectRow = {
   internal_notes: string | null;
   team_id: string | null;
   fixture_id: string | null;
+  opponent_team_id: string | null;
   booker_name: string;
   booker_email: string;
   recurrence_group_id: string | null;
@@ -77,6 +78,7 @@ function toItem(row: BookingSelectRow): PitchBookingItem {
     teamId: row.team_id,
     teamName: row.teams?.name ?? null,
     fixtureId: row.fixture_id,
+    opponentTeamId: row.opponent_team_id,
     bookerName: row.booker_name,
     bookerEmail: row.booker_email,
     recurrenceGroupId: row.recurrence_group_id,
@@ -350,9 +352,11 @@ export async function loadTeamPitchBookings(
         internalNotes: null,
         teamId: row.team_id,
         teamName: row.team_name,
-        // `pitch_calendar()` does not return the fixture link, and its rows are
-        // read-only here anyway — `calendarOnly` is what gates the controls.
+        // `pitch_calendar()` returns neither the fixture link nor the
+        // opposition team, and its rows are read-only here anyway —
+        // `calendarOnly` is what gates the controls.
         fixtureId: null,
+        opponentTeamId: null,
         bookerName: null,
         bookerEmail: null,
         recurrenceGroupId: null,

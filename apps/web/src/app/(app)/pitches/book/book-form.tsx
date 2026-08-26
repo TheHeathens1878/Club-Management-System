@@ -295,8 +295,11 @@ export function BookForm({
 
       {/* Adam, 2026-08-25: "if match is selected, it should ask if the
           opposition is internal (and then choose the team) or external (free
-          type)". No opposition column exists and none is added — the answer
-          becomes the label, which is what the pitch diary shows. */}
+          type)". The answer becomes the label the pitch diary shows, and — for
+          an internal opposition since 20260825410000 — `bookings.opponent_team_id`,
+          which is what `create_internal_match_fixtures()` builds the two
+          mirrored fixture rows from when the request is confirmed. An external
+          club has no team row and so still creates no fixture at all. */}
       {kind === "fixture" && (
         <fieldset className="space-y-3 rounded-lg border bg-secondary/40 p-3">
           <legend className="px-1 text-sm font-medium">Who is the match against?</legend>
@@ -346,6 +349,8 @@ export function BookForm({
               </Select>
               <p className="text-xs text-muted-foreground">
                 Both teams are the club&apos;s, so this books the pitch once, for the team above.
+                When a club administrator confirms it, the match appears on both teams&apos;
+                pages — the team above at home, the opposition away.
               </p>
             </div>
           ) : (

@@ -55,13 +55,13 @@ insert into public.resources (id, type, name) values
 
 -- A. shape ---------------------------------------------------------------------
 select has_function('public', 'request_team_pitch_booking',
-  array['uuid', 'uuid', 'booking_kind', 'timestamptz[]', 'timestamptz[]', 'text', 'text', 'text', 'text', 'uuid'],
+  array['uuid', 'uuid', 'booking_kind', 'timestamptz[]', 'timestamptz[]', 'text', 'text', 'text', 'text', 'uuid', 'uuid'],
   'the team pitch-booking path exists');
 select is(has_function_privilege('authenticated',
-  'public.request_team_pitch_booking(uuid,uuid,public.booking_kind,timestamptz[],timestamptz[],text,text,text,text,uuid)',
+  'public.request_team_pitch_booking(uuid,uuid,public.booking_kind,timestamptz[],timestamptz[],text,text,text,text,uuid,uuid)',
   'EXECUTE'), true, 'a signed-in member may call it');
 select is(has_function_privilege('anon',
-  'public.request_team_pitch_booking(uuid,uuid,public.booking_kind,timestamptz[],timestamptz[],text,text,text,text,uuid)',
+  'public.request_team_pitch_booking(uuid,uuid,public.booking_kind,timestamptz[],timestamptz[],text,text,text,text,uuid,uuid)',
   'EXECUTE'), false, 'nobody signed out may');
 
 
