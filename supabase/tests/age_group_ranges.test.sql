@@ -22,7 +22,7 @@
 
 begin;
 
-select plan(26);
+select plan(28);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a9a9b0b0-5151-4111-8111-000000000001', 'agr-parent@test.invalid', '{"full_name": "Pat Parent"}'::jsonb);
