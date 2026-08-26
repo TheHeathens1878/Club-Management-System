@@ -14,11 +14,14 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 
 import type { Database } from "@club/db";
 
+import { writeAudit } from "@/lib/audit";
 import { getSessionProfile } from "@/lib/auth";
 import { friendlyDbError } from "@/lib/people-display";
+import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
 type AvailabilityStatus = Database["public"]["Enums"]["availability_status"];
@@ -73,4 +76,149 @@ export async function setFixtureAvailability(
     revalidatePath(`/teams/${teamId}`);
   }
   return { notice: "Availability saved." };
+}
+
+
+// ---------------------------------------------------------------------------
+// Deleting a fixture (Adam, 2026-08-26: "Admin can't delete fixtures, they
+// need to be able to")
+// ---------------------------------------------------------------------------
+//
+// The database has allowed this since fixtures existed — `fixtures_admin_delete`
+// is `for delete using (is_club_admin())` — and nothing in the app ever used
+// it. So this is a screen for a permission the club already had, not a new one.
+//
+// A fixture is not a leaf. These rows go with it, by ON DELETE CASCADE:
+//   availability        every player's yes/no/maybe for the game
+//   fixture_lineups     the team sheet, and its slots
+//   fixture_player_stats goals, assists, captain, player of the match
+//   selections          who was picked
+//   events              the diary entry, if one was made from the fixture
+// and `bookings.fixture_id` is ON DELETE SET NULL, which is the trap: delete a
+// fixture that holds a pitch and the BOOKING SURVIVES, still confirmed, still
+// holding the slot, now attached to nothing. That is worse than the fixture it
+// replaced, so the screen offers to give the pitch back at the same time and
+// says plainly what happens either way.
+//
+// An internal match is one game written on two teams' pages
+// (`mirror_fixture_id`, 20260825410000). Deleting one side and leaving the
+// other is never what anybody means, so both go.
+
+export type DeleteFixtureState = { error?: string; notice?: string };
+
+export async function deleteFixture(
+  _prev: DeleteFixtureState,
+  formData: FormData,
+): Promise<DeleteFixtureState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in first." };
+  if (!(await isClubAdmin())) {
+    return { error: "Only a club administrator can delete a fixture." };
+  }
+
+  const fixtureId = text(formData, "fixture_id", 40);
+  const teamId = text(formData, "team_id", 40);
+  const releasePitch = formData.get("release_pitch") === "yes";
+  if (!fixtureId) return { error: "No fixture given." };
+
+  const supabase = await createClient();
+
+  // Read it BEFORE deleting: the audit row is the only record left afterwards,
+  // so it carries enough to recognise — and to re-enter — the game by hand.
+  const { data: fixture, error: readError } = await supabase
+    .from("fixtures")
+    .select(
+      "id,team_id,season_id,opponent,is_home,kickoff_at,competition,status,source,external_ref,booking_id,mirror_fixture_id,venue_text",
+    )
+    .eq("id", fixtureId)
+    .maybeSingle();
+  if (readError) return { error: friendlyDbError(readError, "Could not read that fixture.") };
+  if (!fixture) return { error: "That fixture no longer exists." };
+
+  // What is about to go with it, counted while it is still there.
+  const [availability, lineups, stats, selections, events] = await Promise.all([
+    supabase.from("availability").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+    supabase.from("fixture_lineups").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+    supabase.from("fixture_player_stats").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+    supabase.from("selections").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+    supabase.from("events").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+  ]);
+
+  // The pitch first, while the fixture still exists to be unallocated: once the
+  // row is gone the booking has no fixture_id left to find it by.
+  if (releasePitch && fixture.booking_id) {
+    const { error } = await supabase.rpc("unallocate_fixture", { p_fixture_id: fixtureId });
+    if (error) {
+      return {
+        error: friendlyDbError(
+          error,
+          "The pitch could not be given back, so the fixture has been left alone. Unallocate it on Pitches, then delete it.",
+        ),
+      };
+    }
+  }
+
+  // Both sides of an internal match, or neither.
+  const ids = [fixtureId];
+  if (fixture.mirror_fixture_id) {
+    ids.push(fixture.mirror_fixture_id);
+    if (releasePitch) {
+      // Best effort: the mirror is the away side and rarely holds the pitch.
+      await supabase.rpc("unallocate_fixture", { p_fixture_id: fixture.mirror_fixture_id });
+    }
+  }
+
+  const { error: deleteError, count } = await supabase
+    .from("fixtures")
+    .delete({ count: "exact" })
+    .in("id", ids);
+  if (deleteError) {
+    return { error: friendlyDbError(deleteError, "The database refused to delete that fixture.") };
+  }
+  if (!count) {
+    // RLS returning zero rows rather than an error is what a refusal looks
+    // like from here.
+    return { error: "The database did not delete it. Only a club administrator may." };
+  }
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "fixture.deleted",
+    entity: "fixtures",
+    entityId: fixtureId,
+    detail: {
+      fixture: {
+        team_id: fixture.team_id,
+        season_id: fixture.season_id,
+        opponent: fixture.opponent,
+        is_home: fixture.is_home,
+        kickoff_at: fixture.kickoff_at,
+        competition: fixture.competition,
+        status: fixture.status,
+        source: fixture.source,
+        external_ref: fixture.external_ref,
+        venue_text: fixture.venue_text,
+      },
+      also_deleted: {
+        mirror_fixture_id: fixture.mirror_fixture_id,
+        availability: availability.count ?? 0,
+        lineups: lineups.count ?? 0,
+        player_stats: stats.count ?? 0,
+        selections: selections.count ?? 0,
+        events: events.count ?? 0,
+      },
+      pitch: fixture.booking_id
+        ? { booking_id: fixture.booking_id, released: releasePitch }
+        : null,
+      rows_deleted: count,
+    },
+  });
+
+  if (teamId) {
+    revalidatePath(`/teams/${teamId}`);
+    revalidatePath(`/teams/${teamId}/fixtures`);
+  }
+  revalidatePath("/matches");
+  redirect(teamId ? `/teams/${teamId}?deleted=fixture` : "/matches");
 }
