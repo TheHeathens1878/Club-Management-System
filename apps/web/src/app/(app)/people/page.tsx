@@ -14,6 +14,12 @@ import { Select } from "@/components/ui/field";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
 import { isClubAdmin } from "@/lib/person";
+import {
+  membershipKindLabel,
+  membershipKindVariant,
+  membershipKindWord,
+  type MembershipKind,
+} from "@/lib/membership-kind";
 import { isMinorDob, personLabel, sanitiseSearch } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
@@ -50,6 +56,15 @@ import { createClient } from "@/lib/supabase/server";
  * `public.is_minor_dob()` (SG-0: an unknown date of birth is a minor). It is a
  * label on a screen only committee reach; every decision that matters still
  * asks the database.
+ *
+ * THE MEMBERSHIP TAG (Adam, 2026-08-26) sits in the same cell as the type
+ * badges, in the quieter `outline` style, because it answers a question of the
+ * same shape — what is this person to the club — from a different table. It is
+ * NOT computed here: `memberships.kind` is derived from the number of PLAYERS
+ * on the membership in the current season by `public.membership_kind_for()`,
+ * and a trigger keeps it right when a second child is registered later. The
+ * row is read from `person_memberships`, a security_invoker view, so a caller
+ * who could not read the membership simply gets no badge.
  */
 
 /** Enough to scan, few enough that the per-page enrichment stays four queries. */
@@ -324,9 +339,14 @@ export default async function PeoplePage({
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Enrichment for the page's rows only — four bulk reads, not four per row.
-  const [rolesResult, membershipsResult, guardianshipsResult, profilesResult] =
-    ids.length === 0
-      ? [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+  const [
+    rolesResult,
+    membershipsResult,
+    guardianshipsResult,
+    profilesResult,
+    clubMembershipsResult,
+  ] = ids.length === 0
+      ? [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
       : await Promise.all([
           supabase
             .from("person_roles")
@@ -349,6 +369,17 @@ export default async function PeoplePage({
             .in("guardian_person_id", ids)
             .is("ended_at", null),
           supabase.from("profiles").select("person_id").in("person_id", ids),
+          // The membership tag, one bulk read for the page's rows. Scoped to
+          // the current season: last season's family is not this season's.
+          currentSeason
+            ? supabase
+                .from("person_memberships")
+                .select("person_id,kind")
+                .in("person_id", ids)
+                .eq("season_id", currentSeason.id)
+            : Promise.resolve({
+                data: [] as { person_id: string | null; kind: MembershipKind | null }[],
+              }),
         ]);
 
   const appRoles = new Map<string, Set<Enums<"app_role">>>();
@@ -378,6 +409,11 @@ export default async function PeoplePage({
   }
 
   const withLogin = new Set((profilesResult.data ?? []).map((p) => p.person_id));
+
+  const membershipKind = new Map<string, MembershipKind>();
+  for (const row of clubMembershipsResult.data ?? []) {
+    if (row.person_id && row.kind) membershipKind.set(row.person_id, row.kind);
+  }
 
   // The design's row details: a minor's contact goes through their guardian
   // ("via Kate Ashworth") and a pending account request reads Needs review.
@@ -625,7 +661,7 @@ export default async function PeoplePage({
                     link cannot wrap a <tr>. */}
                 <div className="hidden border-b pb-2 text-xs text-muted-foreground lg:grid lg:grid-cols-12 lg:gap-3">
                   <span className="lg:col-span-3">Name</span>
-                  <span className="lg:col-span-2">Type</span>
+                  <span className="lg:col-span-2">Type · Membership</span>
                   <span className="lg:col-span-2">Teams</span>
                   <span className="lg:col-span-3">Contact</span>
                   <span className="lg:col-span-2">Status</span>
@@ -642,6 +678,7 @@ export default async function PeoplePage({
                       ? guardianPeople.get(guardianOf.get(person.id) ?? "")
                       : undefined;
                     const shownTypes = TYPES.filter((type) => held.includes(type));
+                    const kind = membershipKind.get(person.id) ?? null;
                     const teamsText =
                       heldTeams.length === 0
                         ? "—"
@@ -687,9 +724,14 @@ export default async function PeoplePage({
                               {linked ? "Has a login." : "No login yet."}
                             </span>
                             <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
-                              {shownTypes.length === 0
-                                ? "No type recorded"
-                                : shownTypes.map((type) => TYPE_LABELS[type]).join(" · ")}
+                              {[
+                                shownTypes.length === 0
+                                  ? "No type recorded"
+                                  : shownTypes.map((type) => TYPE_LABELS[type]).join(" · "),
+                                membershipKindWord(kind),
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
                             </span>
                             <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
                               {minor && guardian
@@ -731,7 +773,7 @@ export default async function PeoplePage({
                             )}
                           </span>
                           <span className="flex flex-wrap gap-1 lg:col-span-2">
-                            {held.length === 0 ? (
+                            {held.length === 0 && !kind ? (
                               <span className="text-xs text-muted-foreground">—</span>
                             ) : (
                               shownTypes.map((type) => (
@@ -739,6 +781,15 @@ export default async function PeoplePage({
                                   {TYPE_LABELS[type]}
                                 </Badge>
                               ))
+                            )}
+                            {kind && (
+                              <Badge
+                                variant={membershipKindVariant(kind)}
+                                title={`${membershipKindWord(kind)} — the kind is worked out from the number of players on it`}
+                              >
+                                {membershipKindLabel(kind)}
+                                <span className="sr-only"> membership</span>
+                              </Badge>
                             )}
                           </span>
                           <span className="text-xs text-muted-foreground lg:col-span-2">
@@ -774,7 +825,9 @@ export default async function PeoplePage({
 
             {people.length > 0 && (
               <p className="mt-3 text-xs text-muted-foreground">
-                Contact details for under-18s are shown through their guardian.
+                Contact details for under-18s are shown through their guardian. Family or
+                Individual is this season&apos;s membership, counted in players — two or more
+                players on one membership is a family. Open a record to see who else is on it.
               </p>
             )}
 

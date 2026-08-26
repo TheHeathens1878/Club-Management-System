@@ -12,6 +12,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
 import { signPersonPhotoPath } from "@/lib/avatars";
 import { signIdentityDocumentPaths } from "@/lib/identity-docs";
+import {
+  currentMembership,
+  membershipKindHint,
+  membershipKindLabel,
+  membershipKindVariant,
+  membershipKindWord,
+  membershipPeopleSummary,
+  type PersonMembershipRow,
+} from "@/lib/membership-kind";
 import { isClubAdmin, resolveNames, nameOf } from "@/lib/person";
 import { idDocumentKindLabel } from "@/lib/registration-questions";
 import {
@@ -54,6 +63,14 @@ import {
  * guardian, and nobody else — the read simply returns nothing and the section
  * is not rendered. That is the intended behaviour: the page shows what the
  * caller is entitled to see, and works out nothing for itself.
+ *
+ * THE CLUB MEMBERSHIP CARD (Adam, 2026-08-26) is the same rule: it reads
+ * `person_memberships`, a security_invoker view over `memberships` and
+ * `membership_people`, so it renders only for a reader those policies already
+ * admit (the lead contact, club_admin, safeguarding_lead). Individual or
+ * Family is the DATABASE's answer, derived from the number of PLAYERS on the
+ * membership in that season, and the card lists the other people on it so an
+ * administrator can click straight through to the rest of the family.
  */
 
 const TEAM_ROLE_LABELS: Record<string, string> = {
@@ -170,6 +187,29 @@ export default async function PersonPage({
   const pending = pendingRows ?? [];
   const name = personLabel(person);
 
+  // The club membership this person is tagged with, and the rest of the family
+  // on it. Two small reads of `person_memberships`; both carry the view's
+  // security_invoker RLS, so a reader who may not see the membership sees no
+  // card at all rather than a card with the names missing.
+  const { data: membershipTagRows } = await supabase
+    .from("person_memberships")
+    .select(
+      "membership_id,kind,season_id,season_name,season_is_current,primary_person_id,is_primary,created_at",
+    )
+    .eq("person_id", id);
+  const clubMembership = currentMembership((membershipTagRows ?? []) as PersonMembershipRow[]);
+  const { data: familyRows } = clubMembership?.membership_id
+    ? await supabase
+        .from("person_memberships")
+        .select("person_id,is_primary")
+        .eq("membership_id", clubMembership.membership_id)
+    : { data: [] as { person_id: string | null; is_primary: boolean | null }[] };
+  const familyOthers = (familyRows ?? []).filter(
+    (row): row is { person_id: string; is_primary: boolean | null } =>
+      !!row.person_id && row.person_id !== id,
+  );
+  const familyNames = await resolveNames(familyOthers.map((row) => row.person_id));
+
   // What the latest registration said about this person — the read-only copy
   // on the contact record (20260825260000). It carries the `registrations`
   // read policies, so a reader who is not entitled to the form gets nothing
@@ -231,6 +271,11 @@ export default async function PersonPage({
             <Badge variant="default">Login linked · {profileRow.role}</Badge>
           ) : (
             <Badge variant="muted">No login linked</Badge>
+          )}
+          {clubMembership?.kind && (
+            <Badge variant={membershipKindVariant(clubMembership.kind)}>
+              {membershipKindWord(clubMembership.kind)}
+            </Badge>
           )}
         </div>
 
@@ -335,6 +380,59 @@ export default async function PersonPage({
           </CardHeader>
           <CardContent>
             <GuardianshipsPanel personId={person.id} personName={name} links={guardianships} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Club membership</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Individual or family is worked out by the database from the number of{" "}
+              <strong>players</strong> on the membership in that season — a live squad place, or a
+              registration still pending or approved. Two or more players is a family; a parent who
+              is on the record as the lead contact is not a player.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {!clubMembership || !clubMembership.kind ? (
+              <p className="text-sm text-muted-foreground">
+                No club membership recorded for this person.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={membershipKindVariant(clubMembership.kind)}>
+                    {membershipKindLabel(clubMembership.kind)}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {clubMembership.season_name ?? "Season unknown"}
+                    {clubMembership.season_is_current ? " · current season" : ""}
+                    {clubMembership.is_primary ? " · lead contact" : ""}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {membershipKindHint(clubMembership.kind)}{" "}
+                  {membershipPeopleSummary(familyOthers.length)}
+                </p>
+                {familyOthers.length > 0 && (
+                  <ul className="space-y-1 text-sm">
+                    {familyOthers.map((row) => (
+                      <li key={row.person_id} className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/people/${row.person_id}`}
+                          className="font-medium underline underline-offset-2"
+                        >
+                          {nameOf(familyNames, row.person_id)}
+                        </Link>
+                        <Badge variant={row.is_primary ? "default" : "muted"}>
+                          {row.is_primary ? "Lead contact" : "On the membership"}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
 
