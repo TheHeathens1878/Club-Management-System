@@ -316,9 +316,11 @@ create trigger trg_team_memberships_kind_delete
 -- =============================================================================
 -- 3. create_membership(): ask the helper instead of counting heads
 -- =============================================================================
--- Unchanged: the household check, the six-person cap, the idempotent
--- re-submission, the audit row. Changed: the kind is derived AFTER the people
--- are attached, because that is the only moment the answer can be right.
+-- Unchanged: the six-person cap, the idempotent re-submission, the audit row,
+-- and the household check EXACTLY as 20260825490000 left it — `guardianships`
+-- or `is_household_member_of()`, so a LINKED adult still goes on the family
+-- membership as a created one does. Changed: the kind is derived AFTER the
+-- people are attached, because that is the only moment the answer can be right.
 
 create or replace function public.create_membership(p_person_ids uuid[])
   returns table (membership_id uuid, kind public.membership_kind)
@@ -349,18 +351,15 @@ begin
   end if;
 
   -- Every listed person must be the caller, their guarded child, or a
-  -- household member this login created (no login of their own).
+  -- household member — created by this login OR linked to it, which is
+  -- 20260825490000's `is_household_member_of()`, carried forward verbatim.
   foreach v_pid in array v_ids loop
     if v_pid = v_me then continue; end if;
     if exists (select 1 from public.guardianships g
                where g.child_person_id = v_pid and g.guardian_person_id = v_me and g.ended_at is null) then
       continue;
     end if;
-    if exists (select 1 from public.people p
-               where p.id = v_pid and p.created_by = auth.uid() and p.deleted_at is null
-                 and not exists (select 1 from public.profiles pr where pr.person_id = p.id)) then
-      continue;
-    end if;
+    if public.is_household_member_of(v_pid) then continue; end if;
     raise exception 'create_membership: % is not in your household', v_pid using errcode = 'P0001';
   end loop;
 
