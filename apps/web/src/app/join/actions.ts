@@ -14,8 +14,12 @@
  *     policies cover self, guarded child and household adult) or diverts to
  *     submit_waiting_list_entry(); when the age group is not open the player
  *     still becomes a team-less registration so nobody is ever lost;
- *   · step 4 is create_membership(): one person → individual, two to six →
- *     family, verified against the caller's household by the function.
+ *   · step 4 is create_membership(): the fee band is settled by the number of
+ *     PLAYERS on the membership in that season, NOT the number of people on it
+ *     — a parent registering one child is two people and one player, so an
+ *     INDIVIDUAL membership (20260825520000). The people themselves are still
+ *     verified against the caller's household by the function, and there are
+ *     still at most six of them.
  */
 
 import { countyForTown } from "@/lib/address";
