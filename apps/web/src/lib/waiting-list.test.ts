@@ -12,7 +12,9 @@ import {
   seasonStartYear,
   sortedOpenAgeGroups,
   teamAdmitsSex,
+  ageGroupIsAdultTeam,
   teamAgeBandNumber,
+  teamAgeBandRange,
   teamOfferedToPlayer,
 } from "./waiting-list";
 
@@ -258,5 +260,114 @@ describe("teamOfferedToPlayer", () => {
   it("hides a girls' team until the sex is answered", () => {
     expect(teamOfferedToPlayer(u13girls, "2014-09-01", null, on)).toBe(false);
     expect(teamOfferedToPlayer(u12, "2014-09-01", null, on)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// An age group is not always one band (checked against production 2026-08-26:
+// nine of 73 teams are "U05–U08", "Open Age" or "Vets")
+// ---------------------------------------------------------------------------
+
+describe("teamAgeBandRange", () => {
+  it("reads a single band, however it is padded", () => {
+    expect(teamAgeBandRange("U12")).toEqual({ min: 12, max: 12 });
+    expect(teamAgeBandRange("u8")).toEqual({ min: 8, max: 8 });
+    expect(teamAgeBandRange("  U05 ")).toEqual({ min: 5, max: 5 });
+  });
+
+  it("reads a range written with an en dash, which is what production holds", () => {
+    expect(teamAgeBandRange("U05\u2013U08")).toEqual({ min: 5, max: 8 });
+  });
+
+  it("reads the same range written any other way", () => {
+    expect(teamAgeBandRange("U05-U08")).toEqual({ min: 5, max: 8 });
+    expect(teamAgeBandRange("U5 - U8")).toEqual({ min: 5, max: 8 });
+    expect(teamAgeBandRange("U05\u2014U8")).toEqual({ min: 5, max: 8 });
+    expect(teamAgeBandRange("U05-8")).toEqual({ min: 5, max: 8 });
+  });
+
+  it("puts a backwards range the right way round", () => {
+    expect(teamAgeBandRange("U08-U05")).toEqual({ min: 5, max: 8 });
+  });
+
+  it("names no band for an adult side, a blank or a nonsense", () => {
+    expect(teamAgeBandRange("Open Age")).toBeNull();
+    expect(teamAgeBandRange("Vets")).toBeNull();
+    expect(teamAgeBandRange("O45")).toBeNull();
+    expect(teamAgeBandRange("")).toBeNull();
+    expect(teamAgeBandRange(null)).toBeNull();
+    expect(teamAgeBandRange("Sunday XI")).toBeNull();
+  });
+});
+
+describe("ageGroupIsAdultTeam", () => {
+  it("recognises the labels production actually uses", () => {
+    expect(ageGroupIsAdultTeam("Open Age")).toBe(true);
+    expect(ageGroupIsAdultTeam("Vets")).toBe(true);
+  });
+
+  it("recognises the near neighbours of those labels", () => {
+    expect(ageGroupIsAdultTeam("Senior")).toBe(true);
+    expect(ageGroupIsAdultTeam("Seniors")).toBe(true);
+    expect(ageGroupIsAdultTeam("Adult")).toBe(true);
+    expect(ageGroupIsAdultTeam("Veterans")).toBe(true);
+    expect(ageGroupIsAdultTeam("O45")).toBe(true);
+    expect(ageGroupIsAdultTeam("Over 35")).toBe(true);
+  });
+
+  it("does not read a youth band as an adult side", () => {
+    expect(ageGroupIsAdultTeam("U12")).toBe(false);
+    expect(ageGroupIsAdultTeam("U05\u2013U08")).toBe(false);
+  });
+
+  it("treats silence as silence, not as an adult side", () => {
+    expect(ageGroupIsAdultTeam("")).toBe(false);
+    expect(ageGroupIsAdultTeam(null)).toBe(false);
+    expect(ageGroupIsAdultTeam("   ")).toBe(false);
+  });
+
+  it("does not catch a longer word that merely contains one", () => {
+    expect(ageGroupIsAdultTeam("Openers")).toBe(false);
+    expect(ageGroupIsAdultTeam("Adultery XI")).toBe(false);
+  });
+});
+
+describe("teamOfferedToPlayer across a range", () => {
+  // The season in these cases is 2026/27, so a child born 2020-09-01 is U06.
+  const on = "2026-08-26";
+  const wildcats = { ageGroup: "U05\u2013U08", gender: "girls" };
+  const openAge = { ageGroup: "Open Age", gender: "boys" };
+  const vets = { ageGroup: "Vets", gender: "girls" };
+
+  it("offers the club's only under-eights girls team to a small girl", () => {
+    // This is the case that was broken: she was offered nothing at all.
+    expect(teamOfferedToPlayer(wildcats, "2020-09-01", "female", on)).toBe(true);
+    expect(teamOfferedToPlayer(wildcats, "2018-09-01", "female", on)).toBe(true);
+  });
+
+  it("still keeps a boy out of it", () => {
+    expect(teamOfferedToPlayer(wildcats, "2020-09-01", "male", on)).toBe(false);
+  });
+
+  it("offers it to a player whose band ends the range, and to the one below it", () => {
+    // Born 2018-09-01 is U08 in 2026/27: inside the range.
+    expect(teamOfferedToPlayer(wildcats, "2018-09-01", "female", on)).toBe(true);
+    // Born 2017-09-01 is U09: outside it, and the band above is U10.
+    expect(teamOfferedToPlayer(wildcats, "2017-09-01", "female", on)).toBe(false);
+  });
+
+  it("offers it on the strength of the band ABOVE as well as the player's own", () => {
+    // Born 2021-09-01 is U05 (clamped); U05 and U06 are both in the range.
+    expect(teamOfferedToPlayer(wildcats, "2021-09-01", "female", on)).toBe(true);
+  });
+
+  it("never offers a child an adult side", () => {
+    expect(teamOfferedToPlayer(openAge, "2014-09-01", "male", on)).toBe(false);
+    expect(teamOfferedToPlayer(vets, "2014-09-01", "female", on)).toBe(false);
+  });
+
+  it("offers an adult the adult sides and not the range", () => {
+    expect(teamOfferedToPlayer(openAge, "1985-03-03", "male", on)).toBe(true);
+    expect(teamOfferedToPlayer(wildcats, "1985-03-03", "female", on)).toBe(false);
   });
 });
