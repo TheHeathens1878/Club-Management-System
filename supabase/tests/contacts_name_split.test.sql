@@ -12,7 +12,7 @@
 
 begin;
 
-select plan(15);
+select plan(16);
 
 
 -- A. the split ----------------------------------------------------------------
@@ -51,12 +51,14 @@ select throws_ok(
 insert into public.waiting_list_age_groups (age_group, is_open) values ('U07', true)
   on conflict (age_group) do update set is_open = true;
 
-select throws_like(
-  $q$ insert into public.waiting_list_entries (player_first_name, dob, age_group,
-        parent_first_name, parent_last_name, parent_email, parent_phone)
-      values ('Mono', '2019-01-01', 'U07', 'Pat', 'Parent', 'cns-p@test.invalid', '07700 900001') $q$,
-  '%needs a first name and a last name%',
-  'a waiting-list entry needs both halves of the player''s name');
+-- The legacy Neon importer still posts the one-string name; the trigger splits
+-- it into the two parts rather than refusing it.
+insert into public.waiting_list_entries (player_name, dob, age_group, parent_name, parent_email, parent_phone)
+  values ('Legacy Kid', '2019-01-01', 'U07', 'Pat Parent', 'cns-legacy@test.invalid', '07700 900001');
+select is((select player_first_name || '|' || player_last_name || '|' || parent_first_name
+             from public.waiting_list_entries where parent_email = 'cns-legacy@test.invalid'),
+  'Legacy|Kid|Pat',
+  'a one-string waiting-list entry is split into the parts on the way in');
 
 select lives_ok(
   $q$ select public.submit_waiting_list_entry('New', 'Kid', '2019-02-02', 'U07', 'Year 1', 'MALE',

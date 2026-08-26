@@ -69,18 +69,30 @@
 -- to show something in both columns; here a blank is honest, and an
 -- administrator can correct it from the screen.
 --
--- The display value is preserved: on each split table the old single-string
--- column becomes a STORED GENERATED column, `btrim(first_name || ' ' ||
--- last_name)`. For a name the backfill split that reproduces the original
--- exactly (runs of whitespace collapsed); for an unsplittable one it reproduces
--- it unchanged. Every existing reader of `.name` / `.player_name` /
--- `.parent_name` therefore keeps working untouched — the contacts book, the
--- waiting-list manage screen, the CSV exports.
+-- The display value is preserved everywhere. On `booking_contacts` and
+-- `emergency_contacts` the old single-string column becomes a STORED GENERATED
+-- column, `btrim(btrim(first_name) || ' ' || btrim(last_name))`: for a name the
+-- backfill split that reproduces the original exactly (runs of whitespace
+-- collapsed), and for an unsplittable one it reproduces it unchanged.
 --
--- NEW rows must supply both parts. Enforced by a BEFORE INSERT trigger rather
--- than a CHECK constraint, precisely so that backfilled rows whose single-string
--- name could not be split remain legal: the rule is "stop making half-names",
--- not "delete the history".
+-- `waiting_list_entries` is the exception, and deliberately so: its two display
+-- columns stay PLAIN columns MAINTAINED by a trigger. `migrate_neon()`
+-- (20260824000000) INSERTs `player_name` / `parent_name` straight from the Neon
+-- tables, and a generated column cannot be written — making them generated
+-- would break a ~490-line importer that this change has no business rewriting.
+-- The trigger takes whichever side the writer supplied and fills in the other,
+-- so both parts are populated on every row however it arrived.
+--
+-- Every existing reader of `.name` / `.player_name` / `.parent_name` therefore
+-- keeps working untouched — the contacts book, the waiting-list manage screen,
+-- the CSV exports, the confirmation emails.
+--
+-- NEW rows must supply both parts. On the two generated tables that is a BEFORE
+-- INSERT trigger rather than a CHECK constraint, precisely so that backfilled
+-- rows whose single-string name could not be split remain legal: the rule is
+-- "stop making half-names", not "delete the history". On the waiting list it is
+-- `submit_waiting_list_entry()`, the only door the public form and the join
+-- wizard have, which refuses a blank half of either name.
 --
 -- -----------------------------------------------------------------------------
 -- PR METADATA (PLAN.md §11): migrations y; RLS n (no policy is added, dropped or
@@ -92,7 +104,12 @@
 -- of whitespace. The row counts are written to audit_log as
 -- 'contacts.name_split.backfill'.
 --
--- ROLLBACK, per table, in this order:
+-- ROLLBACK.
+--   waiting_list_entries: drop trigger trg_waiting_list_name_parts, drop
+--     function public.waiting_list_name_parts(), drop the two not-blank
+--     constraints, drop the four part columns. The display columns were never
+--     altered, so nothing there needs restoring.
+--   booking_contacts and emergency_contacts, in this order:
 --   drop trigger trg_<table>_name_parts on public.<table>;
 --   alter table public.<table> drop column <display>;
 --   alter table public.<table> add column <display> text;
@@ -215,7 +232,7 @@ alter table public.booking_contacts
 -- the one on first_name above.
 alter table public.booking_contacts drop column name;
 alter table public.booking_contacts
-  add column name text generated always as (btrim(first_name || ' ' || last_name)) stored;
+  add column name text generated always as (btrim(btrim(first_name) || ' ' || btrim(last_name))) stored;
 
 comment on column public.booking_contacts.name is
   'Display only, generated from first_name and last_name. Kept so that every existing reader (the contacts book, the booking picker, the exports) is unchanged; writers set the two parts.';
@@ -240,27 +257,76 @@ update public.waiting_list_entries
        parent_first_name = public.contact_name_first(parent_name),
        parent_last_name  = public.contact_name_last(parent_name);
 
-alter table public.waiting_list_entries drop column player_name;
-alter table public.waiting_list_entries drop column parent_name;
-alter table public.waiting_list_entries
-  add column player_name text generated always as (btrim(player_first_name || ' ' || player_last_name)) stored,
-  add column parent_name text generated always as (btrim(parent_first_name || ' ' || parent_last_name)) stored;
-
+-- The two display columns stay PLAIN columns here, MAINTAINED by a trigger
+-- rather than generated. The reason is `migrate_neon()` (20260824000000): the
+-- Neon importer INSERTs `player_name` / `parent_name` from the legacy tables,
+-- and a generated column cannot be written, so making them generated would
+-- break the import — a ~490-line function this change has no business
+-- rewriting. The trigger reads whichever side the writer supplied and fills in
+-- the other, so the two parts are populated on every row however it arrived,
+-- and the display value is still exactly first + last.
 alter table public.waiting_list_entries
   add constraint waiting_list_entries_player_first_not_blank check (btrim(player_first_name) <> ''),
   add constraint waiting_list_entries_parent_first_not_blank check (btrim(parent_first_name) <> '');
 
 comment on column public.waiting_list_entries.player_name is
-  'Display only, generated from player_first_name and player_last_name.';
+  'Display only, maintained by trg_waiting_list_name_parts from player_first_name and player_last_name. New writers set the two parts; the legacy Neon importer sets this and the parts are derived from it.';
 comment on column public.waiting_list_entries.parent_name is
-  'Display only, generated from parent_first_name and parent_last_name.';
+  'Display only, maintained by trg_waiting_list_name_parts from parent_first_name and parent_last_name.';
 
-create trigger trg_waiting_list_player_name_parts
-  before insert on public.waiting_list_entries
-  for each row execute function public.require_name_parts('player_first_name', 'player_last_name');
-create trigger trg_waiting_list_parent_name_parts
-  before insert on public.waiting_list_entries
-  for each row execute function public.require_name_parts('parent_first_name', 'parent_last_name');
+create or replace function public.waiting_list_name_parts()
+  returns trigger
+  language plpgsql
+  set search_path = public
+as $$
+declare
+  v_split_player boolean := btrim(coalesce(new.player_first_name, '')) = '';
+  v_split_parent boolean := btrim(coalesce(new.parent_first_name, '')) = '';
+begin
+  -- The parts win, EXCEPT when an UPDATE edited only the display name (an
+  -- administrator correcting a legacy row through a one-box screen), which is
+  -- re-split instead. OLD is only touched inside the UPDATE branch: SQL's AND
+  -- is not short-circuiting, so it cannot be tested in one expression.
+  if tg_op = 'UPDATE' then
+    if new.player_name is distinct from old.player_name
+       and new.player_first_name is not distinct from old.player_first_name
+       and new.player_last_name is not distinct from old.player_last_name then
+      v_split_player := true;
+    end if;
+    if new.parent_name is distinct from old.parent_name
+       and new.parent_first_name is not distinct from old.parent_first_name
+       and new.parent_last_name is not distinct from old.parent_last_name then
+      v_split_parent := true;
+    end if;
+  end if;
+
+  if v_split_player then
+    new.player_first_name := public.contact_name_first(new.player_name);
+    new.player_last_name  := public.contact_name_last(new.player_name);
+  else
+    new.player_first_name := btrim(new.player_first_name);
+    new.player_last_name  := btrim(coalesce(new.player_last_name, ''));
+  end if;
+  new.player_name := btrim(new.player_first_name || ' ' || new.player_last_name);
+
+  if v_split_parent then
+    new.parent_first_name := public.contact_name_first(new.parent_name);
+    new.parent_last_name  := public.contact_name_last(new.parent_name);
+  else
+    new.parent_first_name := btrim(new.parent_first_name);
+    new.parent_last_name  := btrim(coalesce(new.parent_last_name, ''));
+  end if;
+  new.parent_name := btrim(new.parent_first_name || ' ' || new.parent_last_name);
+
+  return new;
+end $$;
+
+comment on function public.waiting_list_name_parts() is
+  'Keeps waiting_list_entries'' two name pairs and their display columns in step, in whichever direction the writer used: the public form and the join wizard post the parts, the legacy Neon importer posts the one-string name and the parts are split out of it.';
+
+create trigger trg_waiting_list_name_parts
+  before insert or update on public.waiting_list_entries
+  for each row execute function public.waiting_list_name_parts();
 
 -- The only writer. Fourteen arguments become sixteen: the two name arguments are
 -- replaced by four. The old signature is DROPPED rather than left beside the new
@@ -324,7 +390,7 @@ update public.emergency_contacts
 
 alter table public.emergency_contacts drop column name;   -- takes its CHECK with it
 alter table public.emergency_contacts
-  add column name text generated always as (btrim(first_name || ' ' || last_name)) stored;
+  add column name text generated always as (btrim(btrim(first_name) || ' ' || btrim(last_name))) stored;
 
 alter table public.emergency_contacts
   add constraint emergency_contacts_first_name_not_blank check (btrim(first_name) <> '');

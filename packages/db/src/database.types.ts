@@ -4838,12 +4838,12 @@ export type Database = {
           parent_email: string
           parent_first_name: string
           parent_last_name: string
-          /** Generated from parent_first_name + parent_last_name: never written. */
+          /** Maintained by a trigger from parent_first_name + parent_last_name. */
           parent_name: string
           parent_phone: string
           player_first_name: string
           player_last_name: string
-          /** Generated from player_first_name + player_last_name: never written. */
+          /** Maintained by a trigger from player_first_name + player_last_name. */
           player_name: string
           priority: number | null
           reconfirm_requested_at: string | null
@@ -4868,9 +4868,11 @@ export type Database = {
           parent_email: string
           parent_first_name?: string
           parent_last_name?: string
+          parent_name?: string
           parent_phone: string
           player_first_name?: string
           player_last_name?: string
+          player_name?: string
           priority?: number | null
           reconfirm_requested_at?: string | null
           school?: string | null
@@ -4894,9 +4896,11 @@ export type Database = {
           parent_email?: string
           parent_first_name?: string
           parent_last_name?: string
+          parent_name?: string
           parent_phone?: string
           player_first_name?: string
           player_last_name?: string
+          player_name?: string
           priority?: number | null
           reconfirm_requested_at?: string | null
           school?: string | null
