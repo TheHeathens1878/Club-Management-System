@@ -11,6 +11,13 @@
 --   F  person_memberships carries the tag and names the lead contact
 --   G  membership_kind_for() is the database's own arithmetic, not a member's
 --
+-- The registrations here carry NO team_id on purpose. What makes somebody a
+-- player for this rule is the registration, not the team on it, and
+-- 20260825500000's age-band guard would otherwise refuse a child whose band
+-- drifts away from the fixture team's every time the calendar turns over. The
+-- squad rows in section C are written directly, which is the other half of the
+-- definition and is not what that guard covers.
+--
 -- Run with: npx supabase test db
 -- =============================================================================
 
@@ -42,16 +49,14 @@ set local role authenticated;
 select set_config('mk.kit', public.add_child('Kit', 'One', (current_date - interval '9 years')::date)::text, true);
 select set_config('mk.kim', public.add_child('Kim', 'One', (current_date - interval '7 years')::date)::text, true);
 
-insert into public.registrations (person_id, season_id, team_id, form)
-values (current_setting('mk.kit')::uuid, 'bbbbcccc-1111-4111-8111-000000000001',
-        'ccccdddd-1111-4111-8111-000000000001', '{}'::jsonb);
+insert into public.registrations (person_id, season_id, form)
+values (current_setting('mk.kit')::uuid, 'bbbbcccc-1111-4111-8111-000000000001', '{}'::jsonb);
 
 select is((select kind::text from public.create_membership(array[current_setting('mk.kit')::uuid])),
   'individual', 'a parent and one playing child: two people, one player, INDIVIDUAL');
 
-insert into public.registrations (person_id, season_id, team_id, form)
-values (current_setting('mk.kim')::uuid, 'bbbbcccc-1111-4111-8111-000000000001',
-        'ccccdddd-1111-4111-8111-000000000001', '{}'::jsonb);
+insert into public.registrations (person_id, season_id, form)
+values (current_setting('mk.kim')::uuid, 'bbbbcccc-1111-4111-8111-000000000001', '{}'::jsonb);
 
 select is((select kind::text from public.create_membership(
              array[current_setting('mk.kit')::uuid, current_setting('mk.kim')::uuid])),
@@ -71,9 +76,8 @@ set local role authenticated;
 select set_config('mk.ali', public.add_child('Ali', 'Two', (current_date - interval '10 years')::date)::text, true);
 select set_config('mk.bea', public.add_child('Bea', 'Two', (current_date - interval '8 years')::date)::text, true);
 
-insert into public.registrations (person_id, season_id, team_id, form)
-values (current_setting('mk.ali')::uuid, 'bbbbcccc-1111-4111-8111-000000000001',
-        'ccccdddd-1111-4111-8111-000000000001', '{}'::jsonb);
+insert into public.registrations (person_id, season_id, form)
+values (current_setting('mk.ali')::uuid, 'bbbbcccc-1111-4111-8111-000000000001', '{}'::jsonb);
 
 select is((select kind::text from public.create_membership(
              array[current_setting('mk.ali')::uuid, current_setting('mk.bea')::uuid])),
@@ -86,9 +90,9 @@ select set_config('mk.sol_membership',
 
 set local request.jwt.claims to '{"sub":"aaaabbbb-1111-4111-8111-000000000002","role":"authenticated"}';
 set local role authenticated;
-insert into public.registrations (id, person_id, season_id, team_id, form)
+insert into public.registrations (id, person_id, season_id, form)
 values ('ddddeeee-1111-4111-8111-000000000001', current_setting('mk.bea')::uuid,
-        'bbbbcccc-1111-4111-8111-000000000001', 'ccccdddd-1111-4111-8111-000000000001', '{}'::jsonb);
+        'bbbbcccc-1111-4111-8111-000000000001', '{}'::jsonb);
 reset role;
 
 set local request.jwt.claims to '{"role":"service_role"}';
