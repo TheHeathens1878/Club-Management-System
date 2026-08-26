@@ -7,7 +7,7 @@ import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSessionProfile } from "@/lib/auth";
+import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
 import { getCurrentPersonId } from "@/lib/person";
 import { formatStamp, personLabel } from "@/lib/people-display";
@@ -17,7 +17,7 @@ import {
   type RegistrationStatusValue,
 } from "@/lib/registration-form";
 import { createClient } from "@/lib/supabase/server";
-import { ageGroupFromDob } from "@/lib/waiting-list";
+import { ageGroupFromDobString } from "@/lib/waiting-list";
 
 import type { LeadContact } from "@/components/emergency-contacts-fields";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
@@ -107,10 +107,10 @@ function addressLine(address: Json | null | undefined): string | null {
 }
 
 function ageGroupHint(dob: string | null): string {
-  if (!dob) return "Age group unknown";
-  const parsed = new Date(`${dob}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return "Age group unknown";
-  return ageGroupFromDob(parsed);
+  // The DATE STRING, never a Date: `new Date("2014-09-01")` is midnight UTC,
+  // which is the previous evening west of Greenwich, and the FA cohort
+  // cut-off is 31 August.
+  return ageGroupFromDobString(dob) ?? "Age group unknown";
 }
 
 function RegistrationList({
@@ -187,7 +187,7 @@ export default async function FamilyPage() {
 
   const [childrenResult, teamsResult, seasonsResult, questionsResult] = await Promise.all([
     supabase.rpc("my_children"),
-    supabase.from("teams").select("id,name,age_group,sort_order").eq("active", true).order("sort_order").order("name"),
+    supabase.from("teams").select("id,name,age_group,gender,sort_order").eq("active", true).order("sort_order").order("name"),
     supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
     // The registration form as the club currently asks it — the same rows
     // /join renders, so "Register for a team" here IS the registration form.
@@ -206,6 +206,7 @@ export default async function FamilyPage() {
     id: team.id,
     name: team.name,
     ageGroup: team.age_group,
+    gender: team.gender,
   }));
   const seasons = seasonsResult.data ?? [];
   const currentSeason = seasons.find((season) => season.is_current) ?? null;
@@ -326,6 +327,16 @@ export default async function FamilyPage() {
       }),
     ),
   );
+  // The sex the club already holds for each child, so the registration form
+  // defaults to it rather than asking again; and whether the caller is a club
+  // administrator, which is the only role offered "show all teams"
+  // (Adam, 2026-08-26).
+  const { data: subjectFacts } = await supabase.rpc("registration_subjects", {
+    p_person_ids: childIds,
+  });
+  const sexByChild = new Map((subjectFacts ?? []).map((row) => [row.person_id, row.sex] as const));
+  const isAdmin = isCommittee(session.profile?.role);
+
   const leadAddressLine = addressLine(leadAddress);
   const detailsByChild = new Map(
     (childContactResult.data ?? []).map((row) => {
@@ -555,6 +566,9 @@ export default async function FamilyPage() {
                       seasonName={currentSeason?.name ?? null}
                       teams={teams}
                       questions={questions}
+                      dob={child.dob}
+                      recordedSex={sexByChild.get(child.person_id) ?? null}
+                      isAdmin={isAdmin}
                     />
                   </div>
                 </CardContent>

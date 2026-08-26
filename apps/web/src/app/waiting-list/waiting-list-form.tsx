@@ -11,7 +11,7 @@ import {
   AGE_GROUP_TO_SCHOOL_YEAR,
   SCHOOL_YEARS,
   SCHOOL_YEAR_TO_AGE_GROUP,
-  ageGroupFromDob,
+  ageGroupFromDobString,
 } from "@/lib/waiting-list";
 
 import { submitWaitingListEntry, type SubmitState } from "./actions";
@@ -56,9 +56,12 @@ export function WaitingListForm({
   }
 
   function handleDobChange(event: React.ChangeEvent<HTMLInputElement>) {
-    const date = new Date(event.target.value);
-    if (Number.isNaN(date.getTime())) return;
-    const suggested = ageGroupFromDob(date);
+    // The <input type="date"> value IS the calendar date: yyyy-mm-dd. Handing
+    // it to `new Date()` made it midnight UTC, and a browser west of
+    // Greenwich then read the day before — a 1 September birthday landing in
+    // the wrong FA cohort. The string goes straight through instead.
+    const suggested = ageGroupFromDobString(event.target.value);
+    if (!suggested) return;
     setSchoolYear(AGE_GROUP_TO_SCHOOL_YEAR[suggested] ?? "");
     if (open.has(suggested)) setAgeGroup(suggested);
   }

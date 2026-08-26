@@ -16,7 +16,6 @@ import { Pencil, Plus, UserPlus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { Select } from "@/components/ui/field";
 import { EmergencyContactsFields, type LeadContact } from "@/components/emergency-contacts-fields";
 import { TownCountyFields } from "@/components/town-county-fields";
 import {
@@ -26,6 +25,7 @@ import {
 } from "@/components/registration-question-block";
 import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
 import { formatStamp } from "@/lib/people-display";
+import { TeamChoiceFields } from "@/components/registration-team-choice";
 import type { RegistrationQuestion } from "@/lib/registration-questions";
 
 import {
@@ -39,7 +39,13 @@ import {
   type FamilyActionState,
 } from "./actions";
 
-export type TeamOption = { id: string; name: string; ageGroup: string | null };
+export type TeamOption = {
+  id: string;
+  name: string;
+  ageGroup: string | null;
+  /** `teams.gender`: null | "mixed" | "boys" | "girls". */
+  gender: string | null;
+};
 
 /** The contact half of a child's record — the only half a guardian may edit. */
 export type ChildDetails = {
@@ -365,6 +371,9 @@ export function RegisterForm({
   seasonName,
   teams,
   questions,
+  dob,
+  recordedSex,
+  isAdmin,
   isSelf = false,
 }: {
   personId: string;
@@ -380,6 +389,12 @@ export function RegisterForm({
   teams: TeamOption[];
   /** The live registration form, in position order. */
   questions: RegistrationQuestion[];
+  /** yyyy-mm-dd, or null when the club holds no date of birth. */
+  dob: string | null;
+  /** `people.sex` as the club already has it, or null. */
+  recordedSex: string | null;
+  /** Only a club administrator is offered "show all teams". */
+  isAdmin: boolean;
   isSelf?: boolean;
 }) {
   const [state, setState] = useState<FamilyActionState>({});
@@ -440,24 +455,19 @@ export function RegisterForm({
         {seasonName ? ` for ${seasonName}` : ""}.
       </p>
 
-      <div className="space-y-1">
-        <Label htmlFor={`team-${personId}`}>
-          Team <span className="text-destructive">*</span>
-        </Label>
-        <Select id={`team-${personId}`} name="team_id" required defaultValue="">
-          <option value="">Choose a team</option>
-          {teams.map((team) => (
-            <option key={team.id} value={team.id}>
-              {team.name}
-              {team.ageGroup ? ` (${team.ageGroup})` : ""}
-            </option>
-          ))}
-        </Select>
-        <p className="text-xs text-muted-foreground">
-          A club administrator confirms the team — ask for the one you think fits and they will
-          move it if the age group is wrong.
-        </p>
-      </div>
+      {/* The same picker /join uses: own age band or the one above, and a
+          girls' team for female players only (Adam, 2026-08-26). Both rules
+          are re-asked by `registrations_guard()` when the row is written. */}
+      <TeamChoiceFields
+        idPrefix={`register-${personId}`}
+        teamFieldName="team_id"
+        teams={teams}
+        dob={dob}
+        recordedSex={recordedSex}
+        isAdmin={isAdmin}
+        firstName={firstName}
+        helpText="A club administrator confirms the team. Only the player's own age group and the one above it are offered."
+      />
 
       {contactsOnRecord === 0 ? (
         <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">

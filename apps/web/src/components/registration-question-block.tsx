@@ -233,10 +233,13 @@ export function QuestionBlock({
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="space-y-1">
               <Label htmlFor={`${id}-kind`}>What is it?</Label>
+              {/* Adam, 2026-08-26: "Make the default proof of identity a
+                  passport." ID_DOCUMENT_KINDS lists passport first and this
+                  reads the default off that list, so the two cannot drift. */}
               <select
                 id={`${id}-kind`}
                 name="id_kind"
-                defaultValue="birth_certificate"
+                defaultValue={ID_DOCUMENT_KINDS[0].value}
                 className="block h-11 w-full rounded-md border bg-background px-3 text-sm lg:h-10"
               >
                 {ID_DOCUMENT_KINDS.map((kind) => (
