@@ -201,6 +201,57 @@ export function teamAgeBandNumber(ageGroup: string | null | undefined): number |
 }
 
 /**
+ * The bands an age group NAMES, inclusive — because a team's age group is not
+ * always one band. On production (checked 2026-08-26) nine of the club's 73
+ * teams are not shaped like "U12":
+ *
+ *   "U05–U08"  U05 Wildcats — the club's only under-eights girls team
+ *   "Open Age" six men's and women's open-age sides
+ *   "Vets"     Vets O35 Women, Vets O45 Men's XI
+ *
+ * Reading only "U12" meant a five-year-old girl was offered no team at all.
+ * A range may be written with a hyphen or an en dash, and may or may not
+ * repeat the U — "U05–U08", "U05-U8", "U5 – U8" all mean the same thing.
+ * Mirrors `public.age_group_band_range()`.
+ */
+export function teamAgeBandRange(
+  ageGroup: string | null | undefined,
+): { min: number; max: number } | null {
+  const label = (ageGroup ?? "")
+    .trim()
+    .toUpperCase()
+    // en dash, em dash, minus sign → hyphen, then close up the spaces
+    .replace(/[\u2013\u2014\u2212]/g, "-")
+    .replace(/\s*-\s*/g, "-");
+  if (!label) return null;
+
+  const one = /^U0*(\d{1,2})$/.exec(label);
+  if (one) return { min: Number(one[1]), max: Number(one[1]) };
+
+  const span = /^U0*(\d{1,2})-U?0*(\d{1,2})$/.exec(label);
+  if (span) {
+    const a = Number(span[1]);
+    const b = Number(span[2]);
+    return { min: Math.min(a, b), max: Math.max(a, b) };
+  }
+  return null;
+}
+
+/**
+ * An age group that says, in words, that it is an adult side. Recognised
+ * POSITIVELY: a blank or unrecognised label is not an adult team, it is a team
+ * the club has not described, and a child must not be refused on the strength
+ * of the club's silence. Mirrors `public.age_group_is_adult()`.
+ */
+export function ageGroupIsAdultTeam(ageGroup: string | null | undefined): boolean {
+  const label = (ageGroup ?? "").trim().toUpperCase();
+  if (!label) return false;
+  return /(^|[^A-Z])(OPEN|SENIORS?|ADULTS?|VETS?|VETERANS?|O\d{2}|OVER[ -]?\d{2})([^A-Z]|$)/.test(
+    label,
+  );
+}
+
+/**
  * The bands a player may be registered into: their own, and the one ABOVE
  * (older) — Adam, 2026-08-26. Null when the date of birth is unknown, which
  * SG-0 treats as a minor the club cannot place.
@@ -262,12 +313,16 @@ export function teamOfferedToPlayer(
   if (!teamAdmitsSex(sex, team.gender)) return false;
   const eligible = eligibleAgeBands(dob, today);
   if (!eligible) return false;
-  const band = teamAgeBandNumber(team.ageGroup);
-  // An adult belongs in a team that names no U-band; a youth belongs in one
-  // that names theirs or the one above. A youth is NOT offered a team whose
-  // age group the club has never recorded — the club has not said what it is.
-  if (!eligible.youth) return band === null;
-  return band !== null && (band === eligible.bands[0] || band === eligible.bands[1]);
+  const range = teamAgeBandRange(team.ageGroup);
+  // An adult belongs in a team that names no youth band at all.
+  if (!eligible.youth) return range === null;
+  // A youth belongs in a team whose age group covers their band or the one
+  // above — a single band ("U12") or a range ("U05–U08"). A youth is NOT
+  // offered a team whose age group the club has never recorded: the club has
+  // not said what it is, and the screen would rather ask than guess.
+  if (!range) return false;
+  const covers = (n: number) => n >= range.min && n <= range.max;
+  return covers(eligible.bands[0]) || covers(eligible.bands[1]);
 }
 
 /** "U12 or U13" — the sentence under a team picker that has been narrowed. */
