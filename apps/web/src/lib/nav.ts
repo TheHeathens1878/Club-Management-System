@@ -134,23 +134,16 @@ export const NAV: readonly NavEntry[] = [
     allowed: (c) => c.isGuardian || c.hasParentRole,
     views: ["me"],
   },
-  {
-    // Who the club has you connected to, drawn as a family tree (Adam,
-    // 2026-08-26). Read-only, and scoped to the caller's OWN links: an
-    // ex-spouse who shares the children sees the children and the people who
-    // guard them, never the other household's adults or their children.
-    href: "/family-linking",
-    label: "Family Linking (4)",
-    icon: UsersRound,
-    group: "Membership Flow",
-    allowed: () => true,
-    views: ["me"],
-  },
+  // Family Linking (4) belongs here — the family tree, scoped to the
+  // caller's own links. The entry is held back until the page it points at
+  // exists: it went into the menu ahead of the route and gave Adam a 404
+  // (2026-08-26). It comes back with the page, and Register Players is (5)
+  // again then.
   {
     // The end of the flow: register whoever plays — yourself, a connected
     // adult or a child (Adam, 2026-08-26).
     href: "/my-registrations",
-    label: "Register Players (5)",
+    label: "Register Players (4)",
     icon: ClipboardCheck,
     group: "Membership Flow",
     allowed: () => true,
