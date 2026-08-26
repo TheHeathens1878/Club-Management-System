@@ -11,7 +11,7 @@
 
 begin;
 
-select plan(8);
+select plan(9);
 
 select has_column('public', 'people', 'is_player', 'people.is_player');
 
@@ -72,13 +72,14 @@ select is((select is_player from public.people where id = current_setting('ip.pa
 -- `update_own_contact()` takes no person: it writes current_person_id() and
 -- nothing else, so there is no argument with which to reach another record.
 -- The other door onto `people` is the admin policy, which is the club's.
-set local request.jwt.claims to '{"sub":"b0b0b0b0-4848-4111-8111-000000000002","role":"authenticated"}';
-set local role authenticated;
+--
+-- Asked as the OWNER: the question is what the TABLE holds. Asking it from the
+-- other person's session would answer "0 rows" because `people_self_read` hides
+-- somebody else's row — true, and not what is being tested.
 select is(
   (select count(*) from public.people p
     where p.id = current_setting('ip.plays')::uuid and p.is_player = true), 1::bigint,
   'the other person''s flag is untouched by anything this person can call');
-reset role;
 
 select * from finish();
 rollback;
