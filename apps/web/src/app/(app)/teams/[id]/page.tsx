@@ -618,7 +618,7 @@ export default async function TeamPage({
         .order("starts_on", { ascending: false }),
       admin
         .from("fixture_import_runs")
-        .select("id,trigger,status,inserted,updated,unchanged,error,source_url,created_at")
+        .select("id,trigger,status,inserted,updated,unchanged,retired,kept_back,error,source_url,created_at")
         .eq("team_id", id)
         .order("created_at", { ascending: false })
         .limit(RUN_LIMIT)
@@ -640,6 +640,8 @@ export default async function TeamPage({
       inserted: run.inserted,
       updated: run.updated,
       unchanged: run.unchanged,
+      retired: run.retired,
+      keptBack: run.kept_back,
       error: run.error,
       source_url: run.source_url,
       created_at: run.created_at,

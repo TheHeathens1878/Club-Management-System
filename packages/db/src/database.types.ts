@@ -1786,6 +1786,8 @@ export type Database = {
           fetched_at: string | null
           id: number
           inserted: number
+          kept_back: number
+          retired: number
           run_by: string | null
           source_url: string | null
           status: string
@@ -1801,6 +1803,8 @@ export type Database = {
           fetched_at?: string | null
           id?: never
           inserted?: number
+          kept_back?: number
+          retired?: number
           run_by?: string | null
           source_url?: string | null
           status: string
@@ -1816,6 +1820,8 @@ export type Database = {
           fetched_at?: string | null
           id?: never
           inserted?: number
+          kept_back?: number
+          retired?: number
           run_by?: string | null
           source_url?: string | null
           status?: string
