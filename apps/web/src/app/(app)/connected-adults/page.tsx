@@ -10,6 +10,7 @@ import { getSessionProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 import { AddAdultForm } from "./household-forms";
+import { EditAdultForm } from "./edit-adult-form";
 
 /**
  * Connected Adults (Adam's parent menu, 2026-08-25) — the adults the club
@@ -60,19 +61,18 @@ export default async function ConnectedAdultsPage() {
         <Card>
           <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2 text-base">
-              <UsersRound className="h-4 w-4" /> Connect an adult player
+              <UsersRound className="h-4 w-4" /> Connect an adult
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              For an adult in your household who does not have their own login yet — a partner, or
-              a grown-up son or daughter — including one who plays for the club. You can then
-              register them from your own account, and if your membership is a family one it covers
-              them at your lead-contact level. If the club already has a record for them, giving
-              their email address connects that record instead of creating a second one. If they
-              later{" "}
-              <Link href="/register" className="underline">
-                create their own login
-              </Link>
-              , they stay connected here — the membership keeps the tie.
+              Any adult the club should treat as part of your household — a partner, a grown-up son
+              or daughter, or whoever else shares the membership. They do not have to play, and
+              they do not have to be new to the club: connecting somebody who already has their own
+              login is how one membership and one bill covers you both.
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Give their email address and the club connects the record it already holds rather
+              than creating a second one. If they have no login yet, one can be created later and
+              they stay connected — the membership keeps the tie either way.
             </p>
           </CardHeader>
           <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
@@ -112,10 +112,10 @@ export default async function ConnectedAdultsPage() {
                     </>
                   ) : (
                     <>
-                      Corrections to their record go through the club — ask a club administrator.
+                      They have no login of their own, so their record is yours to keep right.
                       Their registrations appear on{" "}
                       <Link href="/my-registrations" className="underline">
-                        Registrations
+                        Register a player
                       </Link>
                       .
                     </>
@@ -133,6 +133,24 @@ export default async function ConnectedAdultsPage() {
                     <dd className="mt-0.5">{adult.phone ?? "Not recorded"}</dd>
                   </div>
                 </dl>
+
+                {/* Adam, 2026-08-26: "We should be able to edit details also."
+                    Only for somebody with no login — a person who holds an
+                    account keeps their own details, and their email address is
+                    where a password reset goes. The database refuses it again
+                    on the way in. */}
+                {!adult.has_login && (
+                  <div className="mt-4">
+                    <EditAdultForm
+                      personId={adult.person_id}
+                      firstName={adult.first_name}
+                      lastName={adult.last_name}
+                      preferredName={adult.preferred_name ?? null}
+                      email={adult.email ?? null}
+                      phone={adult.phone ?? null}
+                    />
+                  </div>
+                )}
               </CardContent>
             </Card>
           ))
