@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { membershipKindLabel, type MembershipKind } from "@/lib/membership-kind";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
@@ -11,6 +12,12 @@ import { createClient } from "@/lib/supabase/server";
  * dates of birth: a spreadsheet that leaves the building must not carry
  * children's DOBs; the age question is answered by the under-18 flag alone.
  * Under-18 contact goes through the guardian, exactly as the page shows it.
+ *
+ * The Membership column carries the same tag the list shows (Adam,
+ * 2026-08-26): this season's `memberships.kind`, which the database derives
+ * from the number of PLAYERS on the membership. It is read from the
+ * security_invoker view, so a caller who may not read the membership gets an
+ * empty cell rather than an answer they are not entitled to.
  */
 
 export const dynamic = "force-dynamic";
@@ -74,14 +81,33 @@ export async function GET(): Promise<NextResponse> {
     }
   }
 
-  const header = "Last name,First name,Under 18,Email,Phone,Contact via";
+  // This season's membership tag, one read for the whole export.
+  const { data: currentSeason } = await supabase
+    .from("seasons")
+    .select("id")
+    .eq("is_current", true)
+    .maybeSingle();
+  const membershipKind = new Map<string, MembershipKind>();
+  if (currentSeason) {
+    const { data: tags } = await supabase
+      .from("person_memberships")
+      .select("person_id,kind")
+      .eq("season_id", currentSeason.id);
+    for (const tag of tags ?? []) {
+      if (tag.person_id && tag.kind) membershipKind.set(tag.person_id, tag.kind);
+    }
+  }
+
+  const header = "Last name,First name,Under 18,Membership,Email,Phone,Contact via";
   const lines = rows.map((p) => {
     const minor = !p.dob || new Date(p.dob) > minorCutoff;
     const guardian = minor ? guardianPeople.get(guardianOf.get(p.id) ?? "") : undefined;
+    const kind = membershipKind.get(p.id);
     return [
       csvField(p.last_name),
       csvField(p.first_name),
       minor ? "yes" : "no",
+      csvField(kind ? membershipKindLabel(kind) : ""),
       csvField(minor ? guardian?.email ?? "" : p.email),
       csvField(minor ? guardian?.phone ?? "" : p.phone),
       csvField(guardian?.name ?? ""),

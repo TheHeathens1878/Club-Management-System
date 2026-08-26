@@ -5087,6 +5087,35 @@ export type Database = {
         }
         Relationships: []
       }
+      person_memberships: {
+        Row: {
+          created_at: string | null
+          is_primary: boolean | null
+          kind: Database["public"]["Enums"]["membership_kind"] | null
+          membership_id: string | null
+          person_id: string | null
+          primary_person_id: string | null
+          season_id: string | null
+          season_is_current: boolean | null
+          season_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "membership_people_membership_id_fkey"
+            columns: ["membership_id"]
+            isOneToOne: false
+            referencedRelation: "memberships"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "membership_people_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       room_bookings: {
         Row: {
           amount_pence: number | null
@@ -6002,6 +6031,10 @@ export type Database = {
         Args: { p_item_id: string; p_new_path: string }
         Returns: undefined
       }
+      membership_kind_for: {
+        Args: { p_membership_id: string }
+        Returns: Database["public"]["Enums"]["membership_kind"]
+      }
       message_retention_candidates: {
         Args: never
         Returns: {
@@ -6344,6 +6377,10 @@ export type Database = {
         Returns: undefined
       }
       referees_group_id: { Args: never; Returns: string }
+      refresh_membership_kind: {
+        Args: { p_membership_ids: string[] }
+        Returns: number
+      }
       reject_account_request: {
         Args: { p_note?: string; p_request_id: string }
         Returns: undefined

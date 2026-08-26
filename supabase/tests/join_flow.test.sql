@@ -5,8 +5,10 @@
 --   B  add_household_adult: adult-only, known-adult caller, audited
 --   C  registrations: household adult registerable by their creator; a person
 --      with their own login is not; strangers refused
---   D  create_membership: individual for one, family for 2–6, cap at six,
---      household check, idempotent re-submission
+--   D  create_membership: the household check, the six-person cap, the
+--      idempotent re-submission, and the kind it returns. Since 20260825520000
+--      that kind counts PLAYERS, not people — the rule itself is tested in
+--      membership_kind.test.sql.
 --
 -- Run with: npx supabase test db
 -- =============================================================================
@@ -71,9 +73,14 @@ set local request.jwt.claims to '{"sub":"a5a5a5a5-2222-4111-8111-000000000001","
 set local role authenticated;
 select set_config('jf.child', public.add_child('Kid', 'Iner', (current_date - interval '8 years')::date)::text, true);
 
-select is((select kind::text from public.create_membership(array[]::uuid[])), 'individual', 'one person → individual');
+-- 20260825520000: the kind counts PLAYERS, not people. Jo alone has no
+-- registration and no squad place, so that is an individual; adding the spouse
+-- (one pending registration, section C) and the child (none) is three people
+-- and still ONE player, so it stays an individual. The player rule's own tests
+-- live in membership_kind.test.sql.
+select is((select kind::text from public.create_membership(array[]::uuid[])), 'individual', 'one person, no players → individual');
 select is((select kind::text from public.create_membership(array[current_setting('jf.spouse')::uuid, current_setting('jf.child')::uuid])),
-  'family', 'three people → family (idempotent upsert replaces the earlier row)');
+  'individual', 'three people but one player → individual (idempotent upsert replaces the earlier row)');
 select is((select count(*) from public.membership_people mp
             join public.memberships m on m.id = mp.membership_id
             where m.primary_person_id = current_setting('jf.me')::uuid), 3::bigint, 'membership lists all three');
