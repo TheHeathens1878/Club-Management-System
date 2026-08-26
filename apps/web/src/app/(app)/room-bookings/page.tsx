@@ -28,6 +28,9 @@ export default async function RoomBookingsPage({
 
   const { status: statusFilter, room: roomFilter, period: periodFilter, view } = await searchParams;
   const canDelete = isSuperUser(session.profile?.role);
+  // Declining a block booking is a committee decision, which is what the
+  // database has always said: bookings_admin_delete is is_club_admin().
+  const canDecline = isCommittee(session.profile?.role);
   const isCalendar = view !== "list"; // calendar is the default
 
   const admin = createAdminClient();
@@ -295,6 +298,7 @@ export default async function RoomBookingsPage({
             bookings={filtered}
             roomName={roomNameRecord}
             canDelete={canDelete}
+          canDecline={canDecline}
           />
         )}
       </div>

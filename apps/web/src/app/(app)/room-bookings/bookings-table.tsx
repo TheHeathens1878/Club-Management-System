@@ -7,7 +7,12 @@ import { Trash2, Columns, ChevronDown, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
-import { deleteBooking, deleteBookings, deleteBookingsByGroup } from "./actions";
+import {
+  declineAndDeleteSeries,
+  deleteBooking,
+  deleteBookings,
+  deleteBookingsByGroup,
+} from "./actions";
 import { BookingsExportButtons } from "./bookings-export";
 import { formatBookingDateShort } from "@/lib/booking-time";
 import type { BookingKind, BookingListItem } from "@/lib/booking-types";
@@ -39,10 +44,13 @@ export function BookingsTable({
   bookings,
   roomName,
   canDelete,
+  canDecline,
 }: {
   bookings: BookingListItem[];
   roomName: Record<string, string>;
   canDelete: boolean;
+  /** Committee and above: decline a block booking and clear its dates. */
+  canDecline: boolean;
 }) {
   const router = useRouter();
   const [visible, setVisible] = useState<ColKey[]>(DEFAULT_VISIBLE);
@@ -127,6 +135,38 @@ export function BookingsTable({
     router.refresh();
   }
 
+  // Adam, 2026-08-26: "Admins need the ability to decline and delete block
+  // bookings in one go." One decision — the club says no and the dates go back
+  // on the market — instead of cancelling twenty rows and then deleting them.
+  async function handleDeclineSeries() {
+    if (!selectedGroupIds.length) return;
+    const rowsInSeries = bookings.filter(
+      (b) => b.recurrence_group_id && selectedGroupIds.includes(b.recurrence_group_id),
+    ).length;
+    const reason = prompt(
+      `Decline ${selectedGroupIds.length === 1 ? "this block booking" : `these ${selectedGroupIds.length} block bookings`} and remove ${rowsInSeries} date${rowsInSeries === 1 ? "" : "s"} from the diary?\n\nSay why — it goes in the record, and it is the only trace left that the club was asked.`,
+      "",
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 3) {
+      setError("Give a reason — it is the only thing left in the record afterwards.");
+      return;
+    }
+    setDeleting(true);
+    setError(null);
+    for (const groupId of selectedGroupIds) {
+      const res = await declineAndDeleteSeries(groupId, reason);
+      if (res?.error) {
+        setError(res.error);
+        setDeleting(false);
+        return;
+      }
+    }
+    setDeleting(false);
+    setSelected(new Set());
+    router.refresh();
+  }
+
   async function handleDeleteOne(id: string) {
     if (!confirm("Permanently delete this booking? This cannot be undone.")) return;
     setDeleting(true);
@@ -144,6 +184,19 @@ export function BookingsTable({
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
+          {canDecline && someSelected && selectedGroupIds.length > 0 && (
+            <Button
+              variant="destructive"
+              size="sm"
+              disabled={deleting}
+              onClick={handleDeclineSeries}
+              className="min-h-[44px] lg:min-h-0"
+            >
+              <Repeat className="h-3.5 w-3.5" />
+              Decline &amp; delete{" "}
+              {selectedGroupIds.length === 1 ? "block booking" : `${selectedGroupIds.length} block bookings`}
+            </Button>
+          )}
           {canDelete && someSelected && (
             <>
               <Button

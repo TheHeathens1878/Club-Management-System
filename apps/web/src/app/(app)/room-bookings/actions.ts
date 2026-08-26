@@ -934,3 +934,108 @@ export async function createInternalBooking(
   revalidatePath("/room-bookings");
   redirect(`/room-bookings/${booking.id}`);
 }
+
+
+// ---------------------------------------------------------------------------
+// Declining a block booking (Adam, 2026-08-26: "Admins need the ability to
+// decline and delete block bookings in one go")
+// ---------------------------------------------------------------------------
+//
+// A block booking is one request that becomes many rows — createBlockBooking()
+// writes up to 104 of them sharing a `recurrence_group_id`. Turning one down
+// used to mean two separate jobs done one row at a time: set each to cancelled
+// (updateBookingStatus), then delete the series (deleteBookingsByGroup, and
+// only a super user could). Twenty rows, forty clicks, two different ideas of
+// who is allowed.
+//
+// This is the one decision it always was: the club says no, and the dates go
+// back on the market. It is one call, and it is a COMMITTEE decision, not a
+// super user one — `bookings_admin_delete` is `for delete using
+// (is_club_admin())`, so the database has always said committee. The app was
+// stricter than the database by accident.
+//
+// Deleting rather than cancelling is deliberate for a request that was never
+// accepted: a cancelled row still occupies the diary's cancelled list for ever
+// and still has to be read past. What must NOT vanish is the fact that the
+// club was asked and said no — so the whole series is snapshotted into one
+// audit row first, with every date in it, and the reason.
+
+export type DeclineSeriesResult = { error?: string; deleted?: number };
+
+export async function declineAndDeleteSeries(
+  groupId: string,
+  reason: string,
+): Promise<DeclineSeriesResult> {
+  const session = await getSessionProfile();
+  if (!session || !isCommittee(session.profile?.role)) {
+    return { error: "Only a committee member or an administrator can decline a block booking." };
+  }
+  if (!groupId) return { error: "No series given." };
+  const why = reason.trim();
+  if (why.length < 3) {
+    return { error: "Say why it is being declined — it goes in the record." };
+  }
+
+  const admin = createAdminClient();
+
+  // Read the whole series BEFORE deleting: afterwards this audit row is the
+  // only trace that the club was asked at all.
+  const { data: rows, error: readError } = await admin
+    .from("bookings")
+    .select(
+      "id,starts_at,ends_at,status,occasion,booker_first_name,booker_last_name,booker_email,booker_phone,resource_id,total_pence,payment_status,resources(name)",
+    )
+    .eq("recurrence_group_id", groupId)
+    .order("starts_at");
+  if (readError) return { error: "Could not read that series." };
+  if (!rows?.length) return { error: "That series no longer exists." };
+
+  const paid = rows.filter(
+    (row) => row.payment_status === "paid" || row.payment_status === "deposit_paid",
+  );
+  if (paid.length > 0) {
+    // Money has changed hands. Deleting the row it was taken against would
+    // leave the payment attached to nothing, and arranging a refund is not
+    // this button's job.
+    return {
+      error: `${paid.length} of these ${rows.length} bookings have been paid, or have a deposit against them. Sort the refund out first, then delete those individually.`,
+    };
+  }
+
+  const first = rows[0];
+  if (!first) return { error: "That series no longer exists." };
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "decline_and_delete_series",
+    entity: "room_booking",
+    entityId: groupId,
+    detail: {
+      reason: why,
+      recurrence_group_id: groupId,
+      count: rows.length,
+      room: (first.resources as { name?: string } | null)?.name ?? null,
+      booker: {
+        name: joinContactName(first.booker_first_name, first.booker_last_name),
+        email: first.booker_email,
+        phone: first.booker_phone,
+      },
+      occasion: first.occasion,
+      occurrences: rows.map((row) => ({
+        id: row.id,
+        starts_at: row.starts_at,
+        ends_at: row.ends_at,
+        status: row.status,
+      })),
+    },
+  });
+
+  const { error: deleteError, count } = await admin
+    .from("bookings")
+    .delete({ count: "exact" })
+    .eq("recurrence_group_id", groupId);
+  if (deleteError) return { error: "Failed to delete the series." };
+
+  revalidatePath("/room-bookings");
+  return { deleted: count ?? rows.length };
+}
