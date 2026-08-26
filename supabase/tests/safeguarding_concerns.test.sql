@@ -172,7 +172,16 @@ select throws_ok($$update public.people set pseudonymised_at = now() where id = 
   'legal hold beats pseudonymisation');
 
 -- ---------------------------------------------------------------------------
--- G. SG-6 tier 2: nudges and compliance report
+-- G. SG-6 tier 2: nudges and compliance report.
+--
+-- These functions are still in the database and still correct, and this suite
+-- still proves them. NOTHING CALLS THEM ANY MORE: 20260825440000 retired the
+-- in-app SG-6 tier (SAFEGUARDING.md SG-6) and `safeguarding-nudges` stopped
+-- sending certification expiry mail and the daily compliance report on
+-- 2026-08-26. They are exercised here so the machinery cannot rot before
+-- anyone decides whether to re-enable it or drop it.
+-- Certifications are written below as the OWNER, which is now the only way
+-- they can be written at all: `authenticated` lost INSERT and UPDATE.
 -- ---------------------------------------------------------------------------
 insert into public.certifications (id, person_id, type, expires_on, verified_at) values
   ('cf1cf1cf-1111-4111-8111-000000000001', current_setting('c.coach')::uuid, 'fa_dbs', current_date + 25, now()),

@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The editable parts of one person's record: roles, guardianships,
- * certifications, and the soft delete.
+ * The editable parts of one person's record: roles, guardianships, emergency
+ * contacts, and the soft delete.
  *
  * Each panel writes through a server action that uses the caller's own client,
  * so what comes back is the database's answer. A P0001 refusal — the SG-4
@@ -20,7 +20,7 @@ import { Select, Textarea } from "@/components/ui/field";
 import { PersonPicker } from "@/components/person-picker";
 import { EmergencyContactsFields } from "@/components/emergency-contacts-fields";
 import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
-import { formatDate, formatStamp } from "@/lib/people-display";
+import { formatStamp } from "@/lib/people-display";
 
 import {
   purgePerson,
@@ -30,13 +30,10 @@ import {
 } from "../actions";
 import {
   addGuardianship,
-  addPersonCertification,
   endGuardianship,
   grantRole,
-  revokePersonCertification,
   revokeRole,
   setPersonEmergencyContacts,
-  verifyPersonCertification,
   type PersonDetailState,
 } from "./actions";
 
@@ -63,13 +60,6 @@ export const RELATIONSHIP_LABELS: Record<string, string> = {
   other: "Other",
 };
 
-export const CERTIFICATION_LABELS: Record<string, string> = {
-  fa_dbs: "FA DBS check",
-  safeguarding_children: "Safeguarding children",
-  first_aid: "First aid",
-  coaching_badge: "Coaching badge",
-};
-
 export type RoleRow = {
   id: string;
   role: string;
@@ -85,16 +75,6 @@ export type GuardianshipRow = {
   /** True when the person on screen is the guardian in this link. */
   personIsGuardian: boolean;
   endedAt: string | null;
-};
-
-export type PersonCertificationRow = {
-  id: string;
-  type: string;
-  reference: string | null;
-  issuedOn: string | null;
-  expiresOn: string | null;
-  verifiedAt: string | null;
-  revokedAt: string | null;
 };
 
 function Feedback({ state }: { state: PersonDetailState | PersonActionState }) {
@@ -315,134 +295,6 @@ export function GuardianshipsPanel({
           className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
         >
           {adding ? "Saving…" : "Add guardianship"}
-        </Button>
-        <Feedback state={addState} />
-      </form>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-export function PersonCertificationsPanel({
-  personId,
-  certifications,
-}: {
-  personId: string;
-  certifications: PersonCertificationRow[];
-}) {
-  const [addState, addAction, adding] = useActionState(addPersonCertification, EMPTY);
-  const [verifyState, verifyAction] = useActionState(verifyPersonCertification, EMPTY);
-  const [revokeState, revokeAction] = useActionState(revokePersonCertification, EMPTY);
-
-  return (
-    <div className="space-y-4">
-      {certifications.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing recorded.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs text-muted-foreground">
-              <tr>
-                <th className="py-2 pr-3 font-medium">Type</th>
-                <th className="py-2 pr-3 font-medium">Reference</th>
-                <th className="py-2 pr-3 font-medium">Issued</th>
-                <th className="py-2 pr-3 font-medium">Expires</th>
-                <th className="py-2 pr-3 font-medium">State</th>
-                <th className="py-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
-              {certifications.map((cert) => (
-                <tr key={cert.id} className="border-b align-top last:border-0">
-                  <td className="py-2 pr-3">{CERTIFICATION_LABELS[cert.type] ?? cert.type}</td>
-                  <td className="py-2 pr-3 break-all">{cert.reference ?? "—"}</td>
-                  <td className="whitespace-nowrap py-2 pr-3">{formatDate(cert.issuedOn)}</td>
-                  <td className="whitespace-nowrap py-2 pr-3">{formatDate(cert.expiresOn)}</td>
-                  <td className="py-2 pr-3">
-                    {cert.revokedAt ? (
-                      <Badge variant="destructive">Revoked</Badge>
-                    ) : cert.verifiedAt ? (
-                      <Badge variant="success">Verified</Badge>
-                    ) : (
-                      <Badge variant="warning">Not verified</Badge>
-                    )}
-                  </td>
-                  <td className="py-2">
-                    {!cert.revokedAt && (
-                      <div className="flex gap-1">
-                        {!cert.verifiedAt && (
-                          <form action={verifyAction}>
-                            <input type="hidden" name="person_id" value={personId} />
-                            <input type="hidden" name="certification_id" value={cert.id} />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="outline"
-                              className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0"
-                            >
-                              Verify
-                            </Button>
-                          </form>
-                        )}
-                        <form action={revokeAction}>
-                          <input type="hidden" name="person_id" value={personId} />
-                          <input type="hidden" name="certification_id" value={cert.id} />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="outline"
-                            className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0"
-                          >
-                            Revoke
-                          </Button>
-                        </form>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <Feedback state={verifyState} />
-      <Feedback state={revokeState} />
-
-      <form action={addAction} className="space-y-3 rounded-lg border border-dashed p-4">
-        <p className="text-sm font-medium">Record a certification</p>
-        <input type="hidden" name="person_id" value={personId} />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-type">Type</Label>
-            <Select id="cert-type" name="type" defaultValue="fa_dbs">
-              {Object.keys(CERTIFICATION_LABELS).map((value) => (
-                <option key={value} value={value}>
-                  {CERTIFICATION_LABELS[value]}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-reference">Reference</Label>
-            <Input id="cert-reference" name="reference" placeholder="Certificate number" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-issued">Issued on</Label>
-            <Input id="cert-issued" name="issued_on" type="date" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-expires">Expires on</Label>
-            <Input id="cert-expires" name="expires_on" type="date" />
-          </div>
-        </div>
-        <Button
-          type="submit"
-          size="sm"
-          disabled={adding}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
-        >
-          {adding ? "Saving…" : "Record certification"}
         </Button>
         <Feedback state={addState} />
       </form>

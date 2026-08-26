@@ -94,9 +94,8 @@ export async function addTeamMember(
 /**
  * Change a member's role.
  *
- * The SG-6 guard fires on this update, so promoting a player to coach on a team
- * with minors is refused unless the paperwork (or a lead's exemption) is in
- * place — and the refusal names what is missing.
+ * The database's guards fire on this update; whatever they say is passed back
+ * to the administrator unedited.
  */
 export async function changeMemberRole(
   _prev: MembershipActionState,

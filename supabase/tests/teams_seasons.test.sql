@@ -285,10 +285,17 @@ select throws_ok(
   $$insert into public.team_memberships (person_id, team_id, season_id, role)
     values ('c2c2c2c2-1111-4111-8111-000000000001', '7e7e7e7e-1111-4111-8111-000000000002', '5e5e5e5e-1111-4111-8111-000000000001', 'player')$$,
   'P0001', null, 'club_admin: add_minor_to_team_with_uncertified_coach_throws');
+-- exemption_granted_by_club_admin_throws USED to be proved here through RLS,
+-- where the BEFORE trigger fires ahead of the policy WITH CHECK and a
+-- club_admin got the lead-only P0001. Since 20260825440000 no signed-in user
+-- reaches the trigger at all: INSERT on the two evidence tables was revoked
+-- from `authenticated` when SG-6's in-app tier was retired, so the refusal is
+-- now a flat 42501. The trigger rule itself is still proved above, as the
+-- owner. See SAFEGUARDING.md SG-6.
 select throws_ok(
   $$insert into public.certification_exemptions (person_id, team_id, reason, granted_by_person_id, expires_on)
     values (current_setting('t.other')::uuid, '7e7e7e7e-1111-4111-8111-000000000001', 'x', current_setting('t.admin')::uuid, current_date + 7)$$,
-  'P0001', null, 'club_admin: exemption_granted_by_club_admin_throws (the BEFORE trigger fires before the policy WITH CHECK)');
+  '42501', null, 'club_admin: the app can no longer write a certification exemption');
 reset role;
 -- as service_role
 set local role service_role;
@@ -297,17 +304,22 @@ select throws_ok(
     values ('c2c2c2c2-1111-4111-8111-000000000001', '7e7e7e7e-1111-4111-8111-000000000002', '5e5e5e5e-1111-4111-8111-000000000001', 'player')$$,
   'P0001', null, 'service_role: add_minor_to_team_with_uncertified_coach_throws');
 reset role;
--- as the lead, granted_by must be self
+-- The safeguarding lead was the ONE role that could grant an exemption from
+-- the app. Since 20260825440000 they cannot either: the FA Clubs Portal holds
+-- the paperwork, so there is nothing in the app for an exemption to except
+-- from. The lead-only and granted_by-must-be-self rules are still enforced by
+-- `certification_exemptions_guard()` and are proved above as the owner; what
+-- is proved here is that no route through `authenticated` reaches them.
 set local request.jwt.claims to '{"sub":"a2a2a2a2-1111-4111-8111-000000000002","role":"authenticated"}';
 set local role authenticated;
 select throws_ok(
   $$insert into public.certification_exemptions (person_id, team_id, reason, granted_by_person_id, expires_on)
-    values (current_setting('t.other')::uuid, '7e7e7e7e-1111-4111-8111-000000000001', 'x', current_setting('t.admin')::uuid, current_date + 7)$$,
-  'P0001', null, 'lead cannot attribute an exemption to someone else');
-select lives_ok(
-  $$insert into public.certification_exemptions (person_id, team_id, reason, granted_by_person_id, expires_on)
     values (current_setting('t.other')::uuid, '7e7e7e7e-1111-4111-8111-000000000003', 'paperwork', current_setting('t.lead')::uuid, current_date + 7)$$,
-  'lead grants an exemption as themself');
+  '42501', null, 'the safeguarding lead can no longer grant an exemption from the app either');
+select throws_ok(
+  $$insert into public.certifications (person_id, type, expires_on, verified_at)
+    values (current_setting('t.other')::uuid, 'fa_dbs', current_date + 365, now())$$,
+  '42501', null, 'the safeguarding lead can no longer record a certification from the app');
 reset role;
 
 -- ---------------------------------------------------------------------------

@@ -6,9 +6,9 @@
  * Every write here uses the USER-SCOPED client. `people` RLS is
  * `people_admin_insert` / `people_admin_update` — a club_admin, which is what a
  * committee sign-in holds through the profiles → person_roles sync — and the
- * `people_dob_guard` trigger carries SG-1.2 and SG-6 tier 1(c), so a date of
- * birth correction that turns an existing team member into a minor is
- * re-evaluated by the database, not by this file.
+ * `people_dob_guard` trigger carries SG-1.2, so a date of birth correction
+ * that turns an existing team member into a minor is re-evaluated by the
+ * database, not by this file.
  *
  * `deleted_at` is a soft delete (SG-2): `people` has no FOR DELETE policy, no
  * DELETE grant and a `deny_hard_delete` trigger, and none of those may be
@@ -158,11 +158,9 @@ export async function updatePerson(
       // `apply_neon_pending()` is service_role-only BY DESIGN (P3.3 §12
       // revokes EXECUTE from public, anon and authenticated). It does things
       // no signed-in user may do: it inserts guardianships and team
-      // memberships on the club's behalf and, where SG-6 tier 1 demands it,
-      // grants the safeguarding lead's 30-day certification exemption
-      // (D-P3-2). Handing that to `authenticated` would be a standing
-      // privilege escalation, so the function stays where it is and the app
-      // reaches it with the admin key here and nowhere else.
+      // memberships on the club's behalf. Handing that to `authenticated`
+      // would be a standing privilege escalation, so the function stays where
+      // it is and the app reaches it with the admin key here and nowhere else.
       //
       // The caller's own authority is established twice before this line:
       // the `people` UPDATE above ran under RLS and only a club_admin's

@@ -26,7 +26,7 @@ function asString(value: unknown): string | null {
 
 /**
  * The conversation a notification is about, or null when it is about something
- * else (an arrears reminder, a certification nudge) or is malformed. Only
+ * else (an arrears reminder, a subscription notice) or is malformed. Only
  * `entity: "conversations"` counts, so a future notification carrying some
  * other entity id can never be turned into a messages route.
  */
