@@ -127,11 +127,21 @@ export const NAV: readonly NavEntry[] = [
     views: ["me"],
   },
   {
+    // Shown to everybody in the ME view, like every other step of the flow.
+    //
+    // It used to be `c.isGuardian || c.hasParentRole`, which is the one gate
+    // that cannot work here: this is the page where you connect your FIRST
+    // child, and until you have, you are neither. Adam, 2026-08-26: Mark Law
+    // — a manager with a login, no guardianships and no parent role — had no
+    // way to reach it at all. The page itself already handles having nobody
+    // connected (it shows the Add a child form and says the club has none on
+    // record), so there is nothing to protect by hiding it, and nothing is
+    // read here that /family's own RLS does not already scope to the caller.
     href: "/family",
     label: "Connect Children (3)",
     icon: Baby,
     group: "Membership Flow",
-    allowed: (c) => c.isGuardian || c.hasParentRole,
+    allowed: () => true,
     views: ["me"],
   },
   {

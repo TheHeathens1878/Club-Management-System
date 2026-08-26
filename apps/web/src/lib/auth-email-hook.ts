@@ -31,9 +31,22 @@ export const SIGNATURE_TOLERANCE_SECONDS = 300;
 const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 
 /**
+ * 64 lowercase hex characters — how the Management API returns the secret,
+ * and therefore a form somebody may well paste into the environment.
+ *
+ * It has to be tested BEFORE base64, because hex digits are a subset of the
+ * base64 alphabet: `Buffer.from("8121…", "base64")` does not fail, it quietly
+ * returns 48 bytes of the wrong key and every signature check fails with no
+ * hint as to why. Anchored at 64 characters so a real 32-byte base64 secret
+ * (44 characters, `=`-padded) can never be mistaken for hex.
+ */
+const HEX_32_BYTES = /^[0-9a-f]{64}$/i;
+
+/**
  * The dashboard hands the secret over as `v1,whsec_<base64>`. Accept that,
- * and also the bare `whsec_<base64>` and raw base64 forms, because which one
- * ends up in the environment depends on who copied it.
+ * and also the bare `whsec_<base64>`, raw base64 and raw hex forms, because
+ * which one ends up in the environment depends on who copied it and from
+ * where — the dashboard shows base64, the Management API returns hex.
  */
 export function parseHookSecret(raw: string | null | undefined): Buffer | null {
   if (!raw) return null;
@@ -42,6 +55,8 @@ export function parseHookSecret(raw: string | null | undefined): Buffer | null {
   const comma = value.indexOf(",");
   if (comma !== -1 && /^v\d+$/.test(value.slice(0, comma))) value = value.slice(comma + 1);
   if (value.startsWith("whsec_")) value = value.slice("whsec_".length);
+
+  if (HEX_32_BYTES.test(value)) return Buffer.from(value, "hex");
   if (!BASE64.test(value)) return null;
 
   const key = Buffer.from(value, "base64");

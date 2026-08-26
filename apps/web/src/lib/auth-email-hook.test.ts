@@ -42,6 +42,40 @@ describe("parseHookSecret", () => {
     expect(parseHookSecret("")).toBeNull();
     expect(parseHookSecret("v1,whsec_not base64!")).toBeNull();
   });
+
+  // A real Supabase hook secret is 32 bytes. The dashboard shows base64 of
+  // them; the Management API returns the same bytes as 64 hex characters.
+  // Both spellings must land on the same key.
+  const REAL_BYTES = Buffer.from(
+    "8121189d3ea07efb49aac9c78d3b080b51b83c9bd4d100488aec09c1bbc50663",
+    "hex",
+  );
+
+  it("accepts the hex form the Management API returns", () => {
+    const hex = REAL_BYTES.toString("hex");
+    expect(parseHookSecret(hex)?.equals(REAL_BYTES)).toBe(true);
+    expect(parseHookSecret(hex.toUpperCase())?.equals(REAL_BYTES)).toBe(true);
+    expect(parseHookSecret(`v1,whsec_${hex}`)?.equals(REAL_BYTES)).toBe(true);
+  });
+
+  it("agrees with the base64 spelling of the same secret", () => {
+    expect(parseHookSecret(REAL_BYTES.toString("hex"))).toEqual(
+      parseHookSecret(`v1,whsec_${REAL_BYTES.toString("base64")}`),
+    );
+  });
+
+  it("does not mistake hex for base64, which is the silent-wrong-key trap", () => {
+    // Hex digits are all in the base64 alphabet, so decoding hex AS base64
+    // does not throw — it quietly returns 48 bytes of the wrong key, and
+    // every signature then fails with nothing to say why.
+    const hex = REAL_BYTES.toString("hex");
+    expect(parseHookSecret(hex)?.length).toBe(32);
+    expect(Buffer.from(hex, "base64").length).toBe(48);
+  });
+
+  it("still reads a base64 secret that is not 32 bytes long", () => {
+    expect(parseHookSecret(SECRET)?.equals(SECRET_BYTES)).toBe(true);
+  });
 });
 
 describe("verifyHookSignature", () => {
