@@ -10,6 +10,8 @@
 export type ContactOption = {
   id: string;
   name: string;
+  first_name: string;
+  last_name: string;
   email: string | null;
   phone: string | null;
 };
@@ -32,7 +34,8 @@ export function ContactPicker({ contacts }: { contacts: ContactOption[] }) {
         onChange={(event) => {
           const contact = contacts.find((option) => option.id === event.target.value);
           if (!contact) return;
-          fill("booker_name", contact.name);
+          fill("booker_first_name", contact.first_name);
+          fill("booker_last_name", contact.last_name);
           fill("booker_email", contact.email ?? "");
           fill("booker_phone", contact.phone ?? "");
         }}

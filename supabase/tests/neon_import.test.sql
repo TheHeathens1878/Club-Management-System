@@ -110,7 +110,7 @@ select ok(not has_table_privilege('anon', 'public.waiting_list_entries', 'SELECT
 select ok(not has_table_privilege('authenticated', 'public.waiting_list_entries', 'DELETE'), 'authenticated cannot DELETE waiting_list_entries');
 select ok(not has_schema_privilege('anon', 'neon_legacy', 'USAGE'), 'anon has no USAGE on neon_legacy');
 select ok(not has_schema_privilege('authenticated', 'neon_legacy', 'USAGE'), 'authenticated has no USAGE on neon_legacy');
-select ok(has_function_privilege('anon', 'public.submit_waiting_list_entry(text, date, text, text, text, text, text, text, text, text, text, boolean, text, boolean)', 'EXECUTE'), 'anon may submit to the waiting list');
+select ok(has_function_privilege('anon', 'public.submit_waiting_list_entry(text, text, date, text, text, text, text, text, text, text, text, text, text, boolean, text, boolean)', 'EXECUTE'), 'anon may submit to the waiting list');
 select ok(not has_function_privilege('authenticated', 'public.migrate_neon()', 'EXECUTE'), 'authenticated cannot run migrate_neon');
 select ok(not has_function_privilege('authenticated', 'public.apply_neon_pending(uuid)', 'EXECUTE'), 'authenticated cannot run apply_neon_pending');
 select ok(not has_function_privilege('anon', 'public.complete_own_dob(date)', 'EXECUTE'), 'anon cannot call complete_own_dob');
@@ -304,11 +304,11 @@ reset role;
 set local request.jwt.claims to '{}';
 
 set local role anon;
-select lives_ok($$select public.submit_waiting_list_entry('New Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New Parent', 'New@Parent.test', '07700 5', false, null, true)$$,
+select lives_ok($$select public.submit_waiting_list_entry('New', 'Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New', 'Parent', 'New@Parent.test', '07700 5', false, null, true)$$,
   'anon submits to an open age group');
-select throws_ok($$select public.submit_waiting_list_entry('New Kid', '2020-02-02', 'U09', 'Year 1', 'MALE', null, null, null, 'New Parent', 'new@parent.test', '07700 5', false, null, true)$$,
+select throws_ok($$select public.submit_waiting_list_entry('New', 'Kid', '2020-02-02', 'U09', 'Year 1', 'MALE', null, null, null, 'New', 'Parent', 'new@parent.test', '07700 5', false, null, true)$$,
   'P0001', null, 'closed age group refused');
-select throws_ok($$select public.submit_waiting_list_entry('New Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New Parent', 'new@parent.test', '07700 5', false, null, false)$$,
+select throws_ok($$select public.submit_waiting_list_entry('New', 'Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New', 'Parent', 'new@parent.test', '07700 5', false, null, false)$$,
   'P0001', null, 'no consent, no entry');
 select is((select count(*) from public.waiting_list_open_age_groups()), 1::bigint, 'anon sees the open age groups');
 reset role;

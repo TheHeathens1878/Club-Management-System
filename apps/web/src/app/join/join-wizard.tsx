@@ -72,6 +72,9 @@ export function JoinWizard({ signedIn, defaults }: {
 
   // Step 2 — add-person form state
   const [addError, setAddError] = useState<string | null>(null);
+  // A possible duplicate on the club's records: the sentence to show, and the
+  // post to repeat if the member says it is somebody else (20260825490000).
+  const [addConfirm, setAddConfirm] = useState<{ message: string; formData: FormData } | null>(null);
 
   // Step 3 — per-player outcomes
   const [outcomes, setOutcomes] = useState<Record<string, PlayerOutcome>>({});
@@ -124,11 +127,18 @@ export function JoinWizard({ signedIn, defaults }: {
     formData.set("household_count", String(people.length));
     startTransition(async () => {
       const result = await joinAddPerson({}, formData);
+      if (result.confirmNew) {
+        setAddError(null);
+        setAddConfirm({ message: result.confirmNew, formData });
+        return;
+      }
       if (result.error || !result.added) {
         setAddError(result.error ?? "They could not be added.");
+        setAddConfirm(null);
         return;
       }
       setAddError(null);
+      setAddConfirm(null);
       setPeople((current) => [...current, { ...result.added!, isSelf: false }]);
     });
   }
@@ -136,6 +146,8 @@ export function JoinWizard({ signedIn, defaults }: {
   function submitPlayer(person: HouseholdPerson, formData: FormData) {
     formData.set("person_id", person.personId);
     formData.set("person_name", `${person.firstName} ${person.lastName}`.trim());
+    formData.set("person_first_name", person.firstName);
+    formData.set("person_last_name", person.lastName);
     formData.set("dob", person.dob);
     formData.set("is_self", person.isSelf ? "yes" : "no");
     formData.set("is_minor", person.minor ? "yes" : "no");
@@ -364,6 +376,25 @@ export function JoinWizard({ signedIn, defaults }: {
                   They will be playing
                 </label>
                 {addError && <p className="text-sm text-destructive">{addError}</p>}
+                {addConfirm && (
+                  <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-sm text-amber-900">{addConfirm.message}</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={pending}
+                      onClick={() => {
+                        const again = addConfirm.formData;
+                        again.set("confirm_new", "yes");
+                        setAddConfirm(null);
+                        submitAddPerson(again);
+                      }}
+                    >
+                      This is a different person — add them anyway
+                    </Button>
+                  </div>
+                )}
                 <Button type="submit" size="sm" variant="outline" disabled={pending}>
                   {pending ? "Adding…" : "Add"}
                 </Button>

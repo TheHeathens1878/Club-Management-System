@@ -501,9 +501,10 @@ export type Database = {
         Row: {
           created_at: string
           email: string | null
-          first_name: string | null
+          first_name: string
           id: string
-          last_name: string | null
+          last_name: string
+          /** Generated from first_name + last_name (20260825491000): never written. */
           name: string
           notes: string | null
           phone: string | null
@@ -512,10 +513,9 @@ export type Database = {
         Insert: {
           created_at?: string
           email?: string | null
-          first_name?: string | null
+          first_name: string
           id?: string
-          last_name?: string | null
-          name: string
+          last_name?: string
           notes?: string | null
           phone?: string | null
           updated_at?: string
@@ -523,10 +523,9 @@ export type Database = {
         Update: {
           created_at?: string
           email?: string | null
-          first_name?: string | null
+          first_name?: string
           id?: string
-          last_name?: string | null
-          name?: string
+          last_name?: string
           notes?: string | null
           phone?: string | null
           updated_at?: string
@@ -1487,7 +1486,10 @@ export type Database = {
       emergency_contacts: {
         Row: {
           created_at: string
+          first_name: string
           id: string
+          last_name: string
+          /** Generated from first_name + last_name (20260825491000): never written. */
           name: string
           person_id: string
           phone: string
@@ -1498,8 +1500,9 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          first_name: string
           id?: string
-          name: string
+          last_name?: string
           person_id: string
           phone: string
           position: number
@@ -1509,8 +1512,9 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          first_name?: string
           id?: string
-          name?: string
+          last_name?: string
           person_id?: string
           phone?: string
           position?: number
@@ -2323,6 +2327,41 @@ export type Database = {
           {
             foreignKeyName: "guardianships_guardian_person_id_fkey"
             columns: ["guardian_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      household_links: {
+        Row: {
+          id: string
+          linked_at: string
+          linked_by: string | null
+          match_basis: string
+          owner_user_id: string
+          person_id: string
+        }
+        Insert: {
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          match_basis: string
+          owner_user_id: string
+          person_id: string
+        }
+        Update: {
+          id?: string
+          linked_at?: string
+          linked_by?: string | null
+          match_basis?: string
+          owner_user_id?: string
+          person_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_links_person_id_fkey"
+            columns: ["person_id"]
             isOneToOne: false
             referencedRelation: "people"
             referencedColumns: ["id"]
@@ -4820,8 +4859,14 @@ export type Database = {
           id: string
           legacy_neon_entry_id: string | null
           parent_email: string
+          parent_first_name: string
+          parent_last_name: string
+          /** Maintained by a trigger from parent_first_name + parent_last_name. */
           parent_name: string
           parent_phone: string
+          player_first_name: string
+          player_last_name: string
+          /** Maintained by a trigger from player_first_name + player_last_name. */
           player_name: string
           priority: number | null
           reconfirm_requested_at: string | null
@@ -4844,9 +4889,13 @@ export type Database = {
           id?: string
           legacy_neon_entry_id?: string | null
           parent_email: string
-          parent_name: string
+          parent_first_name?: string
+          parent_last_name?: string
+          parent_name?: string
           parent_phone: string
-          player_name: string
+          player_first_name?: string
+          player_last_name?: string
+          player_name?: string
           priority?: number | null
           reconfirm_requested_at?: string | null
           school?: string | null
@@ -4868,8 +4917,12 @@ export type Database = {
           id?: string
           legacy_neon_entry_id?: string | null
           parent_email?: string
+          parent_first_name?: string
+          parent_last_name?: string
           parent_name?: string
           parent_phone?: string
+          player_first_name?: string
+          player_last_name?: string
           player_name?: string
           priority?: number | null
           reconfirm_requested_at?: string | null
@@ -5204,6 +5257,7 @@ export type Database = {
       }
       add_household_adult: {
         Args: {
+          p_confirm_new?: boolean
           p_dob: string
           p_email?: string
           p_first_name: string
@@ -5211,6 +5265,18 @@ export type Database = {
           p_phone?: string
         }
         Returns: string
+      }
+      contact_name_first: {
+        Args: { p_name: string }
+        Returns: string
+      }
+      contact_name_last: {
+        Args: { p_name: string }
+        Returns: string
+      }
+      contact_name_parts: {
+        Args: { p_item: Json }
+        Returns: { first_name: string; last_name: string }[]
       }
       album_consent_type: {
         Args: { p_visibility: Database["public"]["Enums"]["album_visibility"] }
@@ -6398,9 +6464,11 @@ export type Database = {
           p_dob: string
           p_health_conditions: string
           p_parent_email: string
-          p_parent_name: string
+          p_parent_first_name: string
+          p_parent_last_name: string
           p_parent_phone: string
-          p_player_name: string
+          p_player_first_name: string
+          p_player_last_name: string
           p_school: string
           p_school_year: string
           p_team_preference: string

@@ -81,9 +81,9 @@ insert into public.team_memberships (person_id, team_id, season_id, role) values
 insert into public.registrations (person_id, season_id, status) values
   (current_setting('sp.alf')::uuid, '5a5a5a5a-3535-4111-8111-000000000001', 'approved'),
   (current_setting('sp.bea')::uuid, '5a5a5a5a-3535-4111-8111-000000000001', 'approved');
-insert into public.emergency_contacts (person_id, "position", name, phone) values
-  (current_setting('sp.alf')::uuid, 1, 'Alf Next Of Kin', '07700900001'),
-  (current_setting('sp.bea')::uuid, 1, 'Bea Next Of Kin', '07700900002');
+insert into public.emergency_contacts (person_id, "position", first_name, last_name, phone) values
+  (current_setting('sp.alf')::uuid, 1, 'Alf Next Of', 'Kin', '07700900001'),
+  (current_setting('sp.bea')::uuid, 1, 'Bea Next Of', 'Kin', '07700900002');
 
 -- One ordinary room, and one under a legal hold.
 insert into public.conversations (id, type, title, created_by_person_id) values

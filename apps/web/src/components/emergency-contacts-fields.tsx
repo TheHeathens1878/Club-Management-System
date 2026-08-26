@@ -103,13 +103,25 @@ export function EmergencyContactsFields({
             {!leadHere && (
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label htmlFor={`${idPrefix}-ec${position}-name`}>
-                    Name {required && <span className="text-destructive">*</span>}
+                  <Label htmlFor={`${idPrefix}-ec${position}-first-name`}>
+                    First name {required && <span className="text-destructive">*</span>}
                   </Label>
                   <Input
-                    id={`${idPrefix}-ec${position}-name`}
-                    name={contactField(position, "name")}
-                    defaultValue={prefill?.name ?? ""}
+                    id={`${idPrefix}-ec${position}-first-name`}
+                    name={contactField(position, "first_name")}
+                    defaultValue={prefill?.firstName ?? ""}
+                    required={required}
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`${idPrefix}-ec${position}-last-name`}>
+                    Last name {required && <span className="text-destructive">*</span>}
+                  </Label>
+                  <Input
+                    id={`${idPrefix}-ec${position}-last-name`}
+                    name={contactField(position, "last_name")}
+                    defaultValue={prefill?.lastName ?? ""}
                     required={required}
                     autoComplete="off"
                   />

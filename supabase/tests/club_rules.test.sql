@@ -39,12 +39,13 @@ insert into public.team_memberships (person_id, team_id, season_id, role) values
   (current_setting('cr.coach')::uuid, '7c7c7c7c-9999-4111-8111-000000000001', '5c5c5c5c-9999-4111-8111-000000000001', 'coach'),
   (current_setting('cr.vets')::uuid,  '7c7c7c7c-9999-4111-8111-000000000002', '5c5c5c5c-9999-4111-8111-000000000001', 'coach');
 
-insert into public.waiting_list_entries (id, player_name, dob, age_group, parent_name, parent_email, parent_phone, status) values
-  ('ac1dac1d-9999-4111-8111-000000000013', 'Kid Thirteen', '2013-09-01', 'U13', 'Pat Parent', 'cr13@test.invalid', '07700 900001', 'pending'),
-  ('ac1dac1d-9999-4111-8111-000000000012', 'Kid Twelve',   '2014-09-01', 'U12', 'Pat Parent', 'cr12@test.invalid', '07700 900002', 'pending'),
-  ('ac1dac1d-9999-4111-8111-000000000011', 'Kid Eleven',   '2015-09-01', 'U11', 'Pat Parent', 'cr11@test.invalid', '07700 900003', 'pending'),
-  ('ac1dac1d-9999-4111-8111-000000000010', 'Kid Ten',      '2016-09-01', 'U10', 'Pat Parent', 'cr10@test.invalid', '07700 900004', 'pending'),
-  ('ac1dac1d-9999-4111-8111-000000000099', 'Kid Done',     '2014-03-01', 'U12', 'Pat Parent', 'cr99@test.invalid', '07700 900005', 'accepted');
+insert into public.waiting_list_entries (id, player_first_name, player_last_name, dob, age_group,
+                                         parent_first_name, parent_last_name, parent_email, parent_phone, status) values
+  ('ac1dac1d-9999-4111-8111-000000000013', 'Kid', 'Thirteen', '2013-09-01', 'U13', 'Pat', 'Parent', 'cr13@test.invalid', '07700 900001', 'pending'),
+  ('ac1dac1d-9999-4111-8111-000000000012', 'Kid', 'Twelve',   '2014-09-01', 'U12', 'Pat', 'Parent', 'cr12@test.invalid', '07700 900002', 'pending'),
+  ('ac1dac1d-9999-4111-8111-000000000011', 'Kid', 'Eleven',   '2015-09-01', 'U11', 'Pat', 'Parent', 'cr11@test.invalid', '07700 900003', 'pending'),
+  ('ac1dac1d-9999-4111-8111-000000000010', 'Kid', 'Ten',      '2016-09-01', 'U10', 'Pat', 'Parent', 'cr10@test.invalid', '07700 900004', 'pending'),
+  ('ac1dac1d-9999-4111-8111-000000000099', 'Kid', 'Done',     '2014-03-01', 'U12', 'Pat', 'Parent', 'cr99@test.invalid', '07700 900005', 'accepted');
 
 -- B. the automatic scope ------------------------------------------------------
 set local request.jwt.claims to '{"sub":"c1c1c1c1-9999-4111-8111-000000000001","role":"authenticated"}';

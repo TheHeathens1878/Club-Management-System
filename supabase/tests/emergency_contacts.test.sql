@@ -118,7 +118,7 @@ select throws_like($$
   select public.set_emergency_contacts(
     'ec000000-1111-4111-8111-0000000000aa',
     '[{"name": "No Number", "phone": "   "}]'::jsonb)
-$$, '%needs a name and a phone number%', 'a contact with a blank phone number is refused');
+$$, '%needs a first name, a last name and a phone number%', 'a contact with a blank phone number is refused');
 
 -- 10
 select is((select count(*) from public.emergency_contacts
