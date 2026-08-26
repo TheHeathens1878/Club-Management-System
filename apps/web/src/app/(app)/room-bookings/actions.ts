@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionProfile, isCommittee, isStaff, isSuperUser } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
 import { upsertBookingContact } from "@/lib/booking-contacts";
+import { joinContactName } from "@/lib/person-name";
 import { sendEmail } from "@/lib/email";
 import { renderEmailTemplate } from "@/lib/template-engine";
 import { getEmailBrandColor, getSettings, getRecipientEmails } from "@/lib/settings";
@@ -830,7 +831,12 @@ export async function createInternalBooking(
   const date = String(formData.get("date") || "").trim();
   const startTime = String(formData.get("start_time") || "").trim();
   const endTime = String(formData.get("end_time") || "").trim();
-  const bookerName = String(formData.get("booker_name") || "").trim();
+  // Two boxes since 2026-08-26 ("for all contacts, first name and last name are
+  // separate"). `booker_name` stays as the snapshot the emails and exports read,
+  // composed from the two.
+  const bookerFirstName = String(formData.get("booker_first_name") || "").trim();
+  const bookerLastName = String(formData.get("booker_last_name") || "").trim();
+  const bookerName = joinContactName(bookerFirstName, bookerLastName);
   const bookerEmail = String(formData.get("booker_email") || "").trim();
   const bookerPhone = String(formData.get("booker_phone") || "").trim() || null;
   const occasion = String(formData.get("occasion") || "").trim() || null;
@@ -843,8 +849,8 @@ export async function createInternalBooking(
   const recurrenceUntil = String(formData.get("recurrence_until") || "").trim();
   const recurrenceCount = formData.get("recurrence_count") ? Number(formData.get("recurrence_count")) : 12;
 
-  if (!roomId || !date || !startTime || !endTime || !bookerName)
-    return { error: "Room, date, times and booker name are required." };
+  if (!roomId || !date || !startTime || !endTime || !bookerFirstName || !bookerLastName)
+    return { error: "Room, date, times and the booker's first and last name are required." };
   if (!isValidDateString(date)) return { error: "Please enter a valid date." };
   if (!isValidTimeString(startTime) || !isValidTimeString(endTime))
     return { error: "Please enter valid start and end times." };
@@ -863,7 +869,8 @@ export async function createInternalBooking(
   // The room's contacts book, not the members database: an emailed customer
   // gets (or refreshes) a contact; an email-less one stays snapshot-only.
   const contactId = await upsertBookingContact({
-    name: bookerName,
+    firstName: bookerFirstName,
+    lastName: bookerLastName,
     email: bookerEmail,
     phone: bookerPhone,
   }).catch(() => null);
@@ -874,6 +881,8 @@ export async function createInternalBooking(
       resource_id: roomId,
       ...bookingPeriod(startsAt, endsAt),
       contact_id: contactId,
+      booker_first_name: bookerFirstName,
+      booker_last_name: bookerLastName,
       booker_name: bookerName,
       booker_email: bookerEmail || "—",
       booker_phone: bookerPhone,

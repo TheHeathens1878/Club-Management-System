@@ -84,11 +84,19 @@ export function WaitingListForm({
           Player details
         </legend>
 
-        <div className="space-y-1">
-          <Label htmlFor="player_name">
-            Player&apos;s full name <span className="text-destructive">*</span>
-          </Label>
-          <Input id="player_name" name="player_name" placeholder="First and last name" required />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label htmlFor="player_first_name">
+              Player&apos;s first name <span className="text-destructive">*</span>
+            </Label>
+            <Input id="player_first_name" name="player_first_name" placeholder="First name" required />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="player_last_name">
+              Player&apos;s last name <span className="text-destructive">*</span>
+            </Label>
+            <Input id="player_last_name" name="player_last_name" placeholder="Last name" required />
+          </div>
         </div>
 
         <div className="space-y-1">
@@ -225,11 +233,19 @@ export function WaitingListForm({
           Parent or guardian
         </legend>
 
-        <div className="space-y-1">
-          <Label htmlFor="parent_name">
-            Full name <span className="text-destructive">*</span>
-          </Label>
-          <Input id="parent_name" name="parent_name" placeholder="Parent or guardian name" required />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1">
+            <Label htmlFor="parent_first_name">
+              First name <span className="text-destructive">*</span>
+            </Label>
+            <Input id="parent_first_name" name="parent_first_name" placeholder="First name" required />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="parent_last_name">
+              Last name <span className="text-destructive">*</span>
+            </Label>
+            <Input id="parent_last_name" name="parent_last_name" placeholder="Last name" required />
+          </div>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">

@@ -24,7 +24,8 @@ export async function submitWaitingListEntry(
   _prev: SubmitState,
   formData: FormData,
 ): Promise<SubmitState> {
-  const playerName = text(formData, "player_name");
+  const playerFirstName = text(formData, "player_first_name");
+  const playerLastName = text(formData, "player_last_name");
   const dob = text(formData, "dob");
   const ageGroup = text(formData, "age_group");
   const schoolYear = text(formData, "school_year");
@@ -33,14 +34,16 @@ export async function submitWaitingListEntry(
   const schoolChoice = text(formData, "school");
   const schoolOther = text(formData, "school_other");
   const healthConditions = text(formData, "health_conditions");
-  const parentName = text(formData, "parent_name");
+  const parentFirstName = text(formData, "parent_first_name");
+  const parentLastName = text(formData, "parent_last_name");
   const parentEmail = text(formData, "parent_email");
   const parentPhone = text(formData, "parent_phone");
   const coachingInterest = formData.get("coaching_interest") === "yes";
   const coachingNote = text(formData, "coaching_note");
   const dataConsent = formData.get("data_consent") === "yes";
 
-  if (!playerName) return { error: "Please enter the player's full name." };
+  if (!playerFirstName) return { error: "Please enter the player's first name." };
+  if (!playerLastName) return { error: "Please enter the player's last name." };
   if (!dob) return { error: "Please enter the player's date of birth." };
   if (Number.isNaN(new Date(dob).getTime())) return { error: "Please enter a valid date of birth." };
   if (!ageGroup) return { error: "Please choose an age group." };
@@ -51,7 +54,8 @@ export async function submitWaitingListEntry(
   if (biologicalSex === "FEMALE" && !teamPreference) {
     return { error: "Please choose a team preference." };
   }
-  if (!parentName) return { error: "Please enter the parent or guardian's name." };
+  if (!parentFirstName) return { error: "Please enter the parent or guardian's first name." };
+  if (!parentLastName) return { error: "Please enter the parent or guardian's last name." };
   if (!parentEmail) return { error: "Please enter an email address." };
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parentEmail)) {
     return { error: "Please enter a valid email address." };
@@ -63,7 +67,8 @@ export async function submitWaitingListEntry(
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("submit_waiting_list_entry", {
-    p_player_name: playerName,
+    p_player_first_name: playerFirstName,
+    p_player_last_name: playerLastName,
     p_dob: dob,
     p_age_group: ageGroup,
     p_school_year: schoolYear,
@@ -71,7 +76,8 @@ export async function submitWaitingListEntry(
     p_team_preference: biologicalSex === "FEMALE" ? teamPreference : "",
     p_school: school,
     p_health_conditions: healthConditions,
-    p_parent_name: parentName,
+    p_parent_first_name: parentFirstName,
+    p_parent_last_name: parentLastName,
     p_parent_email: parentEmail,
     p_parent_phone: parentPhone,
     p_coaching_interest: coachingInterest,

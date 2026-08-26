@@ -26,8 +26,8 @@ insert into public.resources (id, type, name, active) values
 set local request.jwt.claims to '{"sub":"bc0bc0bc-eeee-4111-8111-000000000001","role":"authenticated"}';
 set local role authenticated;
 select lives_ok(
-  $$ insert into public.booking_contacts (name, email, phone)
-     values ('Karen Hayes', 'karen@test.invalid', '07700 900001') $$,
+  $$ insert into public.booking_contacts (first_name, last_name, email, phone)
+     values ('Karen', 'Hayes', 'karen@test.invalid', '07700 900001') $$,
   'staff can add a hire contact');
 select is(
   (select count(*)::integer from public.booking_contacts),
@@ -41,7 +41,7 @@ select is(
   0,
   'a plain member sees no hire contacts');
 select throws_ok(
-  $$ insert into public.booking_contacts (name, email) values ('X', 'x@test.invalid') $$,
+  $$ insert into public.booking_contacts (first_name, last_name, email) values ('X', 'Ray', 'x@test.invalid') $$,
   '42501', null,
   'a plain member cannot write the contacts book');
 
@@ -49,7 +49,7 @@ reset role;
 
 -- --- B: one contact per email ------------------------------------------------
 select throws_ok(
-  $$ insert into public.booking_contacts (name, email) values ('Karen H', 'KAREN@test.invalid') $$,
+  $$ insert into public.booking_contacts (first_name, last_name, email) values ('Karen', 'H', 'KAREN@test.invalid') $$,
   '23505', null,
   'a case-shifted duplicate email is refused');
 

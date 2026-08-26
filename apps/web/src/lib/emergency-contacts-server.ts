@@ -26,13 +26,15 @@ export async function loadEmergencyContacts(
   const supabase = await createClient();
   const { data } = await supabase
     .from("emergency_contacts")
-    .select("person_id,position,name,phone,relationship")
+    .select("person_id,position,first_name,last_name,name,phone,relationship")
     .in("person_id", personIds)
     .order("position");
   for (const row of data ?? []) {
     const list = contacts.get(row.person_id) ?? [];
     list.push({
       position: row.position,
+      firstName: row.first_name,
+      lastName: row.last_name,
       name: row.name,
       phone: row.phone,
       relationship: row.relationship ?? "",
@@ -54,7 +56,12 @@ export async function saveEmergencyContacts(
   posted: PostedEmergencyContacts,
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
-  const contacts: { name: string; phone: string; relationship: string | null }[] = [];
+  const contacts: {
+    first_name: string;
+    last_name: string;
+    phone: string;
+    relationship: string | null;
+  }[] = [];
 
   if (posted.useLead) {
     const { data: me } = await supabase.rpc("current_person_id");
@@ -78,13 +85,19 @@ export async function saveEmergencyContacts(
       };
     }
     contacts.push({
-      name: `${lead.first_name} ${lead.last_name}`.trim(),
+      first_name: lead.first_name,
+      last_name: lead.last_name,
       phone: lead.phone,
       relationship: posted.leadRelationship || null,
     });
   }
   for (const row of posted.typed) {
-    contacts.push({ name: row.name, phone: row.phone, relationship: row.relationship || null });
+    contacts.push({
+      first_name: row.firstName,
+      last_name: row.lastName,
+      phone: row.phone,
+      relationship: row.relationship || null,
+    });
   }
 
   const { error } = await supabase.rpc("set_emergency_contacts", {

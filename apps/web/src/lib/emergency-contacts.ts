@@ -26,13 +26,18 @@ export const MAX_EMERGENCY_CONTACTS = 2;
 
 export type EmergencyContact = {
   position: number;
+  /** The two halves, separately (20260825431000) — what the table holds. */
+  firstName: string;
+  lastName: string;
+  /** The display value the table generates from the two halves. */
   name: string;
   phone: string;
   relationship: string;
 };
 
-/** `ec1_name`, `ec2_phone`, … — the posted field names, one set per position. */
-export function contactField(position: number, key: "name" | "phone" | "relationship"): string {
+/** The posted field names, one set per position: `ec1_first_name`, `ec2_phone`, … */
+export type ContactFieldKey = "first_name" | "last_name" | "phone" | "relationship";
+export function contactField(position: number, key: ContactFieldKey): string {
   return `ec${position}_${key}`;
 }
 
@@ -45,7 +50,7 @@ export type PostedEmergencyContacts = {
   /** The relationship typed beside the tick (the caller's, to the person). */
   leadRelationship: string;
   /** The contacts typed in full, in the order they will be numbered. */
-  typed: { name: string; phone: string; relationship: string }[];
+  typed: { firstName: string; lastName: string; phone: string; relationship: string }[];
 };
 
 function text(value: FormDataEntryValue | null): string {
@@ -60,10 +65,11 @@ function text(value: FormDataEntryValue | null): string {
 export function emergencyContactsFromFormData(
   formData: FormData,
 ): { error: string } | PostedEmergencyContacts {
-  const rows: { name: string; phone: string; relationship: string }[] = [];
+  const rows: PostedEmergencyContacts["typed"] = [];
   for (let position = 1; position <= MAX_EMERGENCY_CONTACTS; position += 1) {
     rows.push({
-      name: text(formData.get(contactField(position, "name"))),
+      firstName: text(formData.get(contactField(position, "first_name"))),
+      lastName: text(formData.get(contactField(position, "last_name"))),
       phone: text(formData.get(contactField(position, "phone"))),
       relationship: text(formData.get(contactField(position, "relationship"))),
     });
@@ -72,14 +78,17 @@ export function emergencyContactsFromFormData(
   // The tick stands only when contact 1's own fields are empty — they are not
   // rendered while it is ticked, so both arriving means a reset checkbox.
   const first = rows[0]!;
-  const useLead = formData.get(USE_LEAD_FIELD) === "yes" && !first.name && !first.phone;
+  const useLead =
+    formData.get(USE_LEAD_FIELD) === "yes" && !first.firstName && !first.lastName && !first.phone;
 
   const typed: PostedEmergencyContacts["typed"] = [];
   for (const [index, row] of rows.entries()) {
     if (useLead && index === 0) continue;
-    if (!row.name && !row.phone) continue;
-    if (!row.name || !row.phone) {
-      return { error: `Emergency contact ${index + 1} needs both a name and a phone number.` };
+    if (!row.firstName && !row.lastName && !row.phone) continue;
+    if (!row.firstName || !row.lastName || !row.phone) {
+      return {
+        error: `Emergency contact ${index + 1} needs a first name, a last name and a phone number.`,
+      };
     }
     typed.push(row);
   }

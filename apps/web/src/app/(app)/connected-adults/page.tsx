@@ -60,12 +60,14 @@ export default async function ConnectedAdultsPage() {
         <Card>
           <CardHeader className="p-4 lg:p-6">
             <CardTitle className="flex items-center gap-2 text-base">
-              <UsersRound className="h-4 w-4" /> Connect an adult
+              <UsersRound className="h-4 w-4" /> Connect an adult player
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              For an adult in your household who does not have their own login yet — a spouse or
-              partner, say. You can then register them for the club from your own account, and if
-              your membership is a family one it covers them at your lead-contact level. If they
+              For an adult in your household who does not have their own login yet — a partner, or
+              a grown-up son or daughter — including one who plays for the club. You can then
+              register them from your own account, and if your membership is a family one it covers
+              them at your lead-contact level. If the club already has a record for them, giving
+              their email address connects that record instead of creating a second one. If they
               later{" "}
               <Link href="/register" className="underline">
                 create their own login

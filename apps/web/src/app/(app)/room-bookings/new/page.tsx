@@ -33,7 +33,7 @@ export default async function NewInternalBookingPage() {
       .order("sort_order"),
     admin
       .from("booking_contacts")
-      .select("id,name,email,phone")
+      .select("id,name,first_name,last_name,email,phone")
       .order("updated_at", { ascending: false })
       .limit(200),
   ]);
@@ -76,8 +76,12 @@ export default async function NewInternalBookingPage() {
               <ContactPicker contacts={contacts ?? []} />
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-1.5">
-                  <Label htmlFor="booker_name">Name *</Label>
-                  <Input id="booker_name" name="booker_name" required placeholder="Full name" />
+                  <Label htmlFor="booker_first_name">First name *</Label>
+                  <Input id="booker_first_name" name="booker_first_name" required placeholder="First name" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="booker_last_name">Last name *</Label>
+                  <Input id="booker_last_name" name="booker_last_name" required placeholder="Last name" />
                 </div>
                 <div className="space-y-1.5">
                   <Label htmlFor="booker_phone">Phone</Label>

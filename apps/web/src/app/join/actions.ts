@@ -22,6 +22,7 @@ import { countyForTown } from "@/lib/address";
 import { createClient } from "@/lib/supabase/server";
 import { emergencyContactsFromFormData, noEmergencyContacts } from "@/lib/emergency-contacts";
 import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
+import { splitContactName } from "@/lib/person-name";
 import { registrationFormFromFormData } from "@/lib/registration-form";
 import { questionFromRow, type RegistrationQuestion } from "@/lib/registration-questions";
 import {
@@ -245,6 +246,14 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
 
 export type AddPersonState = {
   error?: string;
+  /**
+   * `add_household_adult()` found somebody of that name already on the club's
+   * records (20260825430000). A name is not evidence, so nothing is linked and
+   * nothing is created: the wizard shows this sentence and offers the two safe
+   * answers — go back and give their email address, or say this is a different
+   * person and re-post with `confirm_new`.
+   */
+  confirmNew?: string;
   added?: {
     personId: string;
     firstName: string;
@@ -287,7 +296,11 @@ export async function joinAddPerson(_prev: AddPersonState, formData: FormData): 
           p_last_name: lastName,
           p_dob: dob,
           p_email: email || undefined,
+          p_confirm_new: formData.get("confirm_new") === "yes",
         });
+  // A possible duplicate is not an error: it is a question, and the wizard has
+  // an answer for it.
+  if (error?.hint === "confirm_new") return { confirmNew: tidyRpcMessage(error.message) };
   if (error || !data) return { error: tidyRpcMessage(error?.message ?? "They could not be added.") };
 
   return {
@@ -380,8 +393,15 @@ export async function joinPlayerDetails(
   if (ageGroup) {
     const { data: openGroups } = await supabase.rpc("waiting_list_open_age_groups");
     if ((openGroups ?? []).some((row) => row.age_group === ageGroup)) {
+      // The waiting list keeps first and last names separately (20260825431000).
+      // The wizard already holds both halves for the player; the registrant's
+      // display name is split on the last space, the same way the database
+      // split the legacy rows.
+      const playerParts = splitContactName(personName);
+      const parentParts = splitContactName(parentName);
       const { error } = await supabase.rpc("submit_waiting_list_entry", {
-        p_player_name: personName,
+        p_player_first_name: text(formData, "person_first_name") || playerParts.firstName,
+        p_player_last_name: text(formData, "person_last_name") || playerParts.lastName,
         p_dob: dob,
         p_age_group: ageGroup,
         p_school_year: "",
@@ -389,7 +409,8 @@ export async function joinPlayerDetails(
         p_team_preference: "",
         p_school: "",
         p_health_conditions: built.form.medical.conditions,
-        p_parent_name: parentName,
+        p_parent_first_name: parentParts.firstName,
+        p_parent_last_name: parentParts.lastName,
         p_parent_email: parentEmail,
         p_parent_phone: parentPhone || "—",
         p_coaching_interest: false,

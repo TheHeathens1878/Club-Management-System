@@ -40,8 +40,8 @@ insert into public.team_memberships (person_id, team_id, season_id, role) values
 
 -- The player's own contacts and photo, written as the owner (the table has no
 -- client write policy; the RPC is exercised elsewhere).
-insert into public.emergency_contacts (person_id, "position", name, phone, relationship) values
-  (current_setting('sr.player')::uuid, 1, 'Mary Player', '07700 900001', 'Mother');
+insert into public.emergency_contacts (person_id, "position", first_name, last_name, phone, relationship) values
+  (current_setting('sr.player')::uuid, 1, 'Mary', 'Player', '07700 900001', 'Mother');
 update public.people set photo_path = current_setting('sr.player') || '/face.jpg'
  where id = current_setting('sr.player')::uuid;
 insert into storage.objects (bucket_id, name, owner, metadata)

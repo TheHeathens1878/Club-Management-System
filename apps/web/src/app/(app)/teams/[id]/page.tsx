@@ -4,7 +4,7 @@ import { ChevronLeft } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
-import { emergencyContactLine } from "@/lib/emergency-contacts";
+import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { isClubAdmin, isSafeguardingLead, nameOf, resolveNames } from "@/lib/person";
@@ -384,7 +384,7 @@ export default async function TeamPage({
       // the roster for staff wearing the coach or admin hat and nobody else.
       const memberContacts = staffTools
         ? await loadEmergencyContacts(memberPersonIds)
-        : new Map<string, { position: number; name: string; phone: string; relationship: string }[]>();
+        : new Map<string, EmergencyContact[]>();
 
       // What is already on the administrator's desk, so a row that has been
       // reported says so instead of offering the button again.

@@ -21,10 +21,10 @@ insert into public.people (id, first_name, last_name, email, dob) values
 
 -- Two of them are in the room's own contacts book; one of those also has a
 -- club relationship, and one has been retired.
-insert into public.booking_contacts (name, email) values
-  ('Hire Only', 'hire.only@test.invalid'),
-  ('Both Hats', 'both.hats@test.invalid'),
-  ('Gone Away', 'gone.away@test.invalid');
+insert into public.booking_contacts (first_name, last_name, email) values
+  ('Hire', 'Only', 'hire.only@test.invalid'),
+  ('Both', 'Hats', 'both.hats@test.invalid'),
+  ('Gone', 'Away', 'gone.away@test.invalid');
 
 -- The import gives every person it creates the bare `member` role, so the
 -- test carries one too: it must not count as a relationship (20260825370000).

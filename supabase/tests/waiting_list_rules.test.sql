@@ -41,11 +41,12 @@ insert into public.team_memberships (person_id, team_id, season_id, role)
 -- transaction, so "nothing is open" means exactly that.
 delete from public.waiting_list_age_groups;
 
-insert into public.waiting_list_entries (id, player_name, dob, age_group, parent_name, parent_email, parent_phone, status) values
-  ('a171a171-7777-4111-8111-000000000012', 'Kid Twelve',   '2014-09-01', 'U12', 'Pat Parent', 'wr12@test.invalid', '07700 900001', 'pending'),
-  ('a171a171-7777-4111-8111-000000000011', 'Kid Eleven',   '2015-09-01', 'U11', 'Pat Parent', 'wr11@test.invalid', '07700 900002', 'pending'),
-  ('a171a171-7777-4111-8111-000000000013', 'Kid Thirteen', '2013-09-01', 'U13', 'Pat Parent', 'wr13@test.invalid', '07700 900003', 'pending'),
-  ('a171a171-7777-4111-8111-000000000008', 'Kid Eight',    '2018-09-01', 'U08', 'Pat Parent', 'wr08@test.invalid', '07700 900004', 'pending');
+insert into public.waiting_list_entries (id, player_first_name, player_last_name, dob, age_group,
+                                         parent_first_name, parent_last_name, parent_email, parent_phone, status) values
+  ('a171a171-7777-4111-8111-000000000012', 'Kid', 'Twelve',   '2014-09-01', 'U12', 'Pat', 'Parent', 'wr12@test.invalid', '07700 900001', 'pending'),
+  ('a171a171-7777-4111-8111-000000000011', 'Kid', 'Eleven',   '2015-09-01', 'U11', 'Pat', 'Parent', 'wr11@test.invalid', '07700 900002', 'pending'),
+  ('a171a171-7777-4111-8111-000000000013', 'Kid', 'Thirteen', '2013-09-01', 'U13', 'Pat', 'Parent', 'wr13@test.invalid', '07700 900003', 'pending'),
+  ('a171a171-7777-4111-8111-000000000008', 'Kid', 'Eight',    '2018-09-01', 'U08', 'Pat', 'Parent', 'wr08@test.invalid', '07700 900004', 'pending');
 
 -- Grants to a band the coach does not coach. Written server-side (no
 -- auth.uid()), exactly as migrate_neon left them behind: the point of C is

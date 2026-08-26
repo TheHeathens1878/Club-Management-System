@@ -4,6 +4,7 @@ import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth
 import { DeleteBookingButton } from "../delete-booking-button";
 import { EditBookingForm } from "../edit-booking-form";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { splitContactName } from "@/lib/person-name";
 import { getSettings } from "@/lib/settings";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -141,8 +142,8 @@ export default async function RoomBookingDetailPage({
                     date: window.date,
                     start_time: window.startTime,
                     end_time: window.endTime,
-                    booker_first_name: booking.booker_first_name ?? booking.booker_name.split(" ")[0] ?? "",
-                    booker_last_name: booking.booker_last_name ?? booking.booker_name.split(" ").slice(1).join(" "),
+                    booker_first_name: booking.booker_first_name ?? splitContactName(booking.booker_name).firstName,
+                    booker_last_name: booking.booker_last_name ?? splitContactName(booking.booker_name).lastName,
                     booker_email: booking.booker_email,
                     booker_phone: booking.booker_phone ?? "",
                     occasion: booking.occasion ?? "",
