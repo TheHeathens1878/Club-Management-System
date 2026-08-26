@@ -1,5 +1,5 @@
 -- =============================================================================
--- An age group can name a range, or name no youth band at all (20260825510000)
+-- An age group can name a range, or name no youth band at all (20260825530000)
 -- =============================================================================
 -- Production holds nine teams whose age group is not shaped like "U12":
 -- 'U05<en dash>U08' (U05 Wildcats), 'Open Age' (six sides) and 'Vets' (two).
