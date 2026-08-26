@@ -1,5 +1,5 @@
 -- =============================================================================
--- For all contacts, first name and last name are separate (20260825431000)
+-- For all contacts, first name and last name are separate (20260825491000)
 -- =============================================================================
 --   A  the split: on the LAST space, and NEVER a guessed surname
 --   B  booking_contacts — the display name is generated and unchanged, both

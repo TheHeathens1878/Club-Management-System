@@ -4,7 +4,7 @@
  * separate").
  *
  * The mirror of `contact_name_first()` / `contact_name_last()` in migration
- * 20260825431000, and it must stay a mirror: the database splits the legacy
+ * 20260825491000, and it must stay a mirror: the database splits the legacy
  * rows with those, the app splits anything still arriving as one string with
  * this, and a disagreement between the two would show up as a name that
  * changes shape when it crosses the boundary.

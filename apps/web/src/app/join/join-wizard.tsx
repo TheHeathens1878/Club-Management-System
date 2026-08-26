@@ -73,7 +73,7 @@ export function JoinWizard({ signedIn, defaults }: {
   // Step 2 — add-person form state
   const [addError, setAddError] = useState<string | null>(null);
   // A possible duplicate on the club's records: the sentence to show, and the
-  // post to repeat if the member says it is somebody else (20260825430000).
+  // post to repeat if the member says it is somebody else (20260825490000).
   const [addConfirm, setAddConfirm] = useState<{ message: string; formData: FormData } | null>(null);
 
   // Step 3 — per-player outcomes

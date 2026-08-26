@@ -248,7 +248,7 @@ export type AddPersonState = {
   error?: string;
   /**
    * `add_household_adult()` found somebody of that name already on the club's
-   * records (20260825430000). A name is not evidence, so nothing is linked and
+   * records (20260825490000). A name is not evidence, so nothing is linked and
    * nothing is created: the wizard shows this sentence and offers the two safe
    * answers — go back and give their email address, or say this is a different
    * person and re-post with `confirm_new`.
@@ -393,7 +393,7 @@ export async function joinPlayerDetails(
   if (ageGroup) {
     const { data: openGroups } = await supabase.rpc("waiting_list_open_age_groups");
     if ((openGroups ?? []).some((row) => row.age_group === ageGroup)) {
-      // The waiting list keeps first and last names separately (20260825431000).
+      // The waiting list keeps first and last names separately (20260825491000).
       // The wizard already holds both halves for the player; the registrant's
       // display name is split on the last space, the same way the database
       // split the legacy rows.

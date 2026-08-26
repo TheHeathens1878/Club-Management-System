@@ -6,7 +6,7 @@ import { joinContactName, splitContactName } from "@/lib/person-name";
  * kept deliberately OUT of the members database. One contact per email; a
  * booking without a usable email stays snapshot-only, exactly as before.
  *
- * Since 20260825431000 the contact's name is TWO columns. `name` on the table
+ * Since 20260825491000 the contact's name is TWO columns. `name` on the table
  * is a generated display value and must never be written; the two parts are.
  * A caller that only has one string (a legacy snapshot, a staff form that has
  * not been split yet) passes `name` and it is split on the last space here.

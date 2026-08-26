@@ -26,7 +26,7 @@ export const MAX_EMERGENCY_CONTACTS = 2;
 
 export type EmergencyContact = {
   position: number;
-  /** The two halves, separately (20260825431000) — what the table holds. */
+  /** The two halves, separately (20260825491000) — what the table holds. */
   firstName: string;
   lastName: string;
   /** The display value the table generates from the two halves. */

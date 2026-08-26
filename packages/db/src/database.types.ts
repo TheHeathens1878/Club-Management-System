@@ -504,7 +504,7 @@ export type Database = {
           first_name: string
           id: string
           last_name: string
-          /** Generated from first_name + last_name (20260825431000): never written. */
+          /** Generated from first_name + last_name (20260825491000): never written. */
           name: string
           notes: string | null
           phone: string | null
@@ -1479,7 +1479,7 @@ export type Database = {
           first_name: string
           id: string
           last_name: string
-          /** Generated from first_name + last_name (20260825431000): never written. */
+          /** Generated from first_name + last_name (20260825491000): never written. */
           name: string
           person_id: string
           phone: string

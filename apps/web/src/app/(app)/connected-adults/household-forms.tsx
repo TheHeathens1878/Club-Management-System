@@ -6,7 +6,7 @@
  * word for word.
  *
  * The one refusal with a second step is the possible duplicate (hint
- * `confirm_new`, 20260825430000): the club already has somebody of that name.
+ * `confirm_new`, 20260825490000): the club already has somebody of that name.
  * A name is not evidence, so the form does NOT offer "yes, that's them" — that
  * would hand out somebody's contact details for a guessed name. It offers the
  * two answers that are safe: go back and add the email address the club holds

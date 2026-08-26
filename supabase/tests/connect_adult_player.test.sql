@@ -1,5 +1,5 @@
 -- =============================================================================
--- Connect an adult player — matching, linking and the refusals (20260825430000)
+-- Connect an adult player — matching, linking and the refusals (20260825490000)
 -- =============================================================================
 --   A  an EMAIL match links the club's existing record: no second people row,
 --      a household_links row, an audit row saying it was linked, the person on

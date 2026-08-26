@@ -2,7 +2,7 @@
 
 /**
  * Connected Adults' one write: `add_household_adult()` (join flow,
- * 20260824280000; matching and linking added 20260825430000). The RPC holds
+ * 20260824280000; matching and linking added 20260825490000). The RPC holds
  * every rule — the caller must be a known adult, the new person must be an
  * adult (children go through `add_child()` so a guardianship is recorded), an
  * EMAIL match links the club's existing record instead of creating a second
