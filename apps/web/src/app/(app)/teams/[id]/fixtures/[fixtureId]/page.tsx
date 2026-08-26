@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fixtureStatusVariant } from "../../fixtures-shared";
 import { googleMapsUrl } from "../../../../events/shared";
 import { FixtureAvailabilityPanel, type FixtureSubject } from "./availability-panel";
+import { DeleteFixtureCard } from "./delete-fixture-card";
 
 type AvailabilityStatus = Database["public"]["Enums"]["availability_status"];
 
@@ -46,7 +47,7 @@ export default async function FixtureAttendancePage({
   const { data: fixture } = await supabase
     .from("fixtures")
     .select(
-      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
+      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,mirror_fixture_id,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
     )
     .eq("id", fixtureId)
     .eq("team_id", teamId)
@@ -62,6 +63,25 @@ export default async function FixtureAttendancePage({
   ]);
   const eventId = eventResult.data?.id ?? null;
   const canManage = staffResult.data === true || admin;
+
+  // What deleting this fixture would destroy with it. Only a club
+  // administrator is offered the delete, so only they pay for the counts.
+  const deleteCounts = admin
+    ? await (async () => {
+        const [availability, lineups, playerStats, events] = await Promise.all([
+          supabase.from("availability").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+          supabase.from("fixture_lineups").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+          supabase.from("fixture_player_stats").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+          supabase.from("events").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+        ]);
+        return {
+          availability: availability.count ?? 0,
+          lineups: lineups.count ?? 0,
+          playerStats: playerStats.count ?? 0,
+          events: events.count ?? 0,
+        };
+      })()
+    : null;
 
   // Who the caller may answer for: themselves and their children — kept to
   // those with a live membership on this team, the same fact the write guard
@@ -312,6 +332,17 @@ export default async function FixtureAttendancePage({
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {admin && deleteCounts && (
+          <DeleteFixtureCard
+            fixtureId={fixture.id}
+            teamId={teamId}
+            label={`${title} — ${whereLine}`}
+            hasPitch={!!fixture.booking_id}
+            isMirrored={!!fixture.mirror_fixture_id}
+            counts={deleteCounts}
+          />
         )}
 
         {canManage && fixture.booking_id && (
