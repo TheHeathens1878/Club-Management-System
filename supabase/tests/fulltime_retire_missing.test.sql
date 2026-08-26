@@ -17,7 +17,7 @@
 
 begin;
 
-select plan(21);
+select plan(23);
 
 insert into public.seasons (id, name, starts_on, ends_on, is_current)
   values ('50000000-2626-4111-8111-000000000001', 'FTR 2043/44', '2043-08-01', '2044-05-31', true);
