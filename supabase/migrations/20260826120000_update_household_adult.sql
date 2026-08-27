@@ -125,22 +125,22 @@ begin
   end if;
 
   if v_first is not null and v_first is distinct from v_them.first_name then
-    v_fields := v_fields || 'first_name';
+    v_fields := array_append(v_fields, 'first_name');
   end if;
   if v_last is not null and v_last is distinct from v_them.last_name then
-    v_fields := v_fields || 'last_name';
+    v_fields := array_append(v_fields, 'last_name');
   end if;
   if v_pref is not null and v_pref is distinct from v_them.preferred_name then
-    v_fields := v_fields || 'preferred_name';
+    v_fields := array_append(v_fields, 'preferred_name');
   end if;
   if v_email is not null and v_email is distinct from lower(v_them.email) then
-    v_fields := v_fields || 'email';
+    v_fields := array_append(v_fields, 'email');
   end if;
   if v_phone is not null and v_phone is distinct from v_them.phone then
-    v_fields := v_fields || 'phone';
+    v_fields := array_append(v_fields, 'phone');
   end if;
   if p_address is not null and p_address is distinct from v_them.address then
-    v_fields := v_fields || 'address';
+    v_fields := array_append(v_fields, 'address');
   end if;
 
   if array_length(v_fields, 1) is null then
