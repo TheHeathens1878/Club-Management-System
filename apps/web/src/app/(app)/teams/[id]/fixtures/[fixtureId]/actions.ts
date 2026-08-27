@@ -112,9 +112,6 @@ export async function deleteFixture(
 ): Promise<DeleteFixtureState> {
   const session = await getSessionProfile();
   if (!session) return { error: "Sign in first." };
-  if (!(await isClubAdmin())) {
-    return { error: "Only a club administrator can delete a fixture." };
-  }
 
   const fixtureId = text(formData, "fixture_id", 40);
   const teamId = text(formData, "team_id", 40);
@@ -122,6 +119,18 @@ export async function deleteFixture(
   if (!fixtureId) return { error: "No fixture given." };
 
   const supabase = await createClient();
+
+  // Adam, 2026-08-27: "As an admin and coach, I should be able to delete
+  // previously created fixtures." `fixtures_staff_delete` (20260827100000) is
+  // what actually decides it; this is the same question asked early so the
+  // refusal is a sentence rather than a delete that quietly removes no rows.
+  const admin = await isClubAdmin();
+  const { data: isStaff } = teamId
+    ? await supabase.rpc("is_team_staff", { p_team_id: teamId })
+    : { data: false };
+  if (!admin && isStaff !== true) {
+    return { error: "Only this team's staff or a club administrator can delete a fixture." };
+  }
 
   // Read it BEFORE deleting: the audit row is the only record left afterwards,
   // so it carries enough to recognise — and to re-enter — the game by hand.
@@ -158,7 +167,17 @@ export async function deleteFixture(
     }
   }
 
-  // Both sides of an internal match, or neither.
+  // Both sides of an internal match, or neither — and a coach staffs only one
+  // of the two teams, so their delete would take their own row and leave the
+  // other team's page pointing at nothing. Refused in words rather than half
+  // done.
+  if (fixture.mirror_fixture_id && !admin) {
+    return {
+      error:
+        "This is an internal match, so it sits on both teams' pages. A club administrator deletes it, because removing only this side would leave the other team with a fixture against nobody.",
+    };
+  }
+
   const ids = [fixtureId];
   if (fixture.mirror_fixture_id) {
     ids.push(fixture.mirror_fixture_id);
@@ -178,7 +197,10 @@ export async function deleteFixture(
   if (!count) {
     // RLS returning zero rows rather than an error is what a refusal looks
     // like from here.
-    return { error: "The database did not delete it. Only a club administrator may." };
+    return {
+      error:
+        "The database did not delete it. Only this team's staff or a club administrator may.",
+    };
   }
 
   await writeAudit({
