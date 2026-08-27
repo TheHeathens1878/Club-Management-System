@@ -90,3 +90,45 @@ export async function addHouseholdAdult(
     notice: `${values.first_name} is now connected to your account. If the club already held a record for them, that record has been connected rather than a second one created.`,
   };
 }
+
+
+/**
+ * Correct a connected adult's record (Adam, 2026-08-26: "We should be able to
+ * edit details also").
+ *
+ * The authority is the database's: `update_household_adult_details()` refuses
+ * anyone who is not connected to this login, anyone who holds their own login
+ * — their email is where a password reset goes — and anyone under 18. Its
+ * refusals are shown word for word, minus the function-name prefix, because
+ * they say which door to use instead.
+ */
+export async function editHouseholdAdult(
+  _prev: HouseholdActionState,
+  formData: FormData,
+): Promise<HouseholdActionState> {
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const firstName = String(formData.get("first_name") ?? "").trim();
+  const lastName = String(formData.get("last_name") ?? "").trim();
+  const preferredName = String(formData.get("preferred_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+
+  if (!personId) return { error: "No person given." };
+  if (!firstName) return { error: "Their first name is required." };
+  if (!lastName) return { error: "Their last name is required." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_household_adult_details", {
+    p_person_id: personId,
+    p_first_name: firstName,
+    p_last_name: lastName,
+    p_preferred_name: preferredName || undefined,
+    p_email: email || undefined,
+    p_phone: phone || undefined,
+  });
+
+  if (error) return { error: tidy(error.message) };
+
+  revalidatePath("/connected-adults");
+  return { notice: `${firstName}'s details have been updated.` };
+}

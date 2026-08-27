@@ -6137,6 +6137,7 @@ export type Database = {
           on_my_membership: boolean
           person_id: string
           phone: string
+          preferred_name: string
         }[]
       }
       my_registrations: {
@@ -6614,6 +6615,18 @@ export type Database = {
       }
       unallocate_fixture: { Args: { p_fixture_id: string }; Returns: undefined }
       unread_notification_count: { Args: never; Returns: number }
+      update_household_adult_details: {
+        Args: {
+          p_address?: Json
+          p_email?: string
+          p_first_name?: string
+          p_last_name?: string
+          p_person_id: string
+          p_phone?: string
+          p_preferred_name?: string
+        }
+        Returns: undefined
+      }
       update_child_details: {
         Args: {
           p_address?: Json
