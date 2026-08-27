@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
-import { signPersonPhotoPath } from "@/lib/avatars";
+import { signPeoplePhotos, signPersonPhotoPath } from "@/lib/avatars";
 import { signIdentityDocumentPaths } from "@/lib/identity-docs";
 import {
   currentMembership,
@@ -40,6 +40,11 @@ import {
   personLabel,
 } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
+import { FamilyTreeView } from "@/components/family-tree-view";
+import { parseFamilyTree, familyTreePersonIds, isFamilyTreeEmpty } from "@/lib/family-tree";
+import { formatCurrency } from "@/lib/utils";
+
+import { PersonTabs, personTabFrom } from "./person-tabs";
 
 import { IdVerifiedForm } from "../../registrations/decision-forms";
 import { PersonForm } from "../person-form";
@@ -105,14 +110,15 @@ export default async function PersonPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string; tab?: string | string[] }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { id } = await params;
-  const { from } = await searchParams;
+  const { from, tab: rawTab } = await searchParams;
+  const tab = personTabFrom(rawTab);
   const supabase = await createClient();
 
   const { data: person } = await supabase.from("people").select("*").eq("id", id).maybeSingle();
@@ -210,6 +216,59 @@ export default async function PersonPage({
   );
   const familyNames = await resolveNames(familyOthers.map((row) => row.person_id));
 
+  // The Membership and payments tab. Only loaded when it is the tab being
+  // shown — a record opened to read a phone number should not pay for a family
+  // tree and two money reads.
+  //
+  // `family_tree_for()` (20260827130000) is the person-shaped twin of
+  // `my_family_tree()`: asking the caller-scoped one here would draw the
+  // ADMINISTRATOR'S own family under somebody else's name. It refuses anyone
+  // who is not club_admin or safeguarding_lead, which is the readership this
+  // page already requires.
+  const membershipTab = tab === "membership";
+  const { data: treeData, error: treeError } = membershipTab
+    ? await supabase.rpc("family_tree_for", { p_person_id: id })
+    : { data: null, error: null };
+  const familyTree = parseFamilyTree(treeData ?? null);
+
+  const treePhotoIds = membershipTab ? familyTreePersonIds(familyTree) : [];
+  const { data: treePhotoRows } =
+    treePhotoIds.length > 0
+      ? await supabase.from("people").select("id,photo_path").in("id", treePhotoIds)
+      : { data: [] as { id: string; photo_path: string | null }[] };
+  const treePhotoUrls = await signPeoplePhotos(treePhotoRows ?? []);
+
+  // Subscriptions this person is the SUBJECT of, and the ones they PAY for —
+  // a parent's record should show the bills they carry for their children.
+  const { data: subscriptionRows } = membershipTab
+    ? await supabase
+        .from("subscriptions")
+        .select(
+          "id,person_id,payer_person_id,status,amount_due_pence,started_at,ended_at,subscription_plans(name,billing,amount_pence)",
+        )
+        .or(`person_id.eq.${id},payer_person_id.eq.${id}`)
+        .order("started_at", { ascending: false })
+    : { data: [] as never[] };
+  const subscriptions = subscriptionRows ?? [];
+
+  const { data: paymentRows } =
+    membershipTab && subscriptions.length > 0
+      ? await supabase
+          .from("payments")
+          .select("id,subscription_id,amount_pence,paid_at,method,kind,refunded_pence")
+          .in(
+            "subscription_id",
+            subscriptions.map((row) => row.id),
+          )
+          .order("paid_at", { ascending: false })
+      : { data: [] as never[] };
+  const payments = paymentRows ?? [];
+
+  const subjectNames = await resolveNames([
+    ...subscriptions.map((row) => row.person_id),
+    ...subscriptions.map((row) => row.payer_person_id),
+  ].filter((value): value is string => !!value));
+
   // What the latest registration said about this person — the read-only copy
   // on the contact record (20260825260000). It carries the `registrations`
   // read policies, so a reader who is not entitled to the form gets nothing
@@ -279,6 +338,10 @@ export default async function PersonPage({
           )}
         </div>
 
+        <PersonTabs personId={person.id} active={tab} from={from} />
+
+        {tab === "record" && (
+        <>
         {pending.length > 0 && (
           <Card className="border-amber-200">
             <CardHeader>
@@ -380,59 +443,6 @@ export default async function PersonPage({
           </CardHeader>
           <CardContent>
             <GuardianshipsPanel personId={person.id} personName={name} links={guardianships} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Club membership</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Individual or family is worked out by the database from the number of{" "}
-              <strong>players</strong> on the membership in that season — a live squad place, or a
-              registration still pending or approved. Two or more players is a family; a parent who
-              is on the record as the lead contact is not a player.
-            </p>
-          </CardHeader>
-          <CardContent>
-            {!clubMembership || !clubMembership.kind ? (
-              <p className="text-sm text-muted-foreground">
-                No club membership recorded for this person.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={membershipKindVariant(clubMembership.kind)}>
-                    {membershipKindLabel(clubMembership.kind)}
-                  </Badge>
-                  <span className="text-sm text-muted-foreground">
-                    {clubMembership.season_name ?? "Season unknown"}
-                    {clubMembership.season_is_current ? " · current season" : ""}
-                    {clubMembership.is_primary ? " · lead contact" : ""}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {membershipKindHint(clubMembership.kind)}{" "}
-                  {membershipPeopleSummary(familyOthers.length)}
-                </p>
-                {familyOthers.length > 0 && (
-                  <ul className="space-y-1 text-sm">
-                    {familyOthers.map((row) => (
-                      <li key={row.person_id} className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/people/${row.person_id}`}
-                          className="font-medium underline underline-offset-2"
-                        >
-                          {nameOf(familyNames, row.person_id)}
-                        </Link>
-                        <Badge variant={row.is_primary ? "default" : "muted"}>
-                          {row.is_primary ? "Lead contact" : "On the membership"}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
           </CardContent>
         </Card>
 
@@ -599,6 +609,179 @@ export default async function PersonPage({
             )}
           </CardContent>
         </Card>
+        </>
+        )}
+
+        {tab === "membership" && (
+          <>
+        <Card>
+          <CardHeader>
+            <CardTitle>Club membership</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Individual or family is worked out by the database from the number of{" "}
+              <strong>players</strong> on the membership in that season — a live squad place, or a
+              registration still pending or approved. Two or more players is a family; a parent who
+              is on the record as the lead contact is not a player.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {!clubMembership || !clubMembership.kind ? (
+              <p className="text-sm text-muted-foreground">
+                No club membership recorded for this person.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={membershipKindVariant(clubMembership.kind)}>
+                    {membershipKindLabel(clubMembership.kind)}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {clubMembership.season_name ?? "Season unknown"}
+                    {clubMembership.season_is_current ? " · current season" : ""}
+                    {clubMembership.is_primary ? " · lead contact" : ""}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {membershipKindHint(clubMembership.kind)}{" "}
+                  {membershipPeopleSummary(familyOthers.length)}
+                </p>
+                {familyOthers.length > 0 && (
+                  <ul className="space-y-1 text-sm">
+                    {familyOthers.map((row) => (
+                      <li key={row.person_id} className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/people/${row.person_id}`}
+                          className="font-medium underline underline-offset-2"
+                        >
+                          {nameOf(familyNames, row.person_id)}
+                        </Link>
+                        <Badge variant={row.is_primary ? "default" : "muted"}>
+                          {row.is_primary ? "Lead contact" : "On the membership"}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+            {/* Adam, 2026-08-26: "The family tree should appear in here."
+                Drawn by the same component /family-linking uses, from
+                family_tree_for() rather than my_family_tree() — the
+                caller-scoped one would draw the ADMINISTRATOR'S own family
+                under this person's name. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Family</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {name} at the top, the children the club has them down as a guardian for, each of
+                  those children&apos;s other guardians, and the adults connected to their account.
+                  Ages are shown as an age group rather than a date of birth.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {treeError ? (
+                  <p className="text-sm text-destructive">{treeError.message}</p>
+                ) : isFamilyTreeEmpty(familyTree) ? (
+                  <p className="text-sm text-muted-foreground">
+                    The club has nobody linked to {name}.
+                  </p>
+                ) : (
+                  <FamilyTreeView
+                    tree={familyTree}
+                    photoUrls={treePhotoUrls}
+                    hrefFor={(node) =>
+                      node.personId === person.id ? null : `/people/${node.personId}`
+                    }
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Subscriptions</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  What {name} is signed up to pay, and anything they pay on somebody else&apos;s
+                  behalf.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {subscriptions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No subscription on record for {name}.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {subscriptions.map((row) => {
+                      const plan = row.subscription_plans as {
+                        name: string;
+                        billing: string | null;
+                        amount_pence: number | null;
+                      } | null;
+                      const forSomeoneElse = row.person_id !== person.id;
+                      return (
+                        <li key={row.id} className="flex flex-wrap items-baseline gap-2 py-2 text-sm">
+                          <span className="font-medium">{plan?.name ?? "Subscription"}</span>
+                          <Badge variant={row.ended_at ? "muted" : "success"}>
+                            {row.ended_at ? "Ended" : (row.status ?? "Active")}
+                          </Badge>
+                          {forSomeoneElse && row.person_id && (
+                            <span className="text-xs text-muted-foreground">
+                              for {nameOf(subjectNames, row.person_id)}
+                            </span>
+                          )}
+                          <span className="ml-auto tabular-nums">
+                            {row.amount_due_pence != null
+                              ? formatCurrency(row.amount_due_pence)
+                              : "—"}
+                            {plan?.billing ? ` · ${plan.billing}` : ""}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Payments</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Against the subscriptions above. Room hire is paid on the booking, not here.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {payments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nothing paid yet.</p>
+                ) : (
+                  <ul className="divide-y">
+                    {payments.map((row) => (
+                      <li key={row.id} className="flex flex-wrap items-baseline gap-2 py-2 text-sm">
+                        <span className="tabular-nums">{formatCurrency(row.amount_pence)}</span>
+                        {row.refunded_pence ? (
+                          <Badge variant="warning">
+                            {formatCurrency(row.refunded_pence)} refunded
+                          </Badge>
+                        ) : null}
+                        <span className="text-xs text-muted-foreground">
+                          {row.method ?? "—"}
+                          {row.kind ? ` · ${row.kind}` : ""}
+                        </span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {row.paid_at ? formatStamp(row.paid_at) : "Not paid"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </>
   );
