@@ -79,19 +79,40 @@ begin
     raise exception 'update_household_adult_details: no such person' using errcode = 'P0001';
   end if;
 
+  -- THE HARD LINE, ASKED FIRST AND ASKED CAREFULLY.
+  --
+  -- `is_household_member_of()` already excludes anybody holding a login — its
+  -- body says `not exists (select 1 from profiles ...)` — so asking it first
+  -- and the login question second made the login refusal unreachable: a linked
+  -- account-holder fell out at "not connected to your account", which is true
+  -- but tells them the wrong thing to do about it.
+  --
+  -- So the login question is asked of exactly the people who are LINKED to
+  -- this caller (created by them, or joined by `household_links`) and happen to
+  -- hold an account. A stranger never reaches it, so nothing is disclosed about
+  -- somebody the caller has no connection to; they get the generic refusal
+  -- below.
+  if not v_admin
+     and exists (select 1 from public.profiles pr where pr.person_id = p_person_id)
+     and exists (
+       select 1 from public.people p
+        where p.id = p_person_id
+          and p.deleted_at is null
+          and (p.created_by = auth.uid()
+               or exists (select 1 from public.household_links hl
+                           where hl.person_id = p.id and hl.owner_user_id = auth.uid())))
+  then
+    raise exception
+      'update_household_adult_details: % has their own login, so their details are theirs to change — ask them, or ask a club administrator'
+      , coalesce(v_them.preferred_name, v_them.first_name) using errcode = 'P0001';
+  end if;
+
   if not (v_admin or public.is_household_member_of(p_person_id)) then
     -- `%` is plpgsql's only placeholder in RAISE; `%s` is a `%` wanting an
     -- argument followed by a literal "s", which is a 42601 at creation time.
     raise exception
       'update_household_adult_details: the club''s records do not show % as connected to your account'
       , v_them.first_name using errcode = 'P0001';
-  end if;
-
-  -- The hard line. `people.email` is where a password reset goes.
-  if not v_admin and exists (select 1 from public.profiles pr where pr.person_id = p_person_id) then
-    raise exception
-      'update_household_adult_details: % has their own login, so their details are theirs to change — ask them, or ask a club administrator'
-      , coalesce(v_them.preferred_name, v_them.first_name) using errcode = 'P0001';
   end if;
 
   -- A minor is a child, and a child's details are a guardian's to change
