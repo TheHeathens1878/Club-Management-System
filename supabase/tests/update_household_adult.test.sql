@@ -39,8 +39,8 @@ insert into public.people (id, first_name, last_name, dob, email)
 
 -- The account-holder is put in the owner's household the honest way, so the
 -- only thing standing between them is the has-a-login rule.
-insert into public.household_links (person_id, owner_user_id)
-  values (current_setting('hh.haslogin')::uuid, 'aa11bb22-2612-4111-8111-000000000001');
+insert into public.household_links (person_id, owner_user_id, match_basis)
+  values (current_setting('hh.haslogin')::uuid, 'aa11bb22-2612-4111-8111-000000000001', 'email');
 
 
 -- ---------------------------------------------------------------------------
