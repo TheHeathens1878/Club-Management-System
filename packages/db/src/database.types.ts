@@ -6120,6 +6120,10 @@ export type Database = {
           venue: string
         }[]
       }
+      family_tree_for: {
+        Args: { p_person_id: string }
+        Returns: Json
+      }
       my_family_tree: { Args: never; Returns: Json }
       my_household: {
         Args: never
