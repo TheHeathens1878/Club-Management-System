@@ -14,6 +14,12 @@ import { signPeoplePhotos } from "@/lib/avatars";
 import { signIdentityDocumentPaths } from "@/lib/identity-docs";
 import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { resolveUserNames, verifierName } from "@/lib/registration-verifiers";
+import {
+  currentMembership,
+  membershipKindLabel,
+  membershipKindVariant,
+  type PersonMembershipRow,
+} from "@/lib/membership-kind";
 import { formatStamp } from "@/lib/people-display";
 import {
   REGISTRATION_STATUS_LABELS,
@@ -164,9 +170,42 @@ export default async function RegistrationsPage({
     }
   }
 
+  // What the club charges the household this player belongs to, and who the
+  // bill sits with (Adam, 2026-08-26: "it should say what type of membership
+  // applies to the lead party"). `person_memberships` is security_invoker over
+  // `memberships`/`membership_people`, so a reader who may not see the
+  // membership gets no row and the card simply says nothing — the page decides
+  // nothing for itself. The kind is the DATABASE's answer, derived from the
+  // number of players on the membership in that season (20260825520000).
+  const membershipByPerson = new Map<string, PersonMembershipRow & { person_id: string }>();
+  if (personIds.length > 0) {
+    const { data: membershipRows } = await supabase
+      .from("person_memberships")
+      .select(
+        "person_id,membership_id,kind,season_id,season_name,season_is_current,primary_person_id,is_primary,created_at",
+      )
+      .in("person_id", personIds);
+    const byPerson = new Map<string, (PersonMembershipRow & { person_id: string })[]>();
+    for (const row of membershipRows ?? []) {
+      if (!row.person_id) continue;
+      const typed = row as PersonMembershipRow & { person_id: string };
+      const list = byPerson.get(row.person_id);
+      if (list) list.push(typed);
+      else byPerson.set(row.person_id, [typed]);
+    }
+    // A person may sit on one membership per season; the current season wins.
+    for (const [personId, rows] of byPerson) {
+      const chosen = currentMembership(rows);
+      if (chosen) membershipByPerson.set(personId, chosen);
+    }
+  }
+
   const names = await resolveNames([
     ...personIds,
     ...Array.from(guardiansByChild.values()).flat(),
+    ...Array.from(membershipByPerson.values())
+      .map((row) => row.primary_person_id)
+      .filter((id): id is string => !!id),
   ]);
 
   // The player photo, the ID tick and any documents on file. All three read
@@ -290,6 +329,11 @@ export default async function RegistrationsPage({
               const documents = documentsByPerson.get(registration.person_id) ?? [];
               const liveDocuments = documents.filter((document) => !document.purged_at);
               const customAnswers = Object.entries(form.custom ?? {});
+              const membership = membershipByPerson.get(registration.person_id) ?? null;
+              const leadName =
+                membership?.primary_person_id && membership.primary_person_id !== registration.person_id
+                  ? nameOf(names, membership.primary_person_id)
+                  : null;
 
               return (
                 <details key={registration.id} className="rounded-lg border bg-card" open={!showDecided}>
@@ -311,6 +355,11 @@ export default async function RegistrationsPage({
                     <Badge variant={registrationStatusVariant(status)}>
                       {REGISTRATION_STATUS_LABELS[status]}
                     </Badge>
+                    {membership?.kind && (
+                      <Badge variant={membershipKindVariant(membership.kind)}>
+                        {membershipKindLabel(membership.kind)} membership
+                      </Badge>
+                    )}
                     <span className="w-full text-xs text-muted-foreground lg:ml-auto lg:w-auto">
                       {formatStamp(registration.submitted_at)}
                     </span>
@@ -322,6 +371,17 @@ export default async function RegistrationsPage({
                         {guardians.length === 0
                           ? "None recorded"
                           : guardians.map((id) => nameOf(names, id)).join(", ")}
+                      </Detail>
+                      <Detail label="Membership">
+                        {!membership?.kind ? (
+                          "None recorded for this player"
+                        ) : (
+                          <>
+                            {membershipKindLabel(membership.kind)}
+                            {leadName ? `, billed to ${leadName}` : ", and they are the lead contact"}
+                            {membership.season_name ? ` (${membership.season_name})` : ""}
+                          </>
+                        )}
                       </Detail>
                       <Detail label="Form version">{registration.form_version}</Detail>
                       <div className="sm:col-span-2">
