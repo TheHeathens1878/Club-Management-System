@@ -47,7 +47,7 @@ insert into public.household_links (person_id, owner_user_id)
 -- A. Shape                                                            (2)
 -- ---------------------------------------------------------------------------
 select has_function('public', 'update_household_adult_details',
-  array['uuid', 'text', 'text', 'text', 'text', 'jsonb'], 'update_household_adult_details(...)');
+  array['uuid', 'text', 'text', 'text', 'text', 'text', 'jsonb'], 'update_household_adult_details(...)');
 select ok(
   pg_get_function_result('public.my_household()'::regprocedure) like '%preferred_name%',
   'my_household() returns preferred_name, so the form can pre-fill it');

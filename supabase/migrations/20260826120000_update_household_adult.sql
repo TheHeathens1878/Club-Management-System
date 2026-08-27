@@ -166,11 +166,11 @@ begin
 end;
 $fn$;
 
-comment on function public.update_household_adult_details(uuid, text, text, text, text, jsonb) is
+comment on function public.update_household_adult_details(uuid, text, text, text, text, text, jsonb) is
   'Correct the record of a connected adult who has no login of their own. Refuses anyone who holds a login (their email is where a password reset goes), anyone under 18, and an email already on another live member. Names the fields changed in the audit log, never their values.';
 
-revoke all privileges on function public.update_household_adult_details(uuid, text, text, text, text, jsonb) from public, anon;
-grant execute on function public.update_household_adult_details(uuid, text, text, text, text, jsonb) to authenticated, service_role;
+revoke all privileges on function public.update_household_adult_details(uuid, text, text, text, text, text, jsonb) from public, anon;
+grant execute on function public.update_household_adult_details(uuid, text, text, text, text, text, jsonb) to authenticated, service_role;
 
 
 -- =============================================================================
@@ -250,7 +250,7 @@ notify pgrst, 'reload schema';
 
 -- =============================================================================
 -- ROLLBACK
---   drop function if exists public.update_household_adult_details(uuid, text, text, text, text, jsonb);
+--   drop function if exists public.update_household_adult_details(uuid, text, text, text, text, text, jsonb);
 --   drop function public.my_household(); then restore it from 20260825490000
 --   (the nine-column version) — dropping is required either way, because the
 --   return type differs.
