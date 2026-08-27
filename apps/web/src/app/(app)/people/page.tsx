@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import type { Enums } from "@club/db";
 
@@ -9,11 +9,16 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, Label } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
+import {
+  parsePeopleColumns,
+  peopleColumn,
+  peopleGridTemplate,
+} from "@/lib/people-columns";
 import { Select } from "@/components/ui/field";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
-import { isClubAdmin } from "@/lib/person";
+import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import {
   membershipKindLabel,
   membershipKindVariant,
@@ -22,6 +27,8 @@ import {
 } from "@/lib/membership-kind";
 import { isMinorDob, personLabel, sanitiseSearch } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
+
+import { PeopleControls } from "./people-controls";
 
 /**
  * The club's contacts database (gap 2).
@@ -118,6 +125,8 @@ type SearchParams = {
   q?: string;
   type?: string;
   filter?: string;
+  /** Which columns the desk view shows — see lib/people-columns.ts. */
+  cols?: string;
   role?: string;
   team?: string;
   page?: string;
@@ -137,6 +146,7 @@ function listQuery(params: SearchParams, overrides: Partial<SearchParams> = {}):
   if (merged.q) query.set("q", merged.q);
   if (merged.type) query.set("type", merged.type);
   if (merged.filter) query.set("filter", merged.filter);
+  if (merged.cols) query.set("cols", merged.cols);
   if (merged.role) query.set("role", merged.role);
   if (merged.team) query.set("team", merged.team);
   if (merged.page && merged.page !== "1") query.set("page", merged.page);
@@ -169,6 +179,10 @@ export default async function PeoplePage({
   const params = await searchParams;
   const term = sanitiseSearch(params.q ?? "");
   const noDob = params.filter === "no_dob";
+  // Which columns this reader asked for (Adam, 2026-08-26). Held in the URL so
+  // a list stays the same list when it is bookmarked or sent on.
+  const columns = parsePeopleColumns(params.cols);
+  const gridTemplate = peopleGridTemplate(columns);
   const roleFilter = ROLES.includes(params.role as Enums<"app_role">)
     ? (params.role as Enums<"app_role">)
     : null;
@@ -374,11 +388,15 @@ export default async function PeoplePage({
           currentSeason
             ? supabase
                 .from("person_memberships")
-                .select("person_id,kind")
+                .select("person_id,kind,primary_person_id")
                 .in("person_id", ids)
                 .eq("season_id", currentSeason.id)
             : Promise.resolve({
-                data: [] as { person_id: string | null; kind: MembershipKind | null }[],
+                data: [] as {
+                  person_id: string | null;
+                  kind: MembershipKind | null;
+                  primary_person_id: string | null;
+                }[],
               }),
         ]);
 
@@ -411,8 +429,23 @@ export default async function PeoplePage({
   const withLogin = new Set((profilesResult.data ?? []).map((p) => p.person_id));
 
   const membershipKind = new Map<string, MembershipKind>();
+  // Who the membership is billed to (Adam, 2026-08-26: "Membership type
+  // (linked to lead party)"). A person who IS the lead has no entry, and the
+  // column says "Lead contact" instead of naming them to themselves.
+  const membershipLeadId = new Map<string, string>();
   for (const row of clubMembershipsResult.data ?? []) {
     if (row.person_id && row.kind) membershipKind.set(row.person_id, row.kind);
+    if (row.person_id && row.primary_person_id && row.primary_person_id !== row.person_id) {
+      membershipLeadId.set(row.person_id, row.primary_person_id);
+    }
+  }
+  // The lead is frequently NOT on the page being listed — a parent whose
+  // children fill the search results — so their names are fetched rather than
+  // looked up among the rows.
+  const leadNames = await resolveNames([...new Set(membershipLeadId.values())]);
+  const membershipLead = new Map<string, string>();
+  for (const [personId, leadId] of membershipLeadId) {
+    membershipLead.set(personId, nameOf(leadNames, leadId));
   }
 
   // The design's row details: a minor's contact goes through their guardian
@@ -551,25 +584,20 @@ export default async function PeoplePage({
               ))}
             </div>
           </CardHeader>
-          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+            <PeopleControls initialQuery={params.q ?? ""} />
+
             {/* A GET form so every list is a URL somebody can bookmark or send.
                 The type chip lives outside the form, so it rides along in a
                 hidden field rather than being lost on the next search. */}
             <form method="get" className="grid gap-4 sm:grid-cols-6">
               {typeFilter && <input type="hidden" name="type" value={typeFilter} />}
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="q">Name or email</Label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="q"
-                    name="q"
-                    defaultValue={params.q ?? ""}
-                    placeholder="Search…"
-                    className="min-h-[44px] pl-8 lg:min-h-0"
-                  />
-                </div>
-              </div>
+              {params.cols && <input type="hidden" name="cols" value={params.cols} />}
+              {/* The name box lives in PeopleControls above, which filters as
+                  you type. This hidden field is what keeps the typed name when
+                  somebody changes the team or role dropdowns and presses
+                  Search — the GET form would otherwise drop it. */}
+              {params.q && <input type="hidden" name="q" value={params.q} />}
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="team">Team (this season)</Label>
                 <Select
@@ -659,12 +687,13 @@ export default async function PeoplePage({
               <div>
                 {/* A header, not a <table>: the whole row is one link, and a
                     link cannot wrap a <tr>. */}
-                <div className="hidden border-b pb-2 text-xs text-muted-foreground lg:grid lg:grid-cols-12 lg:gap-3">
-                  <span className="lg:col-span-3">Name</span>
-                  <span className="lg:col-span-2">Type · Membership</span>
-                  <span className="lg:col-span-2">Teams</span>
-                  <span className="lg:col-span-3">Contact</span>
-                  <span className="lg:col-span-2">Status</span>
+                <div
+                  className="hidden border-b pb-2 text-xs text-muted-foreground lg:grid lg:gap-3"
+                  style={{ gridTemplateColumns: gridTemplate }}
+                >
+                  {columns.map((key) => (
+                    <span key={key}>{peopleColumn(key).label}</span>
+                  ))}
                 </div>
                 <ul className="space-y-2 lg:space-y-0 lg:divide-y">
                   {people.map((person) => {
@@ -679,6 +708,7 @@ export default async function PeoplePage({
                       : undefined;
                     const shownTypes = TYPES.filter((type) => held.includes(type));
                     const kind = membershipKind.get(person.id) ?? null;
+                    const leadName = membershipLead.get(person.id) ?? null;
                     const teamsText =
                       heldTeams.length === 0
                         ? "—"
@@ -749,72 +779,121 @@ export default async function PeoplePage({
                           </span>
                         </Link>
 
+                        {/* The desk row, one cell per chosen column. The
+                            widths come from the same registry the header and
+                            the picker read, so the three cannot drift. */}
                         <Link
                           href={href}
-                          className="hidden gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none lg:grid lg:grid-cols-12 lg:items-center"
+                          className="hidden gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none lg:grid lg:items-center"
+                          style={{ gridTemplateColumns: gridTemplate }}
                         >
-                          <span className="flex flex-wrap items-center gap-2 lg:col-span-3">
-                            <span
-                              aria-hidden="true"
-                              title={linked ? "Has a login" : "No login yet"}
-                              className={
-                                "h-2 w-2 shrink-0 rounded-full " +
-                                (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
-                              }
-                            />
-                            <span className="font-medium">{name}</span>
-                            <span className="sr-only">
-                              {linked ? "Has a login." : "No login yet."}
-                            </span>
-                            {minor && (
-                              <Badge variant="warning">
-                                {person.dob ? "Minor" : "No DOB — treated as a minor"}
-                              </Badge>
-                            )}
-                          </span>
-                          <span className="flex flex-wrap gap-1 lg:col-span-2">
-                            {held.length === 0 && !kind ? (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            ) : (
-                              shownTypes.map((type) => (
-                                <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
-                                  {TYPE_LABELS[type]}
-                                </Badge>
-                              ))
-                            )}
-                            {kind && (
-                              <Badge
-                                variant={membershipKindVariant(kind)}
-                                title={`${membershipKindWord(kind)} — the kind is worked out from the number of players on it`}
-                              >
-                                {membershipKindLabel(kind)}
-                                <span className="sr-only"> membership</span>
-                              </Badge>
-                            )}
-                          </span>
-                          <span className="text-xs text-muted-foreground lg:col-span-2">
-                            {teamsText}
-                          </span>
-                          <span className="text-xs text-muted-foreground lg:col-span-3">
-                            {/* The design's rule, stated on the page: an
-                                under-18's contact goes through their guardian. */}
-                            {minor && guardian ? (
-                              <>
-                                <span className="block">via {guardian.name}</span>
-                                <span className="block">{guardian.phone ?? "No phone"}</span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="block break-all">
-                                  {person.email ?? "No email"}
-                                </span>
-                                <span className="block">{person.phone ?? "No phone"}</span>
-                              </>
-                            )}
-                          </span>
-                          <span className="lg:col-span-2">
-                            <Badge variant={status.variant}>{status.label}</Badge>
-                          </span>
+                          {columns.map((key) => {
+                            switch (key) {
+                              case "name":
+                                return (
+                                  <span key={key} className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      aria-hidden="true"
+                                      title={linked ? "Has a login" : "No login yet"}
+                                      className={
+                                        "h-2 w-2 shrink-0 rounded-full " +
+                                        (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
+                                      }
+                                    />
+                                    <span className="font-medium">{name}</span>
+                                    <span className="sr-only">
+                                      {linked ? "Has a login." : "No login yet."}
+                                    </span>
+                                    {minor && (
+                                      <Badge variant="warning">
+                                        {person.dob ? "Minor" : "No DOB — treated as a minor"}
+                                      </Badge>
+                                    )}
+                                  </span>
+                                );
+                              case "type":
+                                return (
+                                  <span key={key} className="flex flex-wrap gap-1">
+                                    {shownTypes.length === 0 ? (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    ) : (
+                                      shownTypes.map((type) => (
+                                        <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
+                                          {TYPE_LABELS[type]}
+                                        </Badge>
+                                      ))
+                                    )}
+                                  </span>
+                                );
+                              case "membership":
+                                // Adam, 2026-08-26: the membership type, and the
+                                // lead party it belongs to. The row is already a
+                                // link, so the lead is named rather than linked —
+                                // an anchor cannot be nested inside an anchor.
+                                return (
+                                  <span key={key} className="flex flex-col gap-1">
+                                    {kind ? (
+                                      <>
+                                        <Badge
+                                          variant={membershipKindVariant(kind)}
+                                          title={`${membershipKindWord(kind)} — the kind is worked out from the number of players on it`}
+                                          className="w-fit"
+                                        >
+                                          {membershipKindLabel(kind)}
+                                          <span className="sr-only"> membership</span>
+                                        </Badge>
+                                        <span className="text-xs text-muted-foreground">
+                                          {leadName ? `Billed to ${leadName}` : "Lead contact"}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    )}
+                                  </span>
+                                );
+                              case "teams":
+                                return (
+                                  <span key={key} className="text-xs text-muted-foreground">
+                                    {teamsText}
+                                  </span>
+                                );
+                              case "contact":
+                                return (
+                                  <span key={key} className="text-xs text-muted-foreground">
+                                    {/* The design's rule, stated on the page: an
+                                        under-18's contact goes through their
+                                        guardian. */}
+                                    {minor && guardian ? (
+                                      <>
+                                        <span className="block">via {guardian.name}</span>
+                                        <span className="block">
+                                          {guardian.phone ?? "No phone"}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="block break-all">
+                                          {person.email ?? "No email"}
+                                        </span>
+                                        <span className="block">{person.phone ?? "No phone"}</span>
+                                      </>
+                                    )}
+                                  </span>
+                                );
+                              case "dob":
+                                return (
+                                  <span key={key} className="text-xs text-muted-foreground">
+                                    {person.dob ?? "Not on file"}
+                                  </span>
+                                );
+                              case "status":
+                                return (
+                                  <span key={key}>
+                                    <Badge variant={status.variant}>{status.label}</Badge>
+                                  </span>
+                                );
+                            }
+                          })}
                         </Link>
                       </li>
                     );
