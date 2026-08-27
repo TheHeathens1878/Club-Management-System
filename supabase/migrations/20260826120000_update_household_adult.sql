@@ -80,9 +80,11 @@ begin
   end if;
 
   if not (v_admin or public.is_household_member_of(p_person_id)) then
+    -- `%` is plpgsql's only placeholder in RAISE; `%s` is a `%` wanting an
+    -- argument followed by a literal "s", which is a 42601 at creation time.
     raise exception
-      'update_household_adult_details: the club''s records do not show %s as connected to your account'
-      using errcode = 'P0001';
+      'update_household_adult_details: the club''s records do not show % as connected to your account'
+      , v_them.first_name using errcode = 'P0001';
   end if;
 
   -- The hard line. `people.email` is where a password reset goes.
