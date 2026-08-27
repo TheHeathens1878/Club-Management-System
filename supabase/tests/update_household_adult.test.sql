@@ -84,7 +84,7 @@ set local role authenticated;
 
 select throws_like(
   $$ select public.update_household_adult_details(
-       (select person_id from public.profiles where id = 'aa11bb22-2612-4111-8111-000000000003'),
+       current_setting('hh.haslogin')::uuid,
        'Lee', 'Login', null, 'attacker@test.invalid', null) $$,
   '%their own login%',
   'an adult with their own login keeps their own details — this is the takeover door');
