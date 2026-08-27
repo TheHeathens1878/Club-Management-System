@@ -50,6 +50,7 @@ export function DeleteFixtureCard({
   label,
   hasPitch,
   isMirrored,
+  stillPublished,
   counts,
 }: {
   fixtureId: string;
@@ -59,6 +60,11 @@ export function DeleteFixtureCard({
   hasPitch: boolean;
   /** One game on two teams' pages: deleting one side deletes both. */
   isMirrored: boolean;
+  /**
+   * Imported from Full-Time and not flagged as dropped from the feed, so the
+   * next import will simply create it again. Worth saying before, not after.
+   */
+  stillPublished: boolean;
   counts: DeleteFixtureCounts;
 }) {
   const [state, action, pending] = useActionState(deleteFixture, EMPTY);
@@ -69,9 +75,9 @@ export function DeleteFixtureCard({
       <CardHeader className="p-4 lg:p-6">
         <CardTitle className="text-base text-destructive">Delete this fixture</CardTitle>
         <p className="text-sm text-muted-foreground">
-          For a game that should never have been here — a Full-Time import that
-          landed on the wrong team, or one the league has withdrawn. If the game is simply off,
-          set it to postponed or cancelled instead, which keeps the record.
+          For a game that should never have been here — a Full-Time import that landed on the wrong
+          team, one the league has withdrawn, or a friendly entered twice. If the game is simply
+          off, set it to postponed or cancelled instead, which keeps the record.
         </p>
       </CardHeader>
       <CardContent className="space-y-3 p-4 pt-0 lg:p-6 lg:pt-0">
@@ -99,6 +105,13 @@ export function DeleteFixtureCard({
                 </p>
               )}
               <p className="mt-1 text-muted-foreground">This cannot be undone from here.</p>
+              {stillPublished && (
+                <p className="mt-1 text-muted-foreground">
+                  Full-Time still publishes this game, so tonight&apos;s import will create it
+                  again — but the team sheet, the availability answers and the stats above will
+                  not come back with it.
+                </p>
+              )}
             </div>
 
             {hasPitch && (

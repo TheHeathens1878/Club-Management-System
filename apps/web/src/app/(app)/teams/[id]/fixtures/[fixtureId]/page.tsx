@@ -47,7 +47,7 @@ export default async function FixtureAttendancePage({
   const { data: fixture } = await supabase
     .from("fixtures")
     .select(
-      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,mirror_fixture_id,no_longer_published_at,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
+      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,mirror_fixture_id,no_longer_published_at,source,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
     )
     .eq("id", fixtureId)
     .eq("team_id", teamId)
@@ -64,9 +64,11 @@ export default async function FixtureAttendancePage({
   const eventId = eventResult.data?.id ?? null;
   const canManage = staffResult.data === true || admin;
 
-  // What deleting this fixture would destroy with it. Only a club
-  // administrator is offered the delete, so only they pay for the counts.
-  const deleteCounts = admin
+  // What deleting this fixture would destroy with it. Offered to the team's
+  // staff as well as to administrators (Adam, 2026-08-27), so the counts are
+  // paid for by whoever can manage the team — not by every parent who opens a
+  // fixture.
+  const deleteCounts = canManage
     ? await (async () => {
         const [availability, lineups, playerStats, events] = await Promise.all([
           supabase.from("availability").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
@@ -364,13 +366,16 @@ export default async function FixtureAttendancePage({
           </Card>
         )}
 
-        {admin && deleteCounts && (
+        {canManage && deleteCounts && (
           <DeleteFixtureCard
             fixtureId={fixture.id}
             teamId={teamId}
             label={`${title} — ${whereLine}`}
             hasPitch={!!fixture.booking_id}
             isMirrored={!!fixture.mirror_fixture_id}
+            stillPublished={
+              fixture.source === "fulltime" && !fixture.no_longer_published_at
+            }
             counts={deleteCounts}
           />
         )}
