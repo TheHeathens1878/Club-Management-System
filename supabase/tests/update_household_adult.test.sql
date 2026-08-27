@@ -1,5 +1,5 @@
 -- =============================================================================
--- Correcting a connected adult's record (20260826120000)
+-- Correcting a connected adult's record (20260827140000)
 -- =============================================================================
 -- What this suite covers:
 --   A  shape: the function, and my_household()'s new column
