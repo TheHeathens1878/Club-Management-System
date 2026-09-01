@@ -18,6 +18,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { mentionExcerpt, mentionedPersonIds } from "@/lib/mentions";
+import { nameOf, resolveNames } from "@/lib/person";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
 export type ActionState = { error?: string; notice?: string };
@@ -52,8 +55,12 @@ export async function sendMessage(_prev: ActionState, formData: FormData): Promi
   if (!personId) return { error: "Your account is not linked to a member record yet." };
 
   const supabase = await createClient();
+  // The id is settled HERE, not by the column default: the mention rows and
+  // the notifications that follow need to name this message, and reading it
+  // back with RETURNING would have to satisfy the SELECT policy as well.
+  const messageId = UUID_RE.test(clientId) ? clientId : crypto.randomUUID();
   const { error } = await supabase.from("messages").insert({
-    ...(UUID_RE.test(clientId) ? { id: clientId } : {}),
+    id: messageId,
     conversation_id: conversationId,
     sender_person_id: personId,
     body,
@@ -61,9 +68,91 @@ export async function sendMessage(_prev: ActionState, formData: FormData): Promi
   });
   if (error) return { error: error.message };
 
+  await recordMentions(conversationId, messageId, personId, body);
+
   revalidatePath(`${MESSAGES_PATH}/${conversationId}`);
   revalidatePath(MESSAGES_PATH);
   return {};
+}
+
+/**
+ * `@mentions` — resolve, record, notify.
+ *
+ * The typed names are matched SERVER-SIDE against the conversation's LIVE
+ * participants, read through the caller's own client. The browser sends no
+ * list of person ids and could not be believed if it did: a composer is a text
+ * box, and the only thing that decides who was mentioned is who is actually in
+ * the room. `mention_people()` then checks the same two facts again in the
+ * database (you sent this message; they are in this conversation), so a hand-
+ * rolled request cannot mint a mention either.
+ *
+ * The notification goes through `notify()` with the ADMIN client because
+ * `notify()` is service-role-only by design (20260824160000) — in-app only,
+ * no email, and never to the sender themselves. One person mentioned twice in
+ * one message is one row and one notification.
+ *
+ * Nothing in here can fail the send: the message is already committed and
+ * saying "something went wrong" over a message that arrived would be a lie.
+ * A mention that could not be recorded is a missing highlight, not a lost
+ * message.
+ */
+async function recordMentions(
+  conversationId: string,
+  messageId: string,
+  senderPersonId: string,
+  body: string,
+): Promise<void> {
+  if (!body.includes("@")) return;
+  try {
+    const supabase = await createClient();
+    const { data: participantRows } = await supabase
+      .from("conversation_participants")
+      .select("person_id")
+      .eq("conversation_id", conversationId)
+      .is("left_at", null);
+
+    const liveIds = (participantRows ?? [])
+      .map((p) => p.person_id)
+      .filter((id) => id !== senderPersonId);
+    if (liveIds.length === 0) return;
+
+    const names = await resolveNames([...liveIds, senderPersonId]);
+    const candidates = liveIds.map((id) => ({ person_id: id, name: nameOf(names, id) }));
+    const personIds = mentionedPersonIds(body, candidates);
+    if (personIds.length === 0) return;
+
+    const { error: mentionError } = await supabase.rpc("mention_people", {
+      p_message_id: messageId,
+      p_person_ids: personIds,
+    });
+    if (mentionError) return;
+
+    const { data: conversation } = await supabase
+      .from("conversations")
+      .select("type,title")
+      .eq("id", conversationId)
+      .maybeSingle();
+    const where =
+      conversation?.title?.trim() ||
+      (conversation?.type === "dm" ? "your conversation" : "a conversation");
+    const senderName = nameOf(names, senderPersonId);
+
+    const admin = createAdminClient();
+    await Promise.all(
+      personIds.map((id) =>
+        admin.rpc("notify", {
+          p_person_id: id,
+          p_subject: `You were mentioned in ${where}`,
+          p_body: `${senderName} mentioned you: “${mentionExcerpt(body)}”`,
+          p_link: `${MESSAGES_PATH}/${conversationId}`,
+          p_entity: "messages",
+          p_entity_id: messageId,
+        }),
+      ),
+    );
+  } catch {
+    // See the doc comment: the message is sent either way.
+  }
 }
 
 /**
@@ -270,4 +359,57 @@ export async function startConversation(_prev: ActionState, formData: FormData):
 
   revalidatePath(MESSAGES_PATH);
   redirect(`${MESSAGES_PATH}/${conversation.id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Permanent deletion of one message — super user only (Adam, 2026-08-25)
+// ---------------------------------------------------------------------------
+/**
+ * The soft delete above is unchanged and is still what everyone else gets: a
+ * tombstone, per SG-2. This is the one exception the club owner asked for, and
+ * every decision about whether it is allowed is made by `purge_message()` in
+ * the database — super user only, and refused outright for a message cited by
+ * a safeguarding concern or one of its notes, or under a legal hold. The RPC
+ * goes through the user-scoped client so that check sees the real caller.
+ *
+ * Attachments: the storage objects are removed with the SERVICE-ROLE client,
+ * and only AFTER the RPC has returned. Two things make that safe. First, the
+ * ordering: the database has already decided the purge is permitted and has
+ * already written the `messages.purged` audit row, so by the time this runs
+ * the `message_attachments` rows do not exist and the objects are orphans —
+ * unreachable through the storage policies, which key off the message row, and
+ * pointing at nothing. Second, the paths are read with the admin client
+ * BEFOREHAND rather than the caller's, because a super user need not be a
+ * participant of the conversation and their own client would (correctly) be
+ * shown nothing. The admin key is never used to decide anything here; it is
+ * used to finish what the database has already authorised.
+ */
+export async function purgeMessage(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const messageId = String(formData.get("message_id") ?? "");
+  const conversationId = String(formData.get("conversation_id") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!messageId) return { error: "No message given." };
+  if (!reason) {
+    return { error: "Say why. The reason is the only thing the audit row will be able to say." };
+  }
+
+  const admin = createAdminClient();
+  const { data: files } = await admin
+    .from("message_attachments")
+    .select("storage_bucket,storage_path")
+    .eq("message_id", messageId);
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("purge_message", {
+    p_message_id: messageId,
+    p_reason: reason,
+  });
+  if (error) return { error: error.message };
+
+  for (const file of files ?? []) {
+    await admin.storage.from(file.storage_bucket).remove([file.storage_path]);
+  }
+
+  revalidatePath(`${MESSAGES_PATH}/${conversationId}`);
+  return { notice: "Message permanently deleted." };
 }

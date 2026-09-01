@@ -1,8 +1,8 @@
 "use client";
 
 /**
- * The editable parts of one person's record: roles, guardianships,
- * certifications, and the soft delete.
+ * The editable parts of one person's record: roles, guardianships, emergency
+ * contacts, and the soft delete.
  *
  * Each panel writes through a server action that uses the caller's own client,
  * so what comes back is the database's answer. A P0001 refusal — the SG-4
@@ -18,17 +18,22 @@ import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select, Textarea } from "@/components/ui/field";
 import { PersonPicker } from "@/components/person-picker";
-import { formatDate, formatStamp } from "@/lib/people-display";
+import { EmergencyContactsFields } from "@/components/emergency-contacts-fields";
+import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
+import { formatStamp } from "@/lib/people-display";
 
-import { softDeletePerson, restorePerson, type PersonActionState } from "../actions";
+import {
+  purgePerson,
+  restorePerson,
+  softDeletePerson,
+  type PersonActionState,
+} from "../actions";
 import {
   addGuardianship,
-  addPersonCertification,
   endGuardianship,
   grantRole,
-  revokePersonCertification,
   revokeRole,
-  verifyPersonCertification,
+  setPersonEmergencyContacts,
   type PersonDetailState,
 } from "./actions";
 
@@ -43,6 +48,7 @@ export const APP_ROLE_LABELS: Record<string, string> = {
   member: "Member",
   parent: "Parent",
   hirer: "Hirer",
+  referee: "Referee",
 };
 
 export const RELATIONSHIP_LABELS: Record<string, string> = {
@@ -52,13 +58,6 @@ export const RELATIONSHIP_LABELS: Record<string, string> = {
   foster_carer: "Foster carer",
   legal_guardian: "Legal guardian",
   other: "Other",
-};
-
-export const CERTIFICATION_LABELS: Record<string, string> = {
-  fa_dbs: "FA DBS check",
-  safeguarding_children: "Safeguarding children",
-  first_aid: "First aid",
-  coaching_badge: "Coaching badge",
 };
 
 export type RoleRow = {
@@ -76,16 +75,6 @@ export type GuardianshipRow = {
   /** True when the person on screen is the guardian in this link. */
   personIsGuardian: boolean;
   endedAt: string | null;
-};
-
-export type PersonCertificationRow = {
-  id: string;
-  type: string;
-  reference: string | null;
-  issuedOn: string | null;
-  expiresOn: string | null;
-  verifiedAt: string | null;
-  revokedAt: string | null;
 };
 
 function Feedback({ state }: { state: PersonDetailState | PersonActionState }) {
@@ -132,7 +121,7 @@ export function RolesPanel({ personId, roles }: { personId: string; roles: RoleR
               <form action={revokeAction}>
                 <input type="hidden" name="person_id" value={personId} />
                 <input type="hidden" name="role_id" value={role.id} />
-                <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
+                <Button type="submit" size="sm" variant="outline" className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0">
                   Revoke
                 </Button>
               </form>
@@ -165,7 +154,12 @@ export function RolesPanel({ personId, roles }: { personId: string; roles: RoleR
             <Input id="grant-notes" name="notes" placeholder="e.g. Elected at the 2026 AGM" />
           </div>
         </div>
-        <Button type="submit" size="sm" disabled={granting}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={granting}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {granting ? "Granting…" : "Grant role"}
         </Button>
         <Feedback state={grantState} />
@@ -220,7 +214,7 @@ export function GuardianshipsPanel({
               <form action={endAction}>
                 <input type="hidden" name="person_id" value={personId} />
                 <input type="hidden" name="guardianship_id" value={link.id} />
-                <Button type="submit" size="sm" variant="outline" className="h-8 px-2 text-xs">
+                <Button type="submit" size="sm" variant="outline" className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0">
                   End
                 </Button>
               </form>
@@ -294,131 +288,13 @@ export function GuardianshipsPanel({
             far more widely than the concern record.
           </p>
         </div>
-        <Button type="submit" size="sm" disabled={adding}>
+        <Button
+          type="submit"
+          size="sm"
+          disabled={adding}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {adding ? "Saving…" : "Add guardianship"}
-        </Button>
-        <Feedback state={addState} />
-      </form>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-
-export function PersonCertificationsPanel({
-  personId,
-  certifications,
-}: {
-  personId: string;
-  certifications: PersonCertificationRow[];
-}) {
-  const [addState, addAction, adding] = useActionState(addPersonCertification, EMPTY);
-  const [verifyState, verifyAction] = useActionState(verifyPersonCertification, EMPTY);
-  const [revokeState, revokeAction] = useActionState(revokePersonCertification, EMPTY);
-
-  return (
-    <div className="space-y-4">
-      {certifications.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing recorded.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b text-xs text-muted-foreground">
-              <tr>
-                <th className="py-2 pr-3 font-medium">Type</th>
-                <th className="py-2 pr-3 font-medium">Reference</th>
-                <th className="py-2 pr-3 font-medium">Issued</th>
-                <th className="py-2 pr-3 font-medium">Expires</th>
-                <th className="py-2 pr-3 font-medium">State</th>
-                <th className="py-2 font-medium" />
-              </tr>
-            </thead>
-            <tbody>
-              {certifications.map((cert) => (
-                <tr key={cert.id} className="border-b align-top last:border-0">
-                  <td className="py-2 pr-3">{CERTIFICATION_LABELS[cert.type] ?? cert.type}</td>
-                  <td className="py-2 pr-3 break-all">{cert.reference ?? "—"}</td>
-                  <td className="whitespace-nowrap py-2 pr-3">{formatDate(cert.issuedOn)}</td>
-                  <td className="whitespace-nowrap py-2 pr-3">{formatDate(cert.expiresOn)}</td>
-                  <td className="py-2 pr-3">
-                    {cert.revokedAt ? (
-                      <Badge variant="destructive">Revoked</Badge>
-                    ) : cert.verifiedAt ? (
-                      <Badge variant="success">Verified</Badge>
-                    ) : (
-                      <Badge variant="warning">Not verified</Badge>
-                    )}
-                  </td>
-                  <td className="py-2">
-                    {!cert.revokedAt && (
-                      <div className="flex gap-1">
-                        {!cert.verifiedAt && (
-                          <form action={verifyAction}>
-                            <input type="hidden" name="person_id" value={personId} />
-                            <input type="hidden" name="certification_id" value={cert.id} />
-                            <Button
-                              type="submit"
-                              size="sm"
-                              variant="outline"
-                              className="h-8 px-2 text-xs"
-                            >
-                              Verify
-                            </Button>
-                          </form>
-                        )}
-                        <form action={revokeAction}>
-                          <input type="hidden" name="person_id" value={personId} />
-                          <input type="hidden" name="certification_id" value={cert.id} />
-                          <Button
-                            type="submit"
-                            size="sm"
-                            variant="outline"
-                            className="h-8 px-2 text-xs"
-                          >
-                            Revoke
-                          </Button>
-                        </form>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-      <Feedback state={verifyState} />
-      <Feedback state={revokeState} />
-
-      <form action={addAction} className="space-y-3 rounded-lg border border-dashed p-4">
-        <p className="text-sm font-medium">Record a certification</p>
-        <input type="hidden" name="person_id" value={personId} />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-type">Type</Label>
-            <Select id="cert-type" name="type" defaultValue="fa_dbs">
-              {Object.keys(CERTIFICATION_LABELS).map((value) => (
-                <option key={value} value={value}>
-                  {CERTIFICATION_LABELS[value]}
-                </option>
-              ))}
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-reference">Reference</Label>
-            <Input id="cert-reference" name="reference" placeholder="Certificate number" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-issued">Issued on</Label>
-            <Input id="cert-issued" name="issued_on" type="date" />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="cert-expires">Expires on</Label>
-            <Input id="cert-expires" name="expires_on" type="date" />
-          </div>
-        </div>
-        <Button type="submit" size="sm" disabled={adding}>
-          {adding ? "Saving…" : "Record certification"}
         </Button>
         <Feedback state={addState} />
       </form>
@@ -449,7 +325,13 @@ export function RetirePanel({
         </p>
         <form action={restoreAction}>
           <input type="hidden" name="person_id" value={personId} />
-          <Button type="submit" size="sm" variant="outline" disabled={restoring}>
+          <Button
+            type="submit"
+            size="sm"
+            variant="outline"
+            disabled={restoring}
+            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          >
             {restoring ? "Restoring…" : "Restore"}
           </Button>
         </form>
@@ -475,11 +357,174 @@ export function RetirePanel({
         }}
       >
         <input type="hidden" name="person_id" value={personId} />
-        <Button type="submit" size="sm" variant="destructive" disabled={deleting}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="destructive"
+          disabled={deleting}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {deleting ? "Retiring…" : "Retire this person"}
         </Button>
       </form>
       <Feedback state={deleteState} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Emergency contacts (Adam, 2026-08-25) — on the person, up to two
+// ---------------------------------------------------------------------------
+
+export function EmergencyContactsPanel({
+  personId,
+  personName,
+  contacts,
+  canEdit,
+}: {
+  personId: string;
+  personName: string;
+  contacts: EmergencyContact[];
+  canEdit: boolean;
+}) {
+  const [state, action, pending] = useActionState<PersonDetailState, FormData>(
+    setPersonEmergencyContacts,
+    EMPTY,
+  );
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="space-y-3">
+      {contacts.length === 0 ? (
+        <p className="text-sm text-muted-foreground">None on record.</p>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {contacts.map((contact) => (
+            <li key={contact.position} className="flex flex-wrap items-center gap-2">
+              <span className="text-muted-foreground">{contact.position}.</span>
+              <span className="font-medium">{contact.name}</span>
+              <a href={`tel:${contact.phone}`} className="text-primary hover:underline">
+                {contact.phone}
+              </a>
+              {contact.relationship && (
+                <span className="text-xs text-muted-foreground">{contact.relationship}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {canEdit && !open && (
+        <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+          {contacts.length === 0 ? "Add emergency contacts" : "Edit emergency contacts"}
+        </Button>
+      )}
+
+      {canEdit && open && (
+        <form action={action} className="space-y-4 rounded-lg border bg-secondary/20 p-4">
+          <input type="hidden" name="person_id" value={personId} />
+          <EmergencyContactsFields
+            idPrefix={`person-${personId}`}
+            initial={contacts}
+            lead={null}
+            personName={personName}
+            requireFirst={false}
+          />
+          <Feedback state={state} />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" size="sm" disabled={pending}>
+              {pending ? "Saving…" : "Save contacts"}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+        </form>
+      )}
+      {!open && <Feedback state={state} />}
+      {contacts.length > 0 && !canEdit && (
+        <p className="text-xs text-muted-foreground">
+          {emergencyContactLine(contacts[0]!)} is who the club rings first.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Permanent deletion — super user only (Adam, 2026-08-25)
+// ---------------------------------------------------------------------------
+/**
+ * The panel below the Retire panel, and only for a super user.
+ *
+ * Retiring is still the normal answer and still the one offered first. This is
+ * the other thing: a real, irreversible destruction, for a GDPR erasure request
+ * or for a test account that should never have existed.
+ *
+ * Three deliberate frictions, in the order a person meets them: a plain
+ * statement of what will be destroyed and that it cannot be undone; a reason,
+ * which is required because it is the only thing the surviving audit row will
+ * be able to say; and the person's full name typed out, which is what enables
+ * the button. None of these is the control — the control is `purge_person()`,
+ * which refuses a legal hold, a safeguarding concern and the caller themselves
+ * whatever this form sends. They are here so nobody arrives at that refusal by
+ * accident.
+ */
+export function PurgePanel({
+  personId,
+  personName,
+}: {
+  personId: string;
+  personName: string;
+}) {
+  const [state, action, pending] = useActionState(purgePerson, EMPTY_PERSON);
+  const [typed, setTyped] = useState("");
+  const armed = typed.trim().toLowerCase() === personName.trim().toLowerCase();
+
+  return (
+    <div className="mt-6 space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+      <p className="text-sm font-semibold text-destructive">Delete permanently</p>
+      <p className="text-sm text-muted-foreground">
+        This destroys {personName}&apos;s record and everything that references it — their sign-in,
+        team memberships, registrations, messages, reactions, emergency contacts, uploaded ID and
+        photo. Rows that belong to other people, and the club&apos;s own records, keep their place
+        and simply stop naming them. <span className="font-medium">It cannot be undone.</span>
+      </p>
+      <p className="text-sm text-muted-foreground">
+        The audit trail survives, including a new entry recording this deletion and your reason for
+        it. The database refuses outright if this person is under a legal hold, is named by a
+        safeguarding concern, or is in a conversation under a legal hold.
+      </p>
+      <form action={action} className="space-y-3">
+        <input type="hidden" name="person_id" value={personId} />
+        <input type="hidden" name="person_name" value={personName} />
+        <div className="space-y-1">
+          <Label htmlFor="purge-reason">Why is this record being destroyed?</Label>
+          <Textarea id="purge-reason" name="reason" required rows={2} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="purge-confirm">
+            Type <span className="font-semibold">{personName}</span> to confirm
+          </Label>
+          <Input
+            id="purge-confirm"
+            name="confirm_name"
+            autoComplete="off"
+            value={typed}
+            onChange={(event) => setTyped(event.target.value)}
+          />
+        </div>
+        <Button
+          type="submit"
+          size="sm"
+          variant="destructive"
+          disabled={!armed || pending}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
+          {pending ? "Deleting…" : "Delete permanently"}
+        </Button>
+      </form>
+      <Feedback state={state} />
     </div>
   );
 }

@@ -13,6 +13,7 @@ import {
   legacyWindowToInstants,
 } from "@/lib/booking-time";
 import { bookingPeriod, FUNCTION_ROOM } from "@/lib/booking-types";
+import { upsertBookingContact } from "@/lib/booking-contacts";
 import { conflictOrMessage, slotHasConflict, SLOT_TAKEN_MESSAGE } from "@/lib/booking-conflict";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -154,11 +155,22 @@ export async function submitBooking(
 
   const amountPence = calcAmount(room, startTime, endTime);
 
+  // The room's own contacts book — NOT the members database. The snapshot
+  // columns below stay the record of who booked; this only groups their hires.
+  const contactId = await upsertBookingContact({
+    name: bookerName,
+    firstName: bookerFirstName,
+    lastName: bookerLastName,
+    email: bookerEmail,
+    phone: bookerPhone,
+  }).catch(() => null);
+
   const { data: booking, error: insertErr } = await admin
     .from("bookings")
     .insert({
       resource_id: roomId,
       ...bookingPeriod(startsAt, endsAt),
+      contact_id: contactId,
       booker_first_name: bookerFirstName,
       booker_last_name: bookerLastName,
       booker_name: bookerName,

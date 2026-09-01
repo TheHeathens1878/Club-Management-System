@@ -27,13 +27,13 @@ import { ManagePitchesPanel, type PitchAdminRow } from "./manage-panel";
 export default async function ManagePitchesPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
 
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("resources")
     .select(
-      "id,name,description,information,capacity,active,sort_order,default_pre_buffer_minutes,default_post_buffer_minutes,legacy_neon_pitch_id",
+      "id,name,description,address,information,capacity,active,sort_order,default_pre_buffer_minutes,default_post_buffer_minutes,legacy_neon_pitch_id",
     )
     .eq("type", "pitch")
     .order("sort_order")
@@ -59,6 +59,7 @@ export default async function ManagePitchesPage() {
     id: row.id,
     name: row.name,
     description: row.description,
+    address: row.address,
     information: row.information,
     capacity: row.capacity,
     active: row.active,
@@ -84,7 +85,7 @@ export default async function ManagePitchesPage() {
           </div>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         {error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Could not load the pitches: {error.message}
@@ -92,7 +93,7 @@ export default async function ManagePitchesPage() {
         )}
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">
               {pitches.length} {pitches.length === 1 ? "pitch" : "pitches"}
             </CardTitle>
@@ -103,7 +104,7 @@ export default async function ManagePitchesPage() {
               offered and leaves every booking already made against it exactly as it was.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             <ManagePitchesPanel pitches={pitches} />
           </CardContent>
         </Card>

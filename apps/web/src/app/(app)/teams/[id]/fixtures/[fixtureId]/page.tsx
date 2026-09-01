@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, ClipboardList, MapPin } from "lucide-react";
+import { ChevronLeft, ClipboardList, LayoutGrid, MapPin } from "lucide-react";
 
 import type { Database } from "@club/db";
 
@@ -17,6 +17,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fixtureStatusVariant } from "../../fixtures-shared";
 import { googleMapsUrl } from "../../../../events/shared";
 import { FixtureAvailabilityPanel, type FixtureSubject } from "./availability-panel";
+import { DeleteFixtureCard } from "./delete-fixture-card";
 
 type AvailabilityStatus = Database["public"]["Enums"]["availability_status"];
 
@@ -46,7 +47,7 @@ export default async function FixtureAttendancePage({
   const { data: fixture } = await supabase
     .from("fixtures")
     .select(
-      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name)",
+      "id,team_id,kickoff_at,is_home,opponent,competition,status,venue_text,booking_id,mirror_fixture_id,no_longer_published_at,source,seasons(name),teams:team_id(name),resources!fixtures_venue_resource_id_fkey(name,address)",
     )
     .eq("id", fixtureId)
     .eq("team_id", teamId)
@@ -62,6 +63,27 @@ export default async function FixtureAttendancePage({
   ]);
   const eventId = eventResult.data?.id ?? null;
   const canManage = staffResult.data === true || admin;
+
+  // What deleting this fixture would destroy with it. Offered to the team's
+  // staff as well as to administrators (Adam, 2026-08-27), so the counts are
+  // paid for by whoever can manage the team — not by every parent who opens a
+  // fixture.
+  const deleteCounts = canManage
+    ? await (async () => {
+        const [availability, lineups, playerStats, events] = await Promise.all([
+          supabase.from("availability").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+          supabase.from("fixture_lineups").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+          supabase.from("fixture_player_stats").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+          supabase.from("events").select("id", { count: "exact", head: true }).eq("fixture_id", fixtureId),
+        ]);
+        return {
+          availability: availability.count ?? 0,
+          lineups: lineups.count ?? 0,
+          playerStats: playerStats.count ?? 0,
+          events: events.count ?? 0,
+        };
+      })()
+    : null;
 
   // Who the caller may answer for: themselves and their children — kept to
   // those with a live membership on this team, the same fact the write guard
@@ -89,6 +111,12 @@ export default async function FixtureAttendancePage({
   const playerIds = memberships
     .filter((row) => row.role === "player")
     .map((row) => row.person_id);
+  // The organisers — coach, assistant, manager — answer too, and the staff
+  // view lists them FIRST (Adam, 2026-08-25: "it should show organisers and
+  // then players below"). They never count towards the headcount.
+  const staffIds = memberships
+    .filter((row) => row.role !== "player")
+    .map((row) => row.person_id);
 
   const { data: availabilityRows } = await supabase
     .from("availability")
@@ -101,7 +129,9 @@ export default async function FixtureAttendancePage({
     ]),
   );
 
-  const peopleIds = Array.from(new Set([...eligible.map((c) => c.personId), ...playerIds]));
+  const peopleIds = Array.from(
+    new Set([...eligible.map((c) => c.personId), ...staffIds, ...playerIds]),
+  );
   const [names, minorFlags] = await Promise.all([
     resolveNames(peopleIds),
     Promise.all(
@@ -129,6 +159,12 @@ export default async function FixtureAttendancePage({
 
   const household = eligible.map((c) => toSubject(c.personId, c.isSelf, c.relationship));
   const householdIds = new Set(household.map((s) => s.personId));
+  const organisers = canManage
+    ? staffIds
+        .filter((pid) => !householdIds.has(pid))
+        .map((pid) => toSubject(pid, pid === personId, null))
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : [];
   const squad = canManage
     ? playerIds
         .filter((pid) => !householdIds.has(pid))
@@ -151,26 +187,55 @@ export default async function FixtureAttendancePage({
   const title = fixture.is_home
     ? `${teamName} v ${fixture.opponent}`
     : `${fixture.opponent} v ${teamName}`;
-  const pitchName = (fixture.resources as { name: string } | null)?.name ?? null;
+  const venueResource = fixture.resources as { name: string; address: string | null } | null;
+  const pitchName = venueResource?.name ?? null;
+  const pitchAddress = venueResource?.address ?? null;
+
+  const whereLine = `${formatBookingDateShort(local.date)} · ${local.time} · ${
+    fixture.is_home ? (pitchName ?? "Home") : (fixture.venue_text ?? "Away")
+  }`;
 
   return (
     <>
-      <PageHeader
-        title={title}
-        subtitle={`${formatBookingDateShort(local.date)} · ${local.time} · ${
-          fixture.is_home ? (pitchName ?? "Home") : (fixture.venue_text ?? "Away")
-        }`}
-        action={
+      <div className="hidden lg:block">
+        <PageHeader
+          title={title}
+          subtitle={whereLine}
+          action={
+            <Link
+              href={`/teams/${teamId}?tab=matchday`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              <ChevronLeft className="h-4 w-4" /> Back to fixtures
+            </Link>
+          }
+        />
+      </div>
+
+      {/* The phone's band (mobile design, "Availability" artboard): back, the
+          kick-off as an eyebrow, and what the screen is for. */}
+      <div className="theme-ink bg-background px-4 pb-4 pt-3 text-foreground lg:hidden">
+        <div className="flex items-center gap-2">
           <Link
             href={`/teams/${teamId}?tab=matchday`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            aria-label="Back to fixtures"
+            className="-ml-2 flex h-11 w-9 shrink-0 items-center justify-center text-accent"
           >
-            <ChevronLeft className="h-4 w-4" /> Back to fixtures
+            <ChevronLeft className="h-[22px] w-[22px]" />
           </Link>
-        }
-      />
+          <div className="min-w-0 flex-1">
+            <p className="font-display truncate text-[10.5px] uppercase tracking-[0.16em] text-foreground/55">
+              {whereLine}
+            </p>
+            <h1 className="font-display mt-1 truncate text-[19px] font-semibold uppercase leading-none tracking-wide">
+              Availability
+            </h1>
+            <p className="mt-1.5 truncate text-[12px] text-foreground/60">{title}</p>
+          </div>
+        </div>
+      </div>
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={fixtureStatusVariant(fixture.status)} className="capitalize">
             {fixture.status}
@@ -185,8 +250,10 @@ export default async function FixtureAttendancePage({
           {(pitchName || fixture.venue_text) && (
             <a
               href={googleMapsUrl(
+                // A home match pins the venue's street address (Manage
+                // venues) when recorded — the pitch name is the fallback.
                 fixture.is_home
-                  ? (pitchName ?? fixture.venue_text ?? "")
+                  ? (pitchAddress ?? pitchName ?? fixture.venue_text ?? "")
                   : (fixture.venue_text ?? ""),
               )}
               target="_blank"
@@ -204,10 +271,23 @@ export default async function FixtureAttendancePage({
               Event &amp; RSVP
             </Link>
           )}
+          <Link
+            href={`/teams/${teamId}/fixtures/${fixture.id}/lineup`}
+            className="inline-flex items-center gap-1 text-sm font-medium text-primary underline-offset-4 hover:underline"
+          >
+            <LayoutGrid className="h-4 w-4" /> {canManage ? "Pick the lineup" : "Lineup"}
+          </Link>
         </div>
 
-        <Card>
+        {/* The artboard's accent card: on a phone this is the one thing the
+            screen is asking for, so it wears the crest rim. */}
+        <Card className="border-accent/30 lg:border-border">
           <CardHeader>
+            {household.length > 0 && (
+              <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-primary lg:hidden">
+                Your reply is needed
+              </p>
+            )}
             <CardTitle className="text-base">Your household</CardTitle>
             <p className="text-sm text-muted-foreground">
               Who is coming to this {fixture.is_home ? "match" : "away match"}? Answer for yourself
@@ -233,15 +313,71 @@ export default async function FixtureAttendancePage({
                 when the answer arrives some other way (a message, a call at the school gate).
               </p>
             </CardHeader>
-            <CardContent>
-              <FixtureAvailabilityPanel
-                fixtureId={fixture.id}
-                teamId={teamId}
-                subjects={squad}
-                emptyText="No other players in the squad yet."
-              />
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase text-muted-foreground">Organisers</p>
+                <FixtureAvailabilityPanel
+                  fixtureId={fixture.id}
+                  teamId={teamId}
+                  subjects={organisers}
+                  emptyText="No other coaches or managers on this team."
+                />
+              </div>
+              <div className="space-y-2">
+                <p className="text-xs font-medium uppercase text-muted-foreground">Players</p>
+                <FixtureAvailabilityPanel
+                  fixtureId={fixture.id}
+                  teamId={teamId}
+                  subjects={squad}
+                  emptyText="No other players in the squad yet."
+                />
+              </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Full-Time has stopped publishing this game and the importer would
+            not remove it on its own, because something is built on it. Said
+            to anyone who can manage the team, not only to administrators —
+            the coach is the person who knows whether it is still being
+            played (Adam, 2026-08-26). */}
+        {canManage && fixture.no_longer_published_at && (
+          <Card className="border-warning/40">
+            <CardHeader className="p-4 lg:p-6">
+              <CardTitle className="text-base">Not in Full-Time any more</CardTitle>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 text-sm text-muted-foreground lg:p-6 lg:pt-0">
+              <p>
+                The league's fixture list stopped including this game on{" "}
+                {new Date(fixture.no_longer_published_at).toLocaleDateString("en-GB", {
+                  timeZone: "Europe/London",
+                  day: "numeric",
+                  month: "long",
+                })}
+                . It has been left alone because a pitch, a team sheet or match stats hang off it.
+              </p>
+              <p className="mt-2">
+                Either the league withdrew it, or it was re-issued under a new id and the
+                replacement has already imported — worth checking the team&apos;s fixture list for
+                another game in the same slot. If the club is still playing it, leave it; the note
+                goes as soon as Full-Time lists it again.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {canManage && deleteCounts && (
+          <DeleteFixtureCard
+            fixtureId={fixture.id}
+            teamId={teamId}
+            label={`${title} — ${whereLine}`}
+            hasPitch={!!fixture.booking_id}
+            isMirrored={!!fixture.mirror_fixture_id}
+            stillPublished={
+              fixture.source === "fulltime" && !fixture.no_longer_published_at
+            }
+            counts={deleteCounts}
+          />
         )}
 
         {canManage && fixture.booking_id && (

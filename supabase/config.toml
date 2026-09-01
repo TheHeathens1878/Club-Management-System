@@ -88,3 +88,6 @@ verify_jwt = true
 
 [functions.push-fanout]
 verify_jwt = false
+
+[functions.id-docs-purge]
+verify_jwt = true

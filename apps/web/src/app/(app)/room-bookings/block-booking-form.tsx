@@ -55,7 +55,7 @@ export function BlockBookingForm({ rooms }: { rooms: { id: string; name: string 
                 id="block_room_id"
                 name="room_id"
                 required
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                className="min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
               >
                 <option value="">Select a room…</option>
                 {rooms.map((r) => (
@@ -90,7 +90,7 @@ export function BlockBookingForm({ rooms }: { rooms: { id: string; name: string 
 
           {/* Recurrence */}
           <div className="border-t pt-3 space-y-3">
-            <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+            <label className="flex min-h-[44px] items-center gap-2 text-sm font-medium cursor-pointer lg:min-h-0">
               <input
                 type="checkbox"
                 name="recurring"
@@ -110,7 +110,7 @@ export function BlockBookingForm({ rooms }: { rooms: { id: string; name: string 
                       name="recurrence_freq"
                       value={freq}
                       onChange={(e) => setFreq(e.target.value)}
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                      className="min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
                     >
                       <option value="weekly">Weekly</option>
                       <option value="fortnightly">Fortnightly</option>
@@ -144,7 +144,7 @@ export function BlockBookingForm({ rooms }: { rooms: { id: string; name: string 
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-3">
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
               {saving && <Loader2 className="h-4 w-4 animate-spin" />}
               {saving ? "Saving…" : recurring ? "Create repeating blocks" : "Create block"}
             </Button>
@@ -152,6 +152,7 @@ export function BlockBookingForm({ rooms }: { rooms: { id: string; name: string 
               type="button"
               variant="outline"
               onClick={() => { setOpen(false); setError(null); setRecurring(false); }}
+              className="min-h-[44px] lg:min-h-0"
             >
               Cancel
             </Button>

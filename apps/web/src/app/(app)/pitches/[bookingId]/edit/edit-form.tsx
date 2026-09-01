@@ -88,11 +88,16 @@ export function EditBookingForm({
 
       <BookingFeedback state={state} />
 
-      <div className="flex items-center gap-2">
-        <Button type="submit" disabled={pending}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button type="submit" className="h-11 w-full sm:w-auto" disabled={pending}>
           {pending ? "Checking the pitch…" : "Save changes"}
         </Button>
-        <Link href="/pitches/mine" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+        <Link
+          href="/pitches/mine"
+          className={
+            buttonVariants({ variant: "ghost", size: "sm" }) + " h-11 w-full sm:h-9 sm:w-auto"
+          }
+        >
           Back to my bookings
         </Link>
       </div>

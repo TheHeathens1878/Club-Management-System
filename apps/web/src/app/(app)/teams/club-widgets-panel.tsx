@@ -151,7 +151,7 @@ export function ClubWidgetsPanel({
       <SnippetField
         id="club-fixtures"
         label="Club fixtures widget"
-        hint="Full-Time → the club → Add to your website → club fixtures. Fixtures for every team; no scores."
+        hint="Full-Time → the club → Add to your website → club fixtures. Fixtures for every team; no scores. Write each code's league name in front of it — “Timperley & District JFL: 885630049, SMGFL: 123456789” — and teams fed by that widget get their League filled in on the next import (blank League only; hand edits are never overwritten)."
         value={fixtures}
         onChange={setFixtures}
       />

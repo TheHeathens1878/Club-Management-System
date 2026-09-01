@@ -4,12 +4,34 @@ import { ChevronLeft, Clock } from "lucide-react";
 
 import type { Json } from "@club/db";
 
+import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { resolveNames, nameOf } from "@/lib/person";
+import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
+import { signPeoplePhotos, signPersonPhotoPath } from "@/lib/avatars";
+import { signIdentityDocumentPaths } from "@/lib/identity-docs";
+import {
+  currentMembership,
+  membershipKindHint,
+  membershipKindLabel,
+  membershipKindVariant,
+  membershipKindWord,
+  membershipPeopleSummary,
+  type PersonMembershipRow,
+} from "@/lib/membership-kind";
+import { isClubAdmin, resolveNames, nameOf } from "@/lib/person";
+import { idDocumentKindLabel } from "@/lib/registration-questions";
+import {
+  RegistrationDetailsBody,
+  registrationDetailsCaption,
+} from "@/components/registration-details";
+import {
+  loadLivePhotoConsents,
+  loadRegistrationDetails,
+} from "@/lib/registration-details-server";
+import { resolveUserNames, verifierName } from "@/lib/registration-verifiers";
 import {
   addressToFields,
   formatDate,
@@ -18,15 +40,23 @@ import {
   personLabel,
 } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
+import { FamilyTreeView } from "@/components/family-tree-view";
+import { parseFamilyTree, familyTreePersonIds, isFamilyTreeEmpty } from "@/lib/family-tree";
+import { formatCurrency } from "@/lib/utils";
 
+import { PersonTabs, personTabFrom } from "./person-tabs";
+
+import { IdVerifiedForm } from "../../registrations/decision-forms";
 import { PersonForm } from "../person-form";
+import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
+
 import {
+  EmergencyContactsPanel,
   GuardianshipsPanel,
-  PersonCertificationsPanel,
+  PurgePanel,
   RetirePanel,
   RolesPanel,
   type GuardianshipRow,
-  type PersonCertificationRow,
   type RoleRow,
 } from "./panels";
 
@@ -38,6 +68,14 @@ import {
  * guardian, and nobody else — the read simply returns nothing and the section
  * is not rendered. That is the intended behaviour: the page shows what the
  * caller is entitled to see, and works out nothing for itself.
+ *
+ * THE CLUB MEMBERSHIP CARD (Adam, 2026-08-26) is the same rule: it reads
+ * `person_memberships`, a security_invoker view over `memberships` and
+ * `membership_people`, so it renders only for a reader those policies already
+ * admit (the lead contact, club_admin, safeguarding_lead). Individual or
+ * Family is the DATABASE's answer, derived from the number of PLAYERS on the
+ * membership in that season, and the card lists the other people on it so an
+ * administrator can click straight through to the rest of the family.
  */
 
 const TEAM_ROLE_LABELS: Record<string, string> = {
@@ -52,20 +90,6 @@ function payloadField(payload: Json | null, key: string): string | null {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
   const value = (payload as Record<string, Json | undefined>)[key];
   return typeof value === "string" ? value : null;
-}
-
-/** The registration answers, flattened just enough to render. */
-function formEntries(form: Json | null): { key: string; value: string }[] {
-  if (!form || typeof form !== "object" || Array.isArray(form)) return [];
-  return Object.entries(form as Record<string, Json>).map(([key, value]) => ({
-    key: key.replace(/_/g, " "),
-    value:
-      typeof value === "string"
-        ? value
-        : value === null || value === undefined
-          ? "—"
-          : JSON.stringify(value),
-  }));
 }
 
 /**
@@ -86,14 +110,15 @@ export default async function PersonPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
+  searchParams: Promise<{ from?: string; tab?: string | string[] }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { id } = await params;
-  const { from } = await searchParams;
+  const { from, tab: rawTab } = await searchParams;
+  const tab = personTabFrom(rawTab);
   const supabase = await createClient();
 
   const { data: person } = await supabase.from("people").select("*").eq("id", id).maybeSingle();
@@ -103,7 +128,6 @@ export default async function PersonPage({
     { data: roleRows },
     { data: guardianshipRows },
     { data: membershipRows },
-    { data: certificationRows },
     { data: registration },
     { data: pendingRows },
     { data: profileRow },
@@ -125,13 +149,8 @@ export default async function PersonPage({
       .eq("person_id", id)
       .order("joined_at", { ascending: false }),
     supabase
-      .from("certifications")
-      .select("id,type,reference,issued_on,expires_on,verified_at,revoked_at")
-      .eq("person_id", id)
-      .order("expires_on", { nullsFirst: false }),
-    supabase
       .from("registrations")
-      .select("id,status,form,submitted_at,seasons(name)")
+      .select("id,status,submitted_at,seasons(name)")
       .eq("person_id", id)
       .order("submitted_at", { ascending: false })
       .limit(1)
@@ -171,19 +190,117 @@ export default async function PersonPage({
     };
   });
 
-  const certifications: PersonCertificationRow[] = (certificationRows ?? []).map((row) => ({
-    id: row.id,
-    type: row.type,
-    reference: row.reference,
-    issuedOn: row.issued_on,
-    expiresOn: row.expires_on,
-    verifiedAt: row.verified_at,
-    revokedAt: row.revoked_at,
-  }));
-
   const pending = pendingRows ?? [];
   const name = personLabel(person);
-  const registrationAnswers = formEntries(registration?.form ?? null);
+
+  // The club membership this person is tagged with, and the rest of the family
+  // on it. Two small reads of `person_memberships`; both carry the view's
+  // security_invoker RLS, so a reader who may not see the membership sees no
+  // card at all rather than a card with the names missing.
+  const { data: membershipTagRows } = await supabase
+    .from("person_memberships")
+    .select(
+      "membership_id,kind,season_id,season_name,season_is_current,primary_person_id,is_primary,created_at",
+    )
+    .eq("person_id", id);
+  const clubMembership = currentMembership((membershipTagRows ?? []) as PersonMembershipRow[]);
+  const { data: familyRows } = clubMembership?.membership_id
+    ? await supabase
+        .from("person_memberships")
+        .select("person_id,is_primary")
+        .eq("membership_id", clubMembership.membership_id)
+    : { data: [] as { person_id: string | null; is_primary: boolean | null }[] };
+  const familyOthers = (familyRows ?? []).filter(
+    (row): row is { person_id: string; is_primary: boolean | null } =>
+      !!row.person_id && row.person_id !== id,
+  );
+  const familyNames = await resolveNames(familyOthers.map((row) => row.person_id));
+
+  // The Membership and payments tab. Only loaded when it is the tab being
+  // shown — a record opened to read a phone number should not pay for a family
+  // tree and two money reads.
+  //
+  // `family_tree_for()` (20260827130000) is the person-shaped twin of
+  // `my_family_tree()`: asking the caller-scoped one here would draw the
+  // ADMINISTRATOR'S own family under somebody else's name. It refuses anyone
+  // who is not club_admin or safeguarding_lead, which is the readership this
+  // page already requires.
+  const membershipTab = tab === "membership";
+  const { data: treeData, error: treeError } = membershipTab
+    ? await supabase.rpc("family_tree_for", { p_person_id: id })
+    : { data: null, error: null };
+  const familyTree = parseFamilyTree(treeData ?? null);
+
+  const treePhotoIds = membershipTab ? familyTreePersonIds(familyTree) : [];
+  const { data: treePhotoRows } =
+    treePhotoIds.length > 0
+      ? await supabase.from("people").select("id,photo_path").in("id", treePhotoIds)
+      : { data: [] as { id: string; photo_path: string | null }[] };
+  const treePhotoUrls = await signPeoplePhotos(treePhotoRows ?? []);
+
+  // Subscriptions this person is the SUBJECT of, and the ones they PAY for —
+  // a parent's record should show the bills they carry for their children.
+  const { data: subscriptionRows } = membershipTab
+    ? await supabase
+        .from("subscriptions")
+        .select(
+          "id,person_id,payer_person_id,status,amount_due_pence,started_at,ended_at,subscription_plans(name,billing,amount_pence)",
+        )
+        .or(`person_id.eq.${id},payer_person_id.eq.${id}`)
+        .order("started_at", { ascending: false })
+    : { data: [] as never[] };
+  const subscriptions = subscriptionRows ?? [];
+
+  const { data: paymentRows } =
+    membershipTab && subscriptions.length > 0
+      ? await supabase
+          .from("payments")
+          .select("id,subscription_id,amount_pence,paid_at,method,kind,refunded_pence")
+          .in(
+            "subscription_id",
+            subscriptions.map((row) => row.id),
+          )
+          .order("paid_at", { ascending: false })
+      : { data: [] as never[] };
+  const payments = paymentRows ?? [];
+
+  const subjectNames = await resolveNames([
+    ...subscriptions.map((row) => row.person_id),
+    ...subscriptions.map((row) => row.payer_person_id),
+  ].filter((value): value is string => !!value));
+
+  // What the latest registration said about this person — the read-only copy
+  // on the contact record (20260825260000). It carries the `registrations`
+  // read policies, so a reader who is not entitled to the form gets nothing
+  // back and the card is not rendered. The SG-5 photo consents beside it are
+  // `guardian_consents` rows, read the same way.
+  const [snapshots, photoConsents, { data: questionRows }, verifierNames] = await Promise.all([
+    loadRegistrationDetails([id]),
+    isMinorDob(person.dob) ? loadLivePhotoConsents([id]) : Promise.resolve(new Map()),
+    supabase.from("registration_questions").select("qkey,label").order("position"),
+    resolveUserNames([person.id_verified_by]),
+  ]);
+  const snapshot = snapshots.get(id) ?? null;
+  const questionLabels = new Map((questionRows ?? []).map((row) => [row.qkey, row.label] as const));
+
+  // The registration photo, and any identity document the club holds. The
+  // document ROWS come back to anyone the policy admits; the FILES are signed
+  // only for a club administrator, which is the storage policy mirrored.
+  const admin = await isClubAdmin();
+  // Emergency contacts (Adam, 2026-08-25): on the person, read under
+  // `emergency_contacts_admin_read` — club_admin and safeguarding_lead.
+  const emergencyContacts = (await loadEmergencyContacts([id])).get(id) ?? [];
+  const photoUrl = await signPersonPhotoPath(person.photo_path);
+  const { data: documentRows } = await supabase
+    .from("identity_documents")
+    .select("id,kind,storage_path,created_at,purge_after,purged_at")
+    .eq("person_id", id)
+    .is("purged_at", null)
+    .order("created_at", { ascending: false });
+  const documents = documentRows ?? [];
+  const documentUrls = admin
+    ? await signIdentityDocumentPaths(documents.map((row) => row.storage_path))
+    : new Map<string, string>();
 
   return (
     <>
@@ -193,14 +310,17 @@ export default async function PersonPage({
         action={
           <Link
             href={backHref(from)}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
           >
             <ChevronLeft className="h-4 w-4" /> Back to people
           </Link>
         }
       />
-      <div className="space-y-6 p-6">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="space-y-6 p-4 lg:p-6">
+        <div className="flex flex-wrap items-center gap-3">
+          <Avatar name={name} photoUrl={photoUrl} size="lg" />
           {person.deleted_at && <Badge variant="destructive">Retired</Badge>}
           {isMinorDob(person.dob) && (
             <Badge variant="warning">{person.dob ? "Minor" : "No date of birth — treated as a minor"}</Badge>
@@ -211,8 +331,17 @@ export default async function PersonPage({
           ) : (
             <Badge variant="muted">No login linked</Badge>
           )}
+          {clubMembership?.kind && (
+            <Badge variant={membershipKindVariant(clubMembership.kind)}>
+              {membershipKindWord(clubMembership.kind)}
+            </Badge>
+          )}
         </div>
 
+        <PersonTabs personId={person.id} active={tab} from={from} />
+
+        {tab === "record" && (
+        <>
         {pending.length > 0 && (
           <Card className="border-amber-200">
             <CardHeader>
@@ -266,6 +395,25 @@ export default async function PersonPage({
                 address: addressToFields(person.address),
                 notes: person.notes ?? "",
               }}
+            />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Emergency contacts</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Up to two, kept on the person&apos;s record rather than on a registration form.
+              Only a club administrator can change them here; the person and their guardians
+              change them from their own screens.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <EmergencyContactsPanel
+              personId={person.id}
+              personName={name}
+              contacts={emergencyContacts}
+              canEdit={admin}
             />
           </CardContent>
         </Card>
@@ -357,42 +505,84 @@ export default async function PersonPage({
 
         <Card>
           <CardHeader>
-            <CardTitle>Certifications</CardTitle>
+            <CardTitle>Proof of identity</CardTitle>
             <p className="text-sm text-muted-foreground">
-              DBS checks, safeguarding and coaching qualifications. A certification counts towards
-              SG-6 only once it has been verified, and it is revoked, never deleted.
+              A passport or birth certificate is asked for at registration unless a club
+              administrator has recorded that the club has already seen one. Documents are held for
+              three years and then destroyed automatically; the record that one was held survives.
             </p>
           </CardHeader>
-          <CardContent>
-            <PersonCertificationsPanel personId={person.id} certifications={certifications} />
+          <CardContent className="space-y-3">
+            {documents.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nothing on file.</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {documents.map((document) => {
+                  const url = document.storage_path
+                    ? documentUrls.get(document.storage_path)
+                    : undefined;
+                  return (
+                    <li key={document.id} className="flex flex-wrap items-center gap-2">
+                      {url ? (
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-primary hover:underline"
+                        >
+                          {idDocumentKindLabel(document.kind)}
+                        </a>
+                      ) : (
+                        <span className="font-medium">{idDocumentKindLabel(document.kind)}</span>
+                      )}
+                      <span className="text-xs text-muted-foreground">
+                        uploaded {formatStamp(document.created_at)} · destroyed {document.purge_after}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {admin ? (
+              <IdVerifiedForm
+                personId={person.id}
+                verified={person.id_verified}
+                verifiedAt={person.id_verified_at}
+                verifiedByName={
+                  person.id_verified ? verifierName(verifierNames, person.id_verified_by) : null
+                }
+              />
+            ) : (
+              person.id_verified && (
+                <p className="text-sm text-emerald-700">
+                  ID seen and verified by {verifierName(verifierNames, person.id_verified_by)}
+                  {person.id_verified_at
+                    ? ` · ${formatStamp(person.id_verified_at)}`
+                    : ""}
+                </p>
+              )
+            )}
           </CardContent>
         </Card>
 
-        {registration && (
+        {snapshot && (
           <Card>
             <CardHeader>
-              <CardTitle>Latest registration</CardTitle>
+              <CardTitle>From the latest registration</CardTitle>
               <p className="text-sm text-muted-foreground">
-                {registration.seasons?.name ? `${registration.seasons.name} · ` : ""}
-                {registration.status} · submitted {formatStamp(registration.submitted_at)}. Read-only
-                here: the answers are edited where they were given.
+                {registrationDetailsCaption(snapshot.seasonName, snapshot.updatedAt)}
+                {registration?.status ? ` · ${registration.status}` : ""}. Read-only here: each new
+                registration overwrites these answers, and they are changed by registering again.
               </p>
             </CardHeader>
             <CardContent>
-              {registrationAnswers.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No answers were captured, or your role does not include them.
-                </p>
-              ) : (
-                <dl className="grid gap-3 sm:grid-cols-2">
-                  {registrationAnswers.map((entry) => (
-                    <div key={entry.key}>
-                      <dt className="text-xs uppercase text-muted-foreground">{entry.key}</dt>
-                      <dd className="text-sm">{entry.value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              )}
+              <RegistrationDetailsBody
+                details={snapshot.details}
+                photoConsents={
+                  isMinorDob(person.dob) ? (photoConsents.get(id) ?? new Set<string>()) : undefined
+                }
+                questionLabels={questionLabels}
+              />
             </CardContent>
           </Card>
         )}
@@ -411,8 +601,187 @@ export default async function PersonPage({
               personName={name}
               deletedAt={person.deleted_at}
             />
+            {/* Adam, the club owner and sole super user, asked for a real
+                delete for GDPR erasure and for test accounts. Nobody else is
+                offered it, and `purge_person()` would refuse them anyway. */}
+            {isSuperUser(session.profile?.role) && (
+              <PurgePanel personId={person.id} personName={name} />
+            )}
           </CardContent>
         </Card>
+        </>
+        )}
+
+        {tab === "membership" && (
+          <>
+        <Card>
+          <CardHeader>
+            <CardTitle>Club membership</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Individual or family is worked out by the database from the number of{" "}
+              <strong>players</strong> on the membership in that season — a live squad place, or a
+              registration still pending or approved. Two or more players is a family; a parent who
+              is on the record as the lead contact is not a player.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {!clubMembership || !clubMembership.kind ? (
+              <p className="text-sm text-muted-foreground">
+                No club membership recorded for this person.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant={membershipKindVariant(clubMembership.kind)}>
+                    {membershipKindLabel(clubMembership.kind)}
+                  </Badge>
+                  <span className="text-sm text-muted-foreground">
+                    {clubMembership.season_name ?? "Season unknown"}
+                    {clubMembership.season_is_current ? " · current season" : ""}
+                    {clubMembership.is_primary ? " · lead contact" : ""}
+                  </span>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {membershipKindHint(clubMembership.kind)}{" "}
+                  {membershipPeopleSummary(familyOthers.length)}
+                </p>
+                {familyOthers.length > 0 && (
+                  <ul className="space-y-1 text-sm">
+                    {familyOthers.map((row) => (
+                      <li key={row.person_id} className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/people/${row.person_id}`}
+                          className="font-medium underline underline-offset-2"
+                        >
+                          {nameOf(familyNames, row.person_id)}
+                        </Link>
+                        <Badge variant={row.is_primary ? "default" : "muted"}>
+                          {row.is_primary ? "Lead contact" : "On the membership"}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+            {/* Adam, 2026-08-26: "The family tree should appear in here."
+                Drawn by the same component /family-linking uses, from
+                family_tree_for() rather than my_family_tree() — the
+                caller-scoped one would draw the ADMINISTRATOR'S own family
+                under this person's name. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Family</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  {name} at the top, the children the club has them down as a guardian for, each of
+                  those children&apos;s other guardians, and the adults connected to their account.
+                  Ages are shown as an age group rather than a date of birth.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {treeError ? (
+                  <p className="text-sm text-destructive">{treeError.message}</p>
+                ) : isFamilyTreeEmpty(familyTree) ? (
+                  <p className="text-sm text-muted-foreground">
+                    The club has nobody linked to {name}.
+                  </p>
+                ) : (
+                  <FamilyTreeView
+                    tree={familyTree}
+                    photoUrls={treePhotoUrls}
+                    hrefFor={(node) =>
+                      node.personId === person.id ? null : `/people/${node.personId}`
+                    }
+                  />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Subscriptions</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  What {name} is signed up to pay, and anything they pay on somebody else&apos;s
+                  behalf.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {subscriptions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No subscription on record for {name}.
+                  </p>
+                ) : (
+                  <ul className="divide-y">
+                    {subscriptions.map((row) => {
+                      const plan = row.subscription_plans as {
+                        name: string;
+                        billing: string | null;
+                        amount_pence: number | null;
+                      } | null;
+                      const forSomeoneElse = row.person_id !== person.id;
+                      return (
+                        <li key={row.id} className="flex flex-wrap items-baseline gap-2 py-2 text-sm">
+                          <span className="font-medium">{plan?.name ?? "Subscription"}</span>
+                          <Badge variant={row.ended_at ? "muted" : "success"}>
+                            {row.ended_at ? "Ended" : (row.status ?? "Active")}
+                          </Badge>
+                          {forSomeoneElse && row.person_id && (
+                            <span className="text-xs text-muted-foreground">
+                              for {nameOf(subjectNames, row.person_id)}
+                            </span>
+                          )}
+                          <span className="ml-auto tabular-nums">
+                            {row.amount_due_pence != null
+                              ? formatCurrency(row.amount_due_pence)
+                              : "—"}
+                            {plan?.billing ? ` · ${plan.billing}` : ""}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Payments</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  Against the subscriptions above. Room hire is paid on the booking, not here.
+                </p>
+              </CardHeader>
+              <CardContent>
+                {payments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Nothing paid yet.</p>
+                ) : (
+                  <ul className="divide-y">
+                    {payments.map((row) => (
+                      <li key={row.id} className="flex flex-wrap items-baseline gap-2 py-2 text-sm">
+                        <span className="tabular-nums">{formatCurrency(row.amount_pence)}</span>
+                        {row.refunded_pence ? (
+                          <Badge variant="warning">
+                            {formatCurrency(row.refunded_pence)} refunded
+                          </Badge>
+                        ) : null}
+                        <span className="text-xs text-muted-foreground">
+                          {row.method ?? "—"}
+                          {row.kind ? ` · ${row.kind}` : ""}
+                        </span>
+                        <span className="ml-auto text-xs text-muted-foreground">
+                          {row.paid_at ? formatStamp(row.paid_at) : "Not paid"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </>
+        )}
       </div>
     </>
   );

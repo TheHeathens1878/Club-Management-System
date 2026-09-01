@@ -4,7 +4,8 @@ import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { PostForm, type TeamOption } from "./post-form";
@@ -20,7 +21,13 @@ export const metadata = { title: "Post to the lobby" };
 
 export default async function NewLobbyPostPage() {
   const capabilities = await getCapabilities();
-  if (!capabilities.isClubAdmin && !capabilities.isCommittee && !capabilities.isTeamStaff) {
+  // Adam, 2026-08-25: only admins post to the club noticeboard. Team staff
+  // post to their team's lobby from the team page, not from here.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  if (
+    (!capabilities.isClubAdmin && !capabilities.isCommittee) ||
+    (view !== "admin" && view !== null)
+  ) {
     redirect("/lobby");
   }
 
@@ -40,12 +47,17 @@ export default async function NewLobbyPostPage() {
         title="Post to the lobby"
         subtitle="The whole club, every team's board, or just the teams it concerns"
         action={
-          <Link href="/lobby" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/lobby"
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
+          >
             <ArrowLeft className="h-4 w-4" /> Club lobby
           </Link>
         }
       />
-      <div className="p-6">
+      <div className="p-4 lg:p-6">
         <PostForm teams={teams} ageGroups={ageGroups} isAdmin={capabilities.isClubAdmin} />
       </div>
     </>

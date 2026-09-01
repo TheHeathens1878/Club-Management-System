@@ -37,7 +37,7 @@ import { createClient } from "@/lib/supabase/server";
  * only a literal carries that type.
  */
 const BOOKING_SELECT =
-  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,internal_notes,team_id,booker_name,booker_email,recurrence_group_id,resources!inner(name,type),teams!bookings_team_id_fkey(name)";
+  "id,resource_id,kind,status,starts_at,ends_at,occasion,notes,internal_notes,team_id,fixture_id,opponent_team_id,booker_name,booker_email,recurrence_group_id,resources!inner(name,type),teams!bookings_team_id_fkey(name)";
 
 type BookingSelectRow = {
   id: string;
@@ -50,6 +50,8 @@ type BookingSelectRow = {
   notes: string | null;
   internal_notes: string | null;
   team_id: string | null;
+  fixture_id: string | null;
+  opponent_team_id: string | null;
   booker_name: string;
   booker_email: string;
   recurrence_group_id: string | null;
@@ -75,6 +77,8 @@ function toItem(row: BookingSelectRow): PitchBookingItem {
     internalNotes: row.internal_notes,
     teamId: row.team_id,
     teamName: row.teams?.name ?? null,
+    fixtureId: row.fixture_id,
+    opponentTeamId: row.opponent_team_id,
     bookerName: row.booker_name,
     bookerEmail: row.booker_email,
     recurrenceGroupId: row.recurrence_group_id,
@@ -172,6 +176,26 @@ export async function isAnyTeamStaff(): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
+/**
+ * Every active team, for the "internal opposition" picker on the booking form.
+ *
+ * Deliberately not `loadPitchBookingAccess().teams`: that answers "which teams
+ * may this person BOOK for", and the club a coach is playing against is a
+ * different question — an U14 coach arranging a friendly against the U18s does
+ * not staff the U18s. `teams_read` is `using (true)` for any signed-in member,
+ * and a team's name and age group are not private, so this is the caller's own
+ * read like everything else in this module.
+ */
+export async function loadActiveTeams(): Promise<TeamOption[]> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("teams")
+    .select("id,name,age_group,home_resource_id")
+    .eq("active", true)
+    .order("name");
+  return (data ?? []).map(toTeamOption);
+}
+
 /** Every bookable pitch. `resources_public_read` covers the active ones. */
 export async function loadPitches(): Promise<PitchOption[]> {
   const supabase = await createClient();
@@ -202,6 +226,12 @@ export type PitchBookingQuery = {
   teamIds?: string[];
   statuses?: BookingStatus[];
   kinds?: BookingKind[];
+  /**
+   * Leave out the allocator's own fixture slots (`fixture_id is not null`).
+   * A coach's requested match is a `fixture`-kind booking with no link, so the
+   * lists that mean "what this team has asked for" need to tell the two apart.
+   */
+  excludeAllocated?: boolean;
   /** Only bookings that have not finished yet. Defaults to true. */
   upcomingOnly?: boolean;
   limit?: number;
@@ -226,6 +256,7 @@ export async function loadPitchBookings(
   }
   if (options.statuses && options.statuses.length > 0) query = query.in("status", options.statuses);
   if (options.kinds && options.kinds.length > 0) query = query.in("kind", options.kinds);
+  if (options.excludeAllocated) query = query.is("fixture_id", null);
   if (options.upcomingOnly !== false) query = query.gte("ends_at", new Date().toISOString());
 
   query = query.order("starts_at");
@@ -321,6 +352,11 @@ export async function loadTeamPitchBookings(
         internalNotes: null,
         teamId: row.team_id,
         teamName: row.team_name,
+        // `pitch_calendar()` returns neither the fixture link nor the
+        // opposition team, and its rows are read-only here anyway —
+        // `calendarOnly` is what gates the controls.
+        fixtureId: null,
+        opponentTeamId: null,
         bookerName: null,
         bookerEmail: null,
         recurrenceGroupId: null,

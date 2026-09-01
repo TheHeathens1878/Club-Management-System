@@ -72,7 +72,7 @@ export function EditBookingForm({ bookingId, rooms, initial }: Props) {
         <select
           value={fields.resource_id}
           onChange={(e) => set("resource_id", e.target.value)}
-          className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-10 min-h-[44px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:min-h-0"
         >
           {rooms.map((r) => (
             <option key={r.id} value={r.id}>{r.name}</option>
@@ -135,7 +135,7 @@ export function EditBookingForm({ bookingId, rooms, initial }: Props) {
       {error && <p className="text-sm text-destructive">{error}</p>}
       {saved && <p className="text-sm text-green-600">Saved successfully.</p>}
 
-      <Button type="submit" disabled={isPending} size="sm">
+      <Button type="submit" disabled={isPending} size="sm" className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
         {isPending ? "Saving…" : "Save changes"}
       </Button>
     </form>

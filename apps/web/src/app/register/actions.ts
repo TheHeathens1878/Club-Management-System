@@ -19,10 +19,18 @@
 import { redirect } from "next/navigation";
 
 import { createClient } from "@/lib/supabase/server";
+import { getSiteUrl } from "@/lib/utils";
 
 export type RegisterState = {
   error?: string;
   notice?: string;
+  /**
+   * Set when the account exists but the address has to be confirmed before
+   * they can sign in. The form replaces itself with a "check your email"
+   * screen (Adam, 2026-08-25: it needs to be impossible to miss), and the
+   * address is echoed back so it can say WHICH inbox to look in.
+   */
+  confirmEmail?: string;
   values?: { fullName: string; email: string; dob: string; phone: string };
 };
 
@@ -63,10 +71,18 @@ export async function registerAccount(
   }
 
   const supabase = await createClient();
+  // Adam, 2026-08-25: the confirmation link went to the old Vercel host. The
+  // project's Site URL is the club's domain now, and the sign-up names the
+  // callback itself as well, so the link cannot drift with a dashboard
+  // setting. `getSiteUrl()` throws when NEXT_PUBLIC_SITE_URL is unset, which
+  // is the right failure — a confirmation link to nowhere is worse.
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { full_name: fullName, dob, phone: phone || null } },
+    options: {
+      data: { full_name: fullName, dob, phone: phone || null },
+      emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+    },
   });
 
   if (error) return { error: signUpErrorMessage(error.message), values };
@@ -76,6 +92,7 @@ export async function registerAccount(
   // them to a page they cannot load.
   if (!data.session) {
     return {
+      confirmEmail: email,
       notice:
         "Your account has been created. Check your email for a confirmation link, then sign in.",
     };

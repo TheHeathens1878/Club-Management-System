@@ -20,9 +20,10 @@ const KNOWN_AGE_GROUPS = Object.keys(AGE_GROUP_TO_SCHOOL_YEAR).sort((a, b) =>
 );
 
 /**
- * Open, close and advertise age groups. Club administrators only — the RLS
- * policy refuses anyone else, and the page does not render this at all unless
- * `is_club_admin()` said yes.
+ * Open, close and advertise age groups. Club administrators only — the page
+ * does not render this at all unless `is_club_admin()` said yes, and the one
+ * write path, `set_waiting_list_age_group()`, refuses anyone else with a
+ * readable 42501 (a coach cannot set these: Adam, 2026-08-25).
  *
  * "Open" is what the public form checks: a group that is not open is not
  * offered and `submit_waiting_list_entry()` refuses it outright.
@@ -82,7 +83,13 @@ export function AgeGroupsPanel({ settings }: { settings: AgeGroupSetting[] }) {
                   <td className="py-2">
                     <form id={`ag-${setting.age_group}`} action={action}>
                       <input type="hidden" name="age_group" value={setting.age_group} />
-                      <Button type="submit" size="sm" variant="outline" disabled={pending}>
+                      <Button
+                        type="submit"
+                        size="sm"
+                        variant="outline"
+                        disabled={pending}
+                        className="min-h-[44px] lg:min-h-0"
+                      >
                         Save
                       </Button>
                     </form>
@@ -95,8 +102,11 @@ export function AgeGroupsPanel({ settings }: { settings: AgeGroupSetting[] }) {
       )}
 
       {unconfigured.length > 0 && (
-        <form action={action} className="flex flex-wrap items-end gap-2 border-t pt-4">
-          <div className="min-w-40 space-y-1">
+        <form
+          action={action}
+          className="flex flex-col items-stretch gap-2 border-t pt-4 lg:flex-row lg:flex-wrap lg:items-end"
+        >
+          <div className="space-y-1 lg:min-w-40">
             <Label htmlFor="new-age-group">Add an age group</Label>
             <Select id="new-age-group" name="age_group" required defaultValue="">
               <option value="" disabled>
@@ -109,7 +119,7 @@ export function AgeGroupsPanel({ settings }: { settings: AgeGroupSetting[] }) {
               ))}
             </Select>
           </div>
-          <label className="flex h-10 items-center gap-2 text-sm">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:h-10 lg:min-h-0">
             <input
               type="checkbox"
               name="is_open"
@@ -119,7 +129,7 @@ export function AgeGroupsPanel({ settings }: { settings: AgeGroupSetting[] }) {
             />
             Open
           </label>
-          <label className="flex h-10 items-center gap-2 text-sm">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:h-10 lg:min-h-0">
             <input
               type="checkbox"
               name="is_publicly_advertised"
@@ -128,7 +138,7 @@ export function AgeGroupsPanel({ settings }: { settings: AgeGroupSetting[] }) {
             />
             Advertised
           </label>
-          <Button type="submit" size="sm" disabled={pending}>
+          <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
             {pending ? "Saving…" : "Add"}
           </Button>
         </form>

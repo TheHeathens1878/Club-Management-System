@@ -44,7 +44,7 @@ export default async function GroupsPage() {
     return (
       <>
         <PageHeader title="Groups" subtitle="WhatsApp-style group chats for the club" />
-        <div className="p-6 max-w-3xl">
+        <div className="max-w-3xl p-4 lg:p-6">
           <Card>
             <CardContent className="p-6 text-sm text-muted-foreground">
               Your sign-in is not linked to a member record yet, so there are no groups to show and
@@ -98,13 +98,16 @@ export default async function GroupsPage() {
         title="Groups"
         subtitle="Group chats for a venue, a team, or anything else the club runs"
         action={
-          <Link href="/groups/new" className={buttonVariants({ size: "sm" }) + " gap-2"}>
+          <Link
+            href="/groups/new"
+            className={buttonVariants({ size: "sm" }) + " min-h-[44px] gap-2 lg:min-h-0"}
+          >
             <Plus className="h-4 w-4" /> New group
           </Link>
         }
       />
 
-      <div className="p-6 space-y-4">
+      <div className="space-y-4 p-4 lg:p-6">
         {listError && (
           <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {listError.message}
@@ -138,7 +141,7 @@ export default async function GroupsPage() {
             });
 
             return (
-              <div key={group.id} className="rounded-lg border bg-card p-4">
+              <div key={group.id} className="rounded-xl border bg-card p-4 lg:rounded-lg">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
@@ -161,16 +164,26 @@ export default async function GroupsPage() {
                       {formatStamp(group.created_at)}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
+                  {/* Full-width, 44px controls on a phone; the pair the desk
+                      has always had from lg up. */}
+                  <div className="flex w-full shrink-0 items-center gap-2 lg:w-auto">
                     {everIn && (
                       <Link
                         href={`/messages/${group.id}`}
-                        className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5"}
+                        className={
+                          buttonVariants({ variant: "outline", size: "sm" }) +
+                          " min-h-[44px] flex-1 gap-1.5 lg:min-h-0 lg:flex-none"
+                        }
                       >
                         <MessageSquare className="h-3.5 w-3.5" /> Open chat
                       </Link>
                     )}
-                    <Link href={`/groups/${group.id}`} className={buttonVariants({ size: "sm" })}>
+                    <Link
+                      href={`/groups/${group.id}`}
+                      className={
+                        buttonVariants({ size: "sm" }) + " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                      }
+                    >
                       Manage
                     </Link>
                   </div>

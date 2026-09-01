@@ -11,26 +11,37 @@
  *     their own account", "the guardian's date of birth is unknown") arrive as
  *     P0001 and are shown VERBATIM — they are written for the parent reading
  *     them, and rewriting them would lose the reason.
- *   · Registering a child is a plain INSERT on `registrations`. The guardian
+ *   · Registering a child is a plain INSERT on `registrations` (through
+ *     `submitTeamRegistration`, the write /join makes too). The guardian
  *     policy admits it and `registrations_guard()` re-checks the guardianship,
  *     so a parent who is no longer an active guardian is refused by the
  *     database rather than by a check here.
+ *   · Emergency contacts are the child's own record (`set_emergency_contacts`,
+ *     Adam 2026-08-25) — up to two, replaced as a set, guardian or admin only.
  *   · Withdrawing is the single UPDATE the guardian and the subject may make
  *     (`registrations_guardian_withdraw` / `registrations_self_withdraw`, both
- *     WITH CHECK `status = 'withdrawn'`).
+ *     WITH CHECK `status = 'withdrawn'`) — and, since 20260825260000, only
+ *     while the registration is still PENDING. An approved one is withdrawn by
+ *     a club administrator; `registrations_guard()` refuses anyone else with a
+ *     P0001 that says so, and the sentence below prints it unchanged.
  *
- * There is deliberately no "edit my child" action: `people` has a guardian
- * READ policy and no guardian INSERT or UPDATE, by design (P1.2 / SG-4). A
- * correction goes through the club, and the page says so.
+ *   · `update_child_details()` is the one narrow door onto a child's record
+ *     (Adam, 2026-08-25). `people` still has no guardian INSERT or UPDATE
+ *     policy — the RPC is SECURITY DEFINER and checks the live guardianship
+ *     itself — and it accepts CONTACT details only. Name and date of birth are
+ *     not parameters, so there is nothing here to send them with.
  */
 
 import { revalidatePath } from "next/cache";
 
+import type { Json } from "@club/db";
+
+import { countyForTown } from "@/lib/address";
 import { createClient } from "@/lib/supabase/server";
-import {
-  REGISTRATION_FORM_VERSION,
-  registrationFormFromFormData,
-} from "@/lib/registration-form";
+import { emergencyContactsFromFormData, noEmergencyContacts } from "@/lib/emergency-contacts";
+import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
+import { registrationFormFromFormData } from "@/lib/registration-form";
+import { customQuestionsFrom, submitTeamRegistration } from "@/lib/registration-server";
 
 const PATH = "/family";
 
@@ -86,6 +97,7 @@ export async function registerForTeam(
   const seasonId = String(formData.get("season_id") ?? "").trim();
   const teamId = String(formData.get("team_id") ?? "").trim();
   const isSelf = String(formData.get("is_self") ?? "") === "yes";
+  const isMinor = String(formData.get("is_minor") ?? "") === "yes";
 
   if (!personId) return { error: "Missing the person being registered." };
   if (!seasonId) {
@@ -93,37 +105,147 @@ export async function registerForTeam(
   }
   if (!teamId) return { error: "Choose a team." };
 
-  const built = registrationFormFromFormData(formData, { includePhotoPreferences: isSelf });
+  const built = registrationFormFromFormData(formData, {
+    includePhotoPreferences: isSelf,
+    customQuestions: customQuestionsFrom(formData),
+    requireGdpr: formData.get("gdpr_asked") === "yes",
+  });
   if ("error" in built) return { error: built.error };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("registrations").insert({
-    person_id: personId,
-    season_id: seasonId,
-    team_id: teamId,
+  const { data: season } = await supabase
+    .from("seasons")
+    .select("id,ends_on")
+    .eq("id", seasonId)
+    .maybeSingle();
+  if (!season) return { error: "That season is not one the club recognises." };
+
+  // The same write /join makes: the ID rule, the emergency-contact rule, the
+  // pending row, the uploads and the SG-5 consents, in that order.
+  const result = await submitTeamRegistration({
+    personId,
+    isSelf,
+    isMinor,
+    seasonId: season.id,
+    seasonEndsOn: season.ends_on,
+    teamId,
     form: built.form,
-    form_version: REGISTRATION_FORM_VERSION,
+    formData,
+  });
+  if ("error" in result) return { error: result.error };
+
+  revalidatePath(PATH);
+  return { notice: "Registration sent. A club administrator will review it." };
+}
+
+/**
+ * A guardian sets their child's emergency contacts (Adam, 2026-08-25). The
+ * RPC is the authority — `can_act_for()` for a minor child, or club_admin —
+ * and "I am the first emergency contact" is resolved from the caller's own
+ * record in `saveEmergencyContacts`, never from the browser.
+ */
+export async function updateChildEmergencyContacts(
+  _prev: FamilyActionState,
+  formData: FormData,
+): Promise<FamilyActionState> {
+  const childId = String(formData.get("child_person_id") ?? "").trim();
+  if (!childId) return { error: "Missing the child these contacts belong to." };
+
+  const posted = emergencyContactsFromFormData(formData);
+  if ("error" in posted) return { error: posted.error };
+  if (noEmergencyContacts(posted)) {
+    return { error: "Name at least one emergency contact, or tick that you are the first one." };
+  }
+
+  const saved = await saveEmergencyContacts(childId, posted);
+  if (saved.error) return { error: saved.error };
+
+  revalidatePath(PATH);
+  return { notice: "Emergency contacts saved." };
+}
+
+/**
+ * A guardian corrects their child's contact details (Adam, 2026-08-25).
+ *
+ * "Same address as lead contact" is resolved HERE, from the caller's own
+ * `people` row, not from whatever the browser posted: the tick-box is a
+ * statement about a household, and the address it stands for is the one the
+ * club currently holds for the signed-in guardian. Unticked, the four fields
+ * are written as the same object shape the join wizard writes — which is what
+ * lets two separated parents keep two different addresses for the same child.
+ */
+export async function updateChildDetails(
+  _prev: FamilyActionState,
+  formData: FormData,
+): Promise<FamilyActionState> {
+  const childId = String(formData.get("child_person_id") ?? "").trim();
+  if (!childId) return { error: "Missing the child these details belong to." };
+
+  const preferred = String(formData.get("preferred_name") ?? "").trim();
+  const email = String(formData.get("email") ?? "").trim();
+  const phone = String(formData.get("phone") ?? "").trim();
+  const line1 = String(formData.get("address_line1") ?? "").trim();
+  const line2 = String(formData.get("address_line2") ?? "").trim();
+  const town = String(formData.get("address_town") ?? "").trim();
+  // The town settles the county where the club knows the place (Adam,
+  // 2026-08-25), re-derived here so the stored address cannot disagree with
+  // the rule the form showed.
+  const county = countyForTown(town) ?? String(formData.get("address_county") ?? "").trim();
+  const postcode = String(formData.get("address_postcode") ?? "").trim();
+  const anyAddress = !!(line1 || line2 || town || postcode);
+  // The four fields are only rendered while the box is UNTICKED, so an
+  // address arriving alongside a "yes" can only mean the browser reset the
+  // checkbox behind React's back (React 19 resets a form once its action
+  // completes). The typed address is the parent's clearer statement, so it
+  // wins and the tick is ignored — the lead's address never overwrites what
+  // was just typed.
+  const sameAsLead = String(formData.get("same_as_lead") ?? "") === "yes" && !anyAddress;
+
+  const supabase = await createClient();
+
+  let address: Json | undefined;
+  if (sameAsLead) {
+    const { data: personId } = await supabase.rpc("current_person_id");
+    const { data: lead } = personId
+      ? await supabase.from("people").select("address").eq("id", personId).maybeSingle()
+      : { data: null };
+    const leadAddress = lead?.address ?? null;
+    if (!leadAddress) {
+      return {
+        error:
+          "There is no address on your own record to copy. Add yours on My profile, or untick the box and type your child's address.",
+      };
+    }
+    address = leadAddress;
+  } else {
+    if (anyAddress && (!line1 || !town || !postcode)) {
+      return { error: "An address needs at least the first line, the town and the postcode." };
+    }
+    if (anyAddress) address = { line1, line2: line2 || null, town, county: county || null, postcode };
+  }
+
+  const { error } = await supabase.rpc("update_child_details", {
+    p_child_person_id: childId,
+    p_email: email || undefined,
+    p_phone: phone || undefined,
+    p_address: address,
+    p_preferred_name: preferred || undefined,
   });
 
   if (error) {
+    // P0001 is the SG-4 guard, or the email check, speaking for the parent.
     if (error.code === "P0001") return { error: error.message };
-    if (error.code === "23505") {
-      return {
-        error:
-          "There is already a registration waiting or approved for this season. Withdraw it first if you need to change it.",
-      };
-    }
     if (error.code === "42501") {
       return {
         error:
-          "The club's records do not show you as an active guardian of this player, so this registration was refused.",
+          "Your sign-in is not linked to a member record yet, so the club cannot record a change from you. Ask the club to link your account.",
       };
     }
     return { error: error.message };
   }
 
   revalidatePath(PATH);
-  return { notice: "Registration sent. A club administrator will review it." };
+  return { notice: "Saved." };
 }
 
 export async function withdrawRegistration(

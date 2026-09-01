@@ -121,9 +121,14 @@ export function AttendancePanel({ bookingId, rows }: { bookingId: string; rows: 
 
       <Feedback state={state} />
 
+      {/* The register is the one screen that is used standing up: below lg
+          every row becomes a card and the Present / Late / Absent choices
+          become 44px chips (mobile design). The table is the same markup on
+          lg+, so the sheet keeps one set of inputs and cannot disagree with
+          itself. */}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead className="border-b text-xs text-muted-foreground">
+        <table className="block w-full text-left text-sm lg:table">
+          <thead className="hidden border-b text-xs text-muted-foreground lg:table-header-group">
             <tr>
               <th className="py-2 pr-3 font-medium">Member</th>
               <th className="py-2 pr-3 font-medium">Team</th>
@@ -132,10 +137,13 @@ export function AttendancePanel({ bookingId, rows }: { bookingId: string; rows: 
               <th className="py-2 font-medium">Note</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="block lg:table-row-group">
             {rows.map((row) => (
-              <tr key={row.personId} className="border-b align-top last:border-0">
-                <td className="py-2 pr-3">
+              <tr
+                key={row.personId}
+                className="mb-3 block rounded-xl border bg-card p-4 last:mb-0 lg:mb-0 lg:table-row lg:rounded-none lg:border-0 lg:border-b lg:bg-transparent lg:p-0 lg:align-top lg:last:border-0"
+              >
+                <td className="block py-0 lg:table-cell lg:py-2 lg:pr-3">
                   <Link
                     href={`/people/${row.personId}`}
                     className="font-medium underline underline-offset-2"
@@ -152,8 +160,10 @@ export function AttendancePanel({ bookingId, rows }: { bookingId: string; rows: 
                     {row.shirtNumber !== null ? ` · #${row.shirtNumber}` : ""}
                   </span>
                 </td>
-                <td className="py-2 pr-3 text-xs text-muted-foreground">{row.teamName}</td>
-                <td className="py-2 pr-3">
+                <td className="block py-0 text-xs text-muted-foreground lg:table-cell lg:py-2 lg:pr-3">
+                  {row.teamName}
+                </td>
+                <td className="block pt-2 lg:table-cell lg:py-2 lg:pr-3">
                   <Badge variant={availabilityVariant(row.availability)}>
                     {row.availability ? AVAILABILITY_LABELS[row.availability] : "No answer"}
                   </Badge>
@@ -163,13 +173,13 @@ export function AttendancePanel({ bookingId, rows }: { bookingId: string; rows: 
                     </span>
                   )}
                 </td>
-                <td className="py-2 pr-3">
-                  <fieldset className="flex flex-wrap gap-2">
+                <td className="block pt-3 lg:table-cell lg:py-2 lg:pr-3">
+                  <fieldset className="grid grid-cols-4 gap-1.5 lg:flex lg:flex-wrap lg:gap-2">
                     <legend className="sr-only">Attendance for {row.name}</legend>
                     {ATTENDANCE_CHOICES.map((choice) => (
                       <label
                         key={choice.value || "none"}
-                        className="flex items-center gap-1 text-xs"
+                        className="flex min-h-[44px] items-center justify-center gap-1 rounded-lg border px-1 text-xs lg:min-h-0 lg:justify-start lg:rounded-none lg:border-0 lg:px-0"
                       >
                         <input
                           type="radio"
@@ -182,13 +192,13 @@ export function AttendancePanel({ bookingId, rows }: { bookingId: string; rows: 
                     ))}
                   </fieldset>
                 </td>
-                <td className="py-2">
+                <td className="block pt-2 lg:table-cell lg:py-2">
                   <Input
                     name={`note:${row.personId}`}
                     defaultValue={row.attendanceNote ?? ""}
                     maxLength={500}
                     aria-label={`Attendance note for ${row.name}`}
-                    className="h-8 min-w-[10rem] px-2 text-xs"
+                    className="h-11 min-w-[10rem] px-2 text-xs lg:h-8"
                   />
                 </td>
               </tr>
@@ -197,8 +207,13 @@ export function AttendancePanel({ bookingId, rows }: { bookingId: string; rows: 
         </table>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" size="sm" disabled={saving}>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button
+          type="submit"
+          size="sm"
+          className="h-11 w-full lg:h-9 lg:w-auto"
+          disabled={saving}
+        >
           {saving ? "Saving…" : "Save attendance"}
         </Button>
         <p className="text-xs text-muted-foreground">

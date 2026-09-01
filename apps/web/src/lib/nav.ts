@@ -1,5 +1,21 @@
 /**
- * The nav, expressed as one table.
+ * The nav, expressed as one table — regrouped 2026-08-25 to the Club CRM
+ * design's own sections (spec §1): Club, Matchday, Pitches, Function room,
+ * Money, Safeguarding, Settings. Items the design does not draw but the club
+ * still needs (Manage pitches, Rooms, Groups, Media, Super users, My role)
+ * keep their place in the nearest section rather than vanishing.
+ *
+ * The ME and PARENT views share the Club section, spelled out by Adam
+ * (2026-08-25, second pass — this supersedes the morning's "Club Lobby, Team,
+ * My Groups" shape; the third pass makes the same menu the ME view, the
+ * default for every sign-in): Club Lobby, My groups, Messaging, Events,
+ * Register a player. From there they part (Adam, 2026-08-25, evening): the ME view
+ * is the person — Me (My Profile, Connected Adults, My Children), Finance (My
+ * Subs), Settings (Comms preferences) — and the PARENT view is the child's
+ * team: a Team section whose one entry, "Team page", goes through /my-team to
+ * the scoped team (or /family to pick one). The person-level items are NOT
+ * repeated in the parent menu; the switcher's "Me" is the way to them. Both
+ * views keep Report a concern, and the lobby stays the landing page for both.
  *
  * Two independent gates decide whether a link is rendered:
  *
@@ -36,6 +52,7 @@ import {
   Contact,
   Images,
   LandPlot,
+  LayoutDashboard,
   Mail,
   MessageSquare,
   Receipt,
@@ -55,6 +72,7 @@ import {
 import type { Capabilities, RoleView } from "@/lib/role-view";
 
 const ALL_VIEWS = [
+  "me",
   "player",
   "parent",
   "coach",
@@ -62,8 +80,11 @@ const ALL_VIEWS = [
   "function_room",
 ] as const satisfies readonly RoleView[];
 
-/** The four views that belong to the football club rather than the room. */
-const CLUB_VIEWS = ["player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
+/** The five views that belong to the football club rather than the room. */
+const CLUB_VIEWS = ["me", "player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
+
+/** The Club section the default ME view and the parent view share. */
+const ME_VIEWS = ["me", "parent"] as const satisfies readonly RoleView[];
 
 export type NavEntry = {
   href: string;
@@ -80,15 +101,193 @@ export type NavEntry = {
 };
 
 export const NAV: readonly NavEntry[] = [
-  // --- The club ------------------------------------------------------------
+  // --- Membership Flow (Adam, 2026-08-26) ----------------------------------
+  // The ME view leads with the order a new member does things in, numbered so
+  // it reads as a sequence rather than three unrelated screens: your own
+  // details first, then the adults the club should know about, then the
+  // children. It sits ABOVE the Club section because it is what somebody who
+  // has just signed up came here to finish. The parent view does not carry
+  // these — the switcher's Me is the way to them.
   {
-    // The design's front door: the club-wide noticeboard, results and the week.
+    href: "/profile",
+    label: "My Profile (1)",
+    icon: UserCircle,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    // The adults in the caller's household without a login of their own —
+    // added at /join or on this page, read back through my_household().
+    href: "/connected-adults",
+    label: "Connect Adults (2)",
+    icon: Contact,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    // Shown to everybody in the ME view, like every other step of the flow.
+    //
+    // It used to be `c.isGuardian || c.hasParentRole`, which is the one gate
+    // that cannot work here: this is the page where you connect your FIRST
+    // child, and until you have, you are neither. Adam, 2026-08-26: Mark Law
+    // — a manager with a login, no guardianships and no parent role — had no
+    // way to reach it at all. The page itself already handles having nobody
+    // connected (it shows the Add a child form and says the club has none on
+    // record), so there is nothing to protect by hiding it, and nothing is
+    // read here that /family's own RLS does not already scope to the caller.
+    href: "/family",
+    label: "Connect Children (3)",
+    icon: Baby,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    // Who the club has you connected to, drawn as a family tree (Adam,
+    // 2026-08-26). Read-only, and scoped to the caller's OWN links: an
+    // ex-spouse who shares the children sees the children and the people who
+    // guard them, never the other household's adults or their children.
+    //
+    // The entry was held back once because it reached the menu ahead of its
+    // route and gave Adam a 404; it returns here in the same change as the
+    // page, which is the order these two have to land in.
+    href: "/family-linking",
+    label: "Family Linking (4)",
+    icon: UsersRound,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    // The end of the flow: register whoever plays — yourself, a connected
+    // adult or a child (Adam, 2026-08-26).
+    href: "/my-registrations",
+    label: "Register Players (5)",
+    icon: ClipboardCheck,
+    group: "Membership Flow",
+    allowed: () => true,
+    views: ["me"],
+  },
+
+  // --- Club (the design's first section) -----------------------------------
+  {
     href: "/lobby",
     label: "Club lobby",
     icon: Armchair,
     group: "Club",
     allowed: () => true,
     views: CLUB_VIEWS,
+  },
+  {
+    // The me/parent copy of the messages entries sits first so that menu
+    // reads Lobby → My groups → Messaging → Events → Register a player.
+    href: "/messages?filter=groups",
+    label: "My groups",
+    icon: UsersRound,
+    group: "Club",
+    allowed: () => true,
+    views: ME_VIEWS,
+  },
+  {
+    href: "/messages",
+    label: "Messaging",
+    icon: MessageSquare,
+    group: "Club",
+    allowed: () => true,
+    views: ME_VIEWS,
+  },
+  {
+    // Adam's parent menu (2026-08-25, second pass): Events came back into the
+    // parent's Club section after the morning's menu left it out. Same
+    // destination as Matchday's entry; the page admits any signed-in person
+    // and `my_events()` returns only their own diary, so no gate here either.
+    href: "/events",
+    label: "Events",
+    icon: CalendarCheck,
+    group: "Club",
+    allowed: () => true,
+    views: ME_VIEWS,
+  },
+  {
+    // Registering somebody, and where the household's registrations stand —
+    // not the admin queue at /registrations, which keeps its own entry below.
+    // Adam, 2026-08-25: "change the name of registrations to register a
+    // player", because that is the thing a member comes here to do. The ME
+    // view carries it as step 4 of the Membership Flow instead.
+    href: "/my-registrations",
+    label: "Register a player",
+    icon: ClipboardCheck,
+    group: "Club",
+    allowed: () => true,
+    views: ["parent"],
+  },
+  {
+    href: "/messages",
+    label: "Messages",
+    icon: MessageSquare,
+    group: "Club",
+    allowed: () => true,
+    views: ["player", "coach", "admin", "function_room"],
+  },
+
+  // --- Referee (Adam, 2026-08-25: the referee's own view) ------------------
+  {
+    // The referees group, through the redirect that resolves it. The games are
+    // posted there as claimable cards, so it is the whole of the hat.
+    href: "/referee",
+    label: "Referees group",
+    icon: ClipboardList,
+    group: "Referee",
+    allowed: (c) => c.hasRefereeRole,
+    views: ["referee"],
+  },
+  {
+    // A referee's own diary: the games they have claimed appear as events on
+    // the team they are refereeing, and this is the same member-facing list.
+    href: "/messages",
+    label: "Messaging",
+    icon: MessageSquare,
+    group: "Referee",
+    allowed: () => true,
+    views: ["referee"],
+  },
+
+  // --- Team (the parent and coach views' second section, Adam 2026-08-25) --
+  {
+    // One link: the team page. /my-team is a redirect that already knows the
+    // answer — the switcher's team-scoped pick, or the only team the hat
+    // covers — and otherwise sends a parent to /family and a coach to /teams
+    // to choose. The gate is the union of the two views' own qualifiers.
+    href: "/my-team",
+    label: "Team page",
+    icon: Shirt,
+    group: "Team",
+    allowed: (c) => c.isGuardian || c.hasParentRole || c.isTeamStaff || c.hasCoachRole,
+    views: ["parent", "coach"],
+  },
+  {
+    href: "/groups",
+    label: "Groups",
+    icon: UsersRound,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+    child: true,
+  },
+  {
+    // Adam, 2026-08-25 evening: "On the coaches menu, there should be a link
+    // to groups, just below messages." /groups is the admin directory (its
+    // page bounces anyone else), so the coach gets the member-facing view —
+    // their own groups in the messages list, the same door the Me menu opens.
+    href: "/messages?filter=groups",
+    label: "Groups",
+    icon: UsersRound,
+    group: "Club",
+    allowed: () => true,
+    views: ["coach"],
+    child: true,
   },
   {
     // A player's own screen: their teams, and when those teams are next out.
@@ -100,32 +299,24 @@ export const NAV: readonly NavEntry[] = [
     views: ["player"],
   },
   {
-    // The guardian's own screen — their children and those children's teams.
-    href: "/family",
-    label: "Children",
-    icon: Baby,
+    // The admin's first screen: the club at a glance.
+    href: "/overview",
+    label: "Overview",
+    icon: LayoutDashboard,
     group: "Club",
-    allowed: (c) => c.isGuardian || c.hasParentRole,
-    views: ["parent"],
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
   },
   {
-    // Matches, practices and socials with accept/decline — fed by my_events(),
-    // so every view sees only its own teams' occasions.
-    href: "/events",
-    label: "Events",
-    icon: CalendarCheck,
-    group: "Club",
-    allowed: (c) =>
-      c.hasPlayerMembership || c.isGuardian || c.hasParentRole || c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: CLUB_VIEWS,
-  },
-  {
+    // Admin view only (Adam, 2026-08-25: "when I am selecting the coach role,
+    // it shouldn't show the teams menu item") — a coach pick is team-scoped
+    // and lands straight on that team's page, the same rule as parent/player.
     href: "/teams",
     label: "Teams",
     icon: Users,
     group: "Club",
     allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: ["coach", "admin"],
+    views: ["admin"],
   },
   {
     href: "/people",
@@ -159,6 +350,16 @@ export const NAV: readonly NavEntry[] = [
     allowed: (c) => c.isClubAdmin,
     views: ["admin"],
   },
+  {
+    // The form itself, as a shortcut under the queue that uses it.
+    href: "/registrations/form",
+    label: "Registration form",
+    icon: ClipboardList,
+    group: "Club",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+    child: true,
+  },
 
   // --- Matchday (the design's own section) ---------------------------------
   {
@@ -169,6 +370,19 @@ export const NAV: readonly NavEntry[] = [
     group: "Matchday",
     allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
     views: ["coach", "admin"],
+  },
+  {
+    // The member-facing diary with accept/decline — the design places it in
+    // Matchday for players and parents; coaches work from Matches/Training.
+    href: "/events",
+    label: "Events",
+    icon: CalendarCheck,
+    group: "Matchday",
+    allowed: (c) =>
+      c.hasPlayerMembership || c.isGuardian || c.hasParentRole || c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    // Adam's parent menu has no Events entry — a parent's diary lives on the
+    // child's team page and the lobby.
+    views: ["player", "coach", "admin"],
   },
   {
     href: "/training",
@@ -184,7 +398,72 @@ export const NAV: readonly NavEntry[] = [
     icon: CalendarDays,
     group: "Matchday",
     allowed: () => true,
-    views: CLUB_VIEWS,
+    views: ["player", "coach", "admin"],
+  },
+
+  // --- Pitches (a different diary entirely from the function room) ---------
+  {
+    // Adam, 2026-08-25: "Parents don't need to see pitch calendars" — the
+    // parent view drops the whole Pitches section (their child's times live
+    // on the team page and in Events).
+    href: "/pitches/calendar",
+    label: "Pitch calendar",
+    icon: CalendarDays,
+    group: "Pitches",
+    allowed: (c) =>
+      c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
+    views: ["player", "coach", "admin"],
+  },
+  {
+    href: "/pitches/book",
+    label: "Book a pitch",
+    icon: CalendarPlus,
+    group: "Pitches",
+    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/pitches/mine",
+    label: "Pitch bookings",
+    icon: CalendarCheck,
+    group: "Pitches",
+    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
+    views: ["coach", "admin"],
+  },
+  {
+    href: "/pitches",
+    label: "Allocate fixtures",
+    icon: LandPlot,
+    group: "Pitches",
+    allowed: (c) => c.isCommittee,
+    views: ["admin"],
+  },
+  {
+    href: "/pitches/requests",
+    label: "Pitch requests",
+    icon: Inbox,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin,
+    views: ["admin"],
+  },
+  {
+    // The clashes report: what the diary's overlap rule cannot untangle by
+    // itself — refused Full-Time reschedules, a team booked in two places,
+    // fixtures out of step with their booking, home fixtures with no pitch.
+    href: "/pitches/clashes",
+    label: "Clashes",
+    icon: ShieldAlert,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
+  },
+  {
+    href: "/pitches/manage",
+    label: "Manage pitches",
+    icon: Settings2,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
   },
 
   // --- Function room -------------------------------------------------------
@@ -215,6 +494,16 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin", "function_room"],
   },
   {
+    // The room's own contacts book (Adam, 2026-08-25) — hire contacts kept
+    // out of the members database, so this is where the desk finds them.
+    href: "/room-bookings/contacts",
+    label: "Hire contacts",
+    icon: Contact,
+    group: "Function room",
+    allowed: (c) => c.isStaff,
+    views: ["admin", "function_room"],
+  },
+  {
     href: "/bar",
     label: "Bar",
     icon: Beer,
@@ -223,92 +512,34 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin", "function_room"],
   },
 
-  // --- Pitches (a different diary entirely from the function room) ---------
-  {
-    href: "/pitches/calendar",
-    label: "Pitch calendar",
-    icon: CalendarDays,
-    group: "Pitches",
-    allowed: (c) =>
-      c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
-    views: CLUB_VIEWS,
-  },
-  {
-    href: "/pitches/book",
-    label: "Book a pitch",
-    icon: CalendarPlus,
-    group: "Pitches",
-    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: ["coach", "admin"],
-  },
-  {
-    href: "/pitches/mine",
-    label: "Pitch bookings",
-    icon: CalendarCheck,
-    group: "Pitches",
-    allowed: (c) => c.isTeamStaff || c.isCommittee || c.isClubAdmin,
-    views: ["coach", "admin"],
-  },
-  {
-    href: "/pitches/requests",
-    label: "Pitch requests",
-    icon: Inbox,
-    group: "Pitches",
-    allowed: (c) => c.isClubAdmin,
-    views: ["admin"],
-  },
-  {
-    href: "/pitches",
-    label: "Allocate fixtures",
-    icon: LandPlot,
-    group: "Pitches",
-    allowed: (c) => c.isCommittee,
-    views: ["admin"],
-  },
-  {
-    href: "/pitches/manage",
-    label: "Manage pitches",
-    icon: Settings2,
-    group: "Pitches",
-    allowed: (c) => c.isClubAdmin || c.isCommittee,
-    views: ["admin"],
-  },
-
-  // --- Messages ------------------------------------------------------------
-  {
-    href: "/messages",
-    label: "Messages",
-    icon: MessageSquare,
-    group: "Messages",
-    allowed: () => true,
-    views: ALL_VIEWS,
-  },
-  {
-    href: "/groups",
-    label: "Groups",
-    icon: UsersRound,
-    group: "Messages",
-    allowed: (c) => c.isClubAdmin,
-    views: ["admin"],
-    child: true,
-  },
-
-  // --- Subs ----------------------------------------------------------------
+  // --- Money ---------------------------------------------------------------
   {
     href: "/subs",
     label: "Subs",
     icon: Receipt,
-    group: "Subs",
+    group: "Money",
     allowed: (c) => c.isCommittee,
     views: ["admin"],
   },
   {
+    // Not in the coach view (Adam, 2026-08-25 evening: "remove Money - My
+    // subs and Comms preference as they sit under Me").
     href: "/my-subs",
     label: "My subs",
     icon: Wallet,
-    group: "Subs",
+    group: "Money",
     allowed: () => true,
-    views: CLUB_VIEWS,
+    views: ["player", "admin"],
+  },
+
+  // --- Finance (the Me view's name for their own money) --------------------
+  {
+    href: "/my-subs",
+    label: "My Subs",
+    icon: Wallet,
+    group: "Finance",
+    allowed: () => true,
+    views: ["me"],
   },
 
   // --- Safeguarding --------------------------------------------------------
@@ -361,22 +592,27 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin"],
   },
   {
+    // Not in the parent or coach views (Adam, 2026-08-25 evening) — a
+    // person-level setting, so the Me view carries it.
     href: "/settings/comms",
     label: "Comms preferences",
     icon: Mail,
     group: "Settings",
     allowed: () => true,
-    views: CLUB_VIEWS,
+    views: ["me", "player", "admin"],
   },
 
   // --- You -----------------------------------------------------------------
   {
+    // The me and parent views switch hats in the sidebar dropdown; the tiles
+    // page stays for everyone else. SG-3's "Report a concern" above remains in
+    // EVERY view, me and parent included — that entry never thins.
     href: "/welcome",
     label: "My role",
     icon: UserCircle,
     group: "You",
     allowed: () => true,
-    views: ALL_VIEWS,
+    views: ["player", "coach", "admin", "function_room"],
   },
 ];
 

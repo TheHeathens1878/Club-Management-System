@@ -37,6 +37,10 @@ export type ImportRunView = {
   inserted: number;
   updated: number;
   unchanged: number;
+  /** Deleted because Full-Time stopped publishing them (20260826100000). */
+  retired?: number;
+  /** Stopped being published, but a team sheet, stats or a pitch keeps them. */
+  keptBack?: number;
   error: string | null;
   source_url: string | null;
   created_at: string;
@@ -368,7 +372,22 @@ export function ManualImportPanel({
         <p className="flex items-start gap-2 text-sm text-emerald-700">
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Imported: {result.inserted} new, {result.updated} updated, {result.unchanged} unchanged.
+            Imported: {result.inserted} new, {result.updated} updated, {result.unchanged} unchanged
+            {result.retired ? `, ${result.retired} removed` : ""}
+            {result.keptBack ? `, ${result.keptBack} to check` : ""}.
+            {result.retired ? (
+              <span className="mt-1 block text-xs">
+                Removed means Full-Time no longer publishes them for the period this import
+                covered — a withdrawn game, or one the league re-issued under a new id.
+              </span>
+            ) : null}
+            {result.runWarnings?.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
+                {result.runWarnings.map((warning, i) => (
+                  <li key={i}>{warning}</li>
+                ))}
+              </ul>
+            ) : null}
           </span>
         </p>
       )}
@@ -437,6 +456,7 @@ export function ManualImportPanel({
                   <th className="py-1.5 pr-3 font-medium">New</th>
                   <th className="py-1.5 pr-3 font-medium">Updated</th>
                   <th className="py-1.5 pr-3 font-medium">Unchanged</th>
+                  <th className="py-1.5 pr-3 font-medium" title="No longer published by Full-Time for the period this run covered">Removed</th>
                   <th className="py-1.5 font-medium">Error</th>
                 </tr>
               </thead>
@@ -451,6 +471,10 @@ export function ManualImportPanel({
                     <td className="py-1.5 pr-3">{run.inserted}</td>
                     <td className="py-1.5 pr-3">{run.updated}</td>
                     <td className="py-1.5 pr-3">{run.unchanged}</td>
+                    <td className="py-1.5 pr-3">
+                      {run.retired ?? 0}
+                      {run.keptBack ? ` (+${run.keptBack} to check)` : ""}
+                    </td>
                     <td className="py-1.5 break-words text-destructive">{run.error ?? ""}</td>
                   </tr>
                 ))}

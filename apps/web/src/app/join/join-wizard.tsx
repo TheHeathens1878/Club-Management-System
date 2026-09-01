@@ -2,11 +2,21 @@
 
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { Check, ChevronLeft, UserPlus, Users } from "lucide-react";
+import { Check, ChevronLeft, MailCheck, UserPlus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
+import { EmergencyContactsFields, type LeadContact } from "@/components/emergency-contacts-fields";
+import { TownCountyFields } from "@/components/town-county-fields";
+import {
+  QuestionBlock,
+  customQuestionsPayload,
+  stageRegistrationUploads,
+} from "@/components/registration-question-block";
+import { TeamChoiceFields } from "@/components/registration-team-choice";
+import type { RegistrationQuestion } from "@/lib/registration-questions";
+import { NO_WAITING_LIST_MESSAGE } from "@/lib/waiting-list";
 
 import { MAX_HOUSEHOLD } from "./constants";
 import {
@@ -28,6 +38,9 @@ type HouseholdPerson = {
   playing: boolean;
   minor: boolean;
   isSelf: boolean;
+  needsId: boolean;
+  /** `people.sex` if the club already holds it, so the form defaults to it. */
+  sex: string | null;
 };
 
 type PlayerOutcome = "team" | "waiting_list" | "no_team";
@@ -50,15 +63,23 @@ export function JoinWizard({ signedIn, defaults }: {
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [startError, setStartError] = useState<string | null>(null);
+  /** Set when the sign-up needs the email confirmed before anything else. */
+  const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
   const [registrant, setRegistrant] = useState<StartState["registrant"] | null>(null);
   const [teams, setTeams] = useState<JoinTeamOption[]>([]);
   const [openAgeGroups, setOpenAgeGroups] = useState<string[]>([]);
+  /** Only a club administrator gets the "show all teams" escape (Adam, 2026-08-26). */
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [questions, setQuestions] = useState<RegistrationQuestion[]>([]);
   const [people, setPeople] = useState<HouseholdPerson[]>([]);
   const [registrantContact, setRegistrantContact] = useState({ email: defaults.email, phone: defaults.phone });
   const [pending, startTransition] = useTransition();
 
   // Step 2 — add-person form state
   const [addError, setAddError] = useState<string | null>(null);
+  // A possible duplicate on the club's records: the sentence to show, and the
+  // post to repeat if the member says it is somebody else (20260825490000).
+  const [addConfirm, setAddConfirm] = useState<{ message: string; formData: FormData } | null>(null);
 
   // Step 3 — per-player outcomes
   const [outcomes, setOutcomes] = useState<Record<string, PlayerOutcome>>({});
@@ -73,6 +94,10 @@ export function JoinWizard({ signedIn, defaults }: {
   function submitStart(formData: FormData) {
     startTransition(async () => {
       const result = await joinStart({}, formData);
+      if (result.confirmEmail) {
+        setConfirmEmail(result.confirmEmail);
+        return;
+      }
       if (result.error || !result.registrant) {
         setStartError(result.error ?? "Something went wrong.");
         return;
@@ -81,6 +106,8 @@ export function JoinWizard({ signedIn, defaults }: {
       setRegistrant(result.registrant);
       setTeams(result.teams ?? []);
       setOpenAgeGroups(result.openAgeGroups ?? []);
+      setIsAdmin(result.isAdmin === true);
+      setQuestions(result.questions ?? []);
       const [firstName, ...rest] = result.registrant.fullName.split(" ");
       setRegistrantContact({
         email: String(formData.get("email") ?? defaults.email ?? ""),
@@ -95,6 +122,8 @@ export function JoinWizard({ signedIn, defaults }: {
           playing: result.registrant.playing,
           minor: false,
           isSelf: true,
+          needsId: result.registrant.needsId,
+          sex: result.registrant.sex,
         },
       ]);
       setStep(result.registrant.registeringOthers ? 2 : result.registrant.playing ? 3 : 2);
@@ -105,24 +134,45 @@ export function JoinWizard({ signedIn, defaults }: {
     formData.set("household_count", String(people.length));
     startTransition(async () => {
       const result = await joinAddPerson({}, formData);
+      if (result.confirmNew) {
+        setAddError(null);
+        setAddConfirm({ message: result.confirmNew, formData });
+        return;
+      }
       if (result.error || !result.added) {
         setAddError(result.error ?? "They could not be added.");
+        setAddConfirm(null);
         return;
       }
       setAddError(null);
-      setPeople((current) => [...current, { ...result.added!, isSelf: false }]);
+      setAddConfirm(null);
+      setPeople((current) => [...current, { ...result.added!, isSelf: false, sex: null }]);
     });
   }
 
   function submitPlayer(person: HouseholdPerson, formData: FormData) {
     formData.set("person_id", person.personId);
     formData.set("person_name", `${person.firstName} ${person.lastName}`.trim());
+    formData.set("person_first_name", person.firstName);
+    formData.set("person_last_name", person.lastName);
     formData.set("dob", person.dob);
     formData.set("is_self", person.isSelf ? "yes" : "no");
+    formData.set("is_minor", person.minor ? "yes" : "no");
     formData.set("registrant_name", registrant?.fullName ?? "");
     formData.set("registrant_email", registrantContact.email);
     formData.set("registrant_phone", registrantContact.phone);
+    formData.set("gdpr_asked", questions.some((q) => q.qtype === "gdpr_consent") ? "yes" : "no");
+    formData.set("custom_questions", customQuestionsPayload(questions));
+
     startTransition(async () => {
+      // The two files never reach the server action: they go to their bucket
+      // first and the action is handed the paths.
+      const staged = await stageRegistrationUploads(formData, person.personId);
+      if ("error" in staged) {
+        setPlayerErrors((current) => ({ ...current, [person.personId]: staged.error }));
+        return;
+      }
+
       const result: PlayerDetailsState = await joinPlayerDetails({}, formData);
       if (result.error || !result.outcome) {
         setPlayerErrors((current) => ({ ...current, [person.personId]: result.error ?? "Not saved." }));
@@ -149,6 +199,39 @@ export function JoinWizard({ signedIn, defaults }: {
 
   // -------------------------------------------------------------------------
   const steps = ["About you", "Your people", "Player details", "Membership"];
+
+  // The account exists but the address is unconfirmed: that instruction is the
+  // whole screen (Adam, 2026-08-25), because nothing else on this page can be
+  // done until the link in that email is opened.
+  if (confirmEmail) {
+    return (
+      <Card className="mx-auto max-w-2xl">
+        <CardHeader className="text-center">
+          <div className="mx-auto mb-1 inline-flex rounded-full bg-emerald-100 p-3 text-emerald-700">
+            <MailCheck className="h-7 w-7" />
+          </div>
+          <CardTitle>Check your email</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-center text-sm text-emerald-900">
+            Your account is created. Open the confirmation link we have just sent to
+            <span className="mt-1 block break-words text-base font-semibold">{confirmEmail}</span>
+          </p>
+          <ol className="space-y-2 text-sm text-muted-foreground">
+            <li>1. Open the email and click the confirmation link.</li>
+            <li>2. Nothing there? Look in your spam or junk folder.</li>
+            <li>3. Sign in, then come back here to finish joining.</li>
+          </ol>
+          <Link
+            href="/login"
+            className="flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+          >
+            Go to sign in
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -224,7 +307,7 @@ export function JoinWizard({ signedIn, defaults }: {
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Input name="address_line1" placeholder="Address line 1" required className="sm:col-span-2" />
                   <Input name="address_line2" placeholder="Address line 2 (optional)" className="sm:col-span-2" />
-                  <Input name="address_town" placeholder="Town" required />
+                  <TownCountyFields idPrefix="join-address" required />
                   <Input name="address_postcode" placeholder="Postcode" required />
                 </div>
               </fieldset>
@@ -300,6 +383,25 @@ export function JoinWizard({ signedIn, defaults }: {
                   They will be playing
                 </label>
                 {addError && <p className="text-sm text-destructive">{addError}</p>}
+                {addConfirm && (
+                  <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                    <p className="text-sm text-amber-900">{addConfirm.message}</p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={pending}
+                      onClick={() => {
+                        const again = addConfirm.formData;
+                        again.set("confirm_new", "yes");
+                        setAddConfirm(null);
+                        submitAddPerson(again);
+                      }}
+                    >
+                      This is a different person — add them anyway
+                    </Button>
+                  </div>
+                )}
                 <Button type="submit" size="sm" variant="outline" disabled={pending}>
                   {pending ? "Adding…" : "Add"}
                 </Button>
@@ -328,8 +430,15 @@ export function JoinWizard({ signedIn, defaults }: {
             <PlayerPanel
               key={player.personId}
               player={player}
+              lead={
+                player.isSelf
+                  ? null
+                  : { name: registrant?.fullName ?? "", phone: registrantContact.phone || null }
+              }
+              questions={questions}
               teams={teams}
               openAgeGroups={openAgeGroups}
+              isAdmin={isAdmin}
               outcome={outcomes[player.personId]}
               error={playerErrors[player.personId]}
               pending={pending}
@@ -423,38 +532,28 @@ export function JoinWizard({ signedIn, defaults }: {
 
 function PlayerPanel({
   player,
+  lead,
+  questions,
   teams,
   openAgeGroups,
+  isAdmin,
   outcome,
   error,
   pending,
   onSubmit,
 }: {
   player: HouseholdPerson;
+  /** The registrant, offered as "I am the first emergency contact" for a child. */
+  lead: LeadContact | null;
+  questions: RegistrationQuestion[];
   teams: JoinTeamOption[];
   openAgeGroups: string[];
+  isAdmin: boolean;
   outcome?: PlayerOutcome;
   error?: string;
   pending: boolean;
   onSubmit: (formData: FormData) => void;
 }) {
-  const [showAllTeams, setShowAllTeams] = useState(false);
-
-  // A child's plausible teams first; "show all" reveals the rest. Adults see
-  // every team straight away.
-  const suggested = useMemo(() => {
-    if (!player.minor || showAllTeams) return teams;
-    const yearOfBirth = Number(player.dob.slice(0, 4));
-    return teams.filter((team) => {
-      const match = /U(\d{1,2})/i.exec(team.ageGroup ?? "");
-      if (!match) return false;
-      const under = Number(match[1]);
-      const seasonYear = new Date().getFullYear();
-      const roughAge = seasonYear - yearOfBirth;
-      return under >= roughAge && under <= roughAge + 2;
-    });
-  }, [player, showAllTeams, teams]);
-
   if (outcome) {
     return (
       <Card>
@@ -481,87 +580,55 @@ function PlayerPanel({
       </CardHeader>
       <CardContent>
         <form action={onSubmit} className="space-y-4">
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Emergency contact</legend>
-            <div className="grid gap-2 sm:grid-cols-3">
-              <Input name="emergency_name" placeholder="Name" required />
-              <Input name="emergency_phone" placeholder="Phone" required />
-              <Input name="emergency_relationship" placeholder="Relationship" />
-            </div>
-          </fieldset>
+          {/* The two bands and the sex rule, applied where the choice is
+              made (Adam, 2026-08-26) — and re-applied by
+              `registrations_guard()` when the row is written. The "no team
+              yet" line is not a team, so it survives the narrowing: no open
+              age group means no waiting list to join (Adam, 2026-08-25), but
+              the choice still lands as a team-less registration the club
+              follows up. */}
+          <TeamChoiceFields
+            idPrefix={`join-${player.personId}`}
+            teamFieldName="team_choice"
+            teams={teams}
+            dob={player.dob || null}
+            recordedSex={player.sex}
+            isAdmin={isAdmin}
+            firstName={player.firstName}
+            extraOption={{
+              value: "waiting_list",
+              label:
+                openAgeGroups.length > 0
+                  ? "No team yet — join the waiting list"
+                  : "No team yet — the club will be in touch",
+            }}
+          />
+          <p className="text-xs text-muted-foreground">
+            {openAgeGroups.length > 0
+              ? `Waiting list currently open for: ${openAgeGroups.join(", ")}`
+              : NO_WAITING_LIST_MESSAGE}
+          </p>
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Health</legend>
-            <div className="space-y-1">
-              <Label htmlFor={`med-${player.personId}`}>
-                Any medical conditions we should know about?
-              </Label>
-              <textarea
-                id={`med-${player.personId}`}
-                name="medical_conditions"
-                rows={2}
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Input name="medical_medication" placeholder="Medication (if any)" />
-              <Input name="medical_allergies" placeholder="Allergies (if any)" />
-            </div>
-          </fieldset>
+          {/* Emergency contacts are the person's, not the form's (Adam,
+              2026-08-25): a fixed block written to the player's record, ahead
+              of whatever the builder asks. */}
+          <EmergencyContactsFields
+            idPrefix={`join-${player.personId}`}
+            initial={[]}
+            lead={lead}
+            personName={player.firstName}
+          />
 
-          <fieldset className="space-y-2">
-            <legend className="text-sm font-medium">Team</legend>
-            <select
-              name="team_choice"
-              required
-              defaultValue=""
-              className="block w-full rounded-md border bg-background px-3 py-2 text-sm"
-            >
-              <option value="" disabled>
-                Choose a team…
-              </option>
-              {suggested.map((team) => (
-                <option key={team.id} value={team.id}>
-                  {team.ageGroup ? `${team.ageGroup} — ` : ""}
-                  {team.name}
-                </option>
-              ))}
-              <option value="waiting_list">No team yet — join the waiting list</option>
-            </select>
-            {player.minor && !showAllTeams && (
-              <button
-                type="button"
-                onClick={() => setShowAllTeams(true)}
-                className="text-xs text-muted-foreground underline-offset-2 hover:underline"
-              >
-                Show all teams
-              </button>
-            )}
-            <div className="space-y-1">
-              <Label htmlFor={`sex-${player.personId}`}>
-                Biological sex (used for waiting-list and league age groups)
-              </Label>
-              <select
-                id={`sex-${player.personId}`}
-                name="biological_sex"
-                defaultValue="MALE"
-                className="block w-48 rounded-md border bg-background px-3 py-2 text-sm"
-              >
-                <option value="MALE">Male</option>
-                <option value="FEMALE">Female</option>
-              </select>
-            </div>
-            {openAgeGroups.length > 0 && (
-              <p className="text-xs text-muted-foreground">
-                Waiting list currently open for: {openAgeGroups.join(", ")}
-              </p>
-            )}
-          </fieldset>
+          {questions.map((question) => (
+            <QuestionBlock key={question.id} question={question} player={player} />
+          ))}
 
-          <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" name="terms_accepted" value="yes" required className="mt-1 h-4 w-4" />
-            <span>The details are correct and I accept the club&rsquo;s terms.</span>
-          </label>
+          {questions.length === 0 && (
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" name="terms_accepted" value="yes" required className="mt-1 h-4 w-4" />
+              <span>The details are correct and I accept the club&rsquo;s terms.</span>
+            </label>
+          )}
 
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" size="sm" disabled={pending}>

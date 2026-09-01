@@ -105,6 +105,7 @@ function readFields(
     fields: {
       name,
       description: text(formData, "description", 2_000) || null,
+      address: text(formData, "address", 300) || null,
       information: text(formData, "information", 4_000) || null,
       capacity: capacity.value,
       default_pre_buffer_minutes: preBuffer.value,

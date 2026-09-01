@@ -32,6 +32,21 @@ import {
 } from "../booking-actions";
 import { BookingFeedback, EMPTY_BOOKING_STATE } from "../booking-feedback";
 
+/**
+ * Is this the allocator's own slot for a league fixture — the one thing on this
+ * desk that must be unallocated on /pitches rather than cancelled here?
+ *
+ * Three shapes wear `kind = "fixture"`, and only the first is:
+ *   1. `allocate_fixture()`'s slot for an imported or hand-typed fixture:
+ *      `fixtureId` set, no `opponentTeamId`;
+ *   2. a confirmed INTERNAL match: `fixtureId` set (the home mirror) AND
+ *      `opponentTeamId` set. Cancelling it cancels both fixture rows;
+ *   3. a match request still waiting for a decision: no `fixtureId` yet.
+ */
+function isLeagueFixtureSlot(item: PitchBookingItem): boolean {
+  return item.kind === "fixture" && item.fixtureId !== null && item.opponentTeamId === null;
+}
+
 function BookingSummary({ item }: { item: PitchBookingItem }) {
   return (
     <div className="space-y-1">
@@ -42,6 +57,9 @@ function BookingSummary({ item }: { item: PitchBookingItem }) {
         <Badge variant={statusVariant(item.status)}>{statusLabel(item.status)}</Badge>
         <Badge variant="muted">{kindLabel(item.kind)}</Badge>
         {item.recurrenceGroupId && <Badge variant="outline">Weekly series</Badge>}
+        {/* Confirming this one puts a fixture on the opposition's page too, so
+            the desk is told before it decides, not after. */}
+        {item.opponentTeamId && <Badge variant="outline">Club match · both teams</Badge>}
       </div>
       <p className="text-xs text-muted-foreground">
         {formatSlot(item)} · {item.resourceName}
@@ -74,7 +92,13 @@ function DeclineForm({
 
   if (!open) {
     return (
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="h-11 flex-1 lg:h-9 lg:flex-none"
+        onClick={() => setOpen(true)}
+      >
         Decline
       </Button>
     );
@@ -91,10 +115,22 @@ function DeclineForm({
         placeholder="Why is this being declined? The coach is told this."
       />
       <div className="flex gap-2">
-        <Button type="submit" variant="destructive" size="sm" disabled={pending}>
+        <Button
+          type="submit"
+          variant="destructive"
+          size="sm"
+          className="h-11 flex-1 lg:h-9 lg:flex-none"
+          disabled={pending}
+        >
           {pending ? "Declining…" : "Decline request"}
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-11 flex-1 lg:h-9 lg:flex-none"
+          onClick={() => setOpen(false)}
+        >
           Keep it
         </Button>
       </div>
@@ -127,10 +163,15 @@ export function PendingRequests({ items }: { items: PitchBookingItem[] }) {
             <li key={item.id} className="space-y-2 py-4 first:pt-0 last:pb-0">
               <BookingSummary item={item} />
               <div className="flex flex-wrap items-start gap-2">
-                <form action={confirmAction}>
+                <form action={confirmAction} className="flex-1 lg:flex-none">
                   <input type="hidden" name="booking_id" value={item.id} />
                   <input type="hidden" name="team_id" value={item.teamId ?? ""} />
-                  <Button type="submit" size="sm" disabled={confirming}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    className="h-11 w-full lg:h-9 lg:w-auto"
+                    disabled={confirming}
+                  >
                     Confirm
                   </Button>
                 </form>
@@ -159,13 +200,26 @@ export function UpcomingBookings({ items }: { items: PitchBookingItem[] }) {
           {items.map((item) => (
             <li key={item.id} className="space-y-2 py-4 first:pt-0 last:pb-0">
               <BookingSummary item={item} />
-              {/* A fixture's booking belongs to `allocate_fixture()`. Cancelling
-                  it here would leave `fixtures.booking_id` pointing at a dead
-                  slot, so the fixture is sent to the allocation screen instead. */}
-              {item.kind === "fixture" ? (
+              {/* A LEAGUE fixture's booking belongs to `allocate_fixture()`:
+                  the game exists whether or not a pitch does, so cancelling
+                  the slot here would leave `fixtures.booking_id` pointing at a
+                  dead booking, and the fixture is sent to the allocation
+                  screen instead.
+
+                  An INTERNAL match is the opposite case and is told apart by
+                  `opponentTeamId`: the booking IS the match, both fixture rows
+                  exist only because this request was confirmed, and
+                  `bookings_fixture_guard()` lets exactly this cancellation
+                  through so the pair goes off together. A match request that
+                  has not been confirmed yet has no fixture at all and cancels
+                  like any other booking. */}
+              {isLeagueFixtureSlot(item) ? (
                 <Link
                   href="/pitches"
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "outline", size: "sm" }) +
+                    " h-11 w-full lg:h-9 lg:w-auto"
+                  }
                 >
                   Unallocate on Pitches
                 </Link>
@@ -174,7 +228,13 @@ export function UpcomingBookings({ items }: { items: PitchBookingItem[] }) {
                   <form action={action}>
                     <input type="hidden" name="booking_id" value={item.id} />
                     <input type="hidden" name="team_id" value={item.teamId ?? ""} />
-                    <Button type="submit" variant="outline" size="sm" disabled={pending}>
+                    <Button
+                      type="submit"
+                      variant="outline"
+                      size="sm"
+                      className="h-11 w-full lg:h-9 lg:w-auto"
+                      disabled={pending}
+                    >
                       Cancel
                     </Button>
                   </form>

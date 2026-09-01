@@ -40,7 +40,7 @@ export function ReportForm({ people }: { people: PersonOption[] }) {
             <select
               id="subject_person_id"
               name="subject_person_id"
-              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm lg:h-10"
               defaultValue=""
             >
               <option value="">Not saying / not listed</option>
@@ -56,7 +56,7 @@ export function ReportForm({ people }: { people: PersonOption[] }) {
             <select
               id="reported_person_id"
               name="reported_person_id"
-              className="flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+              className="flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm lg:h-10"
               defaultValue=""
             >
               <option value="">Not saying / not listed</option>
@@ -84,7 +84,7 @@ export function ReportForm({ people }: { people: PersonOption[] }) {
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-2"
       >
         <Send className="h-4 w-4" /> Send report
       </button>

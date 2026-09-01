@@ -39,17 +39,25 @@ export function DecisionPanel({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <form action={approve} className="flex flex-wrap items-end gap-2">
+      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-end">
+        <form
+          action={approve}
+          className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-end"
+        >
           <input type="hidden" name="request_id" value={requestId} />
           <input type="hidden" name="person_id" value={personId} />
-          <div className="min-w-56 space-y-1">
+          <div className="space-y-1 lg:min-w-56">
             <Label htmlFor={`approve-note-${requestId}`} className="text-xs text-muted-foreground">
               Note (optional)
             </Label>
             <Input id={`approve-note-${requestId}`} name="note" placeholder="Checked with the coach" />
           </div>
-          <Button type="submit" size="sm" disabled={approving}>
+          <Button
+            type="submit"
+            size="sm"
+            disabled={approving}
+            className="min-h-[44px] lg:min-h-0"
+          >
             <Check className="h-4 w-4" />
             {approving ? "Approving…" : "Approve"}
           </Button>
@@ -60,6 +68,7 @@ export function DecisionPanel({
           variant="outline"
           size="sm"
           onClick={() => setShowReject((open) => !open)}
+          className="min-h-[44px] lg:min-h-0"
         >
           <X className="h-4 w-4" /> Reject
         </Button>
@@ -70,7 +79,13 @@ export function DecisionPanel({
           <input type="hidden" name="request_id" value={requestId} />
           <Label htmlFor={`reject-note-${requestId}`}>Why? {personName} will see this.</Label>
           <Textarea id={`reject-note-${requestId}`} name="note" rows={2} required />
-          <Button type="submit" variant="destructive" size="sm" disabled={rejecting}>
+          <Button
+            type="submit"
+            variant="destructive"
+            size="sm"
+            disabled={rejecting}
+            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          >
             {rejecting ? "Rejecting…" : "Reject request"}
           </Button>
         </form>
@@ -88,7 +103,10 @@ export function DecisionPanel({
           </p>
           <Link
             href={`/people/${approveState.blocked.personId}`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) +
+              " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+            }
           >
             Open {personName}&apos;s record
           </Link>

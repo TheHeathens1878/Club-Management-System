@@ -202,7 +202,7 @@ function EntryPopover({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-muted-foreground hover:bg-secondary"
+            className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary sm:h-auto sm:w-auto sm:p-1"
           >
             <X className="h-4 w-4" />
           </button>
@@ -221,7 +221,8 @@ function EntryPopover({
         {error && <p className="text-xs text-destructive">{error}</p>}
         {notice && <p className="text-xs text-emerald-700">{notice}</p>}
 
-        <div className="flex flex-wrap items-center gap-2 pt-1">
+        {/* Every action in the sheet is a 44px target on a phone. */}
+        <div className="flex flex-wrap items-center gap-2 pt-1 [&_a]:h-11 [&_button]:h-11 sm:[&_a]:h-9 sm:[&_button]:h-9">
           {!isClosure && (
             <Link
               href={`/pitches/${entry.bookingId}`}
@@ -312,7 +313,7 @@ function EntryPopover({
               Deleting removes the booking and its history outright — cancelling is the everyday
               path. A fixture&apos;s slot cannot be deleted here; unallocate it on Pitches.
             </p>
-            <div className="flex gap-2">
+            <div className="flex gap-2 [&_button]:h-11 sm:[&_button]:h-9">
               <Button type="submit" variant="destructive" size="sm" disabled={deleting}>
                 {deleting ? "Deleting…" : "Delete booking"}
               </Button>
@@ -334,7 +335,13 @@ function EntryPopover({
               placeholder="Why is it declined? The coach is told this."
               className="text-xs"
             />
-            <Button type="submit" variant="destructive" size="sm" disabled={declining}>
+            <Button
+              type="submit"
+              variant="destructive"
+              size="sm"
+              className="h-11 w-full sm:h-9 sm:w-auto"
+              disabled={declining}
+            >
               {declining ? "Declining…" : "Confirm decline"}
             </Button>
           </form>
@@ -488,7 +495,7 @@ function DayList({
                 type="button"
                 onClick={() => onSelect(entry)}
                 className={
-                  "w-full space-y-1 rounded-lg border px-3 py-2 text-left hover:brightness-95 " +
+                  "min-h-[44px] w-full space-y-1 rounded-lg border px-3 py-2 text-left hover:brightness-95 " +
                   blockClasses(entry)
                 }
               >
@@ -568,7 +575,7 @@ export function WeekCalendar({
         type="button"
         onClick={() => setOffset(Math.max(0, page - 1))}
         disabled={page === 0}
-        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-40"
+        className="inline-flex min-h-[44px] items-center gap-1 rounded px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-40 sm:min-h-0"
         aria-label="Previous pitches"
       >
         <ChevronLeft className="h-3.5 w-3.5" /> Prev
@@ -583,7 +590,7 @@ export function WeekCalendar({
         type="button"
         onClick={() => setOffset(Math.min(pages - 1, page + 1))}
         disabled={page >= pages - 1}
-        className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-40"
+        className="inline-flex min-h-[44px] items-center gap-1 rounded px-2 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-40 sm:min-h-0"
         aria-label="Next pitches"
       >
         Next <ChevronRight className="h-3.5 w-3.5" />

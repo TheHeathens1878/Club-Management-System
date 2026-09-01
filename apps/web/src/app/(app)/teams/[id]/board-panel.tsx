@@ -92,7 +92,13 @@ function ReplyForm({ teamId, postId }: { teamId: string; postId: string }) {
           placeholder="Reply…"
           className="min-h-9 flex-1 text-sm"
         />
-        <Button type="submit" size="sm" variant="outline" disabled={pending}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          className="min-h-[44px] lg:min-h-0"
+        >
           <Send className="h-3.5 w-3.5" />
           {pending ? "…" : "Reply"}
         </Button>
@@ -152,7 +158,7 @@ export function BoardPanel({
             <div className="flex items-center gap-2">
               <Button type="submit" size="sm" disabled={pending}>
                 <MessageSquareText className="h-4 w-4" />
-                {pending ? "Posting…" : "Post to board"}
+                {pending ? "Posting…" : "Post to the lobby"}
               </Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => setComposing(false)}>
                 Cancel
@@ -161,14 +167,19 @@ export function BoardPanel({
             <Feedback state={state} />
           </form>
         ) : (
-          <Button size="sm" variant="outline" onClick={() => setComposing(true)}>
-            <MessageSquareText className="h-4 w-4" /> Post to board
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setComposing(true)}
+            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          >
+            <MessageSquareText className="h-4 w-4" /> Post to the lobby
           </Button>
         ))}
 
       {posts.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nothing on the board yet{canPost ? " — start it with the first post." : "."}
+          Nothing in the lobby yet{canPost ? " — start it with the first post." : "."}
         </p>
       ) : (
         <ul className="space-y-3">

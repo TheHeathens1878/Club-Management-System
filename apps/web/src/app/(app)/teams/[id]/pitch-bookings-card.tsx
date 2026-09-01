@@ -11,10 +11,9 @@
  */
 
 import Link from "next/link";
-import { useActionState } from "react";
 
 import { Badge } from "@/components/ui/badge";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import {
   formatSlot,
   kindLabel,
@@ -26,8 +25,7 @@ import {
 import type { Headcount } from "@/lib/headcount";
 
 import { HeadcountChips } from "./fixtures-list";
-import { cancelPitchBooking } from "../../pitches/booking-actions";
-import { BookingFeedback, EMPTY_BOOKING_STATE } from "../../pitches/booking-feedback";
+import { CancelPitchBookingButton } from "../../pitches/cancel-booking-button";
 
 export function TeamPitchBookings({
   teamId,
@@ -41,12 +39,8 @@ export function TeamPitchBookings({
   /** Squad availability per booking id — staff view (gap: attendance markers). */
   headcounts?: Record<string, Headcount>;
 }) {
-  const [state, action, pending] = useActionState(cancelPitchBooking, EMPTY_BOOKING_STATE);
-
   return (
     <div className="space-y-3">
-      <BookingFeedback state={state} />
-
       {items.length === 0 ? (
         <p className="py-6 text-center text-sm text-muted-foreground">
           No pitch bookings for this team yet.
@@ -75,7 +69,9 @@ export function TeamPitchBookings({
                   reads as the caller and 404s if they may not see it. */}
               <Link
                 href={`/pitches/${item.id}`}
-                className={buttonVariants({ variant: "outline", size: "sm" })}
+                className={
+                  buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+                }
               >
                 Details
               </Link>
@@ -87,25 +83,31 @@ export function TeamPitchBookings({
               {canManage && (
                 <Link
                   href={`/pitches/${item.id}#attendance`}
-                  className={buttonVariants({ variant: "outline", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+                  }
                 >
                   Attendance
                 </Link>
               )}
-              {/* A fixture's slot is `allocate_fixture()`'s to move, not this
-                  card's — cancelling it here would orphan `fixtures.booking_id`. */}
+              {/* Cancelling, with the second look a released pitch deserves
+                  (Adam, 2026-08-25: "allow coaches to cancel bookings").
+                  `fixtureId`, not `kind`, is the test now that a coach can ask
+                  for a MATCH: a requested match is a `fixture`-kind booking
+                  with no link and is theirs to cancel, while an ALLOCATED
+                  fixture's slot is `allocate_fixture()`'s to move — cancelling
+                  that here would orphan `fixtures.booking_id`, and
+                  `bookings_team_guard()` refuses it anyway. */}
               {canManage &&
                 !item.calendarOnly &&
-                item.kind !== "fixture" &&
+                item.fixtureId === null &&
                 item.status !== "cancelled" && (
-                <form action={action}>
-                  <input type="hidden" name="booking_id" value={item.id} />
-                  <input type="hidden" name="team_id" value={teamId} />
-                  <Button type="submit" variant="outline" size="sm" disabled={pending}>
-                    Cancel
-                  </Button>
-                </form>
-              )}
+                  <CancelPitchBookingButton
+                    bookingId={item.id}
+                    teamId={teamId}
+                    slot={formatSlot(item)}
+                  />
+                )}
               </div>
             </li>
           ))}
@@ -114,7 +116,10 @@ export function TeamPitchBookings({
 
       <Link
         href={`/pitches/book?team=${teamId}`}
-        className={buttonVariants({ variant: "outline", size: "sm" })}
+        className={
+          buttonVariants({ variant: "outline", size: "sm" }) +
+          " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        }
       >
         Book a pitch for this team
       </Link>

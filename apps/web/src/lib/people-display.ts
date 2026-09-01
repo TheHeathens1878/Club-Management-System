@@ -3,10 +3,9 @@
  * the team membership editor.
  *
  * Nothing here decides anything: every safeguarding question is answered by the
- * database (`is_minor()`, `is_child_facing_compliant()`, the SG-4/SG-6 guards)
- * under the caller's own RLS. These are labels, date formatting and the
- * translation of a Postgres error code into a sentence an administrator can act
- * on.
+ * database (`is_minor()`, the SG-4 guards) under the caller's own RLS. These
+ * are labels, date formatting and the translation of a Postgres error code into
+ * a sentence an administrator can act on.
  */
 
 import type { Json } from "@club/db";
@@ -146,10 +145,10 @@ export function addressOneLine(value: Json | null | undefined): string {
  * 42501 is RLS refusing the write outright — the caller does not hold the role
  * the policy asks for, and the raw message says nothing useful.
  *
- * P0001 is a safeguarding guard speaking (SG-4 on `guardianships`, SG-6 on
- * `team_memberships`, the exemption cap). Those messages are written for a
- * human and name the exact certification or link that is missing, so they are
- * shown VERBATIM and never rewritten.
+ * P0001 is a safeguarding guard speaking (SG-4 on `guardianships`, the dob
+ * guard on `people`). Those messages are written for a human and name the
+ * exact link or record at fault, so they are shown VERBATIM and never
+ * rewritten.
  */
 export function friendlyDbError(
   error: PostgrestError,

@@ -10,7 +10,7 @@ import { TemplateEditor } from "./template-editor";
 export default async function EditTemplatePage({ params }: { params: Promise<{ key: string }> }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { key } = await params;
   if (!(key in TEMPLATE_DEFINITIONS)) notFound();
@@ -36,7 +36,10 @@ export default async function EditTemplatePage({ params }: { params: Promise<{ k
         title={def.name}
         subtitle={def.description}
         action={
-          <Link href="/email-templates" className="text-sm text-primary hover:underline">
+          <Link
+            href="/email-templates"
+            className="inline-flex min-h-[44px] items-center text-sm text-primary hover:underline lg:min-h-0"
+          >
             ← All templates
           </Link>
         }

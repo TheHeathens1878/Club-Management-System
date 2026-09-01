@@ -13,7 +13,7 @@ import { PersonForm } from "../person-form";
 export default async function NewPersonPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   return (
     <>
@@ -21,14 +21,19 @@ export default async function NewPersonPage() {
         title="Add a person"
         subtitle="One row per human — a player, a coach, a parent or a hirer"
         action={
-          <Link href="/people" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/people"
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
+          >
             <ChevronLeft className="h-4 w-4" /> Back to people
           </Link>
         }
       />
-      <div className="max-w-3xl p-6">
+      <div className="max-w-3xl p-4 lg:p-6">
         <Card>
-          <CardContent className="pt-6">
+          <CardContent className="p-4 pt-4 lg:p-6 lg:pt-6">
             <PersonForm
               mode="create"
               values={{

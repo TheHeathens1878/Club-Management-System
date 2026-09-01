@@ -25,6 +25,7 @@ import {
   fixturesForTeam,
   parseFixturesPage,
   parseWidgetHtml,
+  widgetCodeLabels,
   widgetTeamName,
   widgetUrl,
   RateLimiter,
@@ -196,8 +197,24 @@ async function importClub(admin: Client, linkedTeamIds: Set<string>, onlyTeam: s
   const codes = (codesData ?? []) as Array<{ kind: string; code: string }>;
   if (codes.length === 0) return results;
 
+  // Each code is one league's widget, so a league name written next to the
+  // code in the settings ("Timperley & District JFL: 885630049") tells us the
+  // league of every team that code feeds (Adam: "make the league … be
+  // pre-populated from the FT feed" — the widget HTML itself names no league).
+  const { data: codeRows } = await admin
+    .from("site_settings")
+    .select("value")
+    .in("key", ["fulltime_club_fixtures_code", "fulltime_club_results_code"]);
+  const leagueByCode = new Map<string, string>();
+  for (const row of (codeRows ?? []) as Array<{ value: string | null }>) {
+    for (const [code, label] of widgetCodeLabels(row.value ?? "")) {
+      if (!leagueByCode.has(code)) leagueByCode.set(code, label);
+    }
+  }
+
   const pages: ParsedPage[] = [];
   const pageWarnings: string[] = [];
+  const leagueByRef = new Map<string, string>();
   let sourceUrl = "";
   for (const c of codes) {
     const url = widgetUrl(c.code);
@@ -210,6 +227,12 @@ async function importClub(admin: Client, linkedTeamIds: Set<string>, onlyTeam: s
     const page = parseWidgetHtml(res.html);
     pages.push(page);
     pageWarnings.push(...page.warnings);
+    const league = leagueByCode.get(c.code);
+    if (league) {
+      for (const f of page.fixtures) {
+        if (!leagueByRef.has(f.externalRef)) leagueByRef.set(f.externalRef, league);
+      }
+    }
   }
   if (pages.length === 0) return results;
   const fixtures = mergeByRef(pages);
@@ -272,6 +295,22 @@ async function importClub(admin: Client, linkedTeamIds: Set<string>, onlyTeam: s
       });
       results.push({ team: team.name, via: "club", status: "error", error: error.message });
     } else {
+      // Pre-populate, never overwrite: the league lands only while the
+      // team's own record is blank, so a hand-corrected name stays put.
+      const votes = new Map<string, number>();
+      for (const f of mine) {
+        const league = leagueByRef.get(f.externalRef);
+        if (league) votes.set(league, (votes.get(league) ?? 0) + 1);
+      }
+      const league = [...votes.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+      if (league) {
+        const { error: leagueError } = await admin
+          .from("teams")
+          .update({ league })
+          .eq("id", team.id)
+          .is("league", null);
+        if (leagueError) results.push({ team: team.name, via: "club", status: "league_error", error: leagueError.message });
+      }
       results.push({ team: team.name, via: "club", status: "ok", result: data });
     }
   }

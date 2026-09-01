@@ -33,7 +33,13 @@ export function NoteForm({ entryId }: { entryId: string }) {
         aria-label="New note"
       />
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" size="sm" variant="outline" disabled={pending}>
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={pending}
+          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+        >
           {pending ? "Saving…" : "Add note"}
         </Button>
         {state.error && <span className="text-sm text-destructive">{state.error}</span>}
@@ -56,13 +62,16 @@ export function StatusForm({
   );
 
   return (
-    <form action={action} className="flex flex-wrap items-center gap-2">
+    <form
+      action={action}
+      className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center"
+    >
       <input type="hidden" name="entry_id" value={entryId} />
       <Select
         name="status"
         defaultValue={status}
         aria-label="Status"
-        className="h-9 w-auto min-w-40"
+        className="min-h-[44px] lg:h-9 lg:w-auto lg:min-h-0 lg:min-w-40"
       >
         {WAITING_LIST_STATUSES.map((value) => (
           <option key={value} value={value}>
@@ -70,7 +79,7 @@ export function StatusForm({
           </option>
         ))}
       </Select>
-      <Button type="submit" size="sm" disabled={pending}>
+      <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
         {pending ? "Saving…" : "Update status"}
       </Button>
       {state.error && <span className="text-sm text-destructive">{state.error}</span>}

@@ -9,7 +9,9 @@ import { addConcernNote, updateConcern, type ActionState } from "../../actions";
 
 const EMPTY: ActionState = {};
 
-const selectClass = "flex h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm";
+/** 44px on a phone, the desk's 40px from lg up. */
+const selectClass =
+  "flex h-11 w-full rounded-md border border-input bg-card px-3 py-2 text-sm lg:h-10";
 
 /** safeguarding_lead only. The accessor refuses anyone else and records it. */
 export function UpdateConcernForm({
@@ -70,7 +72,7 @@ export function UpdateConcernForm({
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-2"
       >
         Save
       </button>
@@ -93,7 +95,7 @@ export function AddNoteForm({ concernRef }: { concernRef: string }) {
       <button
         type="submit"
         disabled={pending}
-        className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-60"
+        className="inline-flex min-h-[44px] w-full items-center justify-center rounded-md border px-3 text-xs font-medium transition-colors hover:bg-secondary disabled:opacity-60 sm:w-auto lg:min-h-0 lg:py-1.5"
       >
         Add note
       </button>

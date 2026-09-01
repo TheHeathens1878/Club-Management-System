@@ -6,7 +6,7 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSessionProfile } from "@/lib/auth";
+import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { groupAttachment, type AttachmentChoice } from "@/lib/group-scope";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
@@ -54,7 +54,7 @@ export default async function ManageGroupPage({
     return (
       <>
         <PageHeader title="Not a group" subtitle="Team rooms are not edited here" />
-        <div className="p-6 max-w-2xl">
+        <div className="max-w-2xl p-4 lg:p-6">
           <Card>
             <CardContent className="space-y-3 p-6 text-sm text-muted-foreground">
               <p>
@@ -62,7 +62,10 @@ export default async function ManageGroupPage({
                 season, and their membership from the team sheet — renaming one here would create a
                 second room the next time somebody joins or leaves.
               </p>
-              <Link href={`/messages/${id}`} className={buttonVariants({ size: "sm" })}>
+              <Link
+                href={`/messages/${id}`}
+                className={buttonVariants({ size: "sm" }) + " min-h-[44px] lg:min-h-0"}
+              >
                 Open the conversation
               </Link>
             </CardContent>
@@ -73,8 +76,20 @@ export default async function ManageGroupPage({
   }
 
   const clubAdmin = await isClubAdmin();
-  const isCreator = conversation.created_by_person_id === personId;
-  const canEdit = clubAdmin || isCreator;
+  // Adam, 2026-08-25: "make sure that coaches cannot edit the group settings
+  // or close the group." Settings and closing are the club's: a creator who
+  // is not an administrator keeps everything else — reading it, posting in it,
+  // adding and removing members — but the name, the attachment and the close
+  // button are the administrator's. The database says the same thing
+  // (`conversations_update`, 20260825320000), so this only stops offering a
+  // form the update would refuse.
+  const canEdit = clubAdmin;
+  // Adam, 2026-08-25: "admins should be able to click on a member's name and
+  // it takes you to their contact page". /people/[id] admits the committee and
+  // nobody else, so the link is offered on exactly that answer — a group's
+  // creator who is not on the committee keeps the plain name rather than a
+  // link that would bounce them to the room diary.
+  const canOpenContacts = isCommittee(session.profile?.role);
 
   const { data: participantRows } = await supabase
     .from("conversation_participants")
@@ -116,13 +131,15 @@ export default async function ManageGroupPage({
           <div className="flex items-center gap-2">
             <Link
               href={`/messages/${id}`}
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5"}
+              className={
+                buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] gap-1.5 lg:min-h-0"
+              }
             >
               <MessageSquare className="h-3.5 w-3.5" /> Open chat
             </Link>
             <Link
               href="/groups"
-              className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline"
+              className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
             >
               <ChevronLeft className="h-4 w-4" /> All groups
             </Link>
@@ -130,7 +147,7 @@ export default async function ManageGroupPage({
         }
       />
 
-      <div className="p-6 space-y-4 max-w-3xl">
+      <div className="max-w-3xl space-y-4 p-4 lg:p-6">
         {/*
           SG-9 (P5.4): a supervised conversation says so wherever it is shown,
           persistently and without a way to dismiss it. Same words as the thread
@@ -161,8 +178,9 @@ export default async function ManageGroupPage({
 
         {!canEdit && (
           <div className="rounded-lg border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
-            You are in this group but did not set it up, so it is shown here read-only. The person
-            who created it, or a club administrator, can change it.
+            The group&apos;s name, what it is attached to and whether it is closed are the club&apos;s
+            to set, so they are shown here read-only. You can still add and remove members below.
+            Ask a club administrator for anything else.
           </div>
         )}
 
@@ -208,6 +226,7 @@ export default async function ManageGroupPage({
               conversationId={conversation.id}
               members={members}
               canEdit={canEdit}
+              canOpenContacts={canOpenContacts}
               closed={!!conversation.closed_at}
             />
           </CardContent>

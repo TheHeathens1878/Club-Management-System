@@ -84,6 +84,12 @@ export type ManualPreview = {
 export type ManualImportResult = {
   error?: string;
   inserted?: number;
+  /** Removed because Full-Time no longer publishes them (20260826100000). */
+  retired?: number;
+  /** No longer published, but a team sheet, stats or a pitch keeps them. */
+  keptBack?: number;
+  /** What the run had to say — including which fixtures it kept back and why. */
+  runWarnings?: string[];
   updated?: number;
   unchanged?: number;
   runId?: number;
@@ -105,7 +111,7 @@ const limiter = new RateLimiter();
 
 async function requireCommittee() {
   const session = await getSessionProfile();
-  if (!session || !isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!session || !isCommittee(session.profile?.role)) redirect("/lobby");
   return session;
 }
 
@@ -315,6 +321,21 @@ export async function runManualImport(
   if (error) return { error: error.message };
 
   const result = data?.[0];
+
+  // The reconciliation's counts live on the run row rather than in the RPC's
+  // return, whose shape other callers depend on. Read them back so the person
+  // who pressed Import is told what was removed as well as what arrived.
+  const { data: runRow } = result?.run_id
+    ? await admin
+        .from("fixture_import_runs")
+        .select("retired,kept_back,warnings")
+        .eq("id", result.run_id)
+        .maybeSingle()
+    : { data: null };
+  const runWarnings = Array.isArray(runRow?.warnings)
+    ? (runRow.warnings as unknown[]).filter((w): w is string => typeof w === "string")
+    : [];
+
   await writeAudit({
     actorId: session.userId,
     actorEmail: session.email,
@@ -329,6 +350,8 @@ export async function runManualImport(
       inserted: result?.inserted ?? 0,
       updated: result?.updated ?? 0,
       unchanged: result?.unchanged ?? 0,
+      retired: runRow?.retired ?? 0,
+      kept_back: runRow?.kept_back ?? 0,
     },
   });
 
@@ -340,6 +363,9 @@ export async function runManualImport(
     inserted: result?.inserted ?? 0,
     updated: result?.updated ?? 0,
     unchanged: result?.unchanged ?? 0,
+    retired: runRow?.retired ?? 0,
+    keptBack: runRow?.kept_back ?? 0,
+    runWarnings,
     runId: result?.run_id ?? undefined,
   };
 }

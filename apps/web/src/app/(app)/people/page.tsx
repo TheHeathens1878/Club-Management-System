@@ -1,19 +1,34 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus, Search } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import type { Enums } from "@club/db";
 
+import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input, Label } from "@/components/ui/input";
+import { Label } from "@/components/ui/input";
+import {
+  parsePeopleColumns,
+  peopleColumn,
+  peopleGridTemplate,
+} from "@/lib/people-columns";
 import { Select } from "@/components/ui/field";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { isClubAdmin } from "@/lib/person";
+import { signPeoplePhotos } from "@/lib/avatars";
+import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
+import {
+  membershipKindLabel,
+  membershipKindVariant,
+  membershipKindWord,
+  type MembershipKind,
+} from "@/lib/membership-kind";
 import { isMinorDob, personLabel, sanitiseSearch } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
+
+import { PeopleControls } from "./people-controls";
 
 /**
  * The club's contacts database (gap 2).
@@ -48,6 +63,15 @@ import { createClient } from "@/lib/supabase/server";
  * `public.is_minor_dob()` (SG-0: an unknown date of birth is a minor). It is a
  * label on a screen only committee reach; every decision that matters still
  * asks the database.
+ *
+ * THE MEMBERSHIP TAG (Adam, 2026-08-26) sits in the same cell as the type
+ * badges, in the quieter `outline` style, because it answers a question of the
+ * same shape — what is this person to the club — from a different table. It is
+ * NOT computed here: `memberships.kind` is derived from the number of PLAYERS
+ * on the membership in the current season by `public.membership_kind_for()`,
+ * and a trigger keeps it right when a second child is registered later. The
+ * row is read from `person_memberships`, a security_invoker view, so a caller
+ * who could not read the membership simply gets no badge.
  */
 
 /** Enough to scan, few enough that the per-page enrichment stays four queries. */
@@ -61,6 +85,7 @@ const ROLES: Enums<"app_role">[] = [
   "member",
   "parent",
   "hirer",
+  "referee",
 ];
 
 const ROLE_LABELS: Record<Enums<"app_role">, string> = {
@@ -71,6 +96,7 @@ const ROLE_LABELS: Record<Enums<"app_role">, string> = {
   member: "Member",
   parent: "Parent",
   hirer: "Hirer",
+  referee: "Referee",
 };
 
 /** The staff half of `team_role` — everything that is not a player. */
@@ -94,13 +120,18 @@ const TYPE_BADGE_VARIANT: Record<ContactType, "default" | "success" | "muted"> =
 /** Teams are listed in full up to this many, then counted. */
 const TEAMS_SHOWN = 2;
 
+
 type SearchParams = {
   q?: string;
   type?: string;
   filter?: string;
+  /** Which columns the desk view shows — see lib/people-columns.ts. */
+  cols?: string;
   role?: string;
   team?: string;
   page?: string;
+  /** The one-line summary purgePerson() redirects back with. */
+  purged?: string;
 };
 
 /** `null` means "no restriction"; an empty array means "restricted to nobody". */
@@ -115,6 +146,7 @@ function listQuery(params: SearchParams, overrides: Partial<SearchParams> = {}):
   if (merged.q) query.set("q", merged.q);
   if (merged.type) query.set("type", merged.type);
   if (merged.filter) query.set("filter", merged.filter);
+  if (merged.cols) query.set("cols", merged.cols);
   if (merged.role) query.set("role", merged.role);
   if (merged.team) query.set("team", merged.team);
   if (merged.page && merged.page !== "1") query.set("page", merged.page);
@@ -142,11 +174,15 @@ export default async function PeoplePage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
 
   const params = await searchParams;
   const term = sanitiseSearch(params.q ?? "");
   const noDob = params.filter === "no_dob";
+  // Which columns this reader asked for (Adam, 2026-08-26). Held in the URL so
+  // a list stays the same list when it is bookmarked or sent on.
+  const columns = parsePeopleColumns(params.cols);
+  const gridTemplate = peopleGridTemplate(columns);
   const roleFilter = ROLES.includes(params.role as Enums<"app_role">)
     ? (params.role as Enums<"app_role">)
     : null;
@@ -259,10 +295,23 @@ export default async function PeoplePage({
 
   const impossible = restricted !== null && restricted.length === 0;
 
+  // Hirers are NOT members (Adam, 2026-08-25). This used to look for a
+  // `booker` profile — a marker that does not exist in this database, so it
+  // matched nothing and 27 room customers sat in the club's contact list.
+  // `hire_only_person_ids()` (20260825360000) asks the question the screen
+  // means instead: no team, no registration, no guardianship, no membership,
+  // no role, no staff login, no account request — and a matching hire contact
+  // or booking. Nobody is re-roled; they are simply somebody else's list.
+  const { data: hirerIds } = await supabase.rpc("hire_only_person_ids");
+  const hirerPersonIds = (hirerIds ?? []) as string[];
+
   let query = supabase
     .from("people")
-    .select("id,first_name,last_name,preferred_name,dob,email,phone", { count: "exact" })
+    .select("id,first_name,last_name,preferred_name,dob,email,phone,photo_path", { count: "exact" })
     .is("deleted_at", null);
+  if (hirerPersonIds.length > 0) {
+    query = query.not("id", "in", `(${hirerPersonIds.join(",")})`);
+  }
 
   if (term.length > 0) {
     const pattern = `%${term}%`;
@@ -299,12 +348,19 @@ export default async function PeoplePage({
   const people = rows ?? [];
   const ids = people.map((p) => p.id);
   const total = count ?? 0;
+  // One signing call for the whole page, not one per row.
+  const photoUrls = await signPeoplePhotos(people);
   const lastPage = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   // Enrichment for the page's rows only — four bulk reads, not four per row.
-  const [rolesResult, membershipsResult, guardianshipsResult, profilesResult] =
-    ids.length === 0
-      ? [{ data: [] }, { data: [] }, { data: [] }, { data: [] }]
+  const [
+    rolesResult,
+    membershipsResult,
+    guardianshipsResult,
+    profilesResult,
+    clubMembershipsResult,
+  ] = ids.length === 0
+      ? [{ data: [] }, { data: [] }, { data: [] }, { data: [] }, { data: [] }]
       : await Promise.all([
           supabase
             .from("person_roles")
@@ -327,6 +383,21 @@ export default async function PeoplePage({
             .in("guardian_person_id", ids)
             .is("ended_at", null),
           supabase.from("profiles").select("person_id").in("person_id", ids),
+          // The membership tag, one bulk read for the page's rows. Scoped to
+          // the current season: last season's family is not this season's.
+          currentSeason
+            ? supabase
+                .from("person_memberships")
+                .select("person_id,kind,primary_person_id")
+                .in("person_id", ids)
+                .eq("season_id", currentSeason.id)
+            : Promise.resolve({
+                data: [] as {
+                  person_id: string | null;
+                  kind: MembershipKind | null;
+                  primary_person_id: string | null;
+                }[],
+              }),
         ]);
 
   const appRoles = new Map<string, Set<Enums<"app_role">>>();
@@ -357,12 +428,31 @@ export default async function PeoplePage({
 
   const withLogin = new Set((profilesResult.data ?? []).map((p) => p.person_id));
 
+  const membershipKind = new Map<string, MembershipKind>();
+  // Who the membership is billed to (Adam, 2026-08-26: "Membership type
+  // (linked to lead party)"). A person who IS the lead has no entry, and the
+  // column says "Lead contact" instead of naming them to themselves.
+  const membershipLeadId = new Map<string, string>();
+  for (const row of clubMembershipsResult.data ?? []) {
+    if (row.person_id && row.kind) membershipKind.set(row.person_id, row.kind);
+    if (row.person_id && row.primary_person_id && row.primary_person_id !== row.person_id) {
+      membershipLeadId.set(row.person_id, row.primary_person_id);
+    }
+  }
+  // The lead is frequently NOT on the page being listed — a parent whose
+  // children fill the search results — so their names are fetched rather than
+  // looked up among the rows.
+  const leadNames = await resolveNames([...new Set(membershipLeadId.values())]);
+  const membershipLead = new Map<string, string>();
+  for (const [personId, leadId] of membershipLeadId) {
+    membershipLead.set(personId, nameOf(leadNames, leadId));
+  }
+
   // The design's row details: a minor's contact goes through their guardian
-  // ("via Kate Ashworth"), a pending account request reads Needs review, and a
-  // staff DBS inside 90 days of expiry reads DBS due. Three more bulk reads
-  // for the page's rows only.
+  // ("via Kate Ashworth") and a pending account request reads Needs review.
+  // Two more bulk reads for the page's rows only.
   const minorIds = people.filter((p) => isMinorDob(p.dob)).map((p) => p.id);
-  const [guardiansResult, requestsResult, dbsResult] = await Promise.all([
+  const [guardiansResult, requestsResult] = await Promise.all([
     minorIds.length > 0
       ? supabase
           .from("guardianships")
@@ -377,14 +467,6 @@ export default async function PeoplePage({
           .in("person_id", ids)
           .eq("status", "pending")
       : Promise.resolve({ data: [] as { person_id: string }[] }),
-    ids.length > 0
-      ? supabase
-          .from("certifications")
-          .select("person_id,expires_on")
-          .in("person_id", ids)
-          .eq("type", "fa_dbs")
-          .is("revoked_at", null)
-      : Promise.resolve({ data: [] as { person_id: string; expires_on: string | null }[] }),
   ]);
 
   const guardianOf = new Map<string, string>();
@@ -411,12 +493,6 @@ export default async function PeoplePage({
   }
 
   const needsReview = new Set((requestsResult.data ?? []).map((r) => r.person_id));
-  const dbsDue = new Set<string>();
-  const dbsSoon = new Date();
-  dbsSoon.setDate(dbsSoon.getDate() + 90);
-  for (const cert of dbsResult.data ?? []) {
-    if (cert.expires_on && new Date(cert.expires_on) <= dbsSoon) dbsDue.add(cert.person_id);
-  }
 
   const chips: { key: string; label: string; href: string; active: boolean }[] = [
     {
@@ -452,69 +528,84 @@ export default async function PeoplePage({
     <>
       <PageHeader
         title="People"
-        subtitle="The club's contacts database — players, parents, coaches and hirers"
+        subtitle="The club's contacts database — players, parents, coaches and staff. Hirers live in the function room's own contacts book."
         action={
-          <span className="flex gap-2">
+          <span className="flex w-full gap-2 lg:w-auto">
             {/* A plain anchor on purpose: this is a file download from a route
                 handler, and Link would try to client-navigate/prefetch it. */}
             {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/people/export"
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-2"}
+              className={
+                buttonVariants({ variant: "outline", size: "sm" }) +
+                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+              }
             >
               Export CSV
             </a>
             <Link
               href="/people/new"
-              className={buttonVariants({ variant: "default", size: "sm" }) + " gap-2"}
+              className={
+                buttonVariants({ variant: "default", size: "sm" }) +
+                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+              }
             >
               <Plus className="h-4 w-4" /> Add a person
             </Link>
           </span>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
+        {params.purged && (
+          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {params.purged}
+          </p>
+        )}
         <Card>
-          <CardHeader className="space-y-3">
+          <CardHeader className="space-y-3 p-4 lg:p-6">
             <CardTitle className="text-base">Find someone</CardTitle>
-            <div className="flex flex-wrap gap-2">
+            {/* The chips scroll sideways in their own lane on a phone rather
+                than wrapping into four lines. */}
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
               {chips.map((chip) => (
                 <Link
                   key={chip.key}
                   href={chip.href}
                   aria-current={chip.active ? "true" : undefined}
-                  className={buttonVariants({
-                    variant: chip.active ? "default" : "outline",
-                    size: "sm",
-                  })}
+                  className={
+                    buttonVariants({
+                      variant: chip.active ? "default" : "outline",
+                      size: "sm",
+                    }) + " min-h-[44px] shrink-0 whitespace-nowrap lg:min-h-0"
+                  }
                 >
                   {chip.label}
                 </Link>
               ))}
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+            <PeopleControls initialQuery={params.q ?? ""} />
+
             {/* A GET form so every list is a URL somebody can bookmark or send.
                 The type chip lives outside the form, so it rides along in a
                 hidden field rather than being lost on the next search. */}
             <form method="get" className="grid gap-4 sm:grid-cols-6">
               {typeFilter && <input type="hidden" name="type" value={typeFilter} />}
-              <div className="space-y-1.5 sm:col-span-2">
-                <Label htmlFor="q">Name or email</Label>
-                <div className="relative">
-                  <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                  <Input
-                    id="q"
-                    name="q"
-                    defaultValue={params.q ?? ""}
-                    placeholder="Search…"
-                    className="pl-8"
-                  />
-                </div>
-              </div>
+              {params.cols && <input type="hidden" name="cols" value={params.cols} />}
+              {/* The name box lives in PeopleControls above, which filters as
+                  you type. This hidden field is what keeps the typed name when
+                  somebody changes the team or role dropdowns and presses
+                  Search — the GET form would otherwise drop it. */}
+              {params.q && <input type="hidden" name="q" value={params.q} />}
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="team">Team (this season)</Label>
-                <Select id="team" name="team" defaultValue={teamFilter ?? ""}>
+                <Select
+                  id="team"
+                  name="team"
+                  defaultValue={teamFilter ?? ""}
+                  className="min-h-[44px] lg:min-h-0"
+                >
                   <option value="">Any team</option>
                   {(teams ?? []).map((team) => (
                     <option key={team.id} value={team.id}>
@@ -525,7 +616,12 @@ export default async function PeoplePage({
               </div>
               <div className="space-y-1.5 sm:col-span-2">
                 <Label htmlFor="role">Role</Label>
-                <Select id="role" name="role" defaultValue={roleFilter ?? ""}>
+                <Select
+                  id="role"
+                  name="role"
+                  defaultValue={roleFilter ?? ""}
+                  className="min-h-[44px] lg:min-h-0"
+                >
                   <option value="">Any role</option>
                   {ROLES.map((role) => (
                     <option key={role} value={role}>
@@ -534,21 +630,27 @@ export default async function PeoplePage({
                   ))}
                 </Select>
               </div>
-              <label className="flex items-center gap-2 text-sm sm:col-span-4">
+              <label className="flex min-h-[44px] items-center gap-2 text-sm sm:col-span-4 lg:min-h-0">
                 <input type="checkbox" name="filter" value="no_dob" defaultChecked={noDob} />
                 Only people with no date of birth on file
               </label>
               <div className="flex items-end gap-2 sm:col-span-2">
                 <button
                   type="submit"
-                  className={buttonVariants({ variant: "default", size: "sm" })}
+                  className={
+                    buttonVariants({ variant: "default", size: "sm" }) +
+                    " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                  }
                 >
                   Search
                 </button>
                 {filtersApplied && (
                   <Link
                     href="/people"
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
+                    className={
+                      buttonVariants({ variant: "outline", size: "sm" }) +
+                      " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                    }
                   >
                     Clear
                   </Link>
@@ -559,7 +661,7 @@ export default async function PeoplePage({
         </Card>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">
               {total} {total === 1 ? "person" : "people"}
               {!currentSeason && (
@@ -569,7 +671,7 @@ export default async function PeoplePage({
               )}
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {error && (
               <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                 Could not load people. Your account may not hold the club_admin or safeguarding_lead
@@ -585,14 +687,15 @@ export default async function PeoplePage({
               <div>
                 {/* A header, not a <table>: the whole row is one link, and a
                     link cannot wrap a <tr>. */}
-                <div className="hidden border-b pb-2 text-xs text-muted-foreground md:grid md:grid-cols-12 md:gap-3">
-                  <span className="md:col-span-3">Name</span>
-                  <span className="md:col-span-2">Type</span>
-                  <span className="md:col-span-2">Teams</span>
-                  <span className="md:col-span-3">Contact</span>
-                  <span className="md:col-span-2">Status</span>
+                <div
+                  className="hidden border-b pb-2 text-xs text-muted-foreground lg:grid lg:gap-3"
+                  style={{ gridTemplateColumns: gridTemplate }}
+                >
+                  {columns.map((key) => (
+                    <span key={key}>{peopleColumn(key).label}</span>
+                  ))}
                 </div>
-                <ul className="divide-y">
+                <ul className="space-y-2 lg:space-y-0 lg:divide-y">
                   {people.map((person) => {
                     const name = personLabel(person);
                     const held = [...(typesByPerson.get(person.id) ?? [])];
@@ -603,78 +706,194 @@ export default async function PeoplePage({
                     const guardian = minor
                       ? guardianPeople.get(guardianOf.get(person.id) ?? "")
                       : undefined;
+                    const shownTypes = TYPES.filter((type) => held.includes(type));
+                    const kind = membershipKind.get(person.id) ?? null;
+                    const leadName = membershipLead.get(person.id) ?? null;
+                    const teamsText =
+                      heldTeams.length === 0
+                        ? "—"
+                        : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
+                          (extraTeams > 0 ? ` +${extraTeams}` : "");
+                    // One status per person, so the card and the table row can
+                    // never drift apart.
+                    const status = needsReview.has(person.id)
+                      ? { label: "Needs review", variant: "destructive" as const }
+                      : minor
+                        ? { label: "Registered", variant: "success" as const }
+                        : linked
+                          ? { label: "Active", variant: "success" as const }
+                          : { label: "No login", variant: "muted" as const };
+                    const href = personHref(person.id, params, page);
                     return (
                       <li key={person.id}>
+                        {/* The phone's card: avatar, name, the muted role and
+                            contact lines, team and status down the right. */}
                         <Link
-                          href={personHref(person.id, params, page)}
-                          className="grid gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none md:grid-cols-12 md:items-center"
+                          href={href}
+                          className="flex min-h-[44px] items-start gap-3 rounded-xl border bg-card p-3 lg:hidden"
                         >
-                          <span className="flex flex-wrap items-center gap-2 md:col-span-3">
+                          <span className="relative inline-flex flex-none">
+                            <Avatar name={name} photoUrl={photoUrls.get(person.id)} />
                             <span
-                              aria-hidden="true"
-                              title={linked ? "Has a login" : "No login yet"}
                               className={
-                                "h-2 w-2 shrink-0 rounded-full " +
+                                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card " +
                                 (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
                               }
                             />
-                            <span className="font-medium">{name}</span>
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-1.5">
+                              <span className="text-sm font-medium leading-tight">{name}</span>
+                              {minor && (
+                                <Badge variant="warning">
+                                  {person.dob ? "Minor" : "No DOB"}
+                                </Badge>
+                              )}
+                            </span>
                             <span className="sr-only">
                               {linked ? "Has a login." : "No login yet."}
                             </span>
-                            {minor && (
-                              <Badge variant="warning">
-                                {person.dob ? "Minor" : "No DOB — treated as a minor"}
-                              </Badge>
-                            )}
+                            <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
+                              {[
+                                shownTypes.length === 0
+                                  ? "No type recorded"
+                                  : shownTypes.map((type) => TYPE_LABELS[type]).join(" · "),
+                                membershipKindWord(kind),
+                              ]
+                                .filter(Boolean)
+                                .join(" · ")}
+                            </span>
+                            <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
+                              {minor && guardian
+                                ? `via ${guardian.name} · ${guardian.phone ?? "No phone"}`
+                                : `${person.email ?? "No email"} · ${person.phone ?? "No phone"}`}
+                            </span>
                           </span>
-                          <span className="flex flex-wrap gap-1 md:col-span-2">
-                            {held.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">—</span>
-                            ) : (
-                              TYPES.filter((type) => held.includes(type)).map((type) => (
-                                <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
-                                  {TYPE_LABELS[type]}
-                                </Badge>
-                              ))
-                            )}
+                          <span className="flex max-w-[104px] flex-none flex-col items-end gap-1">
+                            <Badge variant={status.variant} className="whitespace-nowrap">
+                              {status.label}
+                            </Badge>
+                            <span className="w-full truncate text-right text-[11px] leading-tight text-muted-foreground">
+                              {teamsText}
+                            </span>
                           </span>
-                          <span className="text-xs text-muted-foreground md:col-span-2">
-                            {heldTeams.length === 0
-                              ? "—"
-                              : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
-                                (extraTeams > 0 ? ` +${extraTeams}` : "")}
-                          </span>
-                          <span className="text-xs text-muted-foreground md:col-span-3">
-                            {/* The design's rule, stated on the page: an
-                                under-18's contact goes through their guardian. */}
-                            {minor && guardian ? (
-                              <>
-                                <span className="block">via {guardian.name}</span>
-                                <span className="block">{guardian.phone ?? "No phone"}</span>
-                              </>
-                            ) : (
-                              <>
-                                <span className="block break-all">
-                                  {person.email ?? "No email"}
-                                </span>
-                                <span className="block">{person.phone ?? "No phone"}</span>
-                              </>
-                            )}
-                          </span>
-                          <span className="md:col-span-2">
-                            {needsReview.has(person.id) ? (
-                              <Badge variant="destructive">Needs review</Badge>
-                            ) : dbsDue.has(person.id) ? (
-                              <Badge variant="warning">DBS due</Badge>
-                            ) : minor ? (
-                              <Badge variant="success">Registered</Badge>
-                            ) : linked ? (
-                              <Badge variant="success">Active</Badge>
-                            ) : (
-                              <Badge variant="muted">No login</Badge>
-                            )}
-                          </span>
+                        </Link>
+
+                        {/* The desk row, one cell per chosen column. The
+                            widths come from the same registry the header and
+                            the picker read, so the three cannot drift. */}
+                        <Link
+                          href={href}
+                          className="hidden gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none lg:grid lg:items-center"
+                          style={{ gridTemplateColumns: gridTemplate }}
+                        >
+                          {columns.map((key) => {
+                            switch (key) {
+                              case "name":
+                                return (
+                                  <span key={key} className="flex flex-wrap items-center gap-2">
+                                    <span
+                                      aria-hidden="true"
+                                      title={linked ? "Has a login" : "No login yet"}
+                                      className={
+                                        "h-2 w-2 shrink-0 rounded-full " +
+                                        (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
+                                      }
+                                    />
+                                    <span className="font-medium">{name}</span>
+                                    <span className="sr-only">
+                                      {linked ? "Has a login." : "No login yet."}
+                                    </span>
+                                    {minor && (
+                                      <Badge variant="warning">
+                                        {person.dob ? "Minor" : "No DOB — treated as a minor"}
+                                      </Badge>
+                                    )}
+                                  </span>
+                                );
+                              case "type":
+                                return (
+                                  <span key={key} className="flex flex-wrap gap-1">
+                                    {shownTypes.length === 0 ? (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    ) : (
+                                      shownTypes.map((type) => (
+                                        <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
+                                          {TYPE_LABELS[type]}
+                                        </Badge>
+                                      ))
+                                    )}
+                                  </span>
+                                );
+                              case "membership":
+                                // Adam, 2026-08-26: the membership type, and the
+                                // lead party it belongs to. The row is already a
+                                // link, so the lead is named rather than linked —
+                                // an anchor cannot be nested inside an anchor.
+                                return (
+                                  <span key={key} className="flex flex-col gap-1">
+                                    {kind ? (
+                                      <>
+                                        <Badge
+                                          variant={membershipKindVariant(kind)}
+                                          title={`${membershipKindWord(kind)} — the kind is worked out from the number of players on it`}
+                                          className="w-fit"
+                                        >
+                                          {membershipKindLabel(kind)}
+                                          <span className="sr-only"> membership</span>
+                                        </Badge>
+                                        <span className="text-xs text-muted-foreground">
+                                          {leadName ? `Billed to ${leadName}` : "Lead contact"}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">—</span>
+                                    )}
+                                  </span>
+                                );
+                              case "teams":
+                                return (
+                                  <span key={key} className="text-xs text-muted-foreground">
+                                    {teamsText}
+                                  </span>
+                                );
+                              case "contact":
+                                return (
+                                  <span key={key} className="text-xs text-muted-foreground">
+                                    {/* The design's rule, stated on the page: an
+                                        under-18's contact goes through their
+                                        guardian. */}
+                                    {minor && guardian ? (
+                                      <>
+                                        <span className="block">via {guardian.name}</span>
+                                        <span className="block">
+                                          {guardian.phone ?? "No phone"}
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <span className="block break-all">
+                                          {person.email ?? "No email"}
+                                        </span>
+                                        <span className="block">{person.phone ?? "No phone"}</span>
+                                      </>
+                                    )}
+                                  </span>
+                                );
+                              case "dob":
+                                return (
+                                  <span key={key} className="text-xs text-muted-foreground">
+                                    {person.dob ?? "Not on file"}
+                                  </span>
+                                );
+                              case "status":
+                                return (
+                                  <span key={key}>
+                                    <Badge variant={status.variant}>{status.label}</Badge>
+                                  </span>
+                                );
+                            }
+                          })}
                         </Link>
                       </li>
                     );
@@ -685,7 +904,9 @@ export default async function PeoplePage({
 
             {people.length > 0 && (
               <p className="mt-3 text-xs text-muted-foreground">
-                Contact details for under-18s are shown through their guardian.
+                Contact details for under-18s are shown through their guardian. Family or
+                Individual is this season&apos;s membership, counted in players — two or more
+                players on one membership is a family. Open a record to see who else is on it.
               </p>
             )}
 
@@ -698,7 +919,10 @@ export default async function PeoplePage({
                   {page > 1 && (
                     <Link
                       href={buildHref(params, { page: String(page - 1) })}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      className={
+                        buttonVariants({ variant: "outline", size: "sm" }) +
+                        " min-h-[44px] lg:min-h-0"
+                      }
                     >
                       Previous
                     </Link>
@@ -706,7 +930,10 @@ export default async function PeoplePage({
                   {page < lastPage && (
                     <Link
                       href={buildHref(params, { page: String(page + 1) })}
-                      className={buttonVariants({ variant: "outline", size: "sm" })}
+                      className={
+                        buttonVariants({ variant: "outline", size: "sm" }) +
+                        " min-h-[44px] lg:min-h-0"
+                      }
                     >
                       Next
                     </Link>

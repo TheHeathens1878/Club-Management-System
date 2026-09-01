@@ -60,10 +60,10 @@ export function PostForm({
         />
       </div>
 
-      <div className="space-y-2 rounded-lg border p-4">
+      <div className="space-y-2 rounded-lg border p-3 lg:p-4">
         <span className="text-sm font-medium">Who is it for?</span>
         <div className="flex flex-col gap-2 text-sm">
-          <label className="flex items-start gap-2">
+          <label className="flex min-h-[44px] items-start gap-2 lg:min-h-0">
             <input
               type="radio"
               name="audience_mode"
@@ -79,10 +79,12 @@ export function PostForm({
             </span>
           </label>
           {audience === "club" ? (
-            <label className="ml-6 flex items-start gap-2">
-              <input type="checkbox" name="push_to_boards" value="true" className="mt-1" />
+            <label className="ml-4 flex min-h-[44px] items-start gap-2 lg:ml-6 lg:min-h-0">
+              {/* Checked by default (Adam, 2026-08-25: club-wide posts belong
+                  on every team lobby unless the poster says otherwise). */}
+              <input type="checkbox" name="push_to_boards" value="true" defaultChecked className="mt-1" />
               <span>
-                Also push it onto every team&apos;s bulletin board
+                Also push it onto every team&apos;s lobby
                 <span className="block text-xs text-muted-foreground">
                   It appears on each board with a club-wide chip — replies still come back to the
                   one thread here.
@@ -90,7 +92,7 @@ export function PostForm({
               </span>
             </label>
           ) : null}
-          <label className="flex items-start gap-2">
+          <label className="flex min-h-[44px] items-start gap-2 lg:min-h-0">
             <input
               type="radio"
               name="audience_mode"
@@ -108,14 +110,17 @@ export function PostForm({
         </div>
 
         {audience === "targeted" ? (
-          <div className="ml-6 grid gap-4 pt-2 sm:grid-cols-2">
+          <div className="ml-4 grid gap-4 pt-2 sm:grid-cols-2 lg:ml-6">
             <div className="space-y-1.5">
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Age groups
               </span>
-              <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2 text-sm">
+              <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2 text-sm lg:max-h-44">
                 {ageGroups.map((ageGroup) => (
-                  <label key={ageGroup} className="flex items-center gap-2">
+                  <label
+                    key={ageGroup}
+                    className="flex min-h-[44px] items-center gap-2 lg:min-h-0"
+                  >
                     <input type="checkbox" name="age_groups" value={ageGroup} />
                     {ageGroup}
                   </label>
@@ -126,9 +131,9 @@ export function PostForm({
               <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                 Teams
               </span>
-              <div className="max-h-44 space-y-1 overflow-y-auto rounded-md border p-2 text-sm">
+              <div className="max-h-56 space-y-1 overflow-y-auto rounded-md border p-2 text-sm lg:max-h-44">
                 {teams.map((team) => (
-                  <label key={team.id} className="flex items-center gap-2">
+                  <label key={team.id} className="flex min-h-[44px] items-center gap-2 lg:min-h-0">
                     <input type="checkbox" name="team_ids" value={team.id} />
                     {team.name}
                   </label>
@@ -140,13 +145,13 @@ export function PostForm({
       </div>
 
       {isAdmin ? (
-        <label className="flex items-center gap-2 text-sm">
+        <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
           <input type="checkbox" name="pinned" value="true" />
           Pin it to the top of the board
         </label>
       ) : null}
 
-      <Button type="submit" disabled={saving}>
+      <Button type="submit" disabled={saving} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
         {saving ? "Posting…" : "Post"}
       </Button>
       <p className="text-xs text-muted-foreground">

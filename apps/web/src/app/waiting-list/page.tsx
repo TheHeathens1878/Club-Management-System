@@ -1,6 +1,6 @@
 import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
-import { ageGroupSortKey } from "@/lib/waiting-list";
+import { NO_WAITING_LIST_MESSAGE, sortedOpenAgeGroups } from "@/lib/waiting-list";
 
 import { WaitingListForm } from "./waiting-list-form";
 
@@ -33,9 +33,7 @@ export default async function PublicWaitingListPage({
     getSettings(),
   ]);
 
-  const openAgeGroups = (groups ?? [])
-    .map((group) => group.age_group)
-    .sort((a, b) => ageGroupSortKey(a).localeCompare(ageGroupSortKey(b)));
+  const openAgeGroups = sortedOpenAgeGroups(groups);
 
   // /recruitment links here with the team's age group. Honour it only if the
   // group is actually open — the database refuses a closed one anyway, and a
@@ -66,21 +64,19 @@ export default async function PublicWaitingListPage({
             </div>
           )}
           <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Player waiting list</h1>
-          <p className="mx-auto mt-3 max-w-xl text-base text-muted-foreground">
-            Register your child&apos;s interest in joining the club. We will be in touch when a space
-            comes up in the right age group.
-          </p>
+          {openAgeGroups.length > 0 && (
+            <p className="mx-auto mt-3 max-w-xl text-base text-muted-foreground">
+              Register your child&apos;s interest in joining the club. We will be in touch when a
+              space comes up in the right age group.
+            </p>
+          )}
         </div>
 
         <div className="overflow-hidden rounded-none border-y bg-card sm:rounded-xl sm:border sm:shadow-sm">
           <div className="px-4 py-6 sm:px-6 sm:py-8">
             {openAgeGroups.length === 0 ? (
               <div className="py-8 text-center">
-                <h2 className="text-lg font-semibold">The waiting list is closed</h2>
-                <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                  We are not accepting new waiting list applications at the moment. Please check back
-                  later — or contact the club if your enquiry is urgent.
-                </p>
+                <p className="mx-auto max-w-md text-base">{NO_WAITING_LIST_MESSAGE}</p>
               </div>
             ) : (
               <>

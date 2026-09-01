@@ -19,6 +19,7 @@ import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
 import { DecisionPanel } from "./decision-forms";
+import { LeaveDecisionForms } from "./leave-request-forms";
 
 /**
  * The approvals queue (gap 4) — the Neon app's /admin/approvals, rebuilt.
@@ -112,6 +113,46 @@ export default async function ApprovalsPage({
   const people = new Map((peopleRows ?? []).map((p) => [p.id, p]));
   const teamNames = new Map((teamRows ?? []).map((t) => [t.id, t.name]));
 
+  // ------------------------------------------------------------------
+  // "This player has left" (Adam, 2026-08-25) — a coach's squad change,
+  // waiting for the administrator who is the only one who may make it.
+  //
+  // Its own queue rather than a row among the account requests: approving one
+  // ENDS A MEMBERSHIP, which is a different act from granting someone a role,
+  // and `decide_leave_request()` is a different RPC. The account-request queue
+  // below is untouched.
+  // ------------------------------------------------------------------
+  const { data: leaveRows } = await supabase
+    .from("team_membership_leave_requests")
+    .select("id,person_id,team_id,requested_by_person_id,note,created_at")
+    .eq("status", "pending")
+    .order("created_at");
+  const leaveRequests = leaveRows ?? [];
+
+  const leavePersonIds = Array.from(
+    new Set(
+      leaveRequests
+        .flatMap((row) => [row.person_id, row.requested_by_person_id])
+        .filter((value): value is string => !!value),
+    ),
+  );
+  const leaveTeamIds = Array.from(new Set(leaveRequests.map((row) => row.team_id)));
+  const [{ data: leavePeopleRows }, { data: leaveTeamRows }] = await Promise.all([
+    leavePersonIds.length
+      ? supabase.from("people").select("id,first_name,last_name,preferred_name").in("id", leavePersonIds)
+      : Promise.resolve({ data: [] as { id: string; first_name: string; last_name: string; preferred_name: string | null }[] }),
+    leaveTeamIds.length
+      ? supabase.from("teams").select("id,name").in("id", leaveTeamIds)
+      : Promise.resolve({ data: [] as { id: string; name: string }[] }),
+  ]);
+  const leaveNames = new Map(
+    (leavePeopleRows ?? []).map((p) => [
+      p.id,
+      `${p.preferred_name || p.first_name} ${p.last_name}`.trim(),
+    ]),
+  );
+  const leaveTeams = new Map((leaveTeamRows ?? []).map((t) => [t.id, t.name]));
+
   // One call per distinct date of birth, not per request.
   const dobs = Array.from(
     new Set((peopleRows ?? []).map((p) => p.dob).filter((d): d is string => !!d)),
@@ -130,13 +171,18 @@ export default async function ApprovalsPage({
         title="Approvals"
         subtitle="People who have signed up and told us what they are. Approving a coach or a player writes the team membership; approving a parent grants the parent role."
         action={
-          <Link href="/people" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/people"
+            className={
+              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
+            }
+          >
             People
           </Link>
         }
       />
 
-      <div className="space-y-6 p-8">
+      <div className="space-y-6 p-4 lg:p-8">
         {registrationCount > 0 ? (
           <Card className="border-primary/30 bg-primary/5">
             <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
@@ -158,23 +204,99 @@ export default async function ApprovalsPage({
                   writes the player&apos;s team membership for the season.
                 </span>
               </p>
-              <Link href="/registrations" className={buttonVariants({ size: "sm" })}>
+              <Link
+                href="/registrations"
+                className={
+                  buttonVariants({ size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+                }
+              >
                 Review registrations
               </Link>
             </CardContent>
           </Card>
         ) : null}
 
-        <div className="flex gap-2">
+        {!decided && leaveRequests.length > 0 ? (
+          <Card>
+            <CardHeader className="p-4 pb-3 lg:p-6 lg:pb-3">
+              <CardTitle className="text-base">
+                Squad changes ({leaveRequests.length})
+              </CardTitle>
+              <p className="text-sm text-muted-foreground">
+                A coach has reported that a player has left. Approving one ends that team
+                membership — the same act as End on the team&apos;s Squad tab, which is why it is
+                yours alone. The record is kept either way; nothing is deleted, and the coach is
+                told what you decided.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+              <ul className="space-y-4">
+                {leaveRequests.map((row) => {
+                  const who = leaveNames.get(row.person_id) ?? "Club member";
+                  const asker = row.requested_by_person_id
+                    ? (leaveNames.get(row.requested_by_person_id) ?? "A coach")
+                    : "A coach";
+                  return (
+                    <li key={row.id} className="space-y-3 rounded-lg border p-3">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium">
+                            <Link href={`/people/${row.person_id}`} className="hover:underline">
+                              {who}
+                            </Link>
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {leaveTeams.get(row.team_id) ?? "Team"} · reported by {asker} ·{" "}
+                            {formatStamp(row.created_at)}
+                          </p>
+                        </div>
+                        <Link
+                          href={`/teams/${row.team_id}?tab=squad`}
+                          className={
+                            buttonVariants({ variant: "outline", size: "sm" }) +
+                            " min-h-[44px] lg:min-h-0"
+                          }
+                        >
+                          Open squad
+                        </Link>
+                      </div>
+
+                      {row.note ? (
+                        <p className="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">
+                          {row.note}
+                        </p>
+                      ) : null}
+
+                      <LeaveDecisionForms
+                        requestId={row.id}
+                        personId={row.person_id}
+                        personName={who}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        {/* The tab strip scrolls in its own lane on a phone. */}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 lg:mx-0 lg:overflow-visible lg:px-0">
           <Link
             href="/approvals"
-            className={buttonVariants({ variant: decided ? "ghost" : "secondary", size: "sm" })}
+            className={
+              buttonVariants({ variant: decided ? "ghost" : "secondary", size: "sm" }) +
+              " min-h-[44px] shrink-0 lg:min-h-0"
+            }
           >
             Waiting
           </Link>
           <Link
             href="/approvals?tab=decided"
-            className={buttonVariants({ variant: decided ? "secondary" : "ghost", size: "sm" })}
+            className={
+              buttonVariants({ variant: decided ? "secondary" : "ghost", size: "sm" }) +
+              " min-h-[44px] shrink-0 lg:min-h-0"
+            }
           >
             Decided
           </Link>
@@ -210,7 +332,7 @@ export default async function ApprovalsPage({
               return (
                 <li key={request.id}>
                   <Card>
-                    <CardHeader className="pb-3">
+                    <CardHeader className="p-4 pb-3 lg:p-6 lg:pb-3">
                       <div className="flex flex-wrap items-start justify-between gap-3">
                         <div>
                           <CardTitle className="text-base">
@@ -235,8 +357,8 @@ export default async function ApprovalsPage({
                       </div>
                     </CardHeader>
 
-                    <CardContent className="space-y-4">
-                      <dl className="grid gap-4 text-sm sm:grid-cols-3">
+                    <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+                      <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
                         <div>
                           <dt className="text-xs uppercase text-muted-foreground">Date of birth</dt>
                           <dd className="mt-0.5">

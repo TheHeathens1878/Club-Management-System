@@ -89,7 +89,7 @@ export function PersonPicker({
               setResults([]);
               onPick?.(null);
             }}
-            className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-secondary"
+            className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground hover:bg-secondary lg:min-h-0 lg:min-w-0"
             aria-label="Clear the chosen person"
           >
             <X className="h-3.5 w-3.5" />
@@ -127,7 +127,7 @@ export function PersonPicker({
                     setSelected(person);
                     onPick?.(person);
                   }}
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-secondary"
+                  className="block w-full px-3 py-3 text-left text-sm hover:bg-secondary lg:py-2"
                 >
                   <span className="font-medium">{person.name}</span>
                   {person.email ? (

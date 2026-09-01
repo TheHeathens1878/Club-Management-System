@@ -3,8 +3,9 @@
 -- =============================================================================
 --   A  shape: training kind, bookings.team_id, booking_teams, functions
 --   B  a coach (team staff, no app role) can request a pending training slot on
---      a pitch for their own team; not for another team; not confirmed; not a
---      function room; refused past slots
+--      a pitch for their own team; not for another team; never confirmed (a posted
+--      'confirmed' is pinned to pending, 20260825170000); not a function room;
+--      refused past slots
 --   C  a coach can cancel their own team's booking but cannot confirm it or
 --      move a confirmed one; an admin can confirm
 --   D  visibility: a parent of a player sees pitch_calendar rows without PII;
@@ -16,7 +17,7 @@
 
 begin;
 
-select plan(31);
+select plan(32);
 
 -- Fixtures ---------------------------------------------------------------------
 insert into auth.users (id, email, raw_user_meta_data) values
@@ -41,9 +42,10 @@ insert into public.team_memberships (person_id, team_id, season_id, role) values
 insert into public.people (id, first_name, last_name, dob) values ('9c9c9c9c-1111-4111-8111-000000000001', 'Kid', 'Player', '2020-01-01');
 insert into public.guardianships (guardian_person_id, child_person_id, relationship) values (current_setting('pb.parent')::uuid, '9c9c9c9c-1111-4111-8111-000000000001', 'parent');
 -- the coach needs certs to sit on a team with a minor (SG-6)
-insert into public.certifications (person_id, type, issued_on, expires_on, verified_at) values
-  (current_setting('pb.coach')::uuid, 'fa_dbs', '2026-01-01', '2037-01-01', now()),
-  (current_setting('pb.coach')::uuid, 'safeguarding_children', '2026-01-01', '2037-01-01', now());
+-- The coach's DBS + safeguarding certificates used to be inserted here so the
+-- SG-6 tier-1 guard would let them onto a team with minors. That tier was
+-- retired by 20260825440000 (SAFEGUARDING.md SG-6): the FA Clubs Portal holds
+-- the paperwork, and the app can no longer write a certification at all.
 insert into public.team_memberships (person_id, team_id, season_id, role) values
   ('9c9c9c9c-1111-4111-8111-000000000001', '7c7c7c7c-1111-4111-8111-000000000001', '5c5c5c5c-1111-4111-8111-000000000001', 'player');
 
@@ -76,11 +78,16 @@ select throws_ok($$
           '7c7c7c7c-1111-4111-8111-000000000002', current_setting('pb.coach')::uuid, 'Cy', 'pb-coach@test.invalid')
 $$, '42501', null, 'coach cannot book for a team they do not staff');
 
-select throws_ok($$
-  insert into public.bookings (resource_id, kind, status, starts_at, ends_at, team_id, booker_person_id, booker_name, booker_email)
-  values ('c8c8c8c8-1111-4111-8111-000000000011', 'training', 'confirmed', '2034-09-07 18:00+01', '2034-09-07 19:00+01',
+-- 20260825170000: posting `confirmed` no longer 42501s — the guard pins it to
+-- `pending` before the policy is asked, so the request lands on the
+-- administrator's desk instead of being lost. See pitch_requests_approval.test.
+select lives_ok($$
+  insert into public.bookings (id, resource_id, kind, status, starts_at, ends_at, team_id, booker_person_id, booker_name, booker_email)
+  values ('d8d8d8d8-1111-4111-8111-000000000003', 'c8c8c8c8-1111-4111-8111-000000000011', 'training', 'confirmed', '2034-09-07 18:00+01', '2034-09-07 19:00+01',
           '7c7c7c7c-1111-4111-8111-000000000001', current_setting('pb.coach')::uuid, 'Cy', 'pb-coach@test.invalid')
-$$, '42501', null, 'coach cannot create a confirmed booking');
+$$, 'coach posting a confirmed booking is accepted');
+select is((select status::text from public.bookings where id = 'd8d8d8d8-1111-4111-8111-000000000003'),
+  'pending', 'coach cannot create a confirmed booking — it is stored pending');
 
 select throws_ok($$
   insert into public.bookings (resource_id, kind, status, starts_at, ends_at, team_id, booker_person_id, booker_name, booker_email)

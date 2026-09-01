@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(116);
+select plan(117);
 
 -- SG-6 tier-1 enforcement is OFF in production (SAFEGUARDING.md amendment
 -- 2026-08-23); this suite exercises the pending-queue + exemption machinery,
@@ -110,7 +110,7 @@ select ok(not has_table_privilege('anon', 'public.waiting_list_entries', 'SELECT
 select ok(not has_table_privilege('authenticated', 'public.waiting_list_entries', 'DELETE'), 'authenticated cannot DELETE waiting_list_entries');
 select ok(not has_schema_privilege('anon', 'neon_legacy', 'USAGE'), 'anon has no USAGE on neon_legacy');
 select ok(not has_schema_privilege('authenticated', 'neon_legacy', 'USAGE'), 'authenticated has no USAGE on neon_legacy');
-select ok(has_function_privilege('anon', 'public.submit_waiting_list_entry(text, date, text, text, text, text, text, text, text, text, text, boolean, text, boolean)', 'EXECUTE'), 'anon may submit to the waiting list');
+select ok(has_function_privilege('anon', 'public.submit_waiting_list_entry(text, text, date, text, text, text, text, text, text, text, text, text, text, boolean, text, boolean)', 'EXECUTE'), 'anon may submit to the waiting list');
 select ok(not has_function_privilege('authenticated', 'public.migrate_neon()', 'EXECUTE'), 'authenticated cannot run migrate_neon');
 select ok(not has_function_privilege('authenticated', 'public.apply_neon_pending(uuid)', 'EXECUTE'), 'authenticated cannot run apply_neon_pending');
 select ok(not has_function_privilege('anon', 'public.complete_own_dob(date)', 'EXECUTE'), 'anon cannot call complete_own_dob');
@@ -192,8 +192,11 @@ select is((select count(*) from public.neon_import_pending where kind = 'guardia
 select is((select count(*) from public.team_memberships m join public.people p on p.id = m.person_id
             where p.legacy_neon_user_id in ('u-child', 'u-player', 'u-eve') and m.left_at is null), 3::bigint,
   'known-DOB people are on their teams straight away');
+-- 20260825340000 relaxes this for staff ONLY while SG-6 enforcement is off.
+-- This suite runs with it ON (line 24 sets it), so the
+-- unknown-DOB coach still waits — which is the point of the switch.
 select ok((select last_error like '%date of birth unknown%' from public.neon_import_pending q join public.people p on p.id = q.person_id
-            where p.legacy_neon_user_id = 'u-coach1' and q.kind = 'membership'), 'unknown-DOB coach waits for the DOB gate (SG-0)');
+            where p.legacy_neon_user_id = 'u-coach1' and q.kind = 'membership'), 'unknown-DOB coach waits for the DOB gate while SG-6 enforcement is on');
 select ok((select last_error like '%date of birth must be known%' from public.neon_import_pending where kind = 'guardianship'), 'unknown-DOB guardian waits (SG-4)');
 
 -- the parent signs in (auth import) and hits the gate
@@ -275,10 +278,17 @@ select lives_ok($$update public.waiting_list_entries set status = 'contacted' wh
 reset role;
 set local request.jwt.claims to '{"sub":"a3a3a3a3-1111-4111-8111-000000000007","role":"authenticated"}';
 set local role authenticated;
-select is((select count(*) from public.waiting_list_entries), 1::bigint, 'coach with U07 access sees the U07 entry only');
+-- 20260825290000: the AUTOMATIC scope and nothing else — this coach staffs U05
+-- Lions, so he sees U05 and U04. His imported U07 grant used to widen him and
+-- no longer does (Adam, 2026-08-25: "all coaches should ONLY be able to see
+-- their age group and the age group below"), so the U05 team application is
+-- the whole of his list and Wendy at U07 is not on it.
+select is((select count(*) from public.waiting_list_entries), 1::bigint,
+  'coach sees his own U05 band only — the imported U07 grant no longer widens him');
+select is((select count(*) from public.waiting_list_entries where age_group = 'U07'), 0::bigint, '… not the U07 he holds a grant for');
 select is((select count(*) from public.waiting_list_entries where age_group = 'U09'), 0::bigint, '… not U09');
 select lives_ok($$insert into public.waiting_list_notes (entry_id, author_person_id, body)
-  values ((select id from public.waiting_list_entries where legacy_neon_entry_id = 'w1'), public.current_person_id(), 'Trial Tuesday')$$,
+  values ((select id from public.waiting_list_entries where legacy_neon_entry_id = 'app:ap1'), public.current_person_id(), 'Trial Tuesday')$$,
   'coach adds a note on an entry he can see');
 select throws_ok($$insert into public.waiting_list_notes (entry_id, author_person_id, body)
   values ((select id from public.waiting_list_entries where legacy_neon_entry_id = 'w2'), public.current_person_id(), 'x')$$,
@@ -294,11 +304,11 @@ reset role;
 set local request.jwt.claims to '{}';
 
 set local role anon;
-select lives_ok($$select public.submit_waiting_list_entry('New Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New Parent', 'New@Parent.test', '07700 5', false, null, true)$$,
+select lives_ok($$select public.submit_waiting_list_entry('New', 'Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New', 'Parent', 'New@Parent.test', '07700 5', false, null, true)$$,
   'anon submits to an open age group');
-select throws_ok($$select public.submit_waiting_list_entry('New Kid', '2020-02-02', 'U09', 'Year 1', 'MALE', null, null, null, 'New Parent', 'new@parent.test', '07700 5', false, null, true)$$,
+select throws_ok($$select public.submit_waiting_list_entry('New', 'Kid', '2020-02-02', 'U09', 'Year 1', 'MALE', null, null, null, 'New', 'Parent', 'new@parent.test', '07700 5', false, null, true)$$,
   'P0001', null, 'closed age group refused');
-select throws_ok($$select public.submit_waiting_list_entry('New Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New Parent', 'new@parent.test', '07700 5', false, null, false)$$,
+select throws_ok($$select public.submit_waiting_list_entry('New', 'Kid', '2020-02-02', 'U07', 'Year 1', 'MALE', null, null, null, 'New', 'Parent', 'new@parent.test', '07700 5', false, null, false)$$,
   'P0001', null, 'no consent, no entry');
 select is((select count(*) from public.waiting_list_open_age_groups()), 1::bigint, 'anon sees the open age groups');
 reset role;

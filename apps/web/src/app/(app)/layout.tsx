@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, Menu } from "lucide-react";
 
 import { HeaderTools } from "@/components/header-tools";
 import { buttonVariants } from "@/components/ui/button";
@@ -7,7 +7,11 @@ import { getSessionProfile, isBooker } from "@/lib/auth";
 import { navFor, navForUnlinked } from "@/lib/nav";
 import { NavLink } from "@/components/nav-link";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import { loadUnreadNotificationCount } from "@/lib/notifications-data";
+import { mobileTabsFor } from "@/lib/mobile-nav";
 import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
+import { MobileHeader } from "@/components/mobile-header";
+import { MobileTabBar, type MobileTabItem } from "@/components/mobile-tab-bar";
 import { RoleSwitcher } from "@/components/role-switcher";
 
 /**
@@ -17,7 +21,7 @@ import { RoleSwitcher } from "@/components/role-switcher";
  *
  *   · the person's CAPABILITIES, read from the database under their own RLS —
  *     an item whose capability is false is never rendered, in any view;
- *   · the chosen VIEW, one of the five kinds of user the club recognises. The
+ *   · the chosen VIEW, one of the six kinds of user the club recognises. The
  *     scope is hard: the menu is that view's items and nothing else's, and a
  *     person with more than one hat switches between menus rather than seeing
  *     them merged.
@@ -46,12 +50,39 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const scope = view ? await getTeamScope(view, capabilities) : null;
   const switcher = view ? roleSwitcherProps(capabilities, view, scope?.id ?? null) : null;
 
+  // The phone shell (Club CRM mobile design): identity strip on top, a
+  // five-slot tab bar underneath — the view's front doors plus More. Icons are
+  // rendered here so the capability-scoped list stays a server concern.
+  const unread = await loadUnreadNotificationCount();
+  const tabs: MobileTabItem[] = mobileTabsFor(view, capabilities).map((tab) => {
+    const Icon = tab.icon;
+    return {
+      href: tab.href,
+      label: tab.label,
+      icon: <Icon className="h-[21px] w-[21px]" />,
+      match: tab.match,
+    };
+  });
+  tabs.push({
+    href: "/more",
+    label: "More",
+    icon: <Menu className="h-[21px] w-[21px]" />,
+    match: ["/more"],
+    moreFallback: true,
+  });
+
+  // `min-h-[100dvh]`, not `min-h-screen`: `vh` is the viewport with the URL bar
+  // hidden, so on a phone a `min-h-screen` shell is taller than the screen
+  // actually showing, and every page inherits a stray scroll of exactly the
+  // bar's height (Adam, 2026-09-01).
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="flex min-h-[100dvh] flex-col lg:flex-row">
       {/* The ink rail (crest design): dark sidebar against paper content.
           `.theme-ink` remaps the semantic tokens, so everything inside — the
-          bell, ghost buttons, badges — adapts without bespoke styling. */}
-      <aside className="theme-ink w-full shrink-0 border-b border-border bg-background text-foreground lg:w-[232px] lg:border-b-0 lg:border-r">
+          bell, ghost buttons, badges — adapts without bespoke styling. On a
+          phone the rail does not exist at all: the MobileHeader and the tab
+          bar are the shell (mobile design §"the sidebar becomes a tab bar"). */}
+      <aside className="theme-ink hidden w-full shrink-0 border-b border-border bg-background text-foreground lg:block lg:w-[232px] lg:border-b-0 lg:border-r">
         <div className="flex gap-2 p-3 lg:h-full lg:flex-col lg:p-4">
           <div className="hidden items-center gap-2.5 border-b border-border pb-3 lg:mb-1 lg:flex">
             {/* The crest is a black shield on a dark rail, so its silhouette
@@ -117,7 +148,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
       </aside>
 
-      <main className="flex-1 overflow-x-clip bg-background">{children}</main>
+      <MobileHeader
+        name={name}
+        switcher={switcher ? { options: switcher.options, current: switcher.current } : null}
+        unread={unread}
+      />
+
+      {/* Bottom padding clears the fixed tab bar (plus the home indicator's
+          safe area) so nothing ends underneath it — measured from the bar
+          itself now via `--tab-bar-h`, rather than the 64px this used to
+          guess at while the bar was 55px (globals.css). */}
+      <main className="flex-1 overflow-x-clip bg-background pb-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom))] lg:pb-0">
+        {children}
+      </main>
+
+      <MobileTabBar tabs={tabs} />
     </div>
   );
 }

@@ -15,7 +15,13 @@ export function WithdrawForm({ requestId }: { requestId: string }) {
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="request_id" value={requestId} />
-      <Button type="submit" variant="outline" size="sm" disabled={pending}>
+      <Button
+        type="submit"
+        variant="outline"
+        size="sm"
+        disabled={pending}
+        className="min-h-[44px] lg:min-h-0"
+      >
         {pending ? "Withdrawing…" : "Withdraw"}
       </Button>
       {state.error ? <span className="text-xs text-destructive">{state.error}</span> : null}

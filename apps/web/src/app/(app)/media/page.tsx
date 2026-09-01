@@ -46,16 +46,17 @@ export default async function MediaPage() {
     <>
       <PageHeader title="Media" subtitle="Photo albums, with consent enforced at the query" />
 
-      <div className="p-6 space-y-6">
+      <div className="p-4 space-y-6 lg:p-6">
         {error && (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error.message}
           </p>
         )}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        {/* Two albums to a row on a phone, as the desktop grid already is. */}
+        <div className="grid grid-cols-2 gap-3">
           {(albums ?? []).length === 0 && (
-            <Card className="sm:col-span-2">
+            <Card className="col-span-2">
               <CardContent className="p-6 text-center text-sm text-muted-foreground">
                 No albums you can see.
               </CardContent>
@@ -65,20 +66,21 @@ export default async function MediaPage() {
             <Link
               key={album.id}
               href={`/media/${album.id}`}
-              className="rounded-lg border bg-card p-4 transition-colors hover:bg-secondary/50"
+              className="rounded-lg border bg-card p-3 transition-colors hover:bg-secondary/50 sm:p-4"
             >
-              <div className="flex items-start justify-between gap-2">
+              {/* The pill sits under the title until there is room beside it. */}
+              <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
                 <div className="min-w-0">
                   <p className="flex items-center gap-2 text-sm font-medium">
                     <Images className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    {album.title}
+                    <span className="min-w-0 break-words">{album.title}</span>
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {album.teams?.name ?? "No team"}
                     {album.seasons?.name ? ` · ${album.seasons.name}` : ""}
                   </p>
                 </div>
-                <Badge variant="outline">{album.visibility}</Badge>
+                <Badge variant="outline" className="self-start">{album.visibility}</Badge>
               </div>
               {album.description && (
                 <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{album.description}</p>
@@ -89,7 +91,7 @@ export default async function MediaPage() {
 
         {canCreate && (
           <Card className="border-dashed">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle className="text-base">New album</CardTitle>
               <p className="text-sm text-muted-foreground">
                 An album&apos;s visibility decides which photo consent every young person in it must
@@ -97,7 +99,7 @@ export default async function MediaPage() {
                 bulk exports — not hidden by the page, excluded by the query.
               </p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <AlbumForm teams={teamOptions} seasons={seasonOptions} />
             </CardContent>
           </Card>

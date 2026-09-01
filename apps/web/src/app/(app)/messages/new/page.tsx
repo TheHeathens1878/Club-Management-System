@@ -49,13 +49,16 @@ export default async function NewMessagePage() {
         title="New message"
         subtitle="Start a direct message or a group, or open one of your team rooms"
         action={
-          <Link href="/messages" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:underline">
+          <Link
+            href="/messages"
+            className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
+          >
             <ChevronLeft className="h-4 w-4" /> All messages
           </Link>
         }
       />
 
-      <div className="p-6 space-y-6 max-w-2xl">
+      <div className="space-y-6 p-4 max-w-2xl lg:p-6">
         <Card>
           <CardHeader>
             <CardTitle className="text-base">Message someone</CardTitle>
@@ -88,7 +91,7 @@ export default async function NewMessagePage() {
               <Link
                 key={room.id}
                 href={`/messages/${room.id}`}
-                className="block rounded-lg border p-3 text-sm transition-colors hover:bg-secondary/50"
+                className="flex min-h-[44px] items-center rounded-lg border p-3 text-sm transition-colors hover:bg-secondary/50"
               >
                 {room.title || (room.type === "announcement" ? "Announcements" : "Team room")}
               </Link>

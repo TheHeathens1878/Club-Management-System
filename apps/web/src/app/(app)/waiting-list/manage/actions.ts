@@ -7,7 +7,12 @@
  *   · a note may be added by a club administrator, or by a coach who holds a
  *     `waiting_list_access` row for that entry's age group, and only ever with
  *     `author_person_id = current_person_id()`;
- *   · the status and the age group settings are a club administrator's alone.
+ *   · the status is a club administrator's alone;
+ *   · the age group settings (open for new entries, advertised publicly) are a
+ *     club administrator's alone and go through `set_waiting_list_age_group()`
+ *     — the table takes no write from `authenticated` at all since
+ *     20260825290000, and the function answers anyone else with a readable
+ *     42501 rather than the silent no-op a policy gives.
  *
  * A coach has no UPDATE policy on `waiting_list_entries`, so an attempt to
  * change a status does not raise — the row simply is not visible to the
@@ -144,25 +149,16 @@ export async function setAgeGroupAvailability(
   if (!ageGroup) return { error: "Choose an age group." };
 
   const supabase = await createClient();
-  const { error } = await supabase.from("waiting_list_age_groups").upsert(
-    {
-      age_group: ageGroup,
-      is_open: formData.get("is_open") === "yes",
-      is_publicly_advertised: formData.get("is_publicly_advertised") === "yes",
-    },
-    { onConflict: "age_group" },
-  );
+  const { error } = await supabase.rpc("set_waiting_list_age_group", {
+    p_age_group: ageGroup,
+    p_is_open: formData.get("is_open") === "yes",
+    p_is_publicly_advertised: formData.get("is_publicly_advertised") === "yes",
+  });
 
-  if (error) {
-    return {
-      error:
-        error.code === "42501"
-          ? "Only a club administrator can open or close an age group."
-          : error.message,
-    };
-  }
+  if (error) return { error: error.message };
 
   revalidatePath(PATH);
   revalidatePath("/waiting-list");
+  revalidatePath("/recruitment");
   return { notice: `${ageGroup} saved.` };
 }

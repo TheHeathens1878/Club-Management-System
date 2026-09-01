@@ -8,7 +8,7 @@
  *   · CAPABILITIES — what the database will actually let this person do. Every
  *     one of them is the database's own answer, read through the user-scoped
  *     client under RLS (see `@/lib/capabilities`).
- *   · The chosen VIEW — which of the club's five kinds of user this person is
+ *   · The chosen VIEW — which of the club's six kinds of user this person is
  *     looking at the app as, kept in the `club.role_view` cookie.
  *
  * The rule the club owner set, and the one this module exists to enforce: a
@@ -25,7 +25,12 @@
 import type { UserRole } from "@/lib/types";
 
 export const ROLE_VIEW_COOKIE = "club.role_view";
-/** Set once by the middleware so the first-visit nudge to /welcome happens once. */
+/**
+ * Historical: the middleware's first-visit nudge to /welcome set this once.
+ * The nudge is gone (owner ruling 1 — a first sign-in lands in the Me view on
+ * the lobby, not on a role picker); `setRoleView` still writes the cookie so a
+ * stale one keeps meaning "has chosen".
+ */
 export const ROLE_VIEW_PROMPTED_COOKIE = "club.role_view_prompted";
 /**
  * The optional team a coach/parent/player view is narrowed to (Adam,
@@ -36,35 +41,58 @@ export const ROLE_VIEW_PROMPTED_COOKIE = "club.role_view_prompted";
  */
 export const TEAM_SCOPE_COOKIE = "club.team_scope";
 
-/** The five kinds of user the club recognises, in tile order. */
-export const ROLE_VIEWS = ["player", "parent", "coach", "admin", "function_room"] as const;
+/**
+ * The six kinds of user the club recognises, in tile order. "Me" is not a hat
+ * at all — it is the person themselves (profile, household, subs, lobby), held
+ * by anyone the club has linked to a person record, and it is the view a fresh
+ * sign-in lands in.
+ */
+export const ROLE_VIEWS = [
+  "me",
+  "player",
+  "parent",
+  "coach",
+  "referee",
+  "admin",
+  "function_room",
+] as const;
 export type RoleView = (typeof ROLE_VIEWS)[number];
 
 export const ROLE_VIEW_LABELS: Record<RoleView, string> = {
+  me: "Me",
   player: "Player",
   parent: "Parent or guardian",
   coach: "Coach or manager",
+  referee: "Referee",
   admin: "Club admin",
   function_room: "Function room",
 };
 
 export const ROLE_VIEW_BLURBS: Record<RoleView, string> = {
+  me: "Your profile, your family, your subs and the club lobby.",
   player: "Your teams and when you are playing.",
   parent: "Your children, their teams and their fixtures.",
   coach: "Your teams, pitch bookings and the waiting list.",
+  referee: "The games that need a referee, and the ones you have taken.",
   admin: "Running the club — people, teams, approvals and money.",
   function_room: "The function room diary, the bar and the rooms.",
 };
 
 /**
  * Where each view lands. Picking a tile goes straight here; so does a signed-in
- * hit on `/`.
+ * hit on `/`. Adam, 2026-08-25: the lobby is the club's front door — players
+ * and parents land there; admins land on the overview. A TEAM-SCOPED parent or
+ * player pick overrides this and goes to that team's page (see `setRoleView`).
  */
 export const ROLE_VIEW_HOME: Record<RoleView, string> = {
-  player: "/my-teams",
-  parent: "/family",
+  me: "/lobby",
+  player: "/lobby",
+  parent: "/lobby",
   coach: "/teams",
-  admin: "/teams",
+  // The referees group IS the referee's screen (Adam, 2026-08-25) — the games
+  // are posted there and claimed there. /referee resolves it and goes.
+  referee: "/referee",
+  admin: "/overview",
   function_room: "/room-bookings",
 };
 
@@ -93,6 +121,8 @@ export type Capabilities = {
   isSafeguardingLead: boolean;
   hasCoachRole: boolean;
   hasParentRole: boolean;
+  /** `person_roles.referee` — an approved referee, who may claim a game. */
+  hasRefereeRole: boolean;
   /** coach / assistant_coach / manager on any team. */
   isTeamStaff: boolean;
   /** A live `player` team membership. */
@@ -114,12 +144,18 @@ export type Capabilities = {
  */
 export function qualifiesForView(view: RoleView, c: Capabilities): boolean {
   switch (view) {
+    case "me":
+      // Not a hat: anyone the club has linked to a person record is somebody.
+      // An unlinked sign-in still gets the navForUnlinked() menu instead.
+      return c.personId !== null;
     case "player":
       return c.hasPlayerMembership;
     case "parent":
       return c.isGuardian || c.hasParentRole;
     case "coach":
       return c.isTeamStaff || c.hasCoachRole;
+    case "referee":
+      return c.hasRefereeRole;
     case "admin":
       return c.isClubAdmin || c.isCommittee;
     case "function_room":
@@ -129,10 +165,22 @@ export function qualifiesForView(view: RoleView, c: Capabilities): boolean {
 
 /**
  * Precedence when nothing has been chosen, or when a cookie names a view the
- * person does not hold: the widest hat first. Distinct from {@link ROLE_VIEWS},
+ * person does not hold: ME first (Adam, 2026-08-25 — the Me view is the
+ * default when you log in, and the lobby is its main page; the switcher is
+ * where the wider hats live). The hat order after it only matters for someone
+ * with no person record of their own — function-room staff keep their diary as
+ * the fallback when they hold no club hat. Distinct from {@link ROLE_VIEWS},
  * which is the order the tiles are drawn in.
  */
-const VIEW_PRECEDENCE = ["admin", "function_room", "coach", "parent", "player"] as const;
+const VIEW_PRECEDENCE = [
+  "me",
+  "parent",
+  "player",
+  "coach",
+  "referee",
+  "admin",
+  "function_room",
+] as const;
 
 /** Every view this person holds, in tile order. */
 export function qualifiedViews(c: Capabilities): RoleView[] {
@@ -176,9 +224,11 @@ export type RoleViewOption = {
 
 /** The design's short role words — "Club admin", not "Club admin view". */
 const ROLE_WORDS: Record<RoleView, string> = {
+  me: "Me",
   player: "Player",
   parent: "Parent",
   coach: "Coach",
+  referee: "Referee",
   admin: "Club admin",
   function_room: "Function room",
 };
@@ -223,11 +273,25 @@ export function roleViewOptions(c: Capabilities): RoleViewOption[] {
       label,
       value: serializeViewOption(view, team?.id ?? null),
       role: ROLE_WORDS[view],
-      scope: team?.name ?? (view === "function_room" ? "The room and the bar" : "Whole club"),
+      scope:
+        team?.name ??
+        (view === "function_room"
+          ? "The room and the bar"
+          : view === "me"
+            ? "Just you"
+            : view === "referee"
+              ? "Games to referee"
+              : "Whole club"),
     });
 
+  // The person themselves first — the default view, and the way back to it
+  // from any hat. Function Room goes LAST (Adam, 2026-08-25: "Function Room
+  // should always be at the bottom of the dropdown") — see the end.
+  if (qualifiesForView("me", c)) add("me", null, "Me");
   if (qualifiesForView("admin", c)) add("admin", null, "Club Admin");
-  if (qualifiesForView("function_room", c)) add("function_room", null, "Function Room");
+  // The referee hat is club-wide and has no team scope: the games come to
+  // them in the group, from every team.
+  if (qualifiesForView("referee", c)) add("referee", null, "Referee");
 
   // Group by team: every team any hat touches, alphabetically, with the hats
   // for that team in coach → parent → player order.
@@ -250,6 +314,9 @@ export function roleViewOptions(c: Capabilities): RoleViewOption[] {
   if (qualifiesForView("coach", c) && c.staffTeams.length === 0) add("coach", null, ROLE_VIEW_LABELS.coach);
   if (qualifiesForView("parent", c) && c.parentTeams.length === 0) add("parent", null, ROLE_VIEW_LABELS.parent);
   if (qualifiesForView("player", c) && c.playerTeams.length === 0) add("player", null, ROLE_VIEW_LABELS.player);
+
+  // The room is not a club hat — it props up the bottom of the list.
+  if (qualifiesForView("function_room", c)) add("function_room", null, "Function Room");
 
   return options;
 }

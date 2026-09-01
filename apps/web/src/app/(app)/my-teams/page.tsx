@@ -267,7 +267,7 @@ export default async function MyTeamsPage() {
         }
       />
 
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         {childrenResult.error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {childrenResult.error.message}
@@ -311,7 +311,7 @@ export default async function MyTeamsPage() {
                     {subject.teams.map((team) => (
                       <li
                         key={`${subject.personId}-${team.teamId}`}
-                        className="flex flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
+                        className="flex min-h-[44px] flex-wrap items-center gap-2 rounded-md border bg-card px-3 py-2 text-sm"
                       >
                         <span className="font-medium">{team.teamName}</span>
                         {team.ageGroup ? (
@@ -357,24 +357,29 @@ export default async function MyTeamsPage() {
                 <ul className="space-y-2">
                   {upcoming.map((entry) => (
                     <li key={entry.bookingId}>
+                      {/* One card on a phone — day and time, then what and
+                          where underneath; the desktop line is unchanged
+                          (`lg:contents` dissolves the mobile wrapper). */}
                       <Link
                         href={`/pitches/${entry.bookingId}`}
-                        className="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-md border bg-card px-3 py-2 text-sm transition hover:border-primary/40 hover:bg-secondary"
+                        className="flex min-h-[44px] flex-col gap-1 rounded-md border bg-card px-3 py-2.5 text-sm transition hover:border-primary/40 hover:bg-secondary lg:flex-row lg:flex-wrap lg:items-baseline lg:gap-x-2 lg:gap-y-1 lg:py-2"
                       >
-                        <span className="font-medium">
-                          {entry.date === today ? "Today" : dayHeadingLong(entry.date)}
+                        <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1 lg:contents">
+                          <span className="font-medium">
+                            {entry.date === today ? "Today" : dayHeadingLong(entry.date)}
+                          </span>
+                          <span className="text-muted-foreground">
+                            {entry.startTime}–{entry.endTime}
+                          </span>
+                          <span>{entry.label}</span>
+                          {entry.teamName ? (
+                            <Badge variant="outline">{entry.teamName}</Badge>
+                          ) : null}
+                          {entry.status === "pending" ? (
+                            <Badge variant="warning">Asked for</Badge>
+                          ) : null}
                         </span>
-                        <span className="text-muted-foreground">
-                          {entry.startTime}–{entry.endTime}
-                        </span>
-                        <span>{entry.label}</span>
-                        {entry.teamName ? (
-                          <Badge variant="outline">{entry.teamName}</Badge>
-                        ) : null}
-                        {entry.status === "pending" ? (
-                          <Badge variant="warning">Asked for</Badge>
-                        ) : null}
-                        <span className="ml-auto text-xs text-muted-foreground">
+                        <span className="text-xs text-muted-foreground lg:ml-auto">
                           {entry.resourceName}
                         </span>
                       </Link>
@@ -385,7 +390,7 @@ export default async function MyTeamsPage() {
 
               <Link
                 href="/pitches/calendar"
-                className="inline-block text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                className="inline-flex min-h-[44px] items-center text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground lg:min-h-0"
               >
                 See the whole pitch calendar
               </Link>

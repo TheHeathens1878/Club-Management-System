@@ -44,7 +44,7 @@ export function BrandingForm({ settings }: { settings: SiteSettings }) {
       </div>
 
       {/* Logo display controls */}
-      <div className="space-y-4 rounded-lg border p-4">
+      <div className="space-y-4 rounded-lg border p-3 lg:p-4">
         <p className="text-sm font-medium">Logo display</p>
 
         <div className="space-y-2">
@@ -76,11 +76,11 @@ export function BrandingForm({ settings }: { settings: SiteSettings }) {
         <div className="space-y-2">
           <label className="text-sm text-muted-foreground">Fit</label>
           <input type="hidden" name="logo_object_fit" value={objectFit} />
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {(["contain", "cover", "fill"] as const).map((f) => (
               <button key={f} type="button"
                 onClick={() => setObjectFit(f)}
-                className={`rounded-md border px-3 py-1.5 text-sm capitalize transition
+                className={`min-h-[44px] flex-1 rounded-md border px-3 py-1.5 text-sm capitalize transition lg:min-h-0 lg:flex-none
                   ${objectFit === f ? "border-primary bg-primary/5 font-medium" : "text-muted-foreground hover:bg-secondary"}`}>
                 {f}
               </button>
@@ -132,8 +132,8 @@ export function BrandingForm({ settings }: { settings: SiteSettings }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={saving}>
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
+        <Button type="submit" disabled={saving} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save changes
         </Button>

@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
 import { LinkRow } from "@/components/link-row";
@@ -31,6 +33,16 @@ export default async function TrainingPage() {
     redirect("/events");
   }
 
+  // The chosen hat scopes the page, exactly as Matches does (Adam,
+  // 2026-08-25): coach view → the coach's own teams, narrowed further by a
+  // team-scoped switcher pick.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const scope = await getTeamScope(view, capabilities);
+  const coachTeamIds =
+    view === "coach" ? new Set(capabilities.staffTeams.map((team) => team.id)) : null;
+  const inView = (teamId: string): boolean =>
+    scope ? teamId === scope.id : coachTeamIds ? coachTeamIds.has(teamId) : true;
+
   const supabase = await createClient();
   const now = Date.now();
   const [sessionsResult, termResult] = await Promise.all([
@@ -50,6 +62,8 @@ export default async function TrainingPage() {
 
   const sessions = (sessionsResult.data ?? []).filter(mine);
   const term = (termResult.data ?? []).filter((row) => row.marked > 0 && mine(row));
+  const sessions = (sessionsResult.data ?? []).filter((row) => inView(row.team_id));
+  const term = (termResult.data ?? []).filter((row) => row.marked > 0 && inView(row.team_id));
 
   return (
     <>
@@ -68,9 +82,9 @@ export default async function TrainingPage() {
         }
       />
 
-      <div className="grid gap-6 p-6 lg:grid-cols-[3fr_2fr]">
+      <div className="grid gap-4 p-4 lg:grid-cols-[3fr_2fr] lg:gap-6 lg:p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Sessions this week</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -84,7 +98,43 @@ export default async function TrainingPage() {
                 session” creates one without a pitch.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* Phone: one card per session, with the register as a 44px
+                  control rather than a link at the end of a wide row. */}
+              <div className="space-y-3 px-4 pb-4 lg:hidden">
+                {sessions.map((row) => (
+                  <div key={row.booking_id} className="rounded-xl border bg-card p-4">
+                    <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+                      {formatEventDate(row.starts_at)} · {formatEventTime(row.starts_at)}
+                    </p>
+                    <Link
+                      href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                      className="mt-2 block text-[15px] font-semibold leading-tight"
+                    >
+                      {row.team_name}
+                    </Link>
+                    <p className="mt-1 text-[12.5px] leading-tight text-muted-foreground">
+                      {row.pitch_name ?? "No pitch"} · booked by {row.booked_by}
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+                      <Badge variant={row.accepted > 0 ? "success" : "muted"}>
+                        {row.accepted}/{row.squad} coming
+                      </Badge>
+                      {row.status === "pending" ? (
+                        <Badge variant="warning">pitch awaiting confirmation</Badge>
+                      ) : null}
+                    </div>
+                    <Link
+                      href={`/pitches/${row.booking_id}`}
+                      className="mt-3 flex min-h-[44px] items-center justify-center gap-1.5 rounded-md border bg-card text-sm font-medium"
+                    >
+                      <ClipboardCheck className="h-4 w-4" /> Register
+                    </Link>
+                  </div>
+                ))}
+              </div>
+
+              <div className="hidden overflow-x-auto lg:block">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b bg-secondary/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
@@ -139,15 +189,16 @@ export default async function TrainingPage() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </CardContent>
         </Card>
 
         <Card className="self-start">
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Attendance this term</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
             {term.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 No registers taken yet this season — each session&apos;s Register link is where

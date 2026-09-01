@@ -31,11 +31,16 @@ export default async function MyPitchBookingsPage() {
   const coachView = (await getStoredRoleView()) === "coach";
   const asAdmin = access.isAdmin && !coachView;
   if (!access.isAdmin && !committee && access.staffTeamIds.length === 0) {
-    redirect("/room-bookings");
+    redirect("/lobby");
   }
 
+  // `fixture` is here because a coach can now ask for a MATCH, and a request
+  // you cannot see afterwards is not a request. `excludeAllocated` keeps the
+  // allocator's own fixture slots out of it — those are `/pitches`' business
+  // and `bookings_team_guard()` refuses a coach's hand on them anyway.
   const { items, error } = await loadPitchBookings({
-    kinds: ["training", "block"],
+    kinds: ["training", "block", "fixture"],
+    excludeAllocated: true,
     statuses: ["pending", "confirmed"],
     upcomingOnly: true,
     ...(asAdmin ? {} : { teamIds: access.staffTeamIds }),
@@ -56,21 +61,29 @@ export default async function MyPitchBookingsPage() {
           </Link>
         }
       />
-      <div className="space-y-6 p-6">
+      <div className="space-y-6 p-4 lg:p-6">
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>Upcoming</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Anything still to come, pending or confirmed. Pending bookings can be moved; a
-              confirmed one can be cancelled, and a club administrator can move it. Fixtures are
-              not listed here — they are allocated on{" "}
+              Anything still to come, pending or confirmed.{" "}
+              {!asAdmin && (
+                <>
+                  <span className="font-medium">Awaiting confirmation</span> means a club
+                  administrator has not decided it yet — the slot is held for you until they do,
+                  and you will get a notification either way.{" "}
+                </>
+              )}
+              Pending bookings can be moved; a confirmed one can be cancelled, and a club
+              administrator can move it. Fixtures the club has allocated are not listed here —
+              they live on{" "}
               <Link href="/pitches" className="underline underline-offset-2">
                 Pitches
               </Link>
               .
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {error ? (
               <p className="text-sm text-destructive">Could not load your pitch bookings: {error}</p>
             ) : (

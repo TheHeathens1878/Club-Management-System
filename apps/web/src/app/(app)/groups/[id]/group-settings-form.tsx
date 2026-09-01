@@ -77,6 +77,7 @@ export function GroupSettingsForm({
           required
           maxLength={120}
           disabled={disabled}
+          className="h-11 lg:h-10"
         />
       </div>
 
@@ -91,7 +92,11 @@ export function GroupSettingsForm({
 
       <Feedback state={state} />
 
-      <Button type="submit" disabled={pending || disabled} className="gap-2">
+      <Button
+        type="submit"
+        disabled={pending || disabled}
+        className="min-h-[44px] w-full gap-2 sm:w-auto lg:min-h-0"
+      >
         <Save className="h-4 w-4" /> Save changes
       </Button>
     </form>

@@ -245,6 +245,130 @@ export async function createEvent(
 }
 
 // ---------------------------------------------------------------------------
+// Edit — the same fields, the same guard, one event (Adam, 2026-08-25: "I also
+// need the ability to edit events (as a coach and admin)").
+//
+// `update_team_event` REPLACES rather than merges: what the form shows is what
+// the event becomes, so clearing the notes or the meet time is possible at all.
+// It refuses fixture-mirrored, cancelled and past events, moves the pitch
+// booking with the event, and tells the households when the time or the venue
+// changed — none of which is decided here.
+// ---------------------------------------------------------------------------
+
+export async function updateEvent(
+  _prev: EventActionState,
+  formData: FormData,
+): Promise<EventActionState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in again to edit the event." };
+
+  const eventId = text(formData, "event_id", 40);
+  const type = text(formData, "type", 20);
+  const title = text(formData, "title", 120);
+  const date = text(formData, "date", 10);
+  const time = text(formData, "time", 5);
+  const durationRaw = text(formData, "duration_minutes", 4);
+  const venueResourceId = text(formData, "venue_resource_id", 40);
+  const venueText = text(formData, "venue_text", 200);
+  const notes = text(formData, "notes", 1000);
+
+  if (!eventId) return { error: "No event given." };
+  if (!EVENT_TYPES.includes(type as EventType)) return { error: "Choose an event type." };
+  if (!title) return { error: "Give the event a name." };
+  if (!date || !time) return { error: "Give the event a date and a time." };
+  const duration = Number.parseInt(durationRaw, 10);
+  if (!Number.isFinite(duration) || duration < 15 || duration > 480) {
+    return { error: "The length must be between 15 minutes and 8 hours." };
+  }
+
+  let startsAt: string;
+  try {
+    startsAt = localToInstant(date, time);
+  } catch {
+    return { error: "That date and time could not be read." };
+  }
+
+  const meetTime = text(formData, "meet_time", 5);
+  let meetMinutesBefore: number | null = null;
+  if (meetTime) {
+    let meetAt: string;
+    try {
+      meetAt = localToInstant(date, meetTime);
+    } catch {
+      return { error: "That meet time could not be read." };
+    }
+    const minutes = Math.round((Date.parse(startsAt) - Date.parse(meetAt)) / 60_000);
+    if (minutes < 0) return { error: "The meet time must not be after the start." };
+    if (minutes > 240) return { error: "The meet time is more than four hours before the start." };
+    meetMinutesBefore = minutes;
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("update_team_event", {
+    p_event_id: eventId,
+    p_type: type,
+    p_title: title,
+    p_starts_at: startsAt,
+    p_duration_minutes: duration,
+    p_venue_resource_id: venueResourceId || undefined,
+    p_venue_text: venueText || undefined,
+    p_notes: notes || undefined,
+    p_meet_minutes_before: meetMinutesBefore ?? undefined,
+  });
+  if (error) {
+    return {
+      error: friendlyDbError(
+        error,
+        "The database refused that. Only the team's coach, assistant coach or manager — or a club administrator — can edit events.",
+      ),
+    };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  revalidatePath("/pitches/mine");
+  redirect(`/events/${eventId}`);
+}
+
+// ---------------------------------------------------------------------------
+// Assign a pitch from the event (admin view — Adam, 2026-08-25). Fixture
+// events route through allocate_fixture; unbooked practices/socials book
+// directly. Clashes come back named, verbatim.
+// ---------------------------------------------------------------------------
+
+export async function assignEventPitch(
+  _prev: EventActionState,
+  formData: FormData,
+): Promise<EventActionState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in again to assign a pitch." };
+
+  const eventId = text(formData, "event_id", 40);
+  const resourceId = text(formData, "resource_id", 40);
+  if (!eventId) return { error: "No event given." };
+  if (!resourceId) return { error: "Choose a pitch." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("assign_event_pitch", {
+    p_event_id: eventId,
+    p_resource_id: resourceId,
+  });
+  if (error) {
+    return {
+      error: friendlyDbError(
+        error,
+        "The database refused that. Only a club administrator can assign a pitch from the event.",
+      ),
+    };
+  }
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  revalidatePath("/pitches");
+  return { notice: "Pitch assigned." };
+}
+
+// ---------------------------------------------------------------------------
 // Cancel a one-off / series occurrence (staff). Fixture events are cancelled
 // by cancelling the fixture — the sync would only reinstate them.
 // ---------------------------------------------------------------------------

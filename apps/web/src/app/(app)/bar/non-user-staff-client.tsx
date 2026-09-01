@@ -43,15 +43,20 @@ export function NonUserStaffClient({ initial }: { initial: NonUserStaff[] }) {
 
   return (
     <div className="space-y-4">
-      <form onSubmit={handleAdd} className="flex gap-2">
+      <form onSubmit={handleAdd} className="flex flex-col gap-2 sm:flex-row">
         <Input
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Staff member name"
           disabled={isPending}
-          className="max-w-xs"
+          className="min-h-[44px] sm:min-h-0 sm:max-w-xs"
         />
-        <Button type="submit" disabled={isPending || !name.trim()} size="sm" className="gap-1.5">
+        <Button
+          type="submit"
+          disabled={isPending || !name.trim()}
+          size="sm"
+          className="min-h-[44px] w-full gap-1.5 sm:min-h-0 sm:w-auto"
+        >
           <UserPlus className="h-4 w-4" /> Add
         </Button>
       </form>
@@ -61,12 +66,12 @@ export function NonUserStaffClient({ initial }: { initial: NonUserStaff[] }) {
       ) : (
         <ul className="divide-y rounded-md border">
           {list.map((s) => (
-            <li key={s.id} className="flex items-center justify-between px-3 py-2 text-sm">
-              <span>{s.name}</span>
+            <li key={s.id} className="flex min-h-[44px] items-center justify-between gap-2 px-3 py-2 text-sm lg:min-h-0">
+              <span className="min-w-0 break-words">{s.name}</span>
               <button
                 onClick={() => handleRemove(s.id, s.name)}
                 disabled={isPending}
-                className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                className="flex h-11 w-11 shrink-0 items-center justify-center text-muted-foreground hover:text-destructive transition-colors lg:h-auto lg:w-auto lg:p-1"
                 title="Remove"
               >
                 <Trash2 className="h-3.5 w-3.5" />

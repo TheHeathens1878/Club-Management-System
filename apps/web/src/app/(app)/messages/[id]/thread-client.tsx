@@ -3,12 +3,24 @@
 /**
  * The live half of a thread (PLAN.md P5.4), WhatsApp-style:
  * grouped bubbles with tails, day chips, sent/read ticks, reply-with-quote,
- * emoji reactions, photo attachments, Enter-to-send and optimistic sending.
+ * emoji reactions, photo attachments and optimistic sending.
+ *
+ * Enter does NOT send (Adam, 2026-08-25): it puts a new line in the box like
+ * any other textarea, and the Send button is the only thing that posts. A
+ * conversation this one can be — a team room, a room a young person is in — is
+ * not a place for a message to leave by accident.
  *
  * The browser client is the user's own client, so Realtime and Storage apply
  * the same participant-scoped RLS as the server read did — a subscription
  * cannot leak a conversation the reader is not in, and an upload cannot land
  * outside a conversation the uploader is active in.
+ *
+ * Typing `@` opens a picker of the people actually in this conversation, and
+ * choosing one writes `@First Last` into the box. Arrow keys move, Enter
+ * chooses — and, because Enter never sends here, choosing a name is all Enter
+ * can ever do — Escape closes, and on a phone the rows are 44px targets. Who
+ * was really mentioned is settled on the server against the live participant
+ * list; this picker is a convenience, not the authority.
  *
  * Safeguarding shape (P5.1/P5.2): deleted and redacted bodies render as
  * tombstones EVERYWHERE, quotes included, via `visibleBody()`; announcement
@@ -30,9 +42,11 @@ import {
   CheckCheck,
   Clock3,
   CornerUpLeft,
+  Eraser,
   Flag,
   ImagePlus,
   Loader2,
+  MoreVertical,
   Send,
   SmilePlus,
   Trash2,
@@ -40,18 +54,29 @@ import {
 } from "lucide-react";
 
 import { Textarea } from "@/components/ui/field";
+import {
+  applyMention,
+  filterCandidates,
+  findMentionQuery,
+  splitMentions,
+  type MentionCandidate,
+  type MentionQuery,
+} from "@/lib/mentions";
 import { createClient } from "@/lib/supabase/client";
 
 import {
   deleteMessage,
   markRead,
   openAttachmentMessage,
+  purgeMessage,
   reportMessage,
   sendMessage,
   toggleReaction,
   type ActionState,
 } from "../actions";
 import { clockLabel, dayKey, dayLabel, sameRun, visibleBody } from "./format";
+import { MatchPostCard } from "./match-post-card";
+import type { MatchPostView } from "./thread-data";
 
 export type ThreadMessage = {
   id: string;
@@ -64,6 +89,11 @@ export type ThreadMessage = {
 };
 
 export type ThreadReaction = { id: string; message_id: string; person_id: string; emoji: string };
+
+/** The identity of a reaction — never its row id, which an optimistic row invents. */
+function sameReaction(a: ThreadReaction, b: ThreadReaction): boolean {
+  return a.message_id === b.message_id && a.person_id === b.person_id && a.emoji === b.emoji;
+}
 export type ThreadAttachment = {
   id: string;
   message_id: string;
@@ -97,6 +127,13 @@ export function ThreadClient({
   canPost,
   canReact,
   readOnlyNotice,
+  mentionables = [],
+  matchPosts = {},
+  isReferee = false,
+  isRefereesGroup = false,
+  isAdmin = false,
+  isSuperUser = false,
+  fill = false,
 }: {
   conversationId: string;
   conversationType: string;
@@ -112,6 +149,28 @@ export function ThreadClient({
   canPost: boolean;
   canReact: boolean;
   readOnlyNotice: string | null;
+  /** Who `@` may name: the LIVE participants, minus yourself. */
+  mentionables?: MentionCandidate[];
+  /** The Referees group's game cards, keyed by message id. */
+  matchPosts?: Record<string, MatchPostView>;
+  isReferee?: boolean;
+  /** The Referees group: games are requested through the form, not the chat. */
+  isRefereesGroup?: boolean;
+  isAdmin?: boolean;
+  /**
+   * The club owner. Adds one item to the actions: a permanent delete, which is
+   * the only hard delete of a message that exists (SAFEGUARDING.md SG-2, and
+   * the deliberate exception recorded there). Everyone else's delete is still
+   * the tombstone it always was.
+   */
+  isSuperUser?: boolean;
+  /**
+   * The thread is the whole page (the standalone /messages/[id] route on a
+   * phone): the message list takes every pixel left over instead of a fixed
+   * 58dvh box, and the composer is simply the last row of that column rather
+   * than a sticky element floating over the flow. See ThreadPanel's `fill`.
+   */
+  fill?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -131,14 +190,32 @@ export function ThreadClient({
   const [actionError, setActionError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [reportFor, setReportFor] = useState<string | null>(null);
+  /** Super user only: which message has the permanent-delete reason box open. */
+  const [purgeFor, setPurgeFor] = useState<string | null>(null);
+  /** Ids this session has destroyed, so the bubble goes at once. */
+  const [purged, setPurged] = useState<Set<string>>(() => new Set());
+  /** Phone only: which message has its actions open (there is no hover). */
+  const [actionsFor, setActionsFor] = useState<string | null>(null);
+  /** The half-typed `@…` under the caret, and which row of the picker is armed. */
+  const [mentionSpan, setMentionSpan] = useState<MentionQuery | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
   const [sendState, sendAction, sending] = useActionState(sendMessage, EMPTY);
   const [reportState, reportAction] = useActionState(reportMessage, EMPTY);
+  const [purgeState, purgeAction] = useActionState(purgeMessage, EMPTY);
+  /** Which message the open purge form is about, read back when it succeeds. */
+  const purgedRef = useRef<string | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const clientIdRef = useRef<string>(crypto.randomUUID());
   const typingSentAt = useRef(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  /** The conversation itself — the only thing that scrolls. */
+  const listRef = useRef<HTMLDivElement>(null);
+  /** What is inside that box, watched for growth (see `pinToBottom` below). */
+  const contentRef = useRef<HTMLDivElement>(null);
+  /** False until the first scroll has been placed, so it happens once. */
+  const openedAt = useRef(false);
 
   // ---------------------------------------------------------------------------
   // The message list: server window + pages loaded upward + realtime + pending.
@@ -161,8 +238,12 @@ export function ThreadClient({
         });
       }
     }
+    // A purged message has no row to come back to; drop it here as well as
+    // refreshing, because the copy this component is holding came from a read
+    // that happened before it was destroyed.
+    for (const id of purged) byId.delete(id);
     return Array.from(byId.values()).sort((a, b) => a.created_at.localeCompare(b.created_at));
-  }, [earlier, initialMessages, live, pending, myPersonId]);
+  }, [earlier, initialMessages, live, pending, myPersonId, purged]);
 
   const messageById = useMemo(() => new Map(messages.map((m) => [m.id, m])), [messages]);
   const confirmedIds = useMemo(() => {
@@ -193,9 +274,75 @@ export function ThreadClient({
     void markRead(conversationId, lastId);
   }, [conversationId, lastId, pending]);
 
+  /** Is the reader on the last screen of the conversation, or reading back? */
+  const nearBottom = useCallback(() => {
+    const container = listRef.current;
+    if (!container) return false;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 160;
+  }, []);
+
+  /**
+   * Put the conversation on its last line — twice, a frame apart. Once is not
+   * enough: the bubbles are still being laid out when the effect runs, so the
+   * first `scrollHeight` is the old one and the second catches the real one.
+   */
+  const pinToBottom = useCallback(() => {
+    const place = () => {
+      const container = listRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
+    };
+    place();
+    requestAnimationFrame(place);
+  }, []);
+
+  // Adam, 2026-08-25: "make it just the conversation that scrolls and it
+  // always shows the first unread message." The list below is the scroll
+  // container — the banner, the participant chips and the composer stay put —
+  // so this moves THAT box rather than the page.
+  //
+  // On open: the first unread message, at the top of the view with its divider
+  // above it. Nothing unread means the newest message, as before. Afterwards a
+  // new message pulls the view down only if the reader is already near the
+  // bottom; somebody reading back through the morning is left where they are.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ block: "end" });
-  }, [lastId]);
+    const container = listRef.current;
+    if (!container) return;
+
+    if (!openedAt.current) {
+      openedAt.current = true;
+      const anchor =
+        (firstUnreadId && document.getElementById("thread-unread-divider")) ||
+        (firstUnreadId && document.getElementById(`msg-${firstUnreadId}`));
+      if (anchor instanceof HTMLElement) {
+        // The container is `relative`, so it IS the anchor's offset parent and
+        // `offsetTop` is already measured from the top of the scrolling box.
+        // It used to subtract the container's own `offsetTop` as well, which
+        // was only ever right by accident (Adam, 2026-09-01).
+        container.scrollTop = Math.max(0, anchor.offsetTop - 8);
+        return;
+      }
+      pinToBottom();
+      return;
+    }
+
+    if (nearBottom()) pinToBottom();
+  }, [lastId, firstUnreadId, nearBottom, pinToBottom]);
+
+  // A referee card, a photo, an emoji row: plenty in this list settles AFTER
+  // the effect above has run, and a scrollTop set against the old height lands
+  // short — which on a phone reads as "you can't actually scroll to the bottom
+  // to see the details" (Adam, 2026-09-01). Watching the content itself means
+  // the last message stays on the floor of the box however late it grows,
+  // while a reader who has scrolled up is still left where they are.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (openedAt.current && nearBottom()) pinToBottom();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [nearBottom, pinToBottom]);
 
   // ---------------------------------------------------------------------------
   // Realtime: messages, read pointers, reactions, attachments. RLS scopes all.
@@ -255,7 +402,11 @@ export function ThreadClient({
         (payload) => {
           const row = payload.new as ThreadReaction | null;
           if (!row?.id || !confirmedIds.has(row.message_id)) return;
-          setReactions((prev) => (prev.some((x) => x.id === row.id) ? prev : [...prev, row]));
+          // Adam, 2026-08-25: "when I post emojis it is doubling them up". The
+          // optimistic row carries a temporary id, so matching on id alone let
+          // the real row land beside it. One person, one emoji, one message —
+          // that triple is the identity; the server row replaces the guess.
+          setReactions((prev) => [...prev.filter((x) => !sameReaction(x, row)), row]);
         },
       )
       .on(
@@ -364,18 +515,97 @@ export function ThreadClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sendState, sending]);
 
-  const onComposerKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      formRef.current?.requestSubmit();
-    }
-  }, []);
-
   const autoGrow = useCallback((e: React.FormEvent<HTMLTextAreaElement>) => {
     const el = e.currentTarget;
     el.style.height = "auto";
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
   }, []);
+
+  // ---------------------------------------------------------------------------
+  // @mentions in the composer.
+  //
+  // The textarea is uncontrolled (the form action reads its value at submit),
+  // so the picker reads the caret out of the element and writes the chosen name
+  // back into it. Only the *span* being typed lives in React state.
+  // ---------------------------------------------------------------------------
+  const MENTION_LIMIT = 6;
+  const mentionMatches = useMemo(
+    () => (mentionSpan ? filterCandidates(mentionables, mentionSpan.query).slice(0, MENTION_LIMIT) : []),
+    [mentionSpan, mentionables],
+  );
+
+  const closeMentions = useCallback(() => {
+    setMentionSpan(null);
+    setMentionIndex(0);
+  }, []);
+
+  const syncMentions = useCallback(() => {
+    const el = textRef.current;
+    if (!el || mentionables.length === 0) return;
+    const span = findMentionQuery(el.value, el.selectionStart ?? el.value.length);
+    setMentionSpan(span);
+    setMentionIndex(0);
+  }, [mentionables.length]);
+
+  const chooseMention = useCallback(
+    (candidate: MentionCandidate) => {
+      const el = textRef.current;
+      if (!el || !mentionSpan) return;
+      const next = applyMention(el.value, mentionSpan, candidate.name);
+      el.value = next.text;
+      el.focus();
+      el.setSelectionRange(next.caret, next.caret);
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+      closeMentions();
+    },
+    [mentionSpan, closeMentions],
+  );
+
+  /**
+   * Enter chooses a name and NOTHING else. It cannot send: this is a textarea,
+   * so Enter's own default is a new line, and Send is the only submit (Adam,
+   * 2026-08-25). With the picker open we take that new line away and use the
+   * key to pick; with it closed the new line is left exactly as it was.
+   */
+  const onComposerKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (!mentionSpan) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeMentions();
+        return;
+      }
+      if (mentionMatches.length === 0) return;
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionMatches.length) % mentionMatches.length);
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        e.stopPropagation();
+        chooseMention(mentionMatches[Math.min(mentionIndex, mentionMatches.length - 1)]!);
+      }
+    },
+    [mentionSpan, mentionMatches, mentionIndex, chooseMention, closeMentions],
+  );
+
+  /**
+   * Who a BUBBLE may show as mentioned: everyone the thread has a name for,
+   * people who have since left included — an old message keeps naming whom it
+   * named. The server decided long ago who was really mentioned; this only
+   * decides where the emphasis goes.
+   */
+  const renderCandidates = useMemo<MentionCandidate[]>(
+    () => Object.entries(names).map(([person_id, name]) => ({ person_id, name })),
+    [names],
+  );
 
   // ---------------------------------------------------------------------------
   // Reactions: optimistic toggle, server settles it.
@@ -479,7 +709,7 @@ export function ThreadClient({
             .select("id,message_id,storage_bucket,storage_path,content_type")
             .in("message_id", ids),
         ]);
-        if (r) setReactions((prev) => [...prev.filter((x) => !r.some((y) => y.id === x.id)), ...r]);
+        if (r) setReactions((prev) => [...prev.filter((x) => !r.some((y) => sameReaction(x, y))), ...r]);
         if (a) setAttachments((prev) => [...prev.filter((x) => !a.some((y) => y.id === x.id)), ...a]);
       }
     } finally {
@@ -509,7 +739,12 @@ export function ThreadClient({
 
   const reactionsFor = useMemo(() => {
     const map = new Map<string, Map<string, { count: number; mine: boolean }>>();
+    const seen = new Set<string>();
     for (const r of reactions) {
+      // Count people, not rows — a stray duplicate can never show as two.
+      const key = `${r.message_id} ${r.person_id} ${r.emoji}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       const per = map.get(r.message_id) ?? new Map();
       const entry = per.get(r.emoji) ?? { count: 0, mine: false };
       entry.count += 1;
@@ -528,256 +763,432 @@ export function ThreadClient({
     return map;
   }, [attachments]);
 
+  // A purge is the one action here whose row is really gone: nothing arrives
+  // over realtime to say so, so the thread is told directly and re-read.
+  useEffect(() => {
+    if (!purgeState.notice) return;
+    const id = purgedRef.current;
+    if (id) setPurged((prev) => new Set(prev).add(id));
+    purgedRef.current = null;
+    router.refresh();
+  }, [purgeState, router]);
+
   const typingNames = Object.values(typing).map((t) => t.name);
+  const typingLine = `${typingNames.join(", ")} ${typingNames.length === 1 ? "is" : "are"} typing…`;
   const showSenderNames = conversationType !== "dm";
 
-  return (
-    <div className="flex flex-col gap-3">
-      <div className="space-y-0.5">
-        {moreEarlier && (
-          <div className="flex justify-center pb-2">
-            <button
-              type="button"
-              onClick={() => void loadEarlier()}
-              disabled={loadingEarlier}
-              className="rounded-full border bg-card px-3 py-1 text-xs text-muted-foreground hover:bg-secondary"
+  /**
+   * React, reply, delete and — always — report to the safeguarding lead.
+   *
+   * The desk reveals these on hover in a chip beside the bubble. A phone has no
+   * hover, so the same four render under the bubble as 44px targets: reporting
+   * a message must stay one tap away on every viewport, which is why this is a
+   * second rendering rather than a hover state nobody can reach.
+   */
+  const messageActions = (
+    message: ThreadMessage,
+    mine: boolean,
+    touch: boolean,
+    usable: boolean,
+  ) => {
+    const shape = touch
+      ? "flex h-11 w-11 items-center justify-center rounded-full border bg-card text-muted-foreground"
+      : "rounded-full p-1 hover:bg-secondary";
+    const glyph = touch ? "h-[18px] w-[18px] text-muted-foreground" : "h-3.5 w-3.5 text-muted-foreground";
+
+    return (
+      <div
+        className={
+          touch
+            ? `mt-1 flex items-center gap-1.5 lg:hidden ${mine ? "justify-end" : "justify-start"}`
+            : "absolute top-0 hidden items-center gap-0.5 rounded-full border bg-card px-1 py-0.5 shadow-sm lg:group-hover:flex " +
+              (mine ? "right-full mr-1" : "left-full ml-1")
+        }
+      >
+        {canReact && usable && (
+          <details className="relative">
+            <summary
+              className={`flex cursor-pointer list-none items-center ${shape}`}
+              title="React"
             >
-              {loadingEarlier ? "Loading…" : "Load earlier messages"}
-            </button>
-          </div>
+              <SmilePlus className={glyph} />
+            </summary>
+            <div
+              className={`absolute z-20 mt-1 flex gap-1 rounded-full border bg-card p-1 shadow-md ${mine ? "right-0" : "left-0"} ${touch ? "bottom-full mb-1 mt-0" : ""}`}
+            >
+              {QUICK_EMOJI.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  className={
+                    touch
+                      ? "flex h-11 w-11 items-center justify-center rounded-full text-xl"
+                      : "rounded-full p-0.5 text-base hover:bg-secondary"
+                  }
+                  onClick={(e) => {
+                    react(message.id, emoji);
+                    (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          </details>
         )}
-
-        {messages.length === 0 && (
-          <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
-            No messages yet. Say hello.
-          </p>
+        {canPost && usable && (
+          <button
+            type="button"
+            className={shape}
+            title="Reply"
+            onClick={() => {
+              setReplyTo(message);
+              textRef.current?.focus();
+            }}
+          >
+            <CornerUpLeft className={glyph} />
+            {touch && <span className="sr-only">Reply</span>}
+          </button>
         )}
+        {mine && usable && (
+          <button
+            type="button"
+            className={shape}
+            title="Delete for everyone (the record keeps a tombstone)"
+            onClick={() => {
+              const fd = new FormData();
+              fd.set("message_id", message.id);
+              fd.set("conversation_id", conversationId);
+              void deleteMessage(EMPTY, fd).then((res) => {
+                if (res.error) setActionError(res.error);
+                else router.refresh();
+              });
+            }}
+          >
+            <Trash2 className={glyph} />
+            {touch && <span className="sr-only">Delete</span>}
+          </button>
+        )}
+        {usable && (
+          <button
+            type="button"
+            className={shape}
+            title="Report to the safeguarding lead"
+            onClick={() => setReportFor(reportFor === message.id ? null : message.id)}
+          >
+            <Flag className={glyph} />
+            {touch && <span className="sr-only">Report to the safeguarding lead</span>}
+          </button>
+        )}
+        {/* The club owner's permanent delete. Offered on a tombstoned message
+            too — clearing up a mistake usually starts with someone deleting
+            it the ordinary way first. */}
+        {isSuperUser && (
+          <button
+            type="button"
+            className={shape}
+            title="Delete permanently (destroys the message; cannot be undone)"
+            onClick={() => setPurgeFor(purgeFor === message.id ? null : message.id)}
+          >
+            <Eraser className={glyph} />
+            {touch && <span className="sr-only">Delete permanently</span>}
+          </button>
+        )}
+      </div>
+    );
+  };
 
-        {messages.map((message, i) => {
-          const prev = i > 0 ? messages[i - 1]! : null;
-          const next = i < messages.length - 1 ? messages[i + 1]! : null;
-          const mine = message.sender_person_id === myPersonId;
-          const isPending = !confirmedIds.has(message.id);
-          const newDay = !prev || dayKey(prev.created_at) !== dayKey(message.created_at);
-          const firstOfRun = newDay || !prev || !sameRun(prev, message);
-          const lastOfRun = !next || !sameRun(message, next) || dayKey(next.created_at) !== dayKey(message.created_at);
-          const body = visibleBody(message);
-          const quoted = message.reply_to_id ? messageById.get(message.reply_to_id) : undefined;
-          const per = reactionsFor.get(message.id);
-          const files = attachmentsFor.get(message.id) ?? [];
+  return (
+    <div
+      className={
+        fill ? "flex min-h-0 flex-1 flex-col gap-2 lg:flex-none lg:gap-3" : "flex flex-col gap-3"
+      }
+    >
+      {/* `relative` so the unread anchor's `offsetTop` is measured from this
+          box; `min-h-0 flex-1` in fill mode so the conversation takes the
+          screen that is left instead of a 58dvh guess that left the page and
+          the list fighting over the same flick. */}
+      <div
+        ref={listRef}
+        className={
+          "relative overflow-y-auto overscroll-contain px-0.5 lg:max-h-[calc(100dvh-20rem)] " +
+          (fill ? "min-h-0 flex-1 lg:flex-none" : "max-h-[58dvh] min-h-[16rem]")
+        }
+      >
+        <div ref={contentRef} className="space-y-0.5 pb-1">
+          {moreEarlier && (
+            <div className="flex justify-center pb-2">
+              <button
+                type="button"
+                onClick={() => void loadEarlier()}
+                disabled={loadingEarlier}
+                className="inline-flex min-h-[44px] items-center rounded-full border bg-card px-4 text-xs text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-3 lg:py-1"
+              >
+                {loadingEarlier ? "Loading…" : "Load earlier messages"}
+              </button>
+            </div>
+          )}
 
-          return (
-            <div key={message.id}>
-              {newDay && (
-                <div className="flex justify-center py-3">
-                  <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-medium text-secondary-foreground shadow-sm">
-                    {dayLabel(message.created_at)}
-                  </span>
-                </div>
-              )}
-              {message.id === firstUnreadId && (
-                <div className="flex items-center gap-3 py-2" aria-label="Unread messages">
-                  <span className="h-px flex-1 bg-primary/30" />
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-primary">Unread</span>
-                  <span className="h-px flex-1 bg-primary/30" />
-                </div>
-              )}
+          {messages.length === 0 && (
+            <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+              No messages yet. Say hello.
+            </p>
+          )}
 
-              <div className={`group flex ${mine ? "justify-end" : "justify-start"} ${firstOfRun ? "pt-2" : "pt-0.5"}`}>
-                <div className={`relative max-w-[75%] min-w-0 ${mine ? "items-end" : "items-start"}`}>
-                  <div
-                    className={
-                      "rounded-2xl border px-3 py-1.5 text-sm shadow-sm " +
-                      (mine ? "bg-primary/15 border-primary/20 " : "bg-card ") +
-                      (lastOfRun ? (mine ? "rounded-br-md" : "rounded-bl-md") : "")
-                    }
-                  >
-                    {showSenderNames && !mine && firstOfRun && (
-                      <p className="text-xs font-semibold text-primary">
-                        {names[message.sender_person_id] ?? "Club member"}
-                      </p>
-                    )}
+          {messages.map((message, i) => {
+            const prev = i > 0 ? messages[i - 1]! : null;
+            const next = i < messages.length - 1 ? messages[i + 1]! : null;
+            const mine = message.sender_person_id === myPersonId;
+            const isPending = !confirmedIds.has(message.id);
+            const newDay = !prev || dayKey(prev.created_at) !== dayKey(message.created_at);
+            const firstOfRun = newDay || !prev || !sameRun(prev, message);
+            const lastOfRun = !next || !sameRun(message, next) || dayKey(next.created_at) !== dayKey(message.created_at);
+            const body = visibleBody(message);
+            const quoted = message.reply_to_id ? messageById.get(message.reply_to_id) : undefined;
+            const per = reactionsFor.get(message.id);
+            const files = attachmentsFor.get(message.id) ?? [];
+            // A posted game is a card of labelled rows, not a sentence: at 75%
+            // of a phone, less the bubble's own padding, the kick-off line wraps
+            // three times and two of them together are unreadable (Adam,
+            // 2026-09-01, "very cramped when you post 2 or more games"). It gets
+            // the width of the screen below lg, and the bubble stops padding
+            // what is already a padded card.
+            const hasCard = body.state === "ok" && matchPosts[message.id] !== undefined;
 
-                    {quoted !== undefined && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          document.getElementById(`msg-${quoted.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })
-                        }
-                        className="mt-0.5 mb-1 block w-full rounded-md border-l-2 border-primary/60 bg-secondary/60 px-2 py-1 text-left"
-                      >
-                        <span className="block text-[11px] font-medium text-primary">
-                          {quoted.sender_person_id === myPersonId
-                            ? "You"
-                            : (names[quoted.sender_person_id] ?? "Club member")}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {visibleBody(quoted).text}
-                        </span>
-                      </button>
-                    )}
-                    {message.reply_to_id && quoted === undefined && (
-                      <span className="mt-0.5 mb-1 block rounded-md border-l-2 border-muted bg-secondary/60 px-2 py-1 text-xs italic text-muted-foreground">
-                        Earlier message
-                      </span>
-                    )}
-
-                    {/* A deleted or redacted message keeps none of its
-                        pictures: the tombstone is the whole message. The
-                        policies refuse the file too, so this is the tidy
-                        rendering of a refusal, not the enforcement of it. */}
-                    {body.state === "ok" &&
-                      files.map((file) => <AttachmentImage key={file.id} attachment={file} />)}
-
-                    <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
-                      {body.state === "ok" ? (
-                        body.text
-                      ) : (
-                        <span className="italic text-muted-foreground">{body.text}</span>
-                      )}
-                    </p>
-
-                    <span className="float-right ml-2 mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-                      {clockLabel(message.created_at)}
-                      {mine &&
-                        body.state === "ok" &&
-                        (isPending ? (
-                          <Clock3 className="h-3 w-3" aria-label="Sending" />
-                        ) : readByAll(message) ? (
-                          <CheckCheck className="h-3.5 w-3.5 text-sky-500" aria-label="Read by everyone" />
-                        ) : (
-                          <Check className="h-3.5 w-3.5" aria-label="Sent" />
-                        ))}
+            return (
+              <div key={message.id}>
+                {newDay && (
+                  <div className="flex justify-center py-3">
+                    <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-medium text-secondary-foreground shadow-sm">
+                      {dayLabel(message.created_at)}
                     </span>
                   </div>
+                )}
+                {message.id === firstUnreadId && (
+                  <div
+                    id="thread-unread-divider"
+                    className="flex items-center gap-3 py-2"
+                    aria-label="Unread messages"
+                  >
+                    <span className="h-px flex-1 bg-primary/30" />
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-primary">Unread</span>
+                    <span className="h-px flex-1 bg-primary/30" />
+                  </div>
+                )}
 
-                  {per && per.size > 0 && (
-                    <div className={`-mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"} relative z-10`}>
-                      {Array.from(per.entries()).map(([emoji, info]) => (
-                        <button
-                          key={emoji}
-                          type="button"
-                          disabled={!canReact}
-                          onClick={() => react(message.id, emoji)}
-                          className={
-                            "rounded-full border bg-card px-1.5 py-0.5 text-xs shadow-sm " +
-                            (info.mine ? "border-primary/50 bg-primary/10" : "")
-                          }
-                          title={info.mine ? "Tap to remove your reaction" : "React too"}
-                        >
-                          {emoji}
-                          {info.count > 1 && <span className="ml-0.5 text-[10px]">{info.count}</span>}
-                        </button>
-                      ))}
-                    </div>
+                <div className={`group flex ${mine ? "justify-end" : "justify-start"} ${firstOfRun ? "pt-2" : "pt-0.5"}`}>
+                  {(mine && (body.state === "ok" || isSuperUser) && !isPending) && (
+                    <MessageKebab
+                      open={actionsFor === message.id}
+                      onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
+                    />
                   )}
-
-                  {/* Hover actions */}
-                  {body.state === "ok" && !isPending && (
+                  <div
+                    className={
+                      `relative min-w-0 ${mine ? "items-end" : "items-start"} ` +
+                      (hasCard ? "max-w-[92%] lg:max-w-[75%]" : "max-w-[75%]")
+                    }
+                  >
                     <div
                       className={
-                        "absolute top-0 hidden items-center gap-0.5 rounded-full border bg-card px-1 py-0.5 shadow-sm group-hover:flex " +
-                        (mine ? "right-full mr-1" : "left-full ml-1")
+                        "rounded-2xl border py-1.5 text-sm shadow-sm " +
+                        (hasCard ? "px-1.5 " : "px-3 ") +
+                        (mine ? "bg-primary/15 border-primary/20 " : "bg-card ") +
+                        (lastOfRun ? (mine ? "rounded-br-md" : "rounded-bl-md") : "")
                       }
                     >
-                      {canReact && (
-                        <details className="relative">
-                          <summary className="flex cursor-pointer list-none items-center rounded-full p-1 hover:bg-secondary" title="React">
-                            <SmilePlus className="h-3.5 w-3.5 text-muted-foreground" />
-                          </summary>
-                          <div className={`absolute z-20 mt-1 flex gap-1 rounded-full border bg-card p-1 shadow-md ${mine ? "right-0" : "left-0"}`}>
-                            {QUICK_EMOJI.map((emoji) => (
-                              <button
-                                key={emoji}
-                                type="button"
-                                className="rounded-full p-0.5 text-base hover:bg-secondary"
-                                onClick={(e) => {
-                                  react(message.id, emoji);
-                                  (e.currentTarget.closest("details") as HTMLDetailsElement | null)?.removeAttribute("open");
-                                }}
-                              >
-                                {emoji}
-                              </button>
-                            ))}
-                          </div>
-                        </details>
+                      {showSenderNames && !mine && firstOfRun && (
+                        <p className="text-xs font-semibold text-primary">
+                          {names[message.sender_person_id] ?? "Club member"}
+                        </p>
                       )}
-                      {canPost && (
-                        <button
-                          type="button"
-                          className="rounded-full p-1 hover:bg-secondary"
-                          title="Reply"
-                          onClick={() => {
-                            setReplyTo(message);
-                            textRef.current?.focus();
-                          }}
-                        >
-                          <CornerUpLeft className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
-                      )}
-                      {mine && (
-                        <button
-                          type="button"
-                          className="rounded-full p-1 hover:bg-secondary"
-                          title="Delete for everyone (the record keeps a tombstone)"
-                          onClick={() => {
-                            const fd = new FormData();
-                            fd.set("message_id", message.id);
-                            fd.set("conversation_id", conversationId);
-                            void deleteMessage(EMPTY, fd).then((res) => {
-                              if (res.error) setActionError(res.error);
-                              else router.refresh();
-                            });
-                          }}
-                        >
-                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        className="rounded-full p-1 hover:bg-secondary"
-                        title="Report to the safeguarding lead"
-                        onClick={() => setReportFor(reportFor === message.id ? null : message.id)}
-                      >
-                        <Flag className="h-3.5 w-3.5 text-muted-foreground" />
-                      </button>
-                    </div>
-                  )}
 
-                  {reportFor === message.id && (
-                    <form
-                      action={reportAction}
-                      className="mt-1 space-y-2 rounded-lg border bg-card p-2 shadow-sm"
-                      onSubmit={() => setReportFor(null)}
-                    >
-                      <input type="hidden" name="message_id" value={message.id} />
-                      <Textarea
-                        name="reason"
-                        required
-                        rows={2}
-                        placeholder="What is the concern? This opens a safeguarding case."
-                        className="text-xs"
-                      />
-                      <div className="flex gap-2">
-                        <button type="submit" className="rounded-md border px-2 py-1 text-[11px] font-medium hover:bg-secondary">
-                          Send report
-                        </button>
+                      {quoted !== undefined && (
                         <button
                           type="button"
-                          onClick={() => setReportFor(null)}
-                          className="rounded-md px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary"
+                          onClick={() =>
+                            document.getElementById(`msg-${quoted.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })
+                          }
+                          className="mt-0.5 mb-1 block w-full rounded-md border-l-2 border-primary/60 bg-secondary/60 px-2 py-1 text-left"
                         >
-                          Cancel
+                          <span className="block text-[11px] font-medium text-primary">
+                            {quoted.sender_person_id === myPersonId
+                              ? "You"
+                              : (names[quoted.sender_person_id] ?? "Club member")}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {visibleBody(quoted).text}
+                          </span>
                         </button>
+                      )}
+                      {message.reply_to_id && quoted === undefined && (
+                        <span className="mt-0.5 mb-1 block rounded-md border-l-2 border-muted bg-secondary/60 px-2 py-1 text-xs italic text-muted-foreground">
+                          Earlier message
+                        </span>
+                      )}
+
+                      {/* A deleted or redacted message keeps none of its
+                          pictures: the tombstone is the whole message. The
+                          policies refuse the file too, so this is the tidy
+                          rendering of a refusal, not the enforcement of it. */}
+                      {body.state === "ok" &&
+                        files.map((file) => <AttachmentImage key={file.id} attachment={file} />)}
+
+                      {/* A referee game card replaces the body it fell back to —
+                          same tombstone rule as the attachments above. */}
+                      {hasCard ? (
+                        <span id={`msg-${message.id}`} className="block">
+                          <MatchPostCard
+                            post={matchPosts[message.id]!}
+                            isReferee={isReferee}
+                            myPersonId={myPersonId}
+                            isAdmin={isAdmin}
+                          />
+                        </span>
+                      ) : (
+                        <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
+                          {body.state === "ok" ? (
+                            <MentionText
+                              text={body.text}
+                              candidates={renderCandidates}
+                              myPersonId={myPersonId}
+                            />
+                          ) : (
+                            <span className="italic text-muted-foreground">{body.text}</span>
+                          )}
+                        </p>
+                      )}
+
+                      <span className="float-right ml-2 mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                        {clockLabel(message.created_at)}
+                        {mine &&
+                          body.state === "ok" &&
+                          (isPending ? (
+                            <Clock3 className="h-3 w-3" aria-label="Sending" />
+                          ) : readByAll(message) ? (
+                            <CheckCheck className="h-3.5 w-3.5 text-sky-500" aria-label="Read by everyone" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" aria-label="Sent" />
+                          ))}
+                      </span>
+                    </div>
+
+                    {per && per.size > 0 && (
+                      <div className={`-mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"} relative z-10`}>
+                        {Array.from(per.entries()).map(([emoji, info]) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            disabled={!canReact}
+                            onClick={() => react(message.id, emoji)}
+                            className={
+                              "rounded-full border bg-card px-1.5 py-0.5 text-xs shadow-sm " +
+                              (info.mine ? "border-primary/50 bg-primary/10" : "")
+                            }
+                            title={info.mine ? "Tap to remove your reaction" : "React too"}
+                          >
+                            {emoji}
+                            {info.count > 1 && <span className="ml-0.5 text-[10px]">{info.count}</span>}
+                          </button>
+                        ))}
                       </div>
-                    </form>
+                    )}
+
+                    {/* Hover actions on the desk; on a phone the kebab beside the
+                        bubble opens the same set. */}
+                    {(body.state === "ok" || isSuperUser) && !isPending && (
+                      <>
+                        {messageActions(message, mine, false, body.state === "ok")}
+                        {actionsFor === message.id &&
+                          messageActions(message, mine, true, body.state === "ok")}
+                      </>
+                    )}
+
+                    {reportFor === message.id && (
+                      <form
+                        action={reportAction}
+                        className="mt-1 space-y-2 rounded-lg border bg-card p-2 shadow-sm"
+                        onSubmit={() => setReportFor(null)}
+                      >
+                        <input type="hidden" name="message_id" value={message.id} />
+                        <Textarea
+                          name="reason"
+                          required
+                          rows={2}
+                          placeholder="What is the concern? This opens a safeguarding case."
+                          className="text-xs"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            className="inline-flex min-h-[44px] items-center rounded-md border px-3 text-[11px] font-medium hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Send report
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReportFor(null)}
+                            className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {purgeFor === message.id && (
+                      <form
+                        action={purgeAction}
+                        className="mt-1 space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-2 shadow-sm"
+                        onSubmit={() => {
+                          purgedRef.current = message.id;
+                          setPurgeFor(null);
+                        }}
+                      >
+                        <input type="hidden" name="message_id" value={message.id} />
+                        <input type="hidden" name="conversation_id" value={conversationId} />
+                        <p className="text-[11px] text-muted-foreground">
+                          This destroys the message and its files. It cannot be undone, and the audit
+                          trail will record that you did it and why. The database refuses if the
+                          message is evidence in a safeguarding concern or under a legal hold.
+                        </p>
+                        <Textarea
+                          name="reason"
+                          required
+                          rows={2}
+                          placeholder="Why is this being destroyed?"
+                          className="text-xs"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            className="inline-flex min-h-[44px] items-center rounded-md border border-destructive/40 px-3 text-[11px] font-medium text-destructive hover:bg-destructive/10 lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Delete permanently
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPurgeFor(null)}
+                            className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                  {(!mine && (body.state === "ok" || isSuperUser) && !isPending) && (
+                    <MessageKebab
+                      open={actionsFor === message.id}
+                      onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
+                    />
                   )}
                 </div>
               </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {actionError && (
@@ -795,16 +1206,48 @@ export function ThreadClient({
           {reportState.notice}
         </p>
       )}
+      {purgeState.error && (
+        <p className="whitespace-pre-line rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {purgeState.error}
+        </p>
+      )}
+      {purgeState.notice && (
+        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          {purgeState.notice}
+        </p>
+      )}
 
-      <p className="h-4 text-xs text-muted-foreground">
-        {typingNames.length > 0 &&
-          `${typingNames.join(", ")} ${typingNames.length === 1 ? "is" : "are"} typing…`}
-      </p>
+      {/* Who is typing. In fill mode this line does not exist on its own — it
+          shares the one under the box with the connection state, because two
+          permanently reserved lines of small print above a phone keyboard is
+          two more than the conversation can spare (Adam, 2026-09-01). */}
+      {!fill && (
+        <p className="h-4 text-xs text-muted-foreground">
+          {typingNames.length > 0 && typingLine}
+        </p>
+      )}
 
       {readOnlyNotice ? (
-        <p className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{readOnlyNotice}</p>
+        <p className="shrink-0 rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{readOnlyNotice}</p>
       ) : canPost ? (
-        <form ref={formRef} action={sendAction} onSubmit={onComposerSubmit} className="space-y-2">
+        /* In fill mode the composer is simply the last row of a column that is
+           exactly as tall as the screen, so it sits on the floor without being
+           positioned at all. It used to be `sticky` at a 64px offset inside a
+           container with nothing to slide against, ON TOP of the 64px `<main>`
+           already pads for the tab bar — which is what put the end of the
+           conversation out of reach (Adam, 2026-09-01). Embedded in the team
+           page it is still sticky, now measured from the real bar. */
+        <form
+          ref={formRef}
+          action={sendAction}
+          onSubmit={onComposerSubmit}
+          className={
+            "z-20 space-y-2 rounded-t-xl border-t bg-background pb-2 pt-2 lg:rounded-none lg:border-t-0 lg:pb-0 lg:pt-0 " +
+            (fill
+              ? "shrink-0"
+              : "sticky bottom-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom))] lg:static")
+          }
+        >
           <input type="hidden" name="conversation_id" value={conversationId} />
           <input type="hidden" name="client_id" value={clientIdRef.current} />
           <input type="hidden" name="reply_to" value={replyTo?.id ?? ""} />
@@ -826,9 +1269,55 @@ export function ThreadClient({
             </div>
           )}
 
-          <div className="flex items-end gap-2">
+          {/* Adam, 2026-08-25: the chat is not the way to ask for a referee —
+              the structured Post a game form above is, and it says so where
+              the eye lands before typing. */}
+          {isRefereesGroup && (
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-900 lg:rounded-lg lg:px-3 lg:py-2 lg:text-xs">
+              To request a referee, use the form at the top.
+            </p>
+          )}
+
+          <div className="relative flex items-end gap-2">
+            {mentionSpan && mentionMatches.length > 0 && (
+              /* Above the box, never over the thread's last line: the member is
+                 looking at what they are typing. Rows are 44px so a thumb can
+                 land on one; the armed row is named by aria-activedescendant so
+                 a screen reader hears the same arrow-key move a sighted user
+                 sees. */
+              <ul
+                id="mention-picker"
+                role="listbox"
+                aria-label="Mention someone in this conversation"
+                className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-64 overflow-y-auto rounded-xl border bg-card py-1 shadow-lg"
+              >
+                {mentionMatches.map((candidate, i) => (
+                  <li key={candidate.person_id}>
+                    <button
+                      id={`mention-option-${i}`}
+                      type="button"
+                      role="option"
+                      aria-selected={i === mentionIndex}
+                      // Keep the caret in the box: without this the mousedown
+                      // blurs the textarea and the span we are about to replace
+                      // is gone before the click lands.
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => chooseMention(candidate)}
+                      onMouseEnter={() => setMentionIndex(i)}
+                      className={
+                        "flex min-h-[44px] w-full items-center px-3 text-left text-sm " +
+                        (i === mentionIndex ? "bg-secondary font-semibold" : "hover:bg-secondary/60")
+                      }
+                    >
+                      <span className="mr-1 text-muted-foreground">@</span>
+                      {candidate.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             <label
-              className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border text-muted-foreground hover:bg-secondary"
+              className="flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-full border text-muted-foreground hover:bg-secondary lg:h-9 lg:w-9"
               title="Attach a photo"
             >
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}
@@ -849,28 +1338,120 @@ export function ThreadClient({
               name="body"
               rows={1}
               required
-              placeholder="Write a message…"
-              className="max-h-40 min-h-[2.25rem] flex-1 resize-none"
-              onChange={announceTyping}
+              placeholder={
+                mentionables.length > 0 ? "Write a message… (@ to mention someone)" : "Write a message…"
+              }
+              className="max-h-40 min-h-[44px] flex-1 resize-none lg:min-h-[2.25rem]"
+              role={mentionSpan && mentionMatches.length > 0 ? "combobox" : undefined}
+              aria-expanded={mentionSpan !== null && mentionMatches.length > 0}
+              aria-controls={mentionSpan && mentionMatches.length > 0 ? "mention-picker" : undefined}
+              aria-activedescendant={
+                mentionSpan && mentionMatches.length > 0 ? `mention-option-${mentionIndex}` : undefined
+              }
+              aria-autocomplete="list"
+              onChange={() => {
+                announceTyping();
+                syncMentions();
+              }}
               onInput={autoGrow}
               onKeyDown={onComposerKeyDown}
+              onKeyUp={syncMentions}
+              onClick={syncMentions}
+              onBlur={closeMentions}
             />
             <button
               type="submit"
               disabled={sending || uploading}
               aria-label="Send"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-60 lg:h-9 lg:w-9"
             >
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Enter sends · Shift+Enter for a new line ·{" "}
-            {connected ? "Live" : "Reconnecting — messages refresh every few seconds"}
+          {/* One line of small print, not three. Somebody typing outranks the
+              rest of it; and the "Enter starts a new line" reassurance is for
+              a keyboard, so on a phone — where the return key does exactly
+              that anyway — only the connection state stays. */}
+          <p className="truncate text-[11px] text-muted-foreground" aria-live="polite">
+            {fill && typingNames.length > 0 ? (
+              typingLine
+            ) : (
+              <>
+                <span className={fill ? "hidden lg:inline" : undefined}>
+                  Enter starts a new line — Send is the only thing that sends ·{" "}
+                </span>
+                {connected ? "Live" : "Reconnecting — messages refresh every few seconds"}
+              </>
+            )}
           </p>
         </form>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A message body with its `@mentions` picked out.
+ *
+ * Emphasis, not a link. A conversation can name someone whose member page the
+ * reader is not allowed to open, and a mention that turned into a route would
+ * be telling every reader that such a page exists. The chip is bold with a
+ * tinted pill — weight and shape carry it, so it is not a colour-only signal —
+ * and being mentioned YOURSELF is marked out further, and said aloud for a
+ * screen reader, because that is the one a member is scanning for.
+ */
+function MentionText({
+  text,
+  candidates,
+  myPersonId,
+}: {
+  text: string;
+  candidates: MentionCandidate[];
+  myPersonId: string;
+}) {
+  const segments = useMemo(() => splitMentions(text, candidates), [text, candidates]);
+  if (segments.length === 1 && segments[0]!.person_id === null) return <>{text}</>;
+  return (
+    <>
+      {segments.map((segment, i) =>
+        segment.person_id === null ? (
+          <span key={i}>{segment.text}</span>
+        ) : (
+          <strong
+            key={i}
+            className={
+              "rounded px-1 font-semibold " +
+              (segment.person_id === myPersonId
+                ? "bg-primary/25 text-primary underline decoration-primary/60 underline-offset-2"
+                : "bg-primary/10 text-primary")
+            }
+          >
+            {segment.text}
+            {segment.person_id === myPersonId && <span className="sr-only"> (this mentions you)</span>}
+          </strong>
+        ),
+      )}
+    </>
+  );
+}
+
+/**
+ * The phone's way in to a message's actions — react, reply, delete, and report
+ * to the safeguarding lead. It exists because the desk's set is revealed by
+ * hover, and a touch screen never hovers; nothing about what the actions do
+ * changes with the viewport.
+ */
+function MessageKebab({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={open}
+      className="flex h-11 w-11 flex-none items-center justify-center self-end text-muted-foreground lg:hidden"
+    >
+      <MoreVertical className="h-4 w-4" />
+      <span className="sr-only">{open ? "Hide message actions" : "Message actions"}</span>
+    </button>
   );
 }
 

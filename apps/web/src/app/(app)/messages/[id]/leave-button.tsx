@@ -22,7 +22,7 @@ export function LeaveButton({ conversationId }: { conversationId: string }) {
         <button
           type="submit"
           disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-60"
+          className="inline-flex min-h-[44px] items-center gap-1.5 rounded-md border px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary disabled:opacity-60 lg:min-h-0 lg:py-1.5"
         >
           <LogOut className="h-3.5 w-3.5" /> Leave conversation
         </button>

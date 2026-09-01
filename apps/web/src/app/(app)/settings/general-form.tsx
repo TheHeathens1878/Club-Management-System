@@ -48,7 +48,7 @@ export function GeneralForm({ settings }: { settings: SiteSettings }) {
         <Input name="contact_email" type="email" defaultValue={settings.contact_email} placeholder="bookings@example.com" />
       </div>
 
-      <div className="space-y-4 rounded-lg border p-4">
+      <div className="space-y-4 rounded-lg border p-3 lg:p-4">
         <p className="text-sm font-medium">Homepage benefit cards</p>
         <p className="text-xs text-muted-foreground">Three cards shown below the hero — describe what makes the club worth joining.</p>
         {([1, 2, 3] as const).map((n) => (
@@ -66,8 +66,8 @@ export function GeneralForm({ settings }: { settings: SiteSettings }) {
         ))}
       </div>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={saving}>
+      <div className="flex flex-col items-stretch gap-3 lg:flex-row lg:items-center">
+        <Button type="submit" disabled={saving} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           Save changes
         </Button>

@@ -71,7 +71,10 @@ select public.update_concern(current_setting('r6.ref'), 'closed');
 reset role;
 set local request.jwt.claims to '{}';
 select is((select array_agg(message_id) from public.message_retention_candidates()), array['f6f6f6f6-2222-4111-8111-000000000001']::uuid[], 'only the message older than the period is a candidate');
--- dry run changes nothing (and is forced while retention.enabled = false)
+-- dry run changes nothing (and is forced while retention.enabled = false).
+-- 20260825060000 ships retention ENABLED, so the disabled state is arranged
+-- here rather than assumed from the seed.
+update public.site_settings set value = 'false' where key = 'retention.enabled';
 select set_config('r6.audit0', (select count(*)::text from public.audit_log where action = 'retention.dry_run'), true);
 select is((select mode from public.retention_run(false)), 'dry_run', 'retention.enabled=false forces dry-run even when asked to run');
 select is((select redacted_at from public.messages where id = 'f6f6f6f6-2222-4111-8111-000000000001'), null, 'retention_job_dry_run_changes_nothing');

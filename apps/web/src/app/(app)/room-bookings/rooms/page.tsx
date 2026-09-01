@@ -18,7 +18,7 @@ export default async function RoomsSettingsPage({
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { saved, error: errorParam } = await searchParams;
 
@@ -40,12 +40,15 @@ export default async function RoomsSettingsPage({
         title="Manage Rooms"
         subtitle="Update room details, capacity and pricing"
         action={
-          <Link href="/room-bookings" className={buttonVariants({ variant: "outline", size: "sm" })}>
+          <Link
+            href="/room-bookings"
+            className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"}
+          >
             <ChevronLeft className="h-4 w-4" /> Back to bookings
           </Link>
         }
       />
-      <div className="p-6 space-y-6 max-w-3xl">
+      <div className="max-w-3xl space-y-4 p-4 lg:space-y-6 lg:p-6">
         {saved === "new" && (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -109,7 +112,7 @@ export default async function RoomsSettingsPage({
               </div>
               <button
                 type="submit"
-                className="flex items-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                className="flex min-h-[44px] w-full items-center justify-center gap-1.5 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 lg:min-h-0 lg:w-auto lg:justify-start"
               >
                 <Plus className="h-3.5 w-3.5" /> Create room
               </button>
@@ -137,10 +140,10 @@ export default async function RoomsSettingsPage({
           return (
             <Card key={room.id} className={isSaved ? "border-emerald-300" : ""}>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between gap-2">
-                  <span className="flex items-center gap-2">
-                    {room.name}
-                    {isSaved && <CheckCircle2 className="h-4 w-4 text-emerald-600" />}
+                <CardTitle className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span className="truncate">{room.name}</span>
+                    {isSaved && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />}
                   </span>
                   <DeleteRoomButton roomId={room.id} roomName={room.name} />
                 </CardTitle>
@@ -172,7 +175,7 @@ export default async function RoomsSettingsPage({
                         id={`active-${room.id}`}
                         name="active"
                         defaultValue={room.active ? "true" : "false"}
-                        className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                        className="min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
                       >
                         <option value="true">Visible on public page</option>
                         <option value="false">Hidden</option>
@@ -228,7 +231,7 @@ export default async function RoomsSettingsPage({
                   </div>
                   <button
                     type="submit"
-                    className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
+                    className="min-h-[44px] w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 lg:min-h-0 lg:w-auto"
                   >
                     Save changes
                   </button>

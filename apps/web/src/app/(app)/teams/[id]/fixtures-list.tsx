@@ -9,13 +9,15 @@ import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import type { Headcount } from "@/lib/headcount";
 
 import { googleMapsUrl } from "../../events/shared";
-import { fixtureStatusVariant } from "./fixtures-shared";
+import { fixtureHref, fixtureStatusVariant } from "./fixtures-shared";
 
 /**
  * The whole row is the link (Adam, 2026-08-24: "you should be able to click
  * into the fixture anywhere on the card") — except clicks that land on a real
  * anchor inside it, which keep their own destination (the maps pin, the
- * attendance link).
+ * attendance link). The row opens the Event & RSVP page (Adam, 2026-08-25:
+ * "it should take you directly to the Event & RSVP page"); only the staff
+ * Attendance link still goes to the fixture's own marker page.
  */
 function rowClick(router: ReturnType<typeof useRouter>, href: string) {
   return (event: React.MouseEvent<HTMLElement>) => {
@@ -24,10 +26,15 @@ function rowClick(router: ReturnType<typeof useRouter>, href: string) {
   };
 }
 
-/** Where a fixture is played, as a maps link — the venue text or the pitch. */
+/**
+ * Where a fixture is played, as a maps link. A home match pins the venue's
+ * street address from Manage venues when one is recorded (Adam, 2026-08-25) —
+ * a pitch NAME like "Ashton Park – Pitch 2" is a poor search term, the
+ * address is the real place — falling back to the pitch name as before.
+ */
 function MapsLink({ fixture }: { fixture: TeamFixture }) {
   const place = fixture.isHome
-    ? (fixture.pitchName ?? fixture.venueText)
+    ? (fixture.pitchAddress ?? fixture.pitchName ?? fixture.venueText)
     : (fixture.venueText ?? fixture.opponent);
   if (!place) return null;
   return (
@@ -62,8 +69,19 @@ export type TeamFixture = {
   allocationConflict: boolean;
   seasonName: string | null;
   pitchName: string | null;
+  /** The home pitch's street address (Manage venues) — the maps pin when set. */
+  pitchAddress: string | null;
   /** Squad availability counts — staff and admin view only. */
   headcount: Headcount | null;
+  /** The RSVP event mirroring this fixture, when the events module has one. */
+  eventId: string | null;
+  /**
+   * `fixtures.no_longer_published_at` — Full-Time has stopped publishing this
+   * game, and the importer left it alone because a pitch, a team sheet or
+   * stats hang off it. Somebody has to decide whether the club is still
+   * playing it (20260826110000).
+   */
+  noLongerPublishedAt: string | null;
 };
 
 /** `✓ 5 · ✗ 2 · ? 5` — the marker at a glance; unanswered fold into "?". */
@@ -111,7 +129,61 @@ export function FixturesTable({
   }
 
   return (
-    <div className="overflow-x-auto">
+    <>
+      {/* The phone reads the same fixtures as a stack of cards — kick-off and
+          opponent, the detail line underneath, status and headcount right
+          (mobile design: a dense table becomes cards). */}
+      <ul className="divide-y lg:hidden">
+        {fixtures.map((fixture) => {
+          const local = instantToLocal(fixture.kickoffAt);
+          return (
+            <li
+              key={fixture.id}
+              onClick={rowClick(router, fixtureHref(teamId, fixture))}
+              className="flex min-h-[44px] cursor-pointer items-start justify-between gap-3 py-3 first:pt-0"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium">
+                  {fixture.isHome ? "v" : "away to"} {fixture.opponent}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  {formatBookingDateShort(local.date)} · {local.time}
+                  {fixture.pitchName
+                    ? ` · ${fixture.pitchName}`
+                    : fixture.isHome
+                      ? " · no pitch yet"
+                      : ""}
+                  {fixture.competition ? ` · ${fixture.competition}` : ""}
+                </p>
+                {fixture.venueText && (
+                  <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                    {fixture.venueText}
+                  </p>
+                )}
+                <p className="mt-1 text-xs">
+                  <MapsLink fixture={fixture} />
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <Badge variant={fixtureStatusVariant(fixture.status)} className="capitalize">
+                  {fixture.status}
+                </Badge>
+                {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
+                {fixture.noLongerPublishedAt && (
+                  <Badge variant="warning" title="Full-Time has stopped publishing this game. Open it to decide whether the club is still playing it.">
+                    Not in Full-Time
+                  </Badge>
+                )}
+                {canManage && fixture.headcount && (
+                  <HeadcountChips headcount={fixture.headcount} />
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="hidden overflow-x-auto lg:block">
       <table className="w-full text-left text-sm">
         <thead className="border-b text-xs text-muted-foreground">
           <tr>
@@ -132,7 +204,7 @@ export function FixturesTable({
             return (
               <tr
                 key={fixture.id}
-                onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
+                onClick={rowClick(router, fixtureHref(teamId, fixture))}
                 className="cursor-pointer border-b transition-colors last:border-0 hover:bg-secondary/60"
               >
                 <td className="whitespace-nowrap py-2 pr-3">
@@ -158,6 +230,11 @@ export function FixturesTable({
                       {fixture.status}
                     </Badge>
                     {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
+                {fixture.noLongerPublishedAt && (
+                  <Badge variant="warning" title="Full-Time has stopped publishing this game. Open it to decide whether the club is still playing it.">
+                    Not in Full-Time
+                  </Badge>
+                )}
                   </div>
                 </td>
                 {canManage && (
@@ -178,7 +255,8 @@ export function FixturesTable({
           })}
         </tbody>
       </table>
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -206,8 +284,8 @@ export function FixturesSummary({
           return (
             <li
               key={fixture.id}
-              onClick={rowClick(router, `/teams/${teamId}/fixtures/${fixture.id}`)}
-              className="flex cursor-pointer flex-wrap items-start justify-between gap-2 rounded-md py-3 transition-colors first:pt-0 hover:bg-secondary/60"
+              onClick={rowClick(router, fixtureHref(teamId, fixture))}
+              className="flex min-h-[44px] cursor-pointer flex-wrap items-start justify-between gap-2 rounded-md py-3 transition-colors first:pt-0 hover:bg-secondary/60"
             >
               <div className="min-w-0">
                 <p className="text-sm font-medium">
@@ -227,6 +305,11 @@ export function FixturesSummary({
                   {fixture.status}
                 </Badge>
                 {fixture.allocationConflict && <Badge variant="warning">Pitch clash</Badge>}
+                {fixture.noLongerPublishedAt && (
+                  <Badge variant="warning" title="Full-Time has stopped publishing this game. Open it to decide whether the club is still playing it.">
+                    Not in Full-Time
+                  </Badge>
+                )}
               </div>
             </li>
           );

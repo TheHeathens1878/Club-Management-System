@@ -19,7 +19,7 @@ const TEAMS_PATH = "/teams";
 
 async function requireCommittee() {
   const session = await getSessionProfile();
-  if (!session || !isCommittee(session.profile?.role)) redirect("/room-bookings");
+  if (!session || !isCommittee(session.profile?.role)) redirect("/lobby");
   return session;
 }
 

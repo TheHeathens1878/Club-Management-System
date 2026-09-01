@@ -26,7 +26,7 @@ export default async function SettingsPage({
   searchParams: Promise<{ tab?: string }>;
 }) {
   const session = await getSessionProfile();
-  if (!session || !isSuperUser(session.profile?.role)) redirect("/room-bookings");
+  if (!session || !isSuperUser(session.profile?.role)) redirect("/lobby");
 
   const sp = await searchParams;
   const tab: Tab = VALID_TABS.includes(sp.tab as Tab) ? (sp.tab as Tab) : "general";
@@ -107,27 +107,31 @@ export default async function SettingsPage({
   return (
     <>
       <PageHeader title="Settings" subtitle="Site configuration and administration" />
-      <div className="p-6 space-y-6">
-        <div className="inline-flex rounded-lg bg-secondary p-1 flex-wrap gap-y-1">
-          {tabs.map((t) => (
-            <a
-              key={t.key}
-              href={`/settings?tab=${t.key}`}
-              className={`rounded-md px-4 py-1.5 text-sm font-medium transition whitespace-nowrap
-                ${tab === t.key ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {t.label}
-            </a>
-          ))}
+      <div className="p-4 space-y-4 lg:p-6 lg:space-y-6">
+        {/* The strip scrolls sideways on a phone rather than wrapping into
+            three rows; from lg it wraps as it always has. */}
+        <div className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:overflow-x-visible lg:px-0">
+          <div className="inline-flex flex-nowrap rounded-lg bg-secondary p-1 lg:flex-wrap lg:gap-y-1">
+            {tabs.map((t) => (
+              <a
+                key={t.key}
+                href={`/settings?tab=${t.key}`}
+                className={`flex min-h-[44px] items-center rounded-md px-4 py-1.5 text-sm font-medium transition whitespace-nowrap lg:block lg:min-h-0
+                  ${tab === t.key ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {t.label}
+              </a>
+            ))}
+          </div>
         </div>
 
         {tab === "general" && (
           <Card className="max-w-2xl">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle>General</CardTitle>
               <p className="text-sm text-muted-foreground">Club name, public page text and login page copy.</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <GeneralForm settings={settings} />
             </CardContent>
           </Card>
@@ -135,11 +139,11 @@ export default async function SettingsPage({
 
         {tab === "branding" && (
           <Card className="max-w-2xl">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle>Branding</CardTitle>
               <p className="text-sm text-muted-foreground">Logo and colour theme.</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <BrandingForm settings={settings} />
             </CardContent>
           </Card>
@@ -147,11 +151,11 @@ export default async function SettingsPage({
 
         {tab === "payments" && (
           <Card className="max-w-2xl">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle>Payments</CardTitle>
               <p className="text-sm text-muted-foreground">Deposit defaults and reminder timing for bookings.</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <PaymentsForm settings={settings} />
             </CardContent>
           </Card>
@@ -159,11 +163,11 @@ export default async function SettingsPage({
 
         {tab === "notifications" && (
           <Card className="max-w-2xl">
-            <CardHeader>
+            <CardHeader className="p-4 lg:p-6">
               <CardTitle>Email Notifications</CardTitle>
               <p className="text-sm text-muted-foreground">Choose which staff are copied in on each type of email.</p>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
               <NotificationsForm staff={staff} selections={notifySelections} />
             </CardContent>
           </Card>

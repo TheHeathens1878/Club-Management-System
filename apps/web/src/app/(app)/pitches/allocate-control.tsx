@@ -135,13 +135,13 @@ export function AllocateControl({
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-end gap-2">
-        <label className="min-w-[10rem] flex-1">
+        <label className="w-full min-w-[10rem] flex-1 lg:w-auto">
           {!compact && <span className="mb-1 block text-xs text-muted-foreground">Pitch</span>}
           <select
             aria-label="Pitch"
             value={resourceId}
             onChange={(e) => setResourceId(e.target.value)}
-            className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="h-11 w-full rounded-md border border-input bg-card px-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-9"
           >
             {pitches.map((option) => (
               <option key={option.id} value={option.id}>
@@ -159,7 +159,7 @@ export function AllocateControl({
             type="time"
             value={kickoff}
             onChange={(e) => setKickoff(e.target.value)}
-            className="h-9"
+            className="h-11 lg:h-9"
             title="The fixture is re-timed to this kick-off on its own date; blank keeps its current time."
           />
         </label>
@@ -171,7 +171,7 @@ export function AllocateControl({
             value={pre}
             onChange={(e) => setPre(e.target.value)}
             placeholder={String(pitch?.defaultPreBufferMinutes ?? 0)}
-            className="h-9"
+            className="h-11 lg:h-9"
           />
         </label>
         <label className="w-24">
@@ -182,19 +182,34 @@ export function AllocateControl({
             value={post}
             onChange={(e) => setPost(e.target.value)}
             placeholder={String(pitch?.defaultPostBufferMinutes ?? 0)}
-            className="h-9"
+            className="h-11 lg:h-9"
           />
         </label>
-        <Button size="sm" onClick={runAllocate} disabled={busy !== null || !resourceId}>
-          {busy === "allocate" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-          {currentResourceId === null ? "Allocate" : unchanged ? "Re-allocate" : "Move here"}
-        </Button>
-        {allowUnallocate && (
-          <Button size="sm" variant="outline" onClick={runUnallocate} disabled={busy !== null}>
-            {busy === "unallocate" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            Unallocate
+        {/* The buttons take the width on a phone (this is a 44px control at
+            the side of a pitch); `lg:contents` hands them back to the row. */}
+        <span className="flex w-full gap-2 lg:contents">
+          <Button
+            size="sm"
+            className="h-11 flex-1 lg:h-9 lg:flex-none"
+            onClick={runAllocate}
+            disabled={busy !== null || !resourceId}
+          >
+            {busy === "allocate" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+            {currentResourceId === null ? "Allocate" : unchanged ? "Re-allocate" : "Move here"}
           </Button>
-        )}
+          {allowUnallocate && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-11 flex-1 lg:h-9 lg:flex-none"
+              onClick={runUnallocate}
+              disabled={busy !== null}
+            >
+              {busy === "unallocate" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+              Unallocate
+            </Button>
+          )}
+        </span>
       </div>
 
       {pitch && (

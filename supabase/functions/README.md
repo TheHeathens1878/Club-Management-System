@@ -27,11 +27,12 @@ House rules, all inherited from `fulltime-import`:
 | `stripe-webhook` | **`false`** | Stripe webhook endpoint | P4.1. Verifies the signature, records the delivery in `stripe_events`, applies it to `subscriptions` / `payments`. |
 | `stripe-checkout` | `true` | the app, as the payer | P4.1. Creates a Checkout Session for a pending subscription; returns `{ url }`. |
 | `arrears-reminders` | `true` | cron `0 9 * * 2` | P4.2. Tiered subs chasing (14 / 30 / 60 days), one send per tier ever. |
-| `safeguarding-nudges` | `true` | cron `30 6 * * *` | P4.3. Certification expiry 90/30/7, the compliance report, the SG-1 nightly check. |
+| `safeguarding-nudges` | `true` | cron `30 6 * * *` | The SG-1 nightly check. (The SG-6 certification nudges and compliance report were retired 2026-08-26.) |
 | `comms-dispatch` | `true` | cron `*/5 * * * *` | P4.4. Drains `queued_messages()` to Resend / Twilio / Expo. |
 | `media-quarantine` | `true` | cron `*/10 * * * *` | P4.5. Moves flagged objects to `quarantine/…` so live signed URLs break. |
 | `media-signed-url` | `true` | the app, as a member | P4.5. Consent-filtered signed URLs, TTL ≤ 900s. |
 | `push-fanout` | **`false`** | Database Webhook on `messages` INSERT | P5.5. One push per active, unmuted participant; body withheld when the conversation has a minor. |
+| `id-docs-purge` | `true` | cron `20 5 * * *` | Destroys identity documents three years after upload: removes the object, then stamps `purged_at` and nulls the path. The row survives. |
 
 `verify_jwt = false` is only for the two callers that cannot present a Supabase
 JWT: Stripe (proved by `stripe-signature`) and the Database Webhook (proved by

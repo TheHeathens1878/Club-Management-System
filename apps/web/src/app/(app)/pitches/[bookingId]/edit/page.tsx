@@ -45,7 +45,7 @@ export default async function EditPitchBookingPage({
           </Link>
         }
       />
-      <div className="max-w-3xl space-y-6 p-6">
+      <div className="max-w-3xl space-y-6 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={statusVariant(booking.status)}>{statusLabel(booking.status)}</Badge>
           <Badge variant="muted">{kindLabel(booking.kind)}</Badge>
@@ -53,14 +53,14 @@ export default async function EditPitchBookingPage({
         </div>
 
         <Card>
-          <CardHeader>
+          <CardHeader className="p-4 lg:p-6">
             <CardTitle>{booking.label ?? booking.teamName ?? "Pitch booking"}</CardTitle>
             <p className="text-sm text-muted-foreground">
               Time, pitch and label. The new slot is checked against everything else on that pitch
               before it is saved, and the database refuses an overlap regardless.
             </p>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
             {editable ? (
               <EditBookingForm booking={booking} pitches={pitches} />
             ) : (

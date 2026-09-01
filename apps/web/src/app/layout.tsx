@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Oswald, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
 import { getSettings, themeVars } from "@/lib/settings";
@@ -19,16 +19,32 @@ const oswald = Oswald({
 });
 
 export const metadata: Metadata = {
-  title: "AoM Sports Club — Function Room Hire",
-  description: "Function room hire and booking management for AoM Sports Club.",
+  title: "AoM Sports Club",
+  description:
+    "Ashton-on-Mersey Sports Club — teams, fixtures, availability, messages, subs and bookings.",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
-    title: "AoM Function Room",
+    title: "AoM Club",
+  },
+  icons: {
+    apple: "/apple-touch-icon.png",
   },
   other: {
     "mobile-web-app-capable": "yes",
   },
+};
+
+/**
+ * The phone shell needs the real viewport: edge-to-edge (`viewportFit: cover`)
+ * so the tab bar can pad itself with `env(safe-area-inset-bottom)`, and ink as
+ * the browser chrome colour to match the header strip.
+ */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#14100E",
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {

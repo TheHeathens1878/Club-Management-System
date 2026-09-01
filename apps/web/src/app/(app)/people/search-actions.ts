@@ -31,7 +31,12 @@ export async function searchPeople(query: string): Promise<PersonOption[]> {
 
   const supabase = await createClient();
   const pattern = `%${term}%`;
-  const { data } = await supabase
+  // Somebody who is in `people` only because they hired the function room is
+  // not a person the club adds to a team or a group (Adam, 2026-08-25), so the
+  // picker skips them for the same reason the people list does.
+  const { data: hirerIds } = await supabase.rpc("hire_only_person_ids");
+  const hirers = (hirerIds ?? []) as string[];
+  let request = supabase
     .from("people")
     .select("id,first_name,last_name,preferred_name,email,dob")
     .is("deleted_at", null)
@@ -46,6 +51,8 @@ export async function searchPeople(query: string): Promise<PersonOption[]> {
     .order("last_name")
     .order("first_name")
     .limit(SEARCH_LIMIT);
+  if (hirers.length > 0) request = request.not("id", "in", `(${hirers.join(",")})`);
+  const { data } = await request;
 
   return (data ?? []).map((p) => ({
     id: p.id,

@@ -10,14 +10,13 @@
  *   · it stamps `decided_at` / `decided_by` itself — this action must not, and
  *     the guard raises P0001 if it tries;
  *   · on approval with a `team_id` it creates the live `team_memberships`
- *     (player) row for that season, which is what makes P2.1's SG-6 team
- *     composition guard run at the moment a human is looking. If SG-6 refuses,
- *     the whole approval fails and the registration stays pending. That
- *     message names the coach and the missing certification, so it is shown
+ *     (player) row for that season, which is what makes P2.1's team guards run
+ *     at the moment a human is looking. If one refuses, the whole approval
+ *     fails and the registration stays pending, and the message is shown
  *     VERBATIM: it is the administrator's to-do list.
  *
  * The team membership is therefore NOT created here. Doing it separately would
- * either duplicate the row or move the SG-6 check away from the decision.
+ * either duplicate the row or move those checks away from the decision.
  */
 
 import { revalidatePath } from "next/cache";
@@ -50,7 +49,8 @@ export async function approveRegistration(
     .select("id");
 
   if (error) {
-    // SG-6 and the status machine both speak P0001 and both are worth reading.
+    // The safeguarding guards and the status machine both speak P0001, and
+    // both are worth reading.
     if (error.code === "P0001") return { blocked: error.message };
     if (error.code === "42501") {
       return { error: "Only a club administrator can approve a registration." };
@@ -94,4 +94,44 @@ export async function rejectRegistration(
 
   revalidatePath(PATH);
   return { notice: "Rejected." };
+}
+
+/**
+ * "We have seen this player's ID before" — the tick Adam asked for.
+ *
+ * `set_id_verified()` is club_admin only and stamps who ticked it and when,
+ * with an audit row; this action does none of that itself. What the tick
+ * CHANGES is `needs_id_document()`, which is what makes the upload mandatory
+ * on the join screen — so unticking it is a real act too, and is offered for
+ * the case where the box was ticked against the wrong person.
+ */
+export async function setPersonIdVerified(
+  _prev: RegistrationDecisionState,
+  formData: FormData,
+): Promise<RegistrationDecisionState> {
+  const personId = String(formData.get("person_id") ?? "").trim();
+  const verified = formData.get("verified") === "yes";
+  if (!personId) return { error: "Missing the person." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("set_id_verified", {
+    p_person_id: personId,
+    p_verified: verified,
+  });
+
+  if (error) {
+    if (error.code === "P0001") return { blocked: error.message };
+    if (error.code === "42501") {
+      return { error: "Only a club administrator can confirm the club has seen an identity document." };
+    }
+    return { error: error.message };
+  }
+
+  revalidatePath(PATH);
+  revalidatePath(`/people/${personId}`);
+  return {
+    notice: verified
+      ? "Recorded — the club has seen this player's ID."
+      : "Cleared — proof of identity will be asked for again.",
+  };
 }
