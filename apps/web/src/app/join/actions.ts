@@ -1,25 +1,34 @@
 "use server";
 
 /**
- * Join the club — the one registration flow (Adam, 2026-08-24).
+ * Join the club — the one registration flow (Adam, 2026-08-24), in four steps
+ * since 2026-09-01: your profile, your children, your connected adults, the
+ * registrations.
  *
- * Four server actions, one per wizard step. Authorisation lives in the
- * database throughout:
- *   · step 1 is a Supabase Auth sign-up (handle_new_user() stores name, DOB,
- *     phone and address; the SG-10 guard refuses under-age accounts), or —
- *     already signed in — update_own_contact();
- *   · step 2 creates household people through add_child() / add_household_adult(),
- *     whose SG-4 guards speak for themselves;
- *   · step 3 writes a pending `registrations` row per player (the RLS insert
- *     policies cover self, guarded child and household adult) or diverts to
- *     submit_waiting_list_entry(); when the age group is not open the player
- *     still becomes a team-less registration so nobody is ever lost;
- *   · step 4 is create_membership(): the fee band is settled by the number of
- *     PLAYERS on the membership in that season, NOT the number of people on it
- *     — a parent registering one child is two people and one player, so an
- *     INDIVIDUAL membership (20260825520000). The people themselves are still
- *     verified against the caller's household by the function, and there are
- *     still at most six of them.
+ * Authorisation lives in the database throughout:
+ *   · the PROFILE step is a Supabase Auth sign-up (handle_new_user() stores
+ *     name, DOB, sex, phone and address; the SG-10 guard refuses under-age
+ *     accounts), or — already signed in — update_own_contact();
+ *   · the CHILDREN and CONNECTED ADULTS steps create people through
+ *     add_child() / add_household_adult(), whose SG-4 guards speak for
+ *     themselves;
+ *   · the REGISTRATIONS step writes a pending `registrations` row per player
+ *     (the RLS insert policies cover self, guarded child and household adult)
+ *     or diverts to submit_waiting_list_entry(); when the age group is not
+ *     open the player still becomes a team-less registration so nobody is ever
+ *     lost — and then create_membership(): the fee band is settled by the
+ *     number of PLAYERS on the membership in that season, NOT the number of
+ *     people on it — a parent registering one child is two people and one
+ *     player, so an INDIVIDUAL membership (20260825520000). The people
+ *     themselves are still verified against the caller's household by the
+ *     function, and there are still at most six of them.
+ *
+ * THE HATS. Player is not a request — a registration is how somebody becomes
+ * a player, and has been since gap 4. Coach and referee are: each tick calls
+ * `request_role_for()` (20260901200000), which lands a PENDING account request
+ * a club administrator decides in /approvals, and which is the same function
+ * whether the tick is beside your own name, a child's or a connected adult's.
+ * Nothing in this file grants anybody anything.
  */
 
 import { countyForTown } from "@/lib/address";
@@ -27,6 +36,7 @@ import { createClient } from "@/lib/supabase/server";
 import { emergencyContactsFromFormData, noEmergencyContacts } from "@/lib/emergency-contacts";
 import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { splitContactName } from "@/lib/person-name";
+import { DEFAULT_MIN_REFEREE_AGE } from "@/lib/referee-age";
 import { registrationFormFromFormData } from "@/lib/registration-form";
 import { questionFromRow, type RegistrationQuestion } from "@/lib/registration-questions";
 import {
@@ -54,6 +64,83 @@ function validDob(dob: string): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// The hats a tick asks for
+// ---------------------------------------------------------------------------
+
+/** What the ticks on one person produced: what was asked, and what was not. */
+export type RoleAsk = {
+  /** Sentences to show as confirmations — "asked", never "granted". */
+  asked: string[];
+  /**
+   * A refusal, in the database's own words. The commonest is the referee age
+   * rule, which names the date the person may ask on — a fact worth showing
+   * whole rather than summarising away.
+   */
+  refused: string[];
+};
+
+const EMPTY_ASK: RoleAsk = { asked: [], refused: [] };
+
+/**
+ * Ask for the coach and referee hats on one person's behalf.
+ *
+ * `request_role_for()` decides whether this account may speak for them at all
+ * (itself, a guarded child, or a login-less household adult), refuses a
+ * referee who is not yet 14, and returns the existing request rather than a
+ * duplicate when the form is submitted twice. A null return means the hat is
+ * already held, which is not worth a sentence.
+ *
+ * The coach request carries no team. On the joining form "I coach" is usually
+ * said by somebody the club has not placed yet, and 20260901200000 makes the
+ * team optional for exactly that: approving grants the club-wide hat and an
+ * administrator puts them on a squad from the team page.
+ */
+async function askForRoles(
+  personId: string,
+  who: string,
+  wants: { coach: boolean; referee: boolean },
+): Promise<RoleAsk> {
+  const roles: Array<{ role: "coach" | "referee"; sentence: string }> = [];
+  if (wants.coach) {
+    roles.push({
+      role: "coach",
+      sentence: `${who} asked to coach — a club administrator will confirm it and put them with a team.`,
+    });
+  }
+  if (wants.referee) {
+    roles.push({
+      role: "referee",
+      sentence: `${who} asked to referee — a club administrator will confirm it.`,
+    });
+  }
+  if (roles.length === 0) return EMPTY_ASK;
+
+  const supabase = await createClient();
+  const result: RoleAsk = { asked: [], refused: [] };
+  for (const { role, sentence } of roles) {
+    const { data, error } = await supabase.rpc("request_role_for", {
+      p_person_id: personId,
+      p_role: role,
+    });
+    if (error) {
+      result.refused.push(tidyRpcMessage(error.message));
+      continue;
+    }
+    // null: the hat is already held. Nothing was asked and nothing is owed.
+    if (data) result.asked.push(sentence);
+  }
+  return result;
+}
+
+/** "You"/their first name, for the sentences above. */
+function askedFor(formData: FormData): { coach: boolean; referee: boolean } {
+  return {
+    coach: formData.get("coaching") === "yes",
+    referee: formData.get("refereeing") === "yes",
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Step 1 — about you
 // ---------------------------------------------------------------------------
 
@@ -74,18 +161,23 @@ export type StartState = {
   registrant?: {
     personId: string;
     fullName: string;
+    firstName: string;
+    lastName: string;
     dob: string;
     playing: boolean;
-    registeringOthers: boolean;
     /** True when the club has neither seen their ID nor holds a document. */
     needsId: boolean;
     /** `people.sex` if the club already holds it. */
     sex: string | null;
   };
+  /** What the coach / referee ticks asked for, and what was refused. */
+  roles?: RoleAsk;
   teams?: JoinTeamOption[];
   openAgeGroups?: string[];
   /** Only a club administrator is offered "show all teams" (Adam, 2026-08-26). */
   isAdmin?: boolean;
+  /** The age the club registers referees from — read, never assumed. */
+  minRefereeAge?: number;
   /** The form, as the club currently asks it (live rows, in position order). */
   questions?: RegistrationQuestion[];
 };
@@ -107,15 +199,16 @@ async function needsIdDocument(personId: string): Promise<boolean> {
   return data === true;
 }
 
-/** Teams, open waiting-list age groups and the form itself. */
+/** Teams, open waiting-list age groups, the referee age and the form itself. */
 async function loadJoinContext(): Promise<{
   teams: JoinTeamOption[];
   openAgeGroups: string[];
   questions: RegistrationQuestion[];
   isAdmin: boolean;
+  minRefereeAge: number;
 }> {
   const supabase = await createClient();
-  const [teamsResult, groupsResult, questionsResult, adminResult] = await Promise.all([
+  const [teamsResult, groupsResult, questionsResult, adminResult, refereeAgeResult] = await Promise.all([
     supabase.from("teams").select("id,name,age_group,gender").eq("active", true).order("name"),
     supabase.rpc("waiting_list_open_age_groups"),
     supabase
@@ -124,6 +217,11 @@ async function loadJoinContext(): Promise<{
       .is("archived_at", null)
       .order("position"),
     supabase.rpc("is_club_admin"),
+    // The club registers referees from this age (20260901160000). Read rather
+    // than written down here, so the form and the guard that enforces it
+    // cannot come to disagree; 14 is the documented default the function
+    // itself falls back to.
+    supabase.rpc("safeguarding_setting_int", { p_key: "safeguarding.min_referee_age" }),
   ]);
   return {
     teams: (teamsResult.data ?? []).map((row) => ({
@@ -137,15 +235,21 @@ async function loadJoinContext(): Promise<{
       .map((row) => questionFromRow(row))
       .filter((question): question is RegistrationQuestion => question !== null),
     isAdmin: adminResult.data === true,
+    minRefereeAge:
+      typeof refereeAgeResult.data === "number" && refereeAgeResult.data > 0
+        ? refereeAgeResult.data
+        : DEFAULT_MIN_REFEREE_AGE,
   };
 }
 
 export async function joinStart(_prev: StartState, formData: FormData): Promise<StartState> {
   const playing = formData.get("playing") === "yes";
-  const registeringOthers = formData.get("registering_others") === "yes";
-  if (!playing && !registeringOthers) {
-    return { error: "Tick at least one: playing yourself, or registering family members." };
-  }
+  const wants = askedFor(formData);
+  // No "tick at least one" any more (Adam, 2026-09-01). The four steps ask
+  // about children and connected adults in their own right, so somebody who is
+  // none of these three things is not making a mistake — they are a committee
+  // member who wants a login, which is what /register used to be for and is
+  // now this form with everything left unticked.
 
   const town = text(formData, "address_town");
   const address = {
@@ -191,12 +295,14 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
       registrant: {
         personId,
         fullName: `${person.first_name} ${person.last_name}`,
+        firstName: person.first_name,
+        lastName: person.last_name,
         dob: person.dob,
         playing,
-        registeringOthers,
         needsId: await needsIdDocument(personId),
         sex: person.sex,
       },
+      roles: await askForRoles(personId, "You", wants),
       ...context,
     };
   }
@@ -268,13 +374,15 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     registrant: {
       personId,
       fullName,
+      firstName,
+      lastName,
       dob,
       playing,
-      registeringOthers,
       needsId: await needsIdDocument(personId),
       // A brand-new account: nothing on record yet, so the form asks.
       sex: null,
     },
+    roles: await askForRoles(personId, "You", wants),
     ...context,
   };
 }
@@ -302,6 +410,8 @@ export type AddPersonState = {
     minor: boolean;
     needsId: boolean;
   };
+  /** What the coach / referee ticks beside their name asked for. */
+  roles?: RoleAsk;
 };
 
 export async function joinAddPerson(_prev: AddPersonState, formData: FormData): Promise<AddPersonState> {
@@ -311,6 +421,10 @@ export async function joinAddPerson(_prev: AddPersonState, formData: FormData): 
   const email = text(formData, "email");
   const playing = formData.get("playing") === "yes";
   const count = Number(formData.get("household_count") ?? "1");
+  // Which step asked. The database still decides adult from child by the date
+  // of birth — this only lets the wrong step say so in its own words instead
+  // of forwarding an SG-4 refusal that reads like a fault.
+  const step = text(formData, "step"); // "child" | "adult"
 
   if (!firstName || !lastName) return { error: "Please enter their first name and surname." };
   if (!validDob(dob)) return { error: "Please enter a valid date of birth." };
@@ -326,6 +440,16 @@ export async function joinAddPerson(_prev: AddPersonState, formData: FormData): 
   // with add_child()") are shown verbatim when the split disagrees.
   const dobDate = new Date(`${dob}T00:00:00Z`);
   const age = (Date.now() - dobDate.getTime()) / (365.25 * 24 * 3600 * 1000);
+  if (step === "child" && age >= 18) {
+    return {
+      error: `That date of birth makes ${firstName} an adult. Adults go on the next step, Connected adults.`,
+    };
+  }
+  if (step === "adult" && age < 18) {
+    return {
+      error: `That date of birth makes ${firstName} a child. Go back a step and add them under Your children, so the club records you as their guardian.`,
+    };
+  }
   const rpc = age < 18 ? "add_child" : "add_household_adult";
   const { data, error } =
     rpc === "add_child"
@@ -352,6 +476,7 @@ export async function joinAddPerson(_prev: AddPersonState, formData: FormData): 
       minor: age < 18,
       needsId: await needsIdDocument(data),
     },
+    roles: await askForRoles(data, firstName, askedFor(formData)),
   };
 }
 

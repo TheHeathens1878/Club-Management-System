@@ -6,7 +6,7 @@ import { recordPasswordLogin, requestMagicLink, sendPasswordReset } from "./acti
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ShieldCheck, Mail, KeyRound, Loader2, ArrowLeft, UserPlus, ClipboardList } from "lucide-react";
+import { ShieldCheck, Mail, KeyRound, Loader2, ArrowLeft, ClipboardList } from "lucide-react";
 import { siteConfig } from "@/lib/site-config";
 import { isBookerRole } from "@/lib/types";
 
@@ -189,35 +189,25 @@ export function LoginForm({
             {/* Adam, 2026-09-01: "the membership workflow should be prominent
                 and they should be able to register as a referee too."
 
-                Three doors, in the order most people need them. Joining the
-                club is the one nearly everybody arriving here wants and it was
-                not on this page at all — the only offer was an account, which
-                is the thing you need in order to do the thing you came to do.
-                So the wizard leads, in the solid button; the bare account is
-                the outline underneath it, for the coach or committee member who
-                already belongs and only wants a login; and refereeing gets its
-                own line, because a referee is not joining a club, they are
-                offering to take its games. */}
+                ONE door, where there were three (Adam, 2026-09-01). "Just
+                create an account" is gone: the account is the first step of
+                the joining workflow now, and everything the bare form used to
+                ask is asked there — with the coach and referee ticks beside
+                it. A committee member who only wants a login walks the same
+                four steps and ticks nothing, which costs them two clicks and
+                means the club stops acquiring accounts it knows nothing
+                about. */}
             <div className="mt-6 space-y-2 border-t pt-4 text-center">
               <p className="text-sm text-muted-foreground">New to {clubName}?</p>
               <a href="/join" className={buttonVariants({ size: "sm" }) + " w-full"}>
                 <ClipboardList className="h-4 w-4" /> Join the club
               </a>
               <p className="text-xs text-muted-foreground">
-                Register yourself or your children as members — teams, subs and the season, in one
-                go.
-              </p>
-              <a
-                href="/register"
-                className={buttonVariants({ variant: "outline", size: "sm" }) + " w-full"}
-              >
-                <UserPlus className="h-4 w-4" /> Just create an account
-              </a>
-              <p className="text-xs text-muted-foreground">
-                For a coach or a committee member who already belongs and only needs a login.
+                Register yourself, your children or another adult on your membership — teams, subs
+                and the season, in one go.
               </p>
               <p className="pt-1 text-xs text-muted-foreground">
-                Coaches and referees join the same way — say so as you go through, and a club
+                Coaches and referees start here too. Say so as you go through, and a club
                 administrator approves it.
               </p>
             </div>

@@ -349,6 +349,12 @@ export default async function ApprovalsPage({
                           <Badge variant="default">{roleLabel(request.requested_role)}</Badge>
                           {request.team_id ? (
                             <Badge variant="outline">{teamNames.get(request.team_id) ?? "Team"}</Badge>
+                          ) : request.requested_role === "coach" ? (
+                            /* A coach who ticked the box on the joining form
+                               before anybody had placed them. Approving grants
+                               the club-wide hat and nothing else — the squad is
+                               added from the team page when there is one. */
+                            <Badge variant="muted">No team yet</Badge>
                           ) : null}
                           <Badge variant={statusVariant(request.status)}>
                             {STATUS_LABELS[request.status]}

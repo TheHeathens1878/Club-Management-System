@@ -71,9 +71,18 @@ export function roleLabel(role: string): string {
   return isRequestedRole(role) ? REQUESTED_ROLE_LABELS[role] : role;
 }
 
-/** `parent` is the one role the table lets through without a team. */
+/**
+ * Which roles the table refuses without a team
+ * (`account_requests_team_for_team_roles`).
+ *
+ * Parent and referee are club-wide and never had one. `coach` joined them on
+ * 2026-09-01: on the joining form "I coach" is usually said by somebody the
+ * club has not placed yet, and approving a team-less coach request grants the
+ * club-wide hat alone. Assistant coach and manager are still said about a
+ * squad, never in the abstract.
+ */
 export function requiresTeam(role: RequestedRole): boolean {
-  return role !== "parent";
+  return role === "player" || role === "assistant_coach" || role === "manager";
 }
 
 export function formatStamp(iso: string | null): string {

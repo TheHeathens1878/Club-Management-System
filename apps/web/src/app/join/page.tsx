@@ -51,7 +51,8 @@ export default async function JoinPage() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold">Join {settings.club_name || "the club"}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            One form for the whole household — individual or family membership.
+            Four steps for the whole household: your profile, your children, any adults on your
+            membership, then the registrations.
           </p>
           {!auth.user && (
             <p className="mt-2 text-xs text-muted-foreground">

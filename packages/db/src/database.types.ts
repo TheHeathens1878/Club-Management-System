@@ -6424,6 +6424,15 @@ export type Database = {
         Args: { p_message_id: string; p_reason: string }
         Returns: string
       }
+      request_role_for: {
+        Args: {
+          p_message?: string
+          p_person_id: string
+          p_role: string
+          p_team_id?: string
+        }
+        Returns: string
+      }
       request_team_pitch_booking: {
         Args: {
           p_booker_email: string
