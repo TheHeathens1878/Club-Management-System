@@ -318,9 +318,17 @@ export function JoinWizard({ signedIn, defaults }: {
                   <input type="checkbox" name="playing" value="yes" defaultChecked className="h-4 w-4" />
                   I will be playing
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="registering_others" value="yes" className="h-4 w-4" />
-                  I am registering children or other family members
+                {/* "Other family members" was the club's word for it and not
+                    the reader's (Adam, 2026-09-01: the description "should say
+                    adult players in the club"). A connected adult is not a
+                    relative in the abstract — it is a grown-up who plays here
+                    and whose membership sits with yours. */}
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" name="registering_others" value="yes" className="mt-0.5 h-4 w-4" />
+                  <span>
+                    I am registering children, or adult players in the club whose membership sits
+                    with mine
+                  </span>
                 </label>
               </fieldset>
 
@@ -356,8 +364,9 @@ export function JoinWizard({ signedIn, defaults }: {
               <Users className="h-4 w-4" /> Your people ({people.length} of {MAX_HOUSEHOLD})
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Add everyone this membership covers. One person is an individual membership; two to
-              six become a family membership.
+              Add everyone this membership covers — your children, and any adult players in the
+              club whose membership sits with yours. One person is an individual membership; two
+              to six become a family membership.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
