@@ -8,7 +8,8 @@ import {
 } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { getStoredRoleView } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { resolveRoleView } from "@/lib/role-view";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -255,18 +256,26 @@ export default async function TeamsPage({
   // ------------------------------------------------------------------
   const supabase = await createClient();
   const committee = isCommittee(session.profile?.role);
-  const [clubAdmin, personResult] = await Promise.all([
+  const [clubAdmin, personResult, capabilities] = await Promise.all([
     isClubAdmin(),
     supabase.rpc("current_person_id"),
+    getCapabilities(),
   ]);
   // The active tile scopes the data, not just the menu: an administrator who
   // is also a coach sees ONLY their own teams while in the Coach view
   // ("coaches and managers should only be able to see the teams they are
   // associated with" — Adam, 2026-08-24). Switching to the Admin tile brings
   // the full list back.
-  const roleView = await getStoredRoleView();
-  const coachView = roleView === "coach";
-  const canAdmin = (committee || clubAdmin) && !coachView;
+  //
+  // The club-wide list is now the ADMIN HAT'S, not merely "not the coach's"
+  // (Adam, 2026-09-01: "as a parent and coach, I should only see things
+  // relevant to my team — so I shouldn't see a full list of teams and coaches,
+  // also whether they are FT linked"). Naming the one view that earns the
+  // whole club, rather than listing the views that do not, is also what stops
+  // the next view added to the app from quietly inheriting it.
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const coachView = view === "coach";
+  const canAdmin = (committee || clubAdmin) && (view === "admin" || view === null);
 
   let staffTeamIds: string[] = [];
   if (!canAdmin && personResult.data) {
@@ -280,8 +289,12 @@ export default async function TeamsPage({
   }
   if (!canAdmin && staffTeamIds.length === 0) {
     // In the coach view an admin with no coached team gets sent back to their
-    // role picker rather than a booking page they did not ask for.
-    redirect(coachView && (committee || clubAdmin) ? "/welcome" : "/room-bookings");
+    // role picker rather than a booking page they did not ask for. A parent or
+    // a player has no business on this screen at all — their teams live on the
+    // lobby, which is that view's own home — and only the function room keeps
+    // the diary it used to land on.
+    if (coachView && (committee || clubAdmin)) redirect("/welcome");
+    redirect(view === "function_room" ? "/room-bookings" : "/lobby");
   }
 
   // `teams_read` is open to any signed-in user, so the caller's own client is

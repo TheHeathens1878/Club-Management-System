@@ -1,5 +1,9 @@
 import Link from "next/link";
 
+import { EVENT_TABS, type EventTabKey } from "@/lib/match-tabs";
+
+export { EVENT_TABS, eventTabFrom, eventTabsFor, type EventTabKey } from "@/lib/match-tabs";
+
 /**
  * The match page's tab bar (Adam, 2026-08-25: "The event (match) page should
  * have tabs showing details, line-up, match-stats … and scoreline").
@@ -11,10 +15,6 @@ import Link from "next/link";
  * three tabs, and its page is left exactly as it was.
  */
 
-export const EVENT_TABS = ["details", "lineup", "stats", "score"] as const;
-
-export type EventTabKey = (typeof EVENT_TABS)[number];
-
 const LABELS: Record<EventTabKey, string> = {
   details: "Details",
   lineup: "Line-up",
@@ -22,20 +22,26 @@ const LABELS: Record<EventTabKey, string> = {
   score: "Scoreline",
 };
 
-/** `?tab=` from the URL, or Details for anything unrecognised. */
-export function eventTabFrom(value: string | string[] | undefined): EventTabKey {
-  const key = Array.isArray(value) ? value[0] : value;
-  return (EVENT_TABS as readonly string[]).includes(key ?? "") ? (key as EventTabKey) : "details";
-}
-
-export function EventTabs({ eventId, active }: { eventId: string; active: EventTabKey }) {
+export function EventTabs({
+  eventId,
+  active,
+  tabs = EVENT_TABS,
+}: {
+  eventId: string;
+  active: EventTabKey;
+  /**
+   * Which tabs this reader gets. A family waiting for Sunday gets Details and
+   * nothing else — the event page says why — and the whole bar afterwards.
+   */
+  tabs?: readonly EventTabKey[];
+}) {
   return (
     <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <nav
         aria-label="Match sections"
         className="inline-flex min-w-max gap-1 rounded-lg bg-secondary p-1"
       >
-        {EVENT_TABS.map((tab) => (
+        {tabs.map((tab) => (
           <Link
             key={tab}
             href={`/events/${eventId}?tab=${tab}`}
