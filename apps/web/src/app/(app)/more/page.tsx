@@ -5,7 +5,7 @@ import { Bell, ChevronRight, LogOut, ShieldAlert } from "lucide-react";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
 import { loadUnreadNotificationCount } from "@/lib/notifications-data";
-import { mobileTabsFor } from "@/lib/mobile-nav";
+import { MORE_REPORT_HREF, mobileTabsFor, moreScreenGroups } from "@/lib/mobile-nav";
 import { navFor, navForUnlinked } from "@/lib/nav";
 import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
 import { RoleSwitcherSheet } from "@/components/role-switcher-sheet";
@@ -36,19 +36,10 @@ export default async function MorePage() {
   const switcher = view ? roleSwitcherProps(capabilities, view, scope?.id ?? null) : null;
   const unread = await loadUnreadNotificationCount();
 
-  // What the tab bar already shows stays out of the list (query-string
-  // variants of a tab's route stay too — they are the same surface).
+  // What the tab bar already shows stays out of the list — except where the
+  // group is a numbered flow, which keeps every step. See `moreScreenGroups`.
   const tabHrefs = new Set(mobileTabsFor(view, capabilities).map((tab) => tab.href));
-  const REPORT_HREF = "/safeguarding/report";
-  const listed = groups
-    .map((group) => ({
-      group: group.group,
-      items: group.items.filter((item) => {
-        const base = item.href.split("?", 1)[0] ?? item.href;
-        return !tabHrefs.has(base) && item.href !== REPORT_HREF;
-      }),
-    }))
-    .filter((group) => group.items.length > 0);
+  const listed = moreScreenGroups(groups, tabHrefs);
 
   return (
     <div className="mx-auto w-full max-w-2xl">
@@ -112,7 +103,7 @@ export default async function MorePage() {
         ))}
 
         <Link
-          href={REPORT_HREF}
+          href={MORE_REPORT_HREF}
           className="flex min-h-[52px] items-center gap-3 rounded-xl border border-accent/40 bg-card px-4 py-3"
         >
           <ShieldAlert className="h-[18px] w-[18px] flex-none text-primary" />

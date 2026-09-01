@@ -33,6 +33,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import type { NavGroup } from "@/lib/nav";
 import type { Capabilities, RoleView } from "@/lib/role-view";
 
 export type MobileTabEntry = {
@@ -185,4 +186,55 @@ export function mobileTabsFor(view: RoleView | null, c: Capabilities): MobileTab
     }
   })();
   return slots.filter((tab) => tab.allowed(c));
+}
+
+// ---------------------------------------------------------------------------
+// The More screen's list
+// ---------------------------------------------------------------------------
+
+/** Pulled out of the list and drawn as its own accent card (SG-3). */
+export const MORE_REPORT_HREF = "/safeguarding/report";
+
+/**
+ * Menu groups the More screen keeps WHOLE, tab bar or no tab bar.
+ *
+ * Adam, 2026-09-01: "on mobile in the 'Me' view, the membership flow should
+ * include children even though it's also in the menu bar." The Membership Flow
+ * is a numbered sequence — My Profile (1), Connect Adults (2), Connect
+ * Children (3), Family Linking (4), Register Players (5) — and step 3 is
+ * `/family`, which is also the Me view's Children tab. The plain de-duplication
+ * below was therefore deleting a step out of the MIDDLE of the flow and leaving
+ * a phone showing 1, 2, 4, 5: the one place that tells a new member what to do
+ * next was silently skipping the children.
+ *
+ * A step of a numbered flow is not a duplicate of a tab. The tab is a shortcut
+ * to a screen; the step is the flow saying where the children come in — and
+ * the screens themselves already cover them (`/family` is the guardianships,
+ * "Register Players" registers a child through `registrations_guardian_insert`,
+ * "My Subs" shows a child's subs under `subscriptions_self_read`). Nothing here
+ * widens what a guardian may read or write; it only stops the menu hiding it.
+ */
+const WHOLE_GROUPS: readonly string[] = ["Membership Flow"];
+
+/**
+ * The More screen's cards: the view's own menu, minus whatever the tab bar
+ * already carries and minus the entries the screen draws elsewhere. Query-string
+ * variants of a tab's route go too — "My groups" (`/messages?filter=groups`) is
+ * the Messages tab's surface with a filter on it, not a second destination.
+ */
+export function moreScreenGroups(
+  groups: readonly NavGroup[],
+  tabHrefs: ReadonlySet<string>,
+): NavGroup[] {
+  return groups
+    .map((group) => ({
+      group: group.group,
+      items: group.items.filter((item) => {
+        if (item.href === MORE_REPORT_HREF) return false;
+        if (WHOLE_GROUPS.includes(group.group)) return true;
+        const base = item.href.split("?", 1)[0] ?? item.href;
+        return !tabHrefs.has(base);
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
 }

@@ -345,3 +345,22 @@ export function roleSwitcherProps(
     current,
   };
 }
+
+/**
+ * What the switcher's live region says while a pick is on its way to the
+ * server.
+ *
+ * Adam, 2026-09-01: the panel now confirms and closes itself, which means
+ * there is a moment between the tap and the new view arriving. On screen that
+ * moment is a greyed row with a spinner; to a screen reader it was nothing at
+ * all, so it gets words. `stalled` is the refusal case — `setRoleView` writes
+ * nothing and redirects nowhere when the database no longer backs the view, so
+ * there is no answer coming and "one moment" would be a lie.
+ */
+export function roleSwitchAnnouncement(pendingLabel: string | null, stalled: boolean): string {
+  if (!pendingLabel) return "";
+  if (stalled) {
+    return "That is taking longer than it should. Try again, or close this and check the role at the top of the screen.";
+  }
+  return `Switching to ${pendingLabel}. One moment.`;
+}
