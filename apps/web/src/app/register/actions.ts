@@ -31,7 +31,7 @@ export type RegisterState = {
    * address is echoed back so it can say WHICH inbox to look in.
    */
   confirmEmail?: string;
-  values?: { firstName: string; lastName: string; email: string; dob: string; phone: string };
+  values?: { firstName: string; lastName: string; email: string; dob: string; phone: string; sex: string };
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -59,13 +59,17 @@ export async function registerAccount(
   const confirm = String(formData.get("confirm_password") ?? "");
   const dob = text(formData, "dob");
   const phone = text(formData, "phone");
+  // Biological sex at birth (Adam, 2026-09-01): the club cannot enter a player
+  // into an FA age group without it. `people.sex` has held these two values
+  // since 20260825500000; the form offers exactly them.
+  const sex = text(formData, "sex").toLowerCase();
   // The sign-in page's referee door (?as=referee). Only that one word is
   // honoured — anything else in the field is ignored rather than passed on,
   // because this is browser-supplied text and the fewer values it can carry
   // the less there is to think about. It asks for nothing but a place in the
   // approvals queue: a club administrator still decides.
   const asReferee = text(formData, "requested_role") === "referee";
-  const values = { firstName, lastName, email, dob, phone };
+  const values = { firstName, lastName, email, dob, phone, sex };
 
   // The two halves are asked for separately now (Adam, 2026-09-01), so they no
   // longer have to be recovered from one string by taking the last word as the
@@ -77,6 +81,9 @@ export async function registerAccount(
   // Adam, 2026-09-01: "phone and email should be mandatory."
   if (phone.replace(/[^0-9]/g, "").length < PHONE_DIGITS_MIN) {
     return { error: "Please enter a phone number we can reach you on.", values };
+  }
+  if (sex !== "male" && sex !== "female") {
+    return { error: "Please choose your biological sex at birth.", values };
   }
   if (password.length < MIN_PASSWORD) {
     return { error: `Please choose a password of at least ${MIN_PASSWORD} characters.`, values };
@@ -109,6 +116,7 @@ export async function registerAccount(
         full_name: `${firstName} ${lastName}`,
         dob,
         phone,
+        sex,
         ...(asReferee ? { requested_role: "referee" } : {}),
       },
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
