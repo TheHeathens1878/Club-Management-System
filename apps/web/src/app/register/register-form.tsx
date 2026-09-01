@@ -123,16 +123,33 @@ export function RegisterForm({
         <CardContent>
           <form action={action} className="space-y-4">
             {asReferee && <input type="hidden" name="requested_role" value="referee" />}
-            <div className="space-y-1.5">
-              <Label htmlFor="full_name">Full name</Label>
-              <Input
-                id="full_name"
-                name="full_name"
-                required
-                autoComplete="name"
-                defaultValue={v?.fullName ?? ""}
-                placeholder="Jane Smith"
-              />
+            {/* Two fields, not one (Adam, 2026-09-01). A single "Full name"
+                had to be split by rule, and the rule takes the last word as the
+                surname — which is a guess, and wrong for exactly the people it
+                is worst to be wrong about. Asking is cheaper than guessing. */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="first_name">First name</Label>
+                <Input
+                  id="first_name"
+                  name="first_name"
+                  required
+                  autoComplete="given-name"
+                  defaultValue={v?.firstName ?? ""}
+                  placeholder="Jane"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="last_name">Last name</Label>
+                <Input
+                  id="last_name"
+                  name="last_name"
+                  required
+                  autoComplete="family-name"
+                  defaultValue={v?.lastName ?? ""}
+                  placeholder="Smith"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -185,15 +202,20 @@ export function RegisterForm({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="phone">Phone (optional)</Label>
+              <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
                 name="phone"
                 type="tel"
+                required
                 autoComplete="tel"
                 defaultValue={v?.phone ?? ""}
                 placeholder="07700 900000"
               />
+              <p className="text-xs text-muted-foreground">
+                Required. A coach calling off a match on a wet Saturday morning needs a number
+                that reaches you, and email will not do it in time.
+              </p>
             </div>
 
             <Button type="submit" className="w-full" disabled={pending}>
