@@ -1,5 +1,5 @@
 -- =============================================================================
--- Venues, and the coaches' group that keeps itself (20260901100000/110000)
+-- Venues, and the coaches' group that keeps itself (20260901180000/110000)
 -- =============================================================================
 --   A  the venue model: a venue is created, its group with it, and a pitch
 --      belongs to it

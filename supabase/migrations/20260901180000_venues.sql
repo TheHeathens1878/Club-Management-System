@@ -6,7 +6,7 @@
 --  play at that venue are auto-added."
 --
 -- This migration is the first half — the place. The coaches' group is
--- 20260901110000, exactly as messaging (20260823210000) came before the team
+-- 20260901190000, exactly as messaging (20260823210000) came before the team
 -- rooms that sync themselves (20260823220000).
 --
 -- WHAT A VENUE WAS UNTIL TODAY
@@ -39,7 +39,7 @@
 -- NO DELETE, DELIBERATELY
 --   There is no delete policy and no delete grant. A venue is retired with
 --   `active = false`, the way a pitch is (`/pitches/manage` has never offered
---   a delete either). 20260901110000 hangs a conversation off a venue and a
+--   a delete either). 20260901190000 hangs a conversation off a venue and a
 --   conversation is never destroyed (SG-2), so a venue that can be deleted is
 --   a venue that can orphan a room full of messages. Retiring keeps the room,
 --   the history and the address.
@@ -81,13 +81,13 @@ create trigger trg_venues_updated
   for each row execute function public.set_updated_at();
 
 comment on table public.venues is
-  'A ground the club plays at: a name, an address, and the pitches on it. Pitches point here through resources.venue_id; 20260901110000 hangs the venue''s coaches group off it.';
+  'A ground the club plays at: a name, an address, and the pitches on it. Pitches point here through resources.venue_id; 20260901190000 hangs the venue''s coaches group off it.';
 comment on column public.venues.address is
   'The ground''s postal address. A pitch may still carry its own (two entrances to one park); the pitch wins where it has one.';
 comment on column public.venues.notes is
   'Gate codes, parking, changing rooms — what a coach arriving for the first time needs.';
 comment on column public.venues.active is
-  'False retires the venue. Rows are never deleted: 20260901110000 attaches a conversation, and a conversation is never destroyed (SAFEGUARDING.md SG-2).';
+  'False retires the venue. Rows are never deleted: 20260901190000 attaches a conversation, and a conversation is never destroyed (SAFEGUARDING.md SG-2).';
 
 
 -- =============================================================================
@@ -211,7 +211,7 @@ notify pgrst, 'reload schema';
 -- =============================================================================
 -- 6. ROLLBACK (documented, not executed)
 -- =============================================================================
--- Must run BEFORE 20260901110000's rollback is undone (that migration puts a
+-- Must run BEFORE 20260901190000's rollback is undone (that migration puts a
 -- venue_id on conversations and an FK on this table). As postgres:
 --
 --   alter table public.resources drop column venue_id;

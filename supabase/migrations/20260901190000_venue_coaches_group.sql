@@ -117,7 +117,7 @@
 -- readable in one place.
 --
 -- `on delete restrict` — not `set null`. A venue cannot be deleted at all
--- (20260901100000 §1), and if that ever changes, the database should refuse
+-- (20260901180000 §1), and if that ever changes, the database should refuse
 -- rather than quietly cut a room full of messages loose from the thing it is
 -- about.
 
@@ -143,7 +143,7 @@ create index if not exists conversations_venue_idx
   on public.conversations (venue_id) where venue_id is not null;
 
 comment on column public.conversations.venue_id is
-  'The venue whose coaches this group is. Membership is derived and trigger-maintained (20260901110000); a venue group is adults only.';
+  'The venue whose coaches this group is. Membership is derived and trigger-maintained (20260901190000); a venue group is adults only.';
 
 
 -- =============================================================================
@@ -511,7 +511,7 @@ end;
 $$;
 
 comment on function public.sync_all_venue_coaches_groups() is
-  'Reconcile every active venue coaches group. Scheduled nightly (20260901110000 §6) because the current-season bound moves without any row changing.';
+  'Reconcile every active venue coaches group. Scheduled nightly (20260901190000 §6) because the current-season bound moves without any row changing.';
 
 
 -- ---------------------------------------------------------------------------
