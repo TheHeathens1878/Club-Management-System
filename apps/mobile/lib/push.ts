@@ -76,12 +76,21 @@ export function conversationIdFromDeepLink(url: string | null): string | null {
   return id;
 }
 
-export type DevicePlatform = "ios" | "android" | "web";
+export type DevicePlatform = "ios" | "android" | "unknown";
 
-/** `push_tokens.platform` is free text; keep it to the three we ever send. */
+/**
+ * `push_tokens.platform` is free text, constrained to four values.
+ *
+ * Anything that is not iOS or Android is `unknown`, NOT `web`. Since
+ * 20260901100000 `platform = 'web'` means one specific thing — a browser's
+ * Web Push subscription, with the keys in `web_subscription` — and the
+ * database enforces it, so an Expo token filed under 'web' would now be
+ * rejected outright. `comms-dispatch` also picks its sender from this column:
+ * an Expo token labelled 'web' would be handed to the wrong one.
+ */
 export function normalisePlatform(value: string): DevicePlatform {
   const lowered = value.toLowerCase();
   if (lowered === "ios") return "ios";
   if (lowered === "android") return "android";
-  return "web";
+  return "unknown";
 }

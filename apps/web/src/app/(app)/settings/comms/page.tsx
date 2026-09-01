@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
+import { DeviceNotifications } from "@/components/notification-prompt";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
@@ -115,6 +116,13 @@ export default async function CommsSettingsPage() {
             ))}
           </CardContent>
         </Card>
+
+        {/* The device half of "Push notification" above. The checkbox is the
+            member's standing preference and travels with them; this is whether
+            THIS browser holds a live subscription. Both have to be on, and the
+            component says so — a member whose preference is on and whose phone
+            has never been asked is the commonest "I get nothing" report. */}
+        {personId && <DeviceNotifications personId={personId} />}
 
         {committee && (
           <Card>
