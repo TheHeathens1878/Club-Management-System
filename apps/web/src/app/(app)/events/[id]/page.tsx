@@ -21,6 +21,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { eventTabFrom, eventTabsFor } from "@/lib/match-tabs";
 import { resolveRoleView } from "@/lib/role-view";
 import { scorelineLabel } from "@/lib/scoreline";
 import { createClient } from "@/lib/supabase/server";
@@ -30,7 +31,7 @@ import {
   loadLineupSection,
 } from "../../teams/[id]/fixtures/[fixtureId]/lineup/lineup-section";
 import { AssignPitch } from "./assign-pitch";
-import { EventTabs, eventTabFrom } from "./event-tabs";
+import { EventTabs } from "./event-tabs";
 import { MatchStatsSection } from "./match-stats-section";
 import { ScorelineSection } from "./scoreline-section";
 import { RespondButtons } from "../respond-buttons";
@@ -249,7 +250,25 @@ export default async function EventPage({
   // ------------------------------------------------------------ the tabs
   // Only a fixture-mirrored event has them; anything else is the page as it
   // has always been.
-  const tab = detail.fixtureId ? eventTabFrom(rawTab) : "details";
+  //
+  // Adam, 2026-09-01: "when clicking into an event (match), parents should just
+  // see details, who has accepted, declined and no response. They should not be
+  // able to see line up before the game (would be useful afterwards)."
+  //
+  // So the bar a family gets depends on the clock. Before kick-off there is one
+  // tab, Details, and it carries the thing they came for — the squad's answers,
+  // in three lists. From kick-off the rest arrive at once: the line-up they may
+  // now read back, the stats and the scoreline. It is the SELECTION that is
+  // withheld, never the team sheet's contents once it is theirs to see.
+  //
+  // The hat decides, not the person: a coach or an administrator looking at
+  // their own child's match as a parent gets the parent's bar, the same rule
+  // the team page's tabs follow.
+  const eventTabs = eventTabsFor({
+    memberView: hat === "parent" || hat === "player" || hat === "me",
+    kickedOff: new Date(detail.startsAt).getTime() <= Date.now(),
+  });
+  const tab = detail.fixtureId ? eventTabFrom(rawTab, eventTabs) : "details";
   const canManageMatch = isStaff || capabilities.isClubAdmin;
 
   // The header badge: the effective scoreline, which is the coach's pair when
@@ -335,9 +354,11 @@ export default async function EventPage({
         }
       />
 
-      {detail.fixtureId ? (
+      {/* One tab is not a tab bar: a family before kick-off gets the page,
+          not a bar with Details sitting alone in it. */}
+      {detail.fixtureId && eventTabs.length > 1 ? (
         <div className="border-b bg-card px-4 pb-3 lg:px-8">
-          <EventTabs eventId={detail.id} active={tab} />
+          <EventTabs eventId={detail.id} active={tab} tabs={eventTabs} />
         </div>
       ) : null}
 
