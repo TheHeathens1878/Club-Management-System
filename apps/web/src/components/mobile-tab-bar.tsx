@@ -62,7 +62,11 @@ export function MobileTabBar({ tabs }: { tabs: MobileTabItem[] }) {
               href={tab.href}
               aria-current={active ? "page" : undefined}
               className={
-                "flex min-h-[54px] flex-col items-center justify-center gap-1 pb-1 pt-1.5 text-[10px] leading-none transition-colors " +
+                /* Exactly `--tab-bar-h` less the hairline border above it, so
+                   the bar is the height everything else is told it is
+                   (globals.css, Adam 2026-09-01) — a `min-h` could grow past
+                   it and eat the bottom of a full-screen page. */
+                "flex h-[calc(var(--tab-bar-h)-1px)] flex-col items-center justify-center gap-1 pb-1 pt-1.5 text-[10px] leading-none transition-colors " +
                 (active
                   ? "font-semibold text-primary"
                   : "font-normal text-muted-foreground hover:text-foreground")

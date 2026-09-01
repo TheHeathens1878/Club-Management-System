@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Settings } from "lucide-react";
+import { ChevronLeft, Settings, Shield } from "lucide-react";
 
 
 import { PageHeader } from "@/components/page-header";
@@ -10,10 +10,15 @@ import { instantToLocal } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
 import { createClient } from "@/lib/supabase/server";
 
+import { LeaveButton } from "./leave-button";
 import { type FixtureOption } from "./match-post-composer";
 import { ParticipantsButton } from "./participants-button";
 import { loadThread } from "./thread-data";
 import { ThreadPanel } from "./thread-panel";
+
+/** One header action on a phone: a 44px icon target; the labelled link at lg. */
+const HEADER_LINK =
+  "inline-flex h-11 w-11 items-center justify-center gap-1 rounded-full text-sm text-muted-foreground hover:bg-secondary lg:h-auto lg:min-h-0 lg:w-auto lg:rounded-none lg:hover:bg-transparent lg:hover:underline";
 
 /**
  * A thread (PLAN.md P5.4).
@@ -106,6 +111,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
   return (
     <>
       <PageHeader
+        compact
         title={data.title}
         subtitle={
           data.conversation.type === "team"
@@ -117,11 +123,19 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                 : "Direct message"
         }
         action={
-          <div className="flex flex-wrap items-center gap-x-4">
+          /* On a phone these are icons on one row: four 44px targets fit
+             beside a truncated title, where the labelled version wrapped onto
+             a second 44px line and took a chunk of the conversation with it
+             (Adam, 2026-09-01). Every label is still there for a screen
+             reader, and comes back in full at lg. */
+          <div className="flex shrink-0 items-center gap-0.5 lg:flex-wrap lg:gap-x-4">
             {/* Who is in here, on demand — the list used to sit above the
                 first message and, on a phone, pushed the conversation off the
-                screen (Adam, 2026-08-25). */}
+                screen (Adam, 2026-08-25). Leaving now lives in that panel
+                too: it is an action about who is in the room, and as its own
+                block under the composer it cost a whole row. */}
             <ParticipantsButton
+              compact
               participants={data.participants.map((p) => ({
                 personId: p.person_id,
                 name:
@@ -132,35 +146,38 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                 left: p.left_at !== null,
               }))}
               canOpenContacts={isCommittee(session.profile?.role)}
+              footer={
+                data.myLive && !data.conversation.closed_at ? (
+                  <LeaveButton conversationId={data.conversation.id} />
+                ) : null
+              }
             />
             {data.canManageGroup && (
-              <Link
-                href={`/groups/${data.conversation.id}`}
-                className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
-              >
-                <Settings className="h-4 w-4" /> Group settings
+              <Link href={`/groups/${data.conversation.id}`} className={HEADER_LINK}>
+                <Settings className="h-4 w-4" />
+                <span className="sr-only lg:not-sr-only">Group settings</span>
               </Link>
             )}
             {teamHref && (
-              <Link
-                href={teamHref}
-                className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
-              >
-                Team page
+              <Link href={teamHref} className={HEADER_LINK}>
+                <Shield className="h-4 w-4" />
+                <span className="sr-only lg:not-sr-only">Team page</span>
               </Link>
             )}
-            <Link
-              href="/messages"
-              className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
-            >
-              <ChevronLeft className="h-4 w-4" /> All messages
+            <Link href="/messages" className={HEADER_LINK}>
+              <ChevronLeft className="h-4 w-4" />
+              <span className="sr-only lg:not-sr-only">All messages</span>
             </Link>
           </div>
         }
       />
 
-      <div className="max-w-3xl p-4 lg:p-6">
-        <ThreadPanel data={data} postFixtures={postFixtures} />
+      {/* The thread is the page: below lg it fills what is left of the screen
+          exactly (`.app-shell-fill`, globals.css) so the message list is the
+          only thing that scrolls and it has a real bottom to reach. Above lg
+          the class is inert and this is the block it always was. */}
+      <div className="app-shell-fill flex max-w-3xl flex-col px-3 pt-3 lg:px-6 lg:pb-6 lg:pt-6">
+        <ThreadPanel data={data} postFixtures={postFixtures} showLeave={false} fill />
       </div>
     </>
   );

@@ -133,6 +133,7 @@ export function ThreadClient({
   isRefereesGroup = false,
   isAdmin = false,
   isSuperUser = false,
+  fill = false,
 }: {
   conversationId: string;
   conversationType: string;
@@ -163,6 +164,13 @@ export function ThreadClient({
    * the tombstone it always was.
    */
   isSuperUser?: boolean;
+  /**
+   * The thread is the whole page (the standalone /messages/[id] route on a
+   * phone): the message list takes every pixel left over instead of a fixed
+   * 58dvh box, and the composer is simply the last row of that column rather
+   * than a sticky element floating over the flow. See ThreadPanel's `fill`.
+   */
+  fill?: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -204,6 +212,8 @@ export function ThreadClient({
   const bottomRef = useRef<HTMLDivElement>(null);
   /** The conversation itself — the only thing that scrolls. */
   const listRef = useRef<HTMLDivElement>(null);
+  /** What is inside that box, watched for growth (see `pinToBottom` below). */
+  const contentRef = useRef<HTMLDivElement>(null);
   /** False until the first scroll has been placed, so it happens once. */
   const openedAt = useRef(false);
 
@@ -264,6 +274,27 @@ export function ThreadClient({
     void markRead(conversationId, lastId);
   }, [conversationId, lastId, pending]);
 
+  /** Is the reader on the last screen of the conversation, or reading back? */
+  const nearBottom = useCallback(() => {
+    const container = listRef.current;
+    if (!container) return false;
+    return container.scrollHeight - container.scrollTop - container.clientHeight < 160;
+  }, []);
+
+  /**
+   * Put the conversation on its last line — twice, a frame apart. Once is not
+   * enough: the bubbles are still being laid out when the effect runs, so the
+   * first `scrollHeight` is the old one and the second catches the real one.
+   */
+  const pinToBottom = useCallback(() => {
+    const place = () => {
+      const container = listRef.current;
+      if (container) container.scrollTop = container.scrollHeight;
+    };
+    place();
+    requestAnimationFrame(place);
+  }, []);
+
   // Adam, 2026-08-25: "make it just the conversation that scrolls and it
   // always shows the first unread message." The list below is the scroll
   // container — the banner, the participant chips and the composer stay put —
@@ -283,17 +314,35 @@ export function ThreadClient({
         (firstUnreadId && document.getElementById("thread-unread-divider")) ||
         (firstUnreadId && document.getElementById(`msg-${firstUnreadId}`));
       if (anchor instanceof HTMLElement) {
-        container.scrollTop = Math.max(0, anchor.offsetTop - container.offsetTop - 8);
+        // The container is `relative`, so it IS the anchor's offset parent and
+        // `offsetTop` is already measured from the top of the scrolling box.
+        // It used to subtract the container's own `offsetTop` as well, which
+        // was only ever right by accident (Adam, 2026-09-01).
+        container.scrollTop = Math.max(0, anchor.offsetTop - 8);
         return;
       }
-      container.scrollTop = container.scrollHeight;
+      pinToBottom();
       return;
     }
 
-    const distanceFromBottom =
-      container.scrollHeight - container.scrollTop - container.clientHeight;
-    if (distanceFromBottom < 160) container.scrollTop = container.scrollHeight;
-  }, [lastId, firstUnreadId]);
+    if (nearBottom()) pinToBottom();
+  }, [lastId, firstUnreadId, nearBottom, pinToBottom]);
+
+  // A referee card, a photo, an emoji row: plenty in this list settles AFTER
+  // the effect above has run, and a scrollTop set against the old height lands
+  // short — which on a phone reads as "you can't actually scroll to the bottom
+  // to see the details" (Adam, 2026-09-01). Watching the content itself means
+  // the last message stays on the floor of the box however late it grows,
+  // while a reader who has scrolled up is still left where they are.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => {
+      if (openedAt.current && nearBottom()) pinToBottom();
+    });
+    observer.observe(content);
+    return () => observer.disconnect();
+  }, [nearBottom, pinToBottom]);
 
   // ---------------------------------------------------------------------------
   // Realtime: messages, read pointers, reactions, attachments. RLS scopes all.
@@ -725,6 +774,7 @@ export function ThreadClient({
   }, [purgeState, router]);
 
   const typingNames = Object.values(typing).map((t) => t.name);
+  const typingLine = `${typingNames.join(", ")} ${typingNames.length === 1 ? "is" : "are"} typing…`;
   const showSenderNames = conversationType !== "dm";
 
   /**
@@ -849,270 +899,296 @@ export function ThreadClient({
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div
+      className={
+        fill ? "flex min-h-0 flex-1 flex-col gap-2 lg:flex-none lg:gap-3" : "flex flex-col gap-3"
+      }
+    >
+      {/* `relative` so the unread anchor's `offsetTop` is measured from this
+          box; `min-h-0 flex-1` in fill mode so the conversation takes the
+          screen that is left instead of a 58dvh guess that left the page and
+          the list fighting over the same flick. */}
       <div
         ref={listRef}
-        className="max-h-[58dvh] min-h-[16rem] space-y-0.5 overflow-y-auto overscroll-contain px-0.5 lg:max-h-[calc(100dvh-20rem)]"
+        className={
+          "relative overflow-y-auto overscroll-contain px-0.5 lg:max-h-[calc(100dvh-20rem)] " +
+          (fill ? "min-h-0 flex-1 lg:flex-none" : "max-h-[58dvh] min-h-[16rem]")
+        }
       >
-        {moreEarlier && (
-          <div className="flex justify-center pb-2">
-            <button
-              type="button"
-              onClick={() => void loadEarlier()}
-              disabled={loadingEarlier}
-              className="inline-flex min-h-[44px] items-center rounded-full border bg-card px-4 text-xs text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-3 lg:py-1"
-            >
-              {loadingEarlier ? "Loading…" : "Load earlier messages"}
-            </button>
-          </div>
-        )}
+        <div ref={contentRef} className="space-y-0.5 pb-1">
+          {moreEarlier && (
+            <div className="flex justify-center pb-2">
+              <button
+                type="button"
+                onClick={() => void loadEarlier()}
+                disabled={loadingEarlier}
+                className="inline-flex min-h-[44px] items-center rounded-full border bg-card px-4 text-xs text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-3 lg:py-1"
+              >
+                {loadingEarlier ? "Loading…" : "Load earlier messages"}
+              </button>
+            </div>
+          )}
 
-        {messages.length === 0 && (
-          <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
-            No messages yet. Say hello.
-          </p>
-        )}
+          {messages.length === 0 && (
+            <p className="rounded-lg border bg-card p-6 text-center text-sm text-muted-foreground">
+              No messages yet. Say hello.
+            </p>
+          )}
 
-        {messages.map((message, i) => {
-          const prev = i > 0 ? messages[i - 1]! : null;
-          const next = i < messages.length - 1 ? messages[i + 1]! : null;
-          const mine = message.sender_person_id === myPersonId;
-          const isPending = !confirmedIds.has(message.id);
-          const newDay = !prev || dayKey(prev.created_at) !== dayKey(message.created_at);
-          const firstOfRun = newDay || !prev || !sameRun(prev, message);
-          const lastOfRun = !next || !sameRun(message, next) || dayKey(next.created_at) !== dayKey(message.created_at);
-          const body = visibleBody(message);
-          const quoted = message.reply_to_id ? messageById.get(message.reply_to_id) : undefined;
-          const per = reactionsFor.get(message.id);
-          const files = attachmentsFor.get(message.id) ?? [];
+          {messages.map((message, i) => {
+            const prev = i > 0 ? messages[i - 1]! : null;
+            const next = i < messages.length - 1 ? messages[i + 1]! : null;
+            const mine = message.sender_person_id === myPersonId;
+            const isPending = !confirmedIds.has(message.id);
+            const newDay = !prev || dayKey(prev.created_at) !== dayKey(message.created_at);
+            const firstOfRun = newDay || !prev || !sameRun(prev, message);
+            const lastOfRun = !next || !sameRun(message, next) || dayKey(next.created_at) !== dayKey(message.created_at);
+            const body = visibleBody(message);
+            const quoted = message.reply_to_id ? messageById.get(message.reply_to_id) : undefined;
+            const per = reactionsFor.get(message.id);
+            const files = attachmentsFor.get(message.id) ?? [];
+            // A posted game is a card of labelled rows, not a sentence: at 75%
+            // of a phone, less the bubble's own padding, the kick-off line wraps
+            // three times and two of them together are unreadable (Adam,
+            // 2026-09-01, "very cramped when you post 2 or more games"). It gets
+            // the width of the screen below lg, and the bubble stops padding
+            // what is already a padded card.
+            const hasCard = body.state === "ok" && matchPosts[message.id] !== undefined;
 
-          return (
-            <div key={message.id}>
-              {newDay && (
-                <div className="flex justify-center py-3">
-                  <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-medium text-secondary-foreground shadow-sm">
-                    {dayLabel(message.created_at)}
-                  </span>
-                </div>
-              )}
-              {message.id === firstUnreadId && (
-                <div
-                  id="thread-unread-divider"
-                  className="flex items-center gap-3 py-2"
-                  aria-label="Unread messages"
-                >
-                  <span className="h-px flex-1 bg-primary/30" />
-                  <span className="text-[11px] font-medium uppercase tracking-wide text-primary">Unread</span>
-                  <span className="h-px flex-1 bg-primary/30" />
-                </div>
-              )}
-
-              <div className={`group flex ${mine ? "justify-end" : "justify-start"} ${firstOfRun ? "pt-2" : "pt-0.5"}`}>
-                {(mine && (body.state === "ok" || isSuperUser) && !isPending) && (
-                  <MessageKebab
-                    open={actionsFor === message.id}
-                    onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
-                  />
-                )}
-                <div className={`relative max-w-[75%] min-w-0 ${mine ? "items-end" : "items-start"}`}>
-                  <div
-                    className={
-                      "rounded-2xl border px-3 py-1.5 text-sm shadow-sm " +
-                      (mine ? "bg-primary/15 border-primary/20 " : "bg-card ") +
-                      (lastOfRun ? (mine ? "rounded-br-md" : "rounded-bl-md") : "")
-                    }
-                  >
-                    {showSenderNames && !mine && firstOfRun && (
-                      <p className="text-xs font-semibold text-primary">
-                        {names[message.sender_person_id] ?? "Club member"}
-                      </p>
-                    )}
-
-                    {quoted !== undefined && (
-                      <button
-                        type="button"
-                        onClick={() =>
-                          document.getElementById(`msg-${quoted.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })
-                        }
-                        className="mt-0.5 mb-1 block w-full rounded-md border-l-2 border-primary/60 bg-secondary/60 px-2 py-1 text-left"
-                      >
-                        <span className="block text-[11px] font-medium text-primary">
-                          {quoted.sender_person_id === myPersonId
-                            ? "You"
-                            : (names[quoted.sender_person_id] ?? "Club member")}
-                        </span>
-                        <span className="block truncate text-xs text-muted-foreground">
-                          {visibleBody(quoted).text}
-                        </span>
-                      </button>
-                    )}
-                    {message.reply_to_id && quoted === undefined && (
-                      <span className="mt-0.5 mb-1 block rounded-md border-l-2 border-muted bg-secondary/60 px-2 py-1 text-xs italic text-muted-foreground">
-                        Earlier message
-                      </span>
-                    )}
-
-                    {/* A deleted or redacted message keeps none of its
-                        pictures: the tombstone is the whole message. The
-                        policies refuse the file too, so this is the tidy
-                        rendering of a refusal, not the enforcement of it. */}
-                    {body.state === "ok" &&
-                      files.map((file) => <AttachmentImage key={file.id} attachment={file} />)}
-
-                    {/* A referee game card replaces the body it fell back to —
-                        same tombstone rule as the attachments above. */}
-                    {body.state === "ok" && matchPosts[message.id] !== undefined ? (
-                      <span id={`msg-${message.id}`} className="block">
-                        <MatchPostCard
-                          post={matchPosts[message.id]!}
-                          isReferee={isReferee}
-                          myPersonId={myPersonId}
-                          isAdmin={isAdmin}
-                        />
-                      </span>
-                    ) : (
-                      <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
-                        {body.state === "ok" ? (
-                          <MentionText
-                            text={body.text}
-                            candidates={renderCandidates}
-                            myPersonId={myPersonId}
-                          />
-                        ) : (
-                          <span className="italic text-muted-foreground">{body.text}</span>
-                        )}
-                      </p>
-                    )}
-
-                    <span className="float-right ml-2 mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
-                      {clockLabel(message.created_at)}
-                      {mine &&
-                        body.state === "ok" &&
-                        (isPending ? (
-                          <Clock3 className="h-3 w-3" aria-label="Sending" />
-                        ) : readByAll(message) ? (
-                          <CheckCheck className="h-3.5 w-3.5 text-sky-500" aria-label="Read by everyone" />
-                        ) : (
-                          <Check className="h-3.5 w-3.5" aria-label="Sent" />
-                        ))}
+            return (
+              <div key={message.id}>
+                {newDay && (
+                  <div className="flex justify-center py-3">
+                    <span className="rounded-full bg-secondary px-3 py-1 text-[11px] font-medium text-secondary-foreground shadow-sm">
+                      {dayLabel(message.created_at)}
                     </span>
                   </div>
+                )}
+                {message.id === firstUnreadId && (
+                  <div
+                    id="thread-unread-divider"
+                    className="flex items-center gap-3 py-2"
+                    aria-label="Unread messages"
+                  >
+                    <span className="h-px flex-1 bg-primary/30" />
+                    <span className="text-[11px] font-medium uppercase tracking-wide text-primary">Unread</span>
+                    <span className="h-px flex-1 bg-primary/30" />
+                  </div>
+                )}
 
-                  {per && per.size > 0 && (
-                    <div className={`-mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"} relative z-10`}>
-                      {Array.from(per.entries()).map(([emoji, info]) => (
+                <div className={`group flex ${mine ? "justify-end" : "justify-start"} ${firstOfRun ? "pt-2" : "pt-0.5"}`}>
+                  {(mine && (body.state === "ok" || isSuperUser) && !isPending) && (
+                    <MessageKebab
+                      open={actionsFor === message.id}
+                      onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
+                    />
+                  )}
+                  <div
+                    className={
+                      `relative min-w-0 ${mine ? "items-end" : "items-start"} ` +
+                      (hasCard ? "max-w-[92%] lg:max-w-[75%]" : "max-w-[75%]")
+                    }
+                  >
+                    <div
+                      className={
+                        "rounded-2xl border py-1.5 text-sm shadow-sm " +
+                        (hasCard ? "px-1.5 " : "px-3 ") +
+                        (mine ? "bg-primary/15 border-primary/20 " : "bg-card ") +
+                        (lastOfRun ? (mine ? "rounded-br-md" : "rounded-bl-md") : "")
+                      }
+                    >
+                      {showSenderNames && !mine && firstOfRun && (
+                        <p className="text-xs font-semibold text-primary">
+                          {names[message.sender_person_id] ?? "Club member"}
+                        </p>
+                      )}
+
+                      {quoted !== undefined && (
                         <button
-                          key={emoji}
                           type="button"
-                          disabled={!canReact}
-                          onClick={() => react(message.id, emoji)}
-                          className={
-                            "rounded-full border bg-card px-1.5 py-0.5 text-xs shadow-sm " +
-                            (info.mine ? "border-primary/50 bg-primary/10" : "")
+                          onClick={() =>
+                            document.getElementById(`msg-${quoted.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" })
                           }
-                          title={info.mine ? "Tap to remove your reaction" : "React too"}
+                          className="mt-0.5 mb-1 block w-full rounded-md border-l-2 border-primary/60 bg-secondary/60 px-2 py-1 text-left"
                         >
-                          {emoji}
-                          {info.count > 1 && <span className="ml-0.5 text-[10px]">{info.count}</span>}
+                          <span className="block text-[11px] font-medium text-primary">
+                            {quoted.sender_person_id === myPersonId
+                              ? "You"
+                              : (names[quoted.sender_person_id] ?? "Club member")}
+                          </span>
+                          <span className="block truncate text-xs text-muted-foreground">
+                            {visibleBody(quoted).text}
+                          </span>
                         </button>
-                      ))}
+                      )}
+                      {message.reply_to_id && quoted === undefined && (
+                        <span className="mt-0.5 mb-1 block rounded-md border-l-2 border-muted bg-secondary/60 px-2 py-1 text-xs italic text-muted-foreground">
+                          Earlier message
+                        </span>
+                      )}
+
+                      {/* A deleted or redacted message keeps none of its
+                          pictures: the tombstone is the whole message. The
+                          policies refuse the file too, so this is the tidy
+                          rendering of a refusal, not the enforcement of it. */}
+                      {body.state === "ok" &&
+                        files.map((file) => <AttachmentImage key={file.id} attachment={file} />)}
+
+                      {/* A referee game card replaces the body it fell back to —
+                          same tombstone rule as the attachments above. */}
+                      {hasCard ? (
+                        <span id={`msg-${message.id}`} className="block">
+                          <MatchPostCard
+                            post={matchPosts[message.id]!}
+                            isReferee={isReferee}
+                            myPersonId={myPersonId}
+                            isAdmin={isAdmin}
+                          />
+                        </span>
+                      ) : (
+                        <p id={`msg-${message.id}`} className="whitespace-pre-wrap break-words">
+                          {body.state === "ok" ? (
+                            <MentionText
+                              text={body.text}
+                              candidates={renderCandidates}
+                              myPersonId={myPersonId}
+                            />
+                          ) : (
+                            <span className="italic text-muted-foreground">{body.text}</span>
+                          )}
+                        </p>
+                      )}
+
+                      <span className="float-right ml-2 mt-1 flex items-center gap-1 text-[10px] text-muted-foreground">
+                        {clockLabel(message.created_at)}
+                        {mine &&
+                          body.state === "ok" &&
+                          (isPending ? (
+                            <Clock3 className="h-3 w-3" aria-label="Sending" />
+                          ) : readByAll(message) ? (
+                            <CheckCheck className="h-3.5 w-3.5 text-sky-500" aria-label="Read by everyone" />
+                          ) : (
+                            <Check className="h-3.5 w-3.5" aria-label="Sent" />
+                          ))}
+                      </span>
                     </div>
-                  )}
 
-                  {/* Hover actions on the desk; on a phone the kebab beside the
-                      bubble opens the same set. */}
-                  {(body.state === "ok" || isSuperUser) && !isPending && (
-                    <>
-                      {messageActions(message, mine, false, body.state === "ok")}
-                      {actionsFor === message.id &&
-                        messageActions(message, mine, true, body.state === "ok")}
-                    </>
-                  )}
-
-                  {reportFor === message.id && (
-                    <form
-                      action={reportAction}
-                      className="mt-1 space-y-2 rounded-lg border bg-card p-2 shadow-sm"
-                      onSubmit={() => setReportFor(null)}
-                    >
-                      <input type="hidden" name="message_id" value={message.id} />
-                      <Textarea
-                        name="reason"
-                        required
-                        rows={2}
-                        placeholder="What is the concern? This opens a safeguarding case."
-                        className="text-xs"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          className="inline-flex min-h-[44px] items-center rounded-md border px-3 text-[11px] font-medium hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
-                        >
-                          Send report
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setReportFor(null)}
-                          className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
-                        >
-                          Cancel
-                        </button>
+                    {per && per.size > 0 && (
+                      <div className={`-mt-1 flex flex-wrap gap-1 ${mine ? "justify-end" : "justify-start"} relative z-10`}>
+                        {Array.from(per.entries()).map(([emoji, info]) => (
+                          <button
+                            key={emoji}
+                            type="button"
+                            disabled={!canReact}
+                            onClick={() => react(message.id, emoji)}
+                            className={
+                              "rounded-full border bg-card px-1.5 py-0.5 text-xs shadow-sm " +
+                              (info.mine ? "border-primary/50 bg-primary/10" : "")
+                            }
+                            title={info.mine ? "Tap to remove your reaction" : "React too"}
+                          >
+                            {emoji}
+                            {info.count > 1 && <span className="ml-0.5 text-[10px]">{info.count}</span>}
+                          </button>
+                        ))}
                       </div>
-                    </form>
-                  )}
+                    )}
 
-                  {purgeFor === message.id && (
-                    <form
-                      action={purgeAction}
-                      className="mt-1 space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-2 shadow-sm"
-                      onSubmit={() => {
-                        purgedRef.current = message.id;
-                        setPurgeFor(null);
-                      }}
-                    >
-                      <input type="hidden" name="message_id" value={message.id} />
-                      <input type="hidden" name="conversation_id" value={conversationId} />
-                      <p className="text-[11px] text-muted-foreground">
-                        This destroys the message and its files. It cannot be undone, and the audit
-                        trail will record that you did it and why. The database refuses if the
-                        message is evidence in a safeguarding concern or under a legal hold.
-                      </p>
-                      <Textarea
-                        name="reason"
-                        required
-                        rows={2}
-                        placeholder="Why is this being destroyed?"
-                        className="text-xs"
-                      />
-                      <div className="flex gap-2">
-                        <button
-                          type="submit"
-                          className="inline-flex min-h-[44px] items-center rounded-md border border-destructive/40 px-3 text-[11px] font-medium text-destructive hover:bg-destructive/10 lg:min-h-0 lg:px-2 lg:py-1"
-                        >
-                          Delete permanently
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setPurgeFor(null)}
-                          className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </form>
+                    {/* Hover actions on the desk; on a phone the kebab beside the
+                        bubble opens the same set. */}
+                    {(body.state === "ok" || isSuperUser) && !isPending && (
+                      <>
+                        {messageActions(message, mine, false, body.state === "ok")}
+                        {actionsFor === message.id &&
+                          messageActions(message, mine, true, body.state === "ok")}
+                      </>
+                    )}
+
+                    {reportFor === message.id && (
+                      <form
+                        action={reportAction}
+                        className="mt-1 space-y-2 rounded-lg border bg-card p-2 shadow-sm"
+                        onSubmit={() => setReportFor(null)}
+                      >
+                        <input type="hidden" name="message_id" value={message.id} />
+                        <Textarea
+                          name="reason"
+                          required
+                          rows={2}
+                          placeholder="What is the concern? This opens a safeguarding case."
+                          className="text-xs"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            className="inline-flex min-h-[44px] items-center rounded-md border px-3 text-[11px] font-medium hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Send report
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setReportFor(null)}
+                            className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
+
+                    {purgeFor === message.id && (
+                      <form
+                        action={purgeAction}
+                        className="mt-1 space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-2 shadow-sm"
+                        onSubmit={() => {
+                          purgedRef.current = message.id;
+                          setPurgeFor(null);
+                        }}
+                      >
+                        <input type="hidden" name="message_id" value={message.id} />
+                        <input type="hidden" name="conversation_id" value={conversationId} />
+                        <p className="text-[11px] text-muted-foreground">
+                          This destroys the message and its files. It cannot be undone, and the audit
+                          trail will record that you did it and why. The database refuses if the
+                          message is evidence in a safeguarding concern or under a legal hold.
+                        </p>
+                        <Textarea
+                          name="reason"
+                          required
+                          rows={2}
+                          placeholder="Why is this being destroyed?"
+                          className="text-xs"
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            type="submit"
+                            className="inline-flex min-h-[44px] items-center rounded-md border border-destructive/40 px-3 text-[11px] font-medium text-destructive hover:bg-destructive/10 lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Delete permanently
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPurgeFor(null)}
+                            className="inline-flex min-h-[44px] items-center rounded-md px-3 text-[11px] text-muted-foreground hover:bg-secondary lg:min-h-0 lg:px-2 lg:py-1"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </form>
+                    )}
+                  </div>
+                  {(!mine && (body.state === "ok" || isSuperUser) && !isPending) && (
+                    <MessageKebab
+                      open={actionsFor === message.id}
+                      onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
+                    />
                   )}
                 </div>
-                {(!mine && (body.state === "ok" || isSuperUser) && !isPending) && (
-                  <MessageKebab
-                    open={actionsFor === message.id}
-                    onToggle={() => setActionsFor(actionsFor === message.id ? null : message.id)}
-                  />
-                )}
               </div>
-            </div>
-          );
-        })}
-        <div ref={bottomRef} />
+            );
+          })}
+          <div ref={bottomRef} />
+        </div>
       </div>
 
       {actionError && (
@@ -1141,22 +1217,36 @@ export function ThreadClient({
         </p>
       )}
 
-      <p className="h-4 text-xs text-muted-foreground">
-        {typingNames.length > 0 &&
-          `${typingNames.join(", ")} ${typingNames.length === 1 ? "is" : "are"} typing…`}
-      </p>
+      {/* Who is typing. In fill mode this line does not exist on its own — it
+          shares the one under the box with the connection state, because two
+          permanently reserved lines of small print above a phone keyboard is
+          two more than the conversation can spare (Adam, 2026-09-01). */}
+      {!fill && (
+        <p className="h-4 text-xs text-muted-foreground">
+          {typingNames.length > 0 && typingLine}
+        </p>
+      )}
 
       {readOnlyNotice ? (
-        <p className="rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{readOnlyNotice}</p>
+        <p className="shrink-0 rounded-lg border bg-muted/50 px-4 py-3 text-sm text-muted-foreground">{readOnlyNotice}</p>
       ) : canPost ? (
-        /* On a phone the composer is pinned to the bottom of the thread, clear
-           of the tab bar and its home-indicator inset; on the desk it is the
-           last block of the panel, exactly as it was. */
+        /* In fill mode the composer is simply the last row of a column that is
+           exactly as tall as the screen, so it sits on the floor without being
+           positioned at all. It used to be `sticky` at a 64px offset inside a
+           container with nothing to slide against, ON TOP of the 64px `<main>`
+           already pads for the tab bar — which is what put the end of the
+           conversation out of reach (Adam, 2026-09-01). Embedded in the team
+           page it is still sticky, now measured from the real bar. */
         <form
           ref={formRef}
           action={sendAction}
           onSubmit={onComposerSubmit}
-          className="sticky bottom-[calc(64px+env(safe-area-inset-bottom))] z-20 space-y-2 rounded-t-xl border-t bg-background pb-2 pt-2 lg:static lg:rounded-none lg:border-t-0 lg:pb-0 lg:pt-0"
+          className={
+            "z-20 space-y-2 rounded-t-xl border-t bg-background pb-2 pt-2 lg:rounded-none lg:border-t-0 lg:pb-0 lg:pt-0 " +
+            (fill
+              ? "shrink-0"
+              : "sticky bottom-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom))] lg:static")
+          }
         >
           <input type="hidden" name="conversation_id" value={conversationId} />
           <input type="hidden" name="client_id" value={clientIdRef.current} />
@@ -1183,8 +1273,8 @@ export function ThreadClient({
               the structured Post a game form above is, and it says so where
               the eye lands before typing. */}
           {isRefereesGroup && (
-            <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-900">
-              If you want to request a referee, use the form above.
+            <p className="rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1 text-[11px] font-medium text-amber-900 lg:rounded-lg lg:px-3 lg:py-2 lg:text-xs">
+              To request a referee, use the form at the top.
             </p>
           )}
 
@@ -1278,9 +1368,21 @@ export function ThreadClient({
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </button>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            Enter starts a new line — Send is the only thing that sends ·{" "}
-            {connected ? "Live" : "Reconnecting — messages refresh every few seconds"}
+          {/* One line of small print, not three. Somebody typing outranks the
+              rest of it; and the "Enter starts a new line" reassurance is for
+              a keyboard, so on a phone — where the return key does exactly
+              that anyway — only the connection state stays. */}
+          <p className="truncate text-[11px] text-muted-foreground" aria-live="polite">
+            {fill && typingNames.length > 0 ? (
+              typingLine
+            ) : (
+              <>
+                <span className={fill ? "hidden lg:inline" : undefined}>
+                  Enter starts a new line — Send is the only thing that sends ·{" "}
+                </span>
+                {connected ? "Live" : "Reconnecting — messages refresh every few seconds"}
+              </>
+            )}
           </p>
         </form>
       ) : null}
