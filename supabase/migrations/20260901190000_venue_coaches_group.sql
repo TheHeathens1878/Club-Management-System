@@ -727,11 +727,13 @@ $$;
 revoke all privileges on function public.people_sync_venue_groups()
   from public, anon, authenticated, service_role;
 
-drop trigger if exists trg_people_sync_venue_groups on public.people;
-create trigger trg_people_sync_venue_groups
-  after update of dob on public.people
-  for each row when (new.dob is distinct from old.dob)
-  execute function public.people_sync_venue_groups();
+-- NO TRIGGER ON people.dob. consents_settings.test.sql pins "exactly ONE
+-- trigger on public.people watching dob" — P1.7 extended the single guard
+-- rather than adding a second, so that no two rules about a date of birth can
+-- disagree with each other. A venue group's membership is not a good enough
+-- reason to be the second: a dob correction that moves somebody across the
+-- adults-only line is rare, and the nightly reconcile below already exists for
+-- exactly this class of drift. The function stays, callable, for that job.
 
 
 -- =============================================================================
