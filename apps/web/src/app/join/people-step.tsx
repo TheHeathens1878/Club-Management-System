@@ -208,28 +208,30 @@ export function PeopleStep({
               )}
 
               {/* The referee tick, on children as well as on adults (Adam,
-                  2026-09-01). It appears only once the date of birth says it
-                  can be honoured — offering a tick the database will refuse is
-                  how a form teaches somebody that it lies. Until then the same
-                  line says when they may ask. */}
-              {refereeAllowed ? (
-                <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" name="refereeing" value="yes" className="mt-0.5 h-4 w-4" />
-                  <span>
-                    They referee, or would like to
-                    <span className="block text-xs text-muted-foreground">
-                      Puts them in the club&rsquo;s referees group once an administrator confirms
-                      it, where games needing a referee are posted.
-                    </span>
+                  2026-09-01). Always shown, and tickable only once the date of
+                  birth says it can be honoured: offering a tick the database
+                  will refuse is how a form teaches somebody that it lies, and
+                  hiding it altogether is how a parent never learns their
+                  fourteen-year-old could referee. Disabled, with the reason. */}
+              <label className="flex items-start gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  name="refereeing"
+                  value="yes"
+                  disabled={!refereeAllowed}
+                  className="mt-0.5 h-4 w-4 disabled:opacity-50"
+                />
+                <span className={refereeAllowed ? undefined : "text-muted-foreground"}>
+                  They referee, or would like to
+                  <span className="block text-xs text-muted-foreground">
+                    {refereeAllowed
+                      ? "Puts them in the club’s referees group once an administrator confirms it, where games needing a referee are posted."
+                      : dob === ""
+                        ? `Fill in their date of birth first — the club registers referees from ${minRefereeAge}.`
+                        : refereeFromSentence(dob, minRefereeAge, "they")}
                   </span>
-                </label>
-              ) : (
-                dob !== "" && (
-                  <p className="text-xs text-muted-foreground">
-                    {refereeFromSentence(dob, minRefereeAge, "they")}
-                  </p>
-                )
-              )}
+                </span>
+              </label>
             </div>
 
             {error && <p className="text-sm text-destructive">{error}</p>}

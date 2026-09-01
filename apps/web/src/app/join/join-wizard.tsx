@@ -620,24 +620,31 @@ function ProfileStep({
                 </span>
               </span>
             </label>
-            {refereeAllowed ? (
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" name="refereeing" value="yes" className="mt-0.5 h-4 w-4" />
-                <span>
-                  I referee, or would like to
-                  <span className="block text-xs text-muted-foreground">
-                    Puts you in the club&rsquo;s referees group once an administrator confirms it,
-                    where games needing a referee are posted.
-                  </span>
+            {/* The tick is always HERE, and only sometimes tickable. Hiding it
+                until a date of birth had been typed meant somebody who came to
+                this page specifically to referee found no mention of
+                refereeing at all (caught on the live page, 2026-09-01). It is
+                disabled instead, with the reason beside it — which is also how
+                the reader learns the club has a rule about the age. */}
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                name="refereeing"
+                value="yes"
+                disabled={!refereeAllowed}
+                className="mt-0.5 h-4 w-4 disabled:opacity-50"
+              />
+              <span className={refereeAllowed ? undefined : "text-muted-foreground"}>
+                I referee, or would like to
+                <span className="block text-xs text-muted-foreground">
+                  {refereeAllowed
+                    ? "Puts you in the club’s referees group once an administrator confirms it, where games needing a referee are posted."
+                    : dob === ""
+                      ? `Fill in your date of birth first — the club registers referees from ${minRefereeAge}.`
+                      : refereeFromSentence(dob, minRefereeAge, "you")}
                 </span>
-              </label>
-            ) : (
-              dob !== "" && (
-                <p className="text-xs text-muted-foreground">
-                  {refereeFromSentence(dob, minRefereeAge, "you")}
-                </p>
-              )
-            )}
+              </span>
+            </label>
           </fieldset>
 
           {error && (
