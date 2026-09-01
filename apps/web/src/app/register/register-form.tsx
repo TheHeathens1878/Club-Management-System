@@ -202,6 +202,28 @@ export function RegisterForm({
             </div>
 
             <div className="space-y-1.5">
+              <Label htmlFor="sex">Biological sex at birth</Label>
+              <select
+                id="sex"
+                name="sex"
+                required
+                defaultValue={v?.sex ?? ""}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="" disabled>
+                  Choose…
+                </option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Required. The FA registers players in age groups by sex at birth, so the club
+                cannot enter a player without it. Like your date of birth, it is visible only to
+                club administrators.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
