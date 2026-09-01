@@ -217,12 +217,8 @@ export function LoginForm({
                 For a coach or a committee member who already belongs and only needs a login.
               </p>
               <p className="pt-1 text-xs text-muted-foreground">
-                Refereeing for us?{" "}
-                <a href="/register?as=referee" className="font-medium text-foreground hover:underline">
-                  Register as a referee
-                </a>{" "}
-                — a club administrator approves it, and the games that need one appear in the
-                Referees group.
+                Coaches and referees join the same way — say so as you go through, and a club
+                administrator approves it.
               </p>
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">

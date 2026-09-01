@@ -121,6 +121,56 @@ export async function revokeRole(
   return { notice: "Role revoked. The grant stays on the record as history." };
 }
 
+/**
+ * The referee tick (Adam, 2026-09-01: "admins should be able to tick a box in a
+ * user record confirming they are a referee. That will add them to the referee
+ * group").
+ *
+ * It is `grantRole`/`revokeRole` for one role, said in one gesture — the
+ * dropdown could always do this, but a dropdown is a place to look for something
+ * and a tick is a place to see it. The role is the only thing written; the
+ * Referees conversation follows on its own, because `referee_role_sync_group()`
+ * has fired on a `person_roles` insert since 20260825320000.
+ *
+ * The FA's minimum age is the database's business, not this action's: the guard
+ * on `person_roles` refuses the insert and its sentence is passed through, so
+ * the same answer comes back however the role is granted.
+ */
+export async function setPersonReferee(
+  _prev: PersonDetailState,
+  formData: FormData,
+): Promise<PersonDetailState> {
+  await requireCommittee();
+
+  const personId = text(formData, "person_id");
+  if (!personId) return { error: "No person given." };
+  const shouldHold = text(formData, "is_referee") === "yes";
+
+  const supabase = await createClient();
+
+  if (shouldHold) {
+    const { error } = await supabase
+      .from("person_roles")
+      .insert({ person_id: personId, role: "referee", notes: "confirmed on their record" });
+    if (error) {
+      return { error: friendlyDbError(error, NOT_ADMIN, "They are already a referee.") };
+    }
+    revalidatePath(personPath(personId));
+    return { notice: "Confirmed as a referee, and added to the Referees group." };
+  }
+
+  const { error } = await supabase
+    .from("person_roles")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("person_id", personId)
+    .eq("role", "referee")
+    .is("revoked_at", null);
+  if (error) return { error: friendlyDbError(error, NOT_ADMIN) };
+
+  revalidatePath(personPath(personId));
+  return { notice: "No longer a referee. They leave the Referees group; the grant stays as history." };
+}
+
 // ---------------------------------------------------------------------------
 // Guardianships (SG-4)
 // ---------------------------------------------------------------------------
