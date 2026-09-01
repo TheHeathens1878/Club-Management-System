@@ -103,6 +103,8 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
   const [step, setStep] = useState<Step>("hidden");
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [busy, setBusy] = useState(false);
+  /** Why turning them on did not work, when the browser gave a reason. */
+  const [trouble, setTrouble] = useState<string | null>(null);
 
   useEffect(() => {
     if (!personId || !pushSupported()) return;
@@ -193,16 +195,27 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
   async function handleEnable() {
     if (!personId) return;
     setBusy(true);
+    setTrouble(null);
     try {
       const result = await enableWebPush(personId);
       if (result.status === "subscribed" || result.status === "denied") {
         setStep("hidden");
-      } else {
-        // "Not now" at the browser's own dialog, or something went wrong.
-        // Treat it as a dismissal rather than leaving the banner sitting there.
-        remember(NOTIFICATIONS_DISMISSED);
-        setStep("hidden");
+        return;
       }
+      if (result.status === "error" || result.status === "unsupported") {
+        // Something went wrong, and the reader is owed the reason. Dismissing
+        // the banner here would hide the only evidence there is (Adam,
+        // 2026-09-01: it "hangs on 'Just a second'").
+        setTrouble(
+          result.status === "unsupported"
+            ? "This browser cannot take notifications from a website."
+            : (result.message ?? "Notifications could not be turned on."),
+        );
+        return;
+      }
+      // "Not now" at the browser's own dialog: a decision, so respect it.
+      remember(NOTIFICATIONS_DISMISSED);
+      setStep("hidden");
     } finally {
       setBusy(false);
     }
@@ -314,9 +327,14 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
               <div className="mt-3">
                 <Button size="sm" className="min-h-[44px] lg:min-h-0" onClick={handleEnable} disabled={busy}>
                   <Bell className="h-4 w-4" />
-                  {busy ? "Just a second…" : "Turn on notifications"}
+                  {busy ? "Just a second…" : trouble ? "Try again" : "Turn on notifications"}
                 </Button>
               </div>
+              {trouble && (
+                <p className="mt-2 text-xs text-destructive">
+                  {trouble} You can carry on without them, and turn them on later under Settings.
+                </p>
+              )}
             </div>
             <button
               type="button"

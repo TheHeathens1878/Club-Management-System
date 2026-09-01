@@ -110,9 +110,53 @@ function uint8ToUrlBase64(bytes: Uint8Array): string {
 }
 
 /** The worker, registered once and awake. */
+/**
+ * Every step of turning notifications on is a promise the browser might simply
+ * never settle, and this runs behind a button that says "Just a second…".
+ *
+ * Adam, 2026-09-01: "when I turn on notifications in Edge, it hangs on 'Just a
+ * second'." `navigator.serviceWorker.ready` is the usual culprit — it waits for
+ * an ACTIVE worker for this scope and waits forever when one never arrives,
+ * which is a legitimate browser state and not an error it will ever report. The
+ * permission prompt and the write can hang too, for their own reasons.
+ *
+ * So nothing here is awaited without a clock. A timeout is not a fix for the
+ * underlying condition; it is the difference between a button that comes back
+ * and says what happened and a button that never comes back at all.
+ */
+async function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      work,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${what} did not finish within ${Math.round(ms / 1000)} seconds`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** How long each step may take before the button comes back and says so. */
+const REGISTER_TIMEOUT_MS = 10_000;
+const SUBSCRIBE_TIMEOUT_MS = 15_000;
+const STORE_TIMEOUT_MS = 15_000;
+
 async function readyRegistration(): Promise<ServiceWorkerRegistration> {
-  await navigator.serviceWorker.register("/sw.js");
-  return navigator.serviceWorker.ready;
+  await withTimeout(
+    navigator.serviceWorker.register("/sw.js"),
+    REGISTER_TIMEOUT_MS,
+    "Registering the notification worker",
+  );
+  return withTimeout(
+    navigator.serviceWorker.ready,
+    REGISTER_TIMEOUT_MS,
+    "Waiting for the notification worker to start",
+  );
 }
 
 /**
@@ -191,7 +235,13 @@ export async function enableWebPush(personId: string): Promise<EnableResult> {
 
   let permission: NotificationPermission;
   try {
-    permission = await Notification.requestPermission();
+    // A prompt the reader never answers is not an error the browser reports,
+    // and two minutes is longer than anyone stares at one.
+    permission = await withTimeout(
+      Notification.requestPermission(),
+      120_000,
+      "The browser's permission prompt",
+    );
   } catch (err) {
     return { status: "error", message: err instanceof Error ? err.message : "permission request failed" };
   }
@@ -200,15 +250,21 @@ export async function enableWebPush(personId: string): Promise<EnableResult> {
 
   try {
     const registration = await readyRegistration();
-    let subscription = (await currentSubscription()) ?? (await subscribeFresh(registration));
+    let subscription =
+      (await withTimeout(currentSubscription(), SUBSCRIBE_TIMEOUT_MS, "Reading this browser's subscription")) ??
+      (await withTimeout(subscribeFresh(registration), SUBSCRIBE_TIMEOUT_MS, "Subscribing this browser"));
     try {
-      await storeSubscription(personId, subscription);
+      await withTimeout(storeSubscription(personId, subscription), STORE_TIMEOUT_MS, "Saving this device");
     } catch {
       // See storeSubscription: almost always somebody else's row on a shared
       // browser. One retry on a brand-new endpoint, then give up honestly.
       await subscription.unsubscribe().catch(() => {});
-      subscription = await subscribeFresh(registration);
-      await storeSubscription(personId, subscription);
+      subscription = await withTimeout(
+        subscribeFresh(registration),
+        SUBSCRIBE_TIMEOUT_MS,
+        "Subscribing this browser",
+      );
+      await withTimeout(storeSubscription(personId, subscription), STORE_TIMEOUT_MS, "Saving this device");
     }
     return { status: "subscribed" };
   } catch (err) {
