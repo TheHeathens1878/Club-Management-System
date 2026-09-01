@@ -10,6 +10,7 @@ import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { groupAttachment, type AttachmentChoice } from "@/lib/group-scope";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames } from "@/lib/person";
+import { refereeBandSummary } from "@/lib/referee-bands";
 import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
@@ -108,12 +109,37 @@ export default async function ManageGroupPage({
 
   const participants = participantRows ?? [];
   const names = await resolveNames(participants.map((p) => p.person_id));
+
+  // The Referees group, and only it, shows what each referee may take: one
+  // age band below their own until they are 16 (Adam, 2026-09-01). The bands
+  // come from `referees_group_bands()`, which computes them once and answers
+  // only for somebody who can already see this group — the same readers this
+  // page has. Every other group's list is unchanged.
+  const { data: refereesGroupId } = await supabase.rpc("referees_group_id");
+  const bands = new Map<string, string>();
+  if (refereesGroupId === id) {
+    const { data: bandRows } = await supabase.rpc("referees_group_bands");
+    for (const row of bandRows ?? []) {
+      bands.set(
+        row.person_id,
+        refereeBandSummary({
+          personId: row.person_id,
+          dobKnown: row.dob_known,
+          ownBand: row.own_band,
+          unlimited: row.unlimited,
+          maxBand: row.max_band,
+        }),
+      );
+    }
+  }
+
   const members: GroupMemberRow[] = participants.map((p) => ({
     personId: p.person_id,
     name: p.person_id === personId ? "You" : nameOf(names, p.person_id),
     basis: p.basis,
     joinedAt: p.joined_at,
     leftAt: p.left_at,
+    note: bands.get(p.person_id) ?? null,
   }));
 
   const { venues, teams } = await loadAttachmentOptions();
@@ -229,6 +255,14 @@ export default async function ManageGroupPage({
               People are added one at a time and the club&apos;s safeguarding rules are checked each
               time. If one is refused, the reason below is the database&apos;s own.
             </p>
+            {refereesGroupId === id && (
+              <p className="text-sm text-muted-foreground">
+                Each referee shows their own age group and the games they may take. The club
+                follows the FA: a referee under 16 takes one age group below their own, and from 16
+                they take any of them. A game above somebody&apos;s age group cannot be claimed by
+                them — the database refuses it, not the screen.
+              </p>
+            )}
           </CardHeader>
           <CardContent>
             <GroupMembersPanel

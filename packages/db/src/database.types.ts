@@ -6393,6 +6393,32 @@ export type Database = {
         Args: { p_message_id: string; p_reason: string }
         Returns: undefined
       }
+      referee_bands: {
+        Args: { p_person_ids: string[] }
+        Returns: {
+          dob_known: boolean
+          /** Null means no ceiling when `unlimited`, and no games when the date of birth is unknown. */
+          max_band: number | null
+          own_band: number | null
+          person_id: string
+          unlimited: boolean
+        }[]
+      }
+      referee_may_take_band: {
+        Args: { p_band: number | null; p_person_id: string }
+        Returns: boolean
+      }
+      referees_group_bands: {
+        Args: never
+        Returns: {
+          dob_known: boolean
+          /** Null means no ceiling when `unlimited`, and no games when the date of birth is unknown. */
+          max_band: number | null
+          own_band: number | null
+          person_id: string
+          unlimited: boolean
+        }[]
+      }
       referees_group_id: { Args: never; Returns: string }
       refresh_membership_kind: {
         Args: { p_membership_ids: string[] }
