@@ -682,9 +682,13 @@ export function AppAccessForm({
   );
 
   // Adam, 2026-09-01: "it must only allow access on the 13th birthday and must
-  // say this under grant access." The database refuses a consent granted before
-  // that day (20260901150000); this is the screen agreeing, and — more useful
-  // than a disabled button with no reason — naming the date.
+  // say this under grant access."
+  //
+  // The database has always been the one that decides: SG-10's guard on
+  // `profiles` refuses an account to anyone below min_account_age, so a consent
+  // granted early buys nothing. What it does do is mislead — the badge reads
+  // "App access allowed" and the child cannot have an account for years. So the
+  // button waits for the day, and says which day it is waiting for.
   const eligibleFrom = (() => {
     if (!dob) return null;
     const birth = new Date(`${dob}T00:00:00Z`);
@@ -754,8 +758,8 @@ export function AppAccessForm({
             <p className="text-sm text-amber-800">
               Not yet — {childName} can have their own login from{" "}
               <span className="font-medium">{eligibleLabel}</span>, their {minAccountAge}th
-              birthday. Consent given before then cannot take effect, so the club does not record
-              it: come back on the day and the button will work.
+              birthday. Allowing it before then would record a permission that cannot take effect,
+              so the button waits: come back on the day and it will work.
             </p>
           ) : (
             <p className="text-xs text-muted-foreground">
