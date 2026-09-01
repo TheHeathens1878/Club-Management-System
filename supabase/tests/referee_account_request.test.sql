@@ -3,8 +3,6 @@
 -- =============================================================================
 --   A  'referee' is a role somebody may ask for, and it needs no team
 --   B  a coaching role still needs one
---   C  the sign-up itself opens the request when ?as=referee sent it
---   D  and only for 'referee' — anything else in the metadata is ignored
 --   E  approving grants person_roles.referee; only a club admin may approve
 --
 -- Run with: npx supabase test db
@@ -12,7 +10,7 @@
 
 begin;
 
-select plan(9);
+select plan(7);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('4e4e4e4e-1111-4111-8111-000000000001', 'rf-admin@test.invalid',
@@ -39,30 +37,10 @@ select throws_ok($$
   values (current_setting('rf.ref')::uuid, 'coach')
 $$, '23514', null, 'a coaching role still has to name a team');
 
--- C. the sign-up opens it ------------------------------------------------------
-insert into auth.users (id, email, raw_user_meta_data) values
-  ('4e4e4e4e-1111-4111-8111-000000000003', 'rf-door@test.invalid',
-   '{"first_name": "Ronnie", "last_name": "Door", "dob": "1986-04-04", "requested_role": "referee"}'::jsonb);
-
-select is(
-  (select count(*)::int from public.account_requests ar
-     join public.profiles pr on pr.person_id = ar.person_id
-    where pr.id = '4e4e4e4e-1111-4111-8111-000000000003'
-      and ar.requested_role = 'referee' and ar.status = 'pending'),
-  1,
-  'signing up through the referee door opens the request with the account');
-
--- D. and nothing else ----------------------------------------------------------
-insert into auth.users (id, email, raw_user_meta_data) values
-  ('4e4e4e4e-1111-4111-8111-000000000004', 'rf-chancer@test.invalid',
-   '{"first_name": "Chance", "last_name": "Er", "dob": "1986-04-04", "requested_role": "club_admin"}'::jsonb);
-
-select is(
-  (select count(*)::int from public.account_requests ar
-     join public.profiles pr on pr.person_id = ar.person_id
-    where pr.id = '4e4e4e4e-1111-4111-8111-000000000004'),
-  0,
-  'any other role in the sign-up metadata is ignored, not queued');
+-- C / D. The sign-up door that used to open this request was removed on
+-- 2026-09-01 (20260901160000): referees ask through the joining workflow now,
+-- and that the metadata no longer opens one is asserted in
+-- referee_from_fourteen.test.sql, beside the rule that replaced it.
 
 -- E. approving -----------------------------------------------------------------
 set local request.jwt.claims to '{"sub":"4e4e4e4e-1111-4111-8111-000000000002","role":"authenticated"}';

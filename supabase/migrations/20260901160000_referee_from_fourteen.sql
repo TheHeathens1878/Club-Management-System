@@ -55,6 +55,7 @@ begin
   v_default := case p_key
     when 'safeguarding.min_account_age'                then 13
     when 'safeguarding.unsupervised_messaging_min_age' then 14
+    when 'safeguarding.self_account_age'               then 16
     when 'safeguarding.min_referee_age'                then 14
     else null
   end;
@@ -69,9 +70,10 @@ begin
     from public.site_settings s
    where s.key = p_key;
 
-  return coalesce(nullif(btrim(coalesce(v_value, '')), '')::integer, v_default);
-exception when others then
-  return v_default;
+  if v_value is null or v_value !~ '^d+$' then
+    return v_default;
+  end if;
+  return v_value::integer;
 end $function$;
 
 insert into public.site_settings (key, value)
