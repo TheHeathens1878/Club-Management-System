@@ -71,8 +71,16 @@ function QuestionRow({
   const [editState, editAction, editPending] = useActionState(updateQuestion, EMPTY);
   const [archiveState, archiveAction, archivePending] = useActionState(setQuestionArchived, EMPTY);
 
-  const canArchive = !question.system && !question.locked;
-  const canBeOptional = !question.locked;
+  // Adam, 2026-09-01: "on the editable registration form, a club admin should
+  // still be able to turn off built in and always on form questions."
+  //
+  // "Built in" means the KEY and the TYPE are fixed — an emergency contact is
+  // three fields and cannot become a text box, because this screen renders it by
+  // name. Whether the club ASKS it is a different question, and 20260901170000
+  // stops the database conflating the two: a system row may now be retired, and
+  // only photo_consents (SG-5) may not.
+  const canArchive = question.qkey !== "photo_consents";
+  const canBeOptional = question.qkey !== "photo_consents";
   const hasOptions = question.qtype === "select" || question.qtype === "kit_size";
 
   return (
@@ -122,7 +130,7 @@ function QuestionRow({
             <Lock className="mr-1 h-3 w-3" /> Always on
           </Badge>
         ) : question.system ? (
-          <Badge variant="muted" title="Built in — its key and type are fixed">
+          <Badge variant="muted" title="Built in — its key and type are fixed, but the club can still retire it">
             <Lock className="mr-1 h-3 w-3" /> Built in
           </Badge>
         ) : null}
