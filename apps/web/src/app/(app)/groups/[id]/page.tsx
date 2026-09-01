@@ -8,7 +8,9 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { groupAttachment, type AttachmentChoice } from "@/lib/group-scope";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames } from "@/lib/person";
+import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { loadAttachmentOptions } from "../attachment-options";
@@ -83,7 +85,14 @@ export default async function ManageGroupPage({
   // button are the administrator's. The database says the same thing
   // (`conversations_update`, 20260825320000), so this only stops offering a
   // form the update would refuse.
-  const canEdit = clubAdmin;
+  //
+  // And Adam again, 2026-09-01: "coaches should not be able to edit group
+  // settings or close the group UNDER THAT ROLE." Being an administrator is
+  // what admits you; wearing the coach hat is what puts it away, the same rule
+  // the team and match screens follow. An administrator who coaches sees what a
+  // coach sees until they switch tiles.
+  const hat = resolveRoleView(await getStoredRoleView(), await getCapabilities());
+  const canEdit = clubAdmin && (hat === "admin" || hat === null);
   // Adam, 2026-08-25: "admins should be able to click on a member's name and
   // it takes you to their contact page". /people/[id] admits the committee and
   // nobody else, so the link is offered on exactly that answer — a group's
