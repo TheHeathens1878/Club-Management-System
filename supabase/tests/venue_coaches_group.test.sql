@@ -19,7 +19,7 @@
 
 begin;
 
-select plan(40);
+select plan(42);
 
 -- -----------------------------------------------------------------------------
 -- People
@@ -242,9 +242,15 @@ select lives_ok($$select public.sync_all_venue_coaches_groups()$$,
 select ok(pg_temp.in_group(current_setting('vg.groupA')::uuid, current_setting('vg.nodob')::uuid),
   'and it puts them in');
 
+-- The same clock in the other direction: a correction that makes somebody a
+-- minor takes them out at the reconcile, not on the spot.
 update public.people set dob = current_date - interval '15 years' where id = current_setting('vg.nodob')::uuid;
+select ok(pg_temp.in_group(current_setting('vg.groupA')::uuid, current_setting('vg.nodob')::uuid),
+  'a correction the other way does not move them on the spot either');
+select lives_ok($$select public.sync_all_venue_coaches_groups()$$,
+  'the reconcile runs again');
 select ok(not pg_temp.in_group(current_setting('vg.groupA')::uuid, current_setting('vg.nodob')::uuid),
-  'and a date that makes them a minor walks them back out');
+  'and it walks them back out');
 
 
 -- =============================================================================
