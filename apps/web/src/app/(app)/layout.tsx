@@ -12,6 +12,8 @@ import { mobileTabsFor } from "@/lib/mobile-nav";
 import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
 import { MobileHeader } from "@/components/mobile-header";
 import { MobileTabBar, type MobileTabItem } from "@/components/mobile-tab-bar";
+import { NotificationPrompt } from "@/components/notification-prompt";
+import { getCurrentPersonId } from "@/lib/person";
 import { RoleSwitcher } from "@/components/role-switcher";
 
 /**
@@ -54,6 +56,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // five-slot tab bar underneath — the view's front doors plus More. Icons are
   // rendered here so the capability-scoped list stays a server concern.
   const unread = await loadUnreadNotificationCount();
+  // Who the browser would be registering a device for (Adam, 2026-09-01: "ask
+  // the user to create the app as a web app with notifications enabled"). Null
+  // for a sign-in not yet linked to a member record — there is nobody to
+  // address a push to, so the prompt stays away.
+  const personId = await getCurrentPersonId();
   const tabs: MobileTabItem[] = mobileTabsFor(view, capabilities).map((tab) => {
     const Icon = tab.icon;
     return {
@@ -77,6 +84,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // bar's height (Adam, 2026-09-01).
   return (
     <div className="flex min-h-[100dvh] flex-col lg:flex-row">
+      {/* Install-and-notifications, for signed-in members only. It draws
+          itself fixed above the tab bar, so its place in the tree is
+          immaterial; it renders nothing at all when there is no VAPID key,
+          when this browser is already subscribed, or when it has been
+          dismissed recently. */}
+      <NotificationPrompt personId={personId} />
+
       {/* The ink rail (crest design): dark sidebar against paper content.
           `.theme-ink` remaps the semantic tokens, so everything inside — the
           bell, ghost buttons, badges — adapts without bespoke styling. On a

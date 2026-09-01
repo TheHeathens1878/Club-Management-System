@@ -195,7 +195,7 @@ export function AppNav({ role, name, noticePosts, upcomingEvents = [], logoUrl, 
         {!canSearchMembers && (
           <div className="flex items-center gap-2">
             <ShieldCheck className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold">USC Sale</span>
+            <span className="text-sm font-semibold">AoM SC Portal</span>
           </div>
         )}
 

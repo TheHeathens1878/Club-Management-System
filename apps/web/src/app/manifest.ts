@@ -6,8 +6,15 @@ import type { MetadataRoute } from "next";
  * chrome over paper. `start_url` is `/` — the middleware already lands a
  * signed-in person on their view's home and everyone else on the login page.
  *
- * No service worker yet, deliberately: nothing here claims offline. Icons are
- * the crest centred on ink with a maskable-safe margin (public/icon-*.png).
+ * There IS a service worker now (public/sw.js), and it still claims nothing
+ * about offline: it exists because no browser will issue a Web Push
+ * subscription without one, and iOS Safari will not issue one at all until the
+ * site is on the Home Screen. It has no `fetch` handler, so every screen is
+ * still a live read under the member's own RLS — the reason for not caching a
+ * safeguarding-scoped app has not changed.
+ *
+ * Icons are the crest centred on ink with a maskable-safe margin
+ * (public/icon-*.png); the same badge is the icon on a push notification.
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
