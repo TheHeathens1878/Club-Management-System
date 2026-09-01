@@ -21,7 +21,14 @@ export type RefereeBand = {
 };
 
 export type RefereeBandLabel = {
-  /** "U15", or null when the club has no date of birth. */
+  /**
+   * "U15" — shown only where it EXPLAINS the ceiling beside it.
+   *
+   * An adult's FA band is a real number and a useless one: production's own
+   * referees came back as U46 and U18, and "U46 · Any age group" reads as an
+   * age group the club does not have. A band is worth saying when it is the
+   * reason for the limit, and silent when there is no limit.
+   */
   own: string | null;
   /** What they may take, in words. */
   takes: string;
@@ -37,10 +44,10 @@ export function refereeBandLabel(band: RefereeBand): RefereeBandLabel {
       needsDob: true,
     };
   }
-  const own = band.ownBand === null ? null : `U${band.ownBand}`;
   if (band.unlimited) {
-    return { own, takes: "Any age group", needsDob: false };
+    return { own: null, takes: "Any age group", needsDob: false };
   }
+  const own = band.ownBand === null ? null : `U${band.ownBand}`;
   if (band.maxBand === null) {
     // Not reachable while the database keeps its own rule: a known date of
     // birth under the open age always yields a ceiling. Said plainly rather

@@ -18,10 +18,13 @@ describe("refereeBandLabel", () => {
     ).toEqual({ own: "U15", takes: "U14 and below", needsDob: false });
   });
 
-  it("gives an adult referee no ceiling", () => {
+  it("gives an adult referee no ceiling, and does not print their band", () => {
+    // Production's own referees are band 46 and band 18. "U46 · Any age group"
+    // names an age group the club does not have; the band is worth saying only
+    // when it is the reason for a limit.
     expect(
-      refereeBandLabel({ ...base, dobKnown: true, ownBand: 24, unlimited: true, maxBand: null }),
-    ).toEqual({ own: "U24", takes: "Any age group", needsDob: false });
+      refereeBandLabel({ ...base, dobKnown: true, ownBand: 46, unlimited: true, maxBand: null }),
+    ).toEqual({ own: null, takes: "Any age group", needsDob: false });
   });
 
   it("does not read an unknown date of birth as no ceiling", () => {
