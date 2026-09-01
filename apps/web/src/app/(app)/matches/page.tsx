@@ -5,22 +5,18 @@ import { CalendarPlus, LandPlot } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { LinkRow } from "@/components/link-row";
 import { Card, CardContent } from "@/components/ui/card";
-import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
 import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
-import { LinkRow } from "@/components/link-row";
 
 /**
  * Matches — the Matchday desk (spec §2). A coach sees their teams, an admin
- * the club; `matchday_fixtures()` does the scoping by identity, and the Coach
- * view narrows an administrator-who-coaches to their own teams on top — the
- * same "the active tile scopes the data" rule the Teams page follows (Adam,
- * 2026-08-24: "Coaches should only be able to see their own games"). Three
- * period tabs, the needs-attention chips, and the whole row links into the
- * fixture's event where the RSVP, remind and detail already live.
+ * the club; `matchday_fixtures()` does the scoping. Three period tabs, the
+ * needs-attention chips, and every row links into the fixture's event where
+ * the RSVP, remind and detail already live.
  */
 
 export const dynamic = "force-dynamic";
@@ -70,21 +66,11 @@ export default async function MatchesPage({
     scope ? teamId === scope.id : coachTeamIds ? coachTeamIds.has(teamId) : true;
 
   const supabase = await createClient();
-  // The active tile scopes the data, not just the menu: in the Coach view an
-  // administrator-who-coaches sees only the teams they staff, exactly as on
-  // /teams. `my_capabilities()` already carries those teams — no extra read.
-  const roleView = await getStoredRoleView();
-  const coachTeamIds =
-    roleView === "coach" ? new Set(capabilities.staffTeams.map((team) => team.id)) : null;
-
   const { data, error } = await supabase.rpc("matchday_fixtures", {
     p_from: from.toISOString(),
     p_to: to.toISOString(),
   });
   const fixtures = (data ?? []).filter(
-    (row) =>
-      (period === "results" ? true : row.status === "scheduled") &&
-      (coachTeamIds === null || coachTeamIds.has(row.team_id)),
     (row) => inView(row.team_id) && (period === "results" ? true : row.status === "scheduled"),
   );
 
@@ -174,78 +160,6 @@ export default async function MatchesPage({
                   ? "No fixtures played in the last four weeks."
                   : "Nothing on the fixture list for this window."}
               </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-secondary/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                      <th className="px-4 py-2 font-medium">Kick-off</th>
-                      <th className="px-4 py-2 font-medium">Fixture</th>
-                      <th className="px-4 py-2 font-medium">Competition</th>
-                      <th className="px-4 py-2 font-medium">Pitch</th>
-                      <th className="px-4 py-2 font-medium">Replies</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {fixtures.map((row) => {
-                      const short = row.squad > 0 && row.accepted * 2 < row.squad;
-                      return (
-                        <LinkRow
-                          key={row.fixture_id}
-                          href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
-                          className="border-b last:border-b-0 hover:bg-secondary/40"
-                        >
-                          <td className="px-4 py-3 align-top text-muted-foreground">
-                            <span className="font-semibold">{formatEventDate(row.kickoff_at)}</span>
-                            <br />
-                            {formatEventTime(row.kickoff_at)}
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            <Link
-                              href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
-                              className="font-semibold hover:underline"
-                            >
-                              {row.team_name} v {row.opponent}
-                            </Link>
-                            <span className="block text-xs text-muted-foreground">
-                              {row.is_home ? "Home" : `Away${row.venue_text ? ` · ${row.venue_text}` : ""}`}
-                              {row.status !== "scheduled" ? ` · ${row.status}` : ""}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 align-top">{row.competition ?? "League"}</td>
-                          <td className="px-4 py-3 align-top">
-                            {!row.is_home ? (
-                              <span className="text-muted-foreground">Away</span>
-                            ) : row.pitch_name ? (
-                              <span>
-                                {row.pitch_name}
-                                {!row.allocated ? (
-                                  <span className="block text-xs text-amber-700">not booked</span>
-                                ) : null}
-                              </span>
-                            ) : (
-                              <span className="text-amber-700">Unallocated</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            <Badge variant={short ? "destructive" : row.accepted > 0 ? "success" : "muted"}>
-                              {row.accepted} of {row.squad}
-                            </Badge>
-                            {row.declined > 0 ? (
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                {row.declined} out
-                              </span>
-                            ) : null}
-                          </td>
-                        </LinkRow>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
             </CardContent>
           </Card>
         ) : (
@@ -324,7 +238,11 @@ export default async function MatchesPage({
                       {fixtures.map((row) => {
                         const short = row.squad > 0 && row.accepted * 2 < row.squad;
                         return (
-                          <tr key={row.fixture_id} className="border-b last:border-b-0 hover:bg-secondary/40">
+                          <LinkRow
+                            key={row.fixture_id}
+                            href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                            className="border-b last:border-b-0 hover:bg-secondary/40"
+                          >
                             <td className="px-4 py-3 align-top text-muted-foreground">
                               <span className="font-semibold">{formatEventDate(row.kickoff_at)}</span>
                               <br />
@@ -367,7 +285,7 @@ export default async function MatchesPage({
                                 </span>
                               ) : null}
                             </td>
-                          </tr>
+                          </LinkRow>
                         );
                       })}
                     </tbody>
