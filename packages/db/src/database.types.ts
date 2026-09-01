@@ -1395,6 +1395,7 @@ export type Database = {
           title: string | null
           type: Database["public"]["Enums"]["conversation_type"]
           updated_at: string
+          venue_id: string | null
         }
         Insert: {
           closed_at?: string | null
@@ -1410,6 +1411,7 @@ export type Database = {
           title?: string | null
           type: Database["public"]["Enums"]["conversation_type"]
           updated_at?: string
+          venue_id?: string | null
         }
         Update: {
           closed_at?: string | null
@@ -1425,6 +1427,7 @@ export type Database = {
           title?: string | null
           type?: Database["public"]["Enums"]["conversation_type"]
           updated_at?: string
+          venue_id?: string | null
         }
         Relationships: [
           {
@@ -1446,6 +1449,13 @@ export type Database = {
             columns: ["team_id"]
             isOneToOne: false
             referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversations_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
             referencedColumns: ["id"]
           },
         ]
@@ -3650,6 +3660,7 @@ export type Database = {
           standard_price_pence: number | null
           type: Database["public"]["Enums"]["resource_type"]
           updated_at: string
+          venue_id: string | null
         }
         Insert: {
           active?: boolean
@@ -3677,6 +3688,7 @@ export type Database = {
           standard_price_pence?: number | null
           type: Database["public"]["Enums"]["resource_type"]
           updated_at?: string
+          venue_id?: string | null
         }
         Update: {
           active?: boolean
@@ -3704,8 +3716,17 @@ export type Database = {
           standard_price_pence?: number | null
           type?: Database["public"]["Enums"]["resource_type"]
           updated_at?: string
+          venue_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "resources_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       room_bookings_legacy: {
         Row: {
@@ -4802,6 +4823,39 @@ export type Database = {
           submitted_by?: string | null
           updated_at?: string
           week_start?: string
+        }
+        Relationships: []
+      }
+      venues: {
+        Row: {
+          active: boolean
+          address: string | null
+          created_at: string
+          id: string
+          name: string
+          notes: string | null
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          address?: string | null
+          created_at?: string
+          id?: string
+          name: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          address?: string | null
+          created_at?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          sort_order?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -6711,6 +6765,37 @@ export type Database = {
         Args: { p_resource_id: string; p_venue_text: string }
         Returns: string
       }
+      ensure_venue_coaches_group: {
+        Args: { p_venue_id: string }
+        Returns: string
+      }
+      sync_all_venue_coaches_groups: { Args: never; Returns: undefined }
+      sync_venue_coaches_group: {
+        Args: { p_venue_id: string }
+        Returns: undefined
+      }
+      sync_venue_coaches_group_of_resource: {
+        Args: { p_resource_id: string }
+        Returns: undefined
+      }
+      sync_venue_coaches_groups_for_team: {
+        Args: { p_team_id: string }
+        Returns: undefined
+      }
+      venue_coach_person_ids: {
+        Args: { p_venue_id: string }
+        Returns: string[]
+      }
+      venue_coaches_group_id: { Args: { p_venue_id: string }; Returns: string }
+      venue_coaching_staff: {
+        Args: { p_venue_id: string }
+        Returns: {
+          adult: boolean
+          in_group: boolean
+          person_id: string
+        }[]
+      }
+      venues_for_team: { Args: { p_team_id: string }; Returns: string[] }
       team_admits_sex: {
         Args: { p_sex: string; p_team_gender: string }
         Returns: boolean

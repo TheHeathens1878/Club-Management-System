@@ -79,6 +79,12 @@ export default async function ManagePitchesPage() {
             <Link href="/pitches" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <ChevronLeft className="h-4 w-4" /> Pitches
             </Link>
+            {/* The ground a pitch is on is edited there, not here: a venue
+                carries an address, arrival notes and a coaches' group, and
+                none of that belongs to one pitch. */}
+            <Link href="/venues" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              Venues
+            </Link>
             <Link href="/pitches/manage/new" className={buttonVariants({ size: "sm" })}>
               <Plus className="h-4 w-4" /> Add a pitch
             </Link>

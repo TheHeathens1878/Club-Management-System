@@ -54,6 +54,7 @@ import {
   LandPlot,
   LayoutDashboard,
   Mail,
+  MapPin,
   MessageSquare,
   Receipt,
   Settings,
@@ -461,6 +462,16 @@ export const NAV: readonly NavEntry[] = [
     href: "/pitches/manage",
     label: "Manage pitches",
     icon: Settings2,
+    group: "Pitches",
+    allowed: (c) => c.isClubAdmin || c.isCommittee,
+    views: ["admin"],
+  },
+  {
+    // The grounds those pitches are on: addresses, arrival notes, and the
+    // coaches' group each one fills for itself (20260901180000/190000).
+    href: "/venues",
+    label: "Venues",
+    icon: MapPin,
     group: "Pitches",
     allowed: (c) => c.isClubAdmin || c.isCommittee,
     views: ["admin"],
