@@ -42,6 +42,13 @@ export function contactField(position: number, key: ContactFieldKey): string {
 }
 
 /** Posted as "yes" when contact 1 should be the signed-in lead contact themselves. */
+/**
+ * Posted alongside the fieldset so a save can tell "they were not asked" from
+ * "they cleared both". An absent fieldset must never be read as an instruction
+ * to delete the numbers the club would ring in an emergency.
+ */
+export const EMERGENCY_FIELDS_PRESENT = "has_emergency_fields";
+
 export const USE_LEAD_FIELD = "ec_use_lead";
 
 export type PostedEmergencyContacts = {

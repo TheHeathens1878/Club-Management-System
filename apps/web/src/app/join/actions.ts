@@ -161,6 +161,7 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     return { error: "Please fill in the first address line, the town and the postcode." };
   }
   const phone = text(formData, "phone");
+  const sex = text(formData, "sex").toLowerCase();
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getUser();
@@ -202,14 +203,22 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
 
   // Signed out: this is the account creation, exactly like /register plus the
   // address. SG-10 refusals from the profiles guard come back verbatim.
-  const fullName = text(formData, "full_name");
+  const firstName = text(formData, "first_name");
+  const lastName = text(formData, "last_name");
+  const fullName = `${firstName} ${lastName}`.trim();
   const email = text(formData, "email");
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm_password") ?? "");
   const dob = text(formData, "dob");
 
-  if (fullName.length < 2 || !fullName.includes(" ")) {
-    return { error: "Please enter your first name and surname." };
+  // The two halves as typed (Adam, 2026-09-01), the same as /register — no
+  // recovering a surname from one string by taking its last word.
+  if (!firstName) return { error: "Please enter your first name." };
+  if (!lastName) return { error: "Please enter your last name." };
+  // "Biological sex (this is required for the FA's records)" — the club cannot
+  // enter a player into an age group without it.
+  if (sex !== "male" && sex !== "female") {
+    return { error: "Please choose your biological sex at birth." };
   }
   if (!EMAIL_RE.test(email)) return { error: "Please enter a valid email address." };
   if (password.length < MIN_PASSWORD) {
@@ -222,7 +231,15 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     email,
     password,
     options: {
-      data: { full_name: fullName, dob, phone: phone || null, address },
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        full_name: fullName,
+        dob,
+        phone: phone || null,
+        sex,
+        address,
+      },
       // The club's own domain, named here rather than left to the project's
       // Site URL (Adam, 2026-08-25: the link pointed at the old Vercel host).
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,

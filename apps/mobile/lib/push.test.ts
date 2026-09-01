@@ -83,6 +83,8 @@ describe("normalisePlatform", () => {
   it("maps the platforms we send from", () => {
     expect(normalisePlatform("ios")).toBe("ios");
     expect(normalisePlatform("Android")).toBe("android");
-    expect(normalisePlatform("macos")).toBe("web");
+    // Not "web": that value is reserved for a browser's Web Push
+    // subscription, and the database rejects an Expo token wearing it.
+    expect(normalisePlatform("macos")).toBe("unknown");
   });
 });

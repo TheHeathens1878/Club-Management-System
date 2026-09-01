@@ -59,7 +59,7 @@ const OUTCOME_LABELS: Record<PlayerOutcome, string> = {
  */
 export function JoinWizard({ signedIn, defaults }: {
   signedIn: boolean;
-  defaults: { fullName: string; email: string; phone: string };
+  defaults: { firstName: string; lastName: string; email: string; phone: string };
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [startError, setStartError] = useState<string | null>(null);
@@ -187,6 +187,22 @@ export function JoinWizard({ signedIn, defaults }: {
     });
   }
 
+  /**
+   * Adam, 2026-09-01: a photo over 5MB was refused, "when I chose a different
+   * file, the same error message remains and it won't let me click on send
+   * registration". The message outlived the file it was about, because it was
+   * only ever cleared by a save that succeeded — so the reader fixed the thing
+   * and was told it was still broken. It goes the moment they change anything.
+   */
+  function clearPlayerError(personId: string) {
+    setPlayerErrors((current) => {
+      if (!(personId in current)) return current;
+      const next = { ...current };
+      delete next[personId];
+      return next;
+    });
+  }
+
   function submitFinish() {
     const formData = new FormData();
     for (const person of people) {
@@ -268,13 +284,53 @@ export function JoinWizard({ signedIn, defaults }: {
               {!signedIn && (
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Two fields, as /register asks (Adam, 2026-09-01). One
+                        "Full name" had to be split by rule, and the rule takes
+                        the last word as the surname — a guess, and wrong for
+                        exactly the people it is worst to be wrong about. */}
                     <div className="space-y-1">
-                      <Label htmlFor="join-name">Full name</Label>
-                      <Input id="join-name" name="full_name" required defaultValue={defaults.fullName} />
+                      <Label htmlFor="join-first-name">First name</Label>
+                      <Input
+                        id="join-first-name"
+                        name="first_name"
+                        required
+                        autoComplete="given-name"
+                        defaultValue={defaults.firstName}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="join-last-name">Last name</Label>
+                      <Input
+                        id="join-last-name"
+                        name="last_name"
+                        required
+                        autoComplete="family-name"
+                        defaultValue={defaults.lastName}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="join-dob">Date of birth</Label>
                       <Input id="join-dob" name="dob" type="date" required />
+                    </div>
+                    {/* Adam, 2026-09-01: "biological sex (this is required for
+                        the FA's records)" — the club cannot enter a player into
+                        an age group without it. `people.sex` has held these two
+                        values since 20260825500000. */}
+                    <div className="space-y-1">
+                      <Label htmlFor="join-sex">Biological sex at birth</Label>
+                      <select
+                        id="join-sex"
+                        name="sex"
+                        required
+                        defaultValue=""
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <option value="" disabled>
+                          Choose…
+                        </option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                      </select>
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="join-email">Email</Label>
@@ -318,13 +374,37 @@ export function JoinWizard({ signedIn, defaults }: {
                   <input type="checkbox" name="playing" value="yes" defaultChecked className="h-4 w-4" />
                   I will be playing
                 </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" name="registering_others" value="yes" className="h-4 w-4" />
-                  I am registering children or other family members
+                {/* "Other family members" was the club's word for it and not
+                    the reader's (Adam, 2026-09-01: the description "should say
+                    adult players in the club"). A connected adult is not a
+                    relative in the abstract — it is a grown-up who plays here
+                    and whose membership sits with yours. */}
+                <label className="flex items-start gap-2 text-sm">
+                  <input type="checkbox" name="registering_others" value="yes" className="mt-0.5 h-4 w-4" />
+                  <span>
+                    I am registering children, or adult players in the club whose membership sits
+                    with mine
+                  </span>
                 </label>
               </fieldset>
 
-              {startError && <p className="text-sm text-destructive">{startError}</p>}
+              {startError && (
+                <div className="space-y-1">
+                  <p className="text-sm text-destructive">{startError}</p>
+                  {/* When what is missing lives on the profile rather than on
+                      this form, say where to go AND bring them back — the round
+                      trip is the whole point (Adam, 2026-09-01: after saving "it
+                      should take you back to the Joining the club workflow"). */}
+                  {/profile|date of birth/i.test(startError) && (
+                    <a
+                      href="/profile?next=/join"
+                      className="inline-block text-sm font-medium underline underline-offset-2"
+                    >
+                      Complete your profile, then come straight back here
+                    </a>
+                  )}
+                </div>
+              )}
               <Button type="submit" disabled={pending}>
                 {pending ? "Saving…" : "Continue"}
               </Button>
@@ -340,8 +420,9 @@ export function JoinWizard({ signedIn, defaults }: {
               <Users className="h-4 w-4" /> Your people ({people.length} of {MAX_HOUSEHOLD})
             </CardTitle>
             <p className="text-sm text-muted-foreground">
-              Add everyone this membership covers. One person is an individual membership; two to
-              six become a family membership.
+              Add everyone this membership covers — your children, and any adult players in the
+              club whose membership sits with yours. One person is an individual membership; two
+              to six become a family membership.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -441,6 +522,7 @@ export function JoinWizard({ signedIn, defaults }: {
               isAdmin={isAdmin}
               outcome={outcomes[player.personId]}
               error={playerErrors[player.personId]}
+              onClearError={() => clearPlayerError(player.personId)}
               pending={pending}
               onSubmit={(formData) => submitPlayer(player, formData)}
             />
@@ -539,6 +621,7 @@ function PlayerPanel({
   isAdmin,
   outcome,
   error,
+  onClearError,
   pending,
   onSubmit,
 }: {
@@ -551,6 +634,8 @@ function PlayerPanel({
   isAdmin: boolean;
   outcome?: PlayerOutcome;
   error?: string;
+  /** Drop the message as soon as the reader changes what it was about. */
+  onClearError: () => void;
   pending: boolean;
   onSubmit: (formData: FormData) => void;
 }) {
@@ -579,7 +664,13 @@ function PlayerPanel({
         </p>
       </CardHeader>
       <CardContent>
-        <form action={onSubmit} className="space-y-4">
+        <form
+          action={onSubmit}
+          className="space-y-4"
+          onChange={() => {
+            if (error) onClearError();
+          }}
+        >
           {/* The two bands and the sex rule, applied where the choice is
               made (Adam, 2026-08-26) — and re-applied by
               `registrations_guard()` when the row is written. The "no team
@@ -630,7 +721,15 @@ function PlayerPanel({
             </label>
           )}
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2">
+              <p className="text-sm text-destructive">{error}</p>
+              <p className="mt-1 text-xs text-destructive/80">
+                {player.firstName} is not saved yet, so the registration cannot be sent. Put it
+                right above and press Save player again.
+              </p>
+            </div>
+          )}
           <Button type="submit" size="sm" disabled={pending}>
             {pending ? "Saving…" : "Save player"}
           </Button>

@@ -9,12 +9,13 @@
 import { useActionState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { TownCountyFields } from "@/components/town-county-fields";
 import { EmergencyContactsFields } from "@/components/emergency-contacts-fields";
-import type { EmergencyContact } from "@/lib/emergency-contacts";
+import { EMERGENCY_FIELDS_PRESENT, type EmergencyContact } from "@/lib/emergency-contacts";
 
-import { updateContactDetails, updateEmergencyContacts, type ProfileActionState } from "./actions";
+import { updateProfile, type ProfileActionState } from "./actions";
 
 export type ContactDetails = {
   preferredName: string;
@@ -29,14 +30,41 @@ export type ContactDetails = {
   postcode: string;
 };
 
-export function ContactDetailsForm({ initial }: { initial: ContactDetails }) {
+export function ProfileForm({
+  initial,
+  emergencyContacts,
+  personName,
+  showEmergency,
+  next,
+}: {
+  initial: ContactDetails;
+  emergencyContacts: EmergencyContact[];
+  /** Whose contacts these are, for the fieldset's own wording. */
+  personName: string;
+  /** Only a player is asked for emergency contacts. */
+  showEmergency: boolean;
+  /** Where to go after saving — the join wizard sends people here and back. */
+  next: string | null;
+}) {
   const [state, action, pending] = useActionState<ProfileActionState, FormData>(
-    updateContactDetails,
+    updateProfile,
     {},
   );
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="space-y-6">
+      {/* Where to go after saving. The join wizard sends people here for the
+          one thing it is missing and expects them back (Adam, 2026-09-01). */}
+      {next && <input type="hidden" name="next" value={next} />}
+
+      <Card>
+        <CardHeader className="p-4 lg:p-6">
+          <CardTitle className="text-base">Contact details</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            These are yours to keep current — the club uses them to reach you.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="preferred-name">Known as</Label>
@@ -119,6 +147,38 @@ export function ContactDetailsForm({ initial }: { initial: ContactDetails }) {
         </div>
       </fieldset>
 
+        </CardContent>
+      </Card>
+
+      {/* Only a player is asked for these (Adam, 2026-08-26): they are who the
+          club rings when something happens to somebody on a pitch. Tick "I am a
+          player" above, save, and the card appears. */}
+      {showEmergency && (
+        <Card>
+          <CardHeader className="p-4 lg:p-6">
+            <CardTitle className="text-base">Emergency contacts</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Who the club rings if something happens to you — an injury at training, or anything
+              at a match that means somebody has to be told now. Up to two, and the first is tried
+              first. Kept on your record, so they are asked for once rather than on every
+              registration form.
+            </p>
+          </CardHeader>
+          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+            {/* Says the fieldset was on screen, so an absent one is never read
+                as "clear them". */}
+            <input type="hidden" name={EMERGENCY_FIELDS_PRESENT} value="yes" />
+            <EmergencyContactsFields
+              idPrefix="profile"
+              initial={emergencyContacts}
+              lead={null}
+              personName={personName}
+              requireFirst={false}
+            />
+          </CardContent>
+        </Card>
+      )}
+
       {state.error && (
         <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {state.error}
@@ -137,56 +197,6 @@ export function ContactDetailsForm({ initial }: { initial: ContactDetails }) {
         className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
       >
         {pending ? "Saving…" : "Save changes"}
-      </Button>
-    </form>
-  );
-}
-
-/**
- * The caller's own emergency contacts (Adam, 2026-08-25). Nobody is "the lead
- * contact" for themselves, so the tick-box is not offered; contact 1 is
- * optional here — the registration is what insists on one.
- */
-export function OwnEmergencyContactsForm({
-  initial,
-  personName,
-}: {
-  initial: EmergencyContact[];
-  personName: string;
-}) {
-  const [state, action, pending] = useActionState<ProfileActionState, FormData>(
-    updateEmergencyContacts,
-    {},
-  );
-
-  return (
-    <form action={action} className="space-y-4">
-      <EmergencyContactsFields
-        idPrefix="profile"
-        initial={initial}
-        lead={null}
-        personName={personName}
-        requireFirst={false}
-      />
-
-      {state.error && (
-        <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {state.error}
-        </p>
-      )}
-      {state.notice && (
-        <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-          {state.notice}
-        </p>
-      )}
-
-      <Button
-        type="submit"
-        size="sm"
-        disabled={pending}
-        className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
-      >
-        {pending ? "Saving…" : "Save contacts"}
       </Button>
     </form>
   );

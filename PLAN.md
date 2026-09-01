@@ -27,7 +27,8 @@ The club currently runs four separate systems:
 
 1. **Never run destructive SQL against the production project directly.** All schema changes go through Supabase CLI migrations in the repo, rehearsed on a Supabase branch first.
 2. **RLS on every table, written with the table, not after.** A migration adding a table without policies fails review.
-3. **No auto-merge** on any PR touching: member/person data, safeguarding module, messaging, auth, payments, or RLS policies. These require human review from Adam. (This applies to Finn-loop `finn-review` too.)
+3. **A written review before merge** on any PR touching: member/person data, safeguarding module, messaging, auth, payments, or RLS policies. Adam handed the merge itself to Claude on 2026-09-01 — *"you merge it for me. Change the rules if you need to"* — after a run of PRs sat green and waiting on a click. What was never the point of this rule is the click; what was the point is that somebody looks. So these PRs no longer wait, and in exchange each one must say **in its own body**, under the four §11 headings, what it touches and why it is safe — and Claude does not merge one until that has actually been written and is true. An empty "RLS: none" on a PR that changes a policy is the failure this rule exists to catch. (This applies to Finn-loop `finn-review` too.)
+   - **Still stops for Adam:** a PR that weakens a §2.4 safeguarding invariant. SAFEGUARDING.md §6.2 requires a weakening to be recorded with its reason and signed off, and a signature is not something a delegation can hand over.
 4. **Safeguarding invariants are enforced in the database** (RLS/constraints/triggers), never only in application UI:
    - No conversation may contain exactly one adult and one minor with no guardian participant.
    - Messages are soft-deleted only; no hard deletes of messages or audit rows.

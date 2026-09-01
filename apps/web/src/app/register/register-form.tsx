@@ -15,10 +15,13 @@ export function RegisterForm({
   logoUrl,
   logoAlt,
   clubName,
+  asReferee = false,
 }: {
   logoUrl: string | null;
   logoAlt: string;
   clubName: string;
+  /** Arrived from the sign-in page's "Register as a referee" door. */
+  asReferee?: boolean;
 }) {
   const [state, action, pending] = useActionState<RegisterState, FormData>(registerAccount, {});
   const today = new Date().toISOString().slice(0, 10);
@@ -99,24 +102,54 @@ export function RegisterForm({
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           {logo}
-          <CardTitle className="text-2xl">Create an account</CardTitle>
+          <CardTitle className="text-2xl">
+            {asReferee ? "Register as a referee" : "Create an account"}
+          </CardTitle>
           <CardDescription>
-            Join {clubName}. Once you are in you can tell us whether you are a player, a parent, or
-            a coach — a club administrator approves that part.
+            {asReferee ? (
+              <>
+                Referee for {clubName}. This creates your account and puts your name in front of a
+                club administrator — once they approve it, the games that need a referee appear in
+                the Referees group for you to claim.
+              </>
+            ) : (
+              <>
+                Join {clubName}. Once you are in you can tell us whether you are a player, a parent,
+                a coach or a referee — a club administrator approves that part.
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">
-            <div className="space-y-1.5">
-              <Label htmlFor="full_name">Full name</Label>
-              <Input
-                id="full_name"
-                name="full_name"
-                required
-                autoComplete="name"
-                defaultValue={v?.fullName ?? ""}
-                placeholder="Jane Smith"
-              />
+            {asReferee && <input type="hidden" name="requested_role" value="referee" />}
+            {/* Two fields, not one (Adam, 2026-09-01). A single "Full name"
+                had to be split by rule, and the rule takes the last word as the
+                surname — which is a guess, and wrong for exactly the people it
+                is worst to be wrong about. Asking is cheaper than guessing. */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="first_name">First name</Label>
+                <Input
+                  id="first_name"
+                  name="first_name"
+                  required
+                  autoComplete="given-name"
+                  defaultValue={v?.firstName ?? ""}
+                  placeholder="Jane"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="last_name">Last name</Label>
+                <Input
+                  id="last_name"
+                  name="last_name"
+                  required
+                  autoComplete="family-name"
+                  defaultValue={v?.lastName ?? ""}
+                  placeholder="Smith"
+                />
+              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -169,20 +202,47 @@ export function RegisterForm({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="phone">Phone (optional)</Label>
+              <Label htmlFor="sex">Biological sex at birth</Label>
+              <select
+                id="sex"
+                name="sex"
+                required
+                defaultValue={v?.sex ?? ""}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="" disabled>
+                  Choose…
+                </option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Required. The FA registers players in age groups by sex at birth, so the club
+                cannot enter a player without it. Like your date of birth, it is visible only to
+                club administrators.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="phone">Phone</Label>
               <Input
                 id="phone"
                 name="phone"
                 type="tel"
+                required
                 autoComplete="tel"
                 defaultValue={v?.phone ?? ""}
                 placeholder="07700 900000"
               />
+              <p className="text-xs text-muted-foreground">
+                Required. A coach calling off a match on a wet Saturday morning needs a number
+                that reaches you, and email will not do it in time.
+              </p>
             </div>
 
             <Button type="submit" className="w-full" disabled={pending}>
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              Create account
+              {asReferee ? "Create account and ask to referee" : "Create account"}
             </Button>
           </form>
 

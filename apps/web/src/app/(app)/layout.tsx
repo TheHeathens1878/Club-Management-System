@@ -12,6 +12,8 @@ import { mobileTabsFor } from "@/lib/mobile-nav";
 import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
 import { MobileHeader } from "@/components/mobile-header";
 import { MobileTabBar, type MobileTabItem } from "@/components/mobile-tab-bar";
+import { NotificationPrompt } from "@/components/notification-prompt";
+import { getCurrentPersonId } from "@/lib/person";
 import { RoleSwitcher } from "@/components/role-switcher";
 
 /**
@@ -54,6 +56,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // five-slot tab bar underneath — the view's front doors plus More. Icons are
   // rendered here so the capability-scoped list stays a server concern.
   const unread = await loadUnreadNotificationCount();
+  // Who the browser would be registering a device for (Adam, 2026-09-01: "ask
+  // the user to create the app as a web app with notifications enabled"). Null
+  // for a sign-in not yet linked to a member record — there is nobody to
+  // address a push to, so the prompt stays away.
+  const personId = await getCurrentPersonId();
   const tabs: MobileTabItem[] = mobileTabsFor(view, capabilities).map((tab) => {
     const Icon = tab.icon;
     return {
@@ -71,8 +78,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     moreFallback: true,
   });
 
+  // `min-h-[100dvh]`, not `min-h-screen`: `vh` is the viewport with the URL bar
+  // hidden, so on a phone a `min-h-screen` shell is taller than the screen
+  // actually showing, and every page inherits a stray scroll of exactly the
+  // bar's height (Adam, 2026-09-01).
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="flex min-h-[100dvh] flex-col lg:flex-row">
+      {/* Install-and-notifications, for signed-in members only. It draws
+          itself fixed above the tab bar, so its place in the tree is
+          immaterial; it renders nothing at all when there is no VAPID key,
+          when this browser is already subscribed, or when it has been
+          dismissed recently. */}
+      <NotificationPrompt personId={personId} />
+
       {/* The ink rail (crest design): dark sidebar against paper content.
           `.theme-ink` remaps the semantic tokens, so everything inside — the
           bell, ghost buttons, badges — adapts without bespoke styling. On a
@@ -151,8 +169,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       />
 
       {/* Bottom padding clears the fixed tab bar (plus the home indicator's
-          safe area) so nothing ends underneath it. */}
-      <main className="flex-1 overflow-x-clip bg-background pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-0">
+          safe area) so nothing ends underneath it — measured from the bar
+          itself now via `--tab-bar-h`, rather than the 64px this used to
+          guess at while the bar was 55px (globals.css). */}
+      <main className="flex-1 overflow-x-clip bg-background pb-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom))] lg:pb-0">
         {children}
       </main>
 

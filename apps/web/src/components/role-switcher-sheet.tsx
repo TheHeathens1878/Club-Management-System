@@ -14,15 +14,25 @@
  * calls the same `switchRoleView` action as the sidebar dropdown; everything is
  * re-validated server-side before the cookie is written.
  *
+ * Adam, 2026-09-01: "when you click on a club (viewing as) it should confirm
+ * and auto-close the popup down rather than you having to click off." The
+ * header's sheet lives in the persistent layout, so switching used to leave it
+ * sitting open — and with the body still scroll-locked — on top of the view it
+ * had just changed. The chosen row now takes the tick and a spinner while the
+ * round-trip runs, and `useRoleSwitcher` closes the sheet the moment the new
+ * hat comes back down in `current`; see that hook for why the action's own
+ * promise is not the signal to close on.
+ *
  * One option renders the trigger inert — nothing to switch to.
  */
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect } from "react";
 import {
   Baby,
   Check,
   ChevronsUpDown,
   DoorOpen,
+  Loader2,
   Megaphone,
   ShieldCheck,
   Shirt,
@@ -30,8 +40,9 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { switchRoleView } from "@/app/(app)/welcome/actions";
 import type { RoleSwitcherOption } from "@/components/role-switcher";
+import { useRoleSwitcher } from "@/components/use-role-switcher";
+import { roleSwitchAnnouncement } from "@/lib/role-view";
 
 /** The design keys the row icon off the KIND of hat, not the team. */
 const VIEW_ICONS: Record<string, LucideIcon> = {
@@ -56,20 +67,15 @@ export function RoleSwitcherSheet({
   current: string;
   trigger: "role-line" | "tile";
 }) {
-  const [open, setOpen] = useState(false);
-  const [switching, startTransition] = useTransition();
+  const { open, pending, stalled, busy, openPanel, dismiss, choose, triggerRef, panelRef } =
+    useRoleSwitcher(current);
 
   useEffect(() => {
     if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
     // The page behind the sheet should not scroll under a thumb.
     const previous = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     return () => {
-      document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = previous;
     };
   }, [open]);
@@ -77,16 +83,24 @@ export function RoleSwitcherSheet({
   const active = options.find((option) => option.value === current) ?? options[0];
   if (!active) return null;
   const single = options.length <= 1;
+  const pendingOption = pending ? options.find((option) => option.value === pending) : undefined;
+  const announcement = roleSwitchAnnouncement(
+    pendingOption ? `${pendingOption.role}${pendingOption.scope ? `, ${pendingOption.scope}` : ""}` : null,
+    stalled,
+  );
 
   const triggerNode =
     trigger === "role-line" ? (
       <button
+        ref={triggerRef}
         type="button"
-        disabled={single || switching}
-        onClick={() => setOpen(true)}
+        disabled={single}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => (open ? dismiss() : openPanel())}
         className={
           "flex min-h-[28px] items-center gap-1 text-left text-[11.5px] leading-tight text-accent " +
-          (switching ? "opacity-60" : "")
+          (busy ? "opacity-60" : "")
         }
       >
         <span className="truncate">
@@ -97,12 +111,15 @@ export function RoleSwitcherSheet({
       </button>
     ) : (
       <button
+        ref={triggerRef}
         type="button"
-        disabled={single || switching}
-        onClick={() => setOpen(true)}
+        disabled={single}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => (open ? dismiss() : openPanel())}
         className={
           "flex w-full items-center gap-3 rounded-lg border border-accent/40 bg-accent/15 px-3.5 py-3 text-left " +
-          (switching ? "opacity-60" : "")
+          (busy ? "opacity-60" : "")
         }
       >
         <span className="min-w-0 flex-1">
@@ -130,15 +147,17 @@ export function RoleSwitcherSheet({
       {triggerNode}
       {open ? (
         <div
+          ref={panelRef}
           className="fixed inset-0 z-50 flex flex-col justify-end"
           role="dialog"
           aria-modal="true"
           aria-label="Viewing as"
+          aria-busy={busy}
         >
           <button
             type="button"
             aria-label="Close"
-            onClick={() => setOpen(false)}
+            onClick={dismiss}
             className="absolute inset-0 bg-black/45"
           />
           <div className="relative max-h-[85vh] overflow-y-auto rounded-t-2xl bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3 text-card-foreground shadow-2xl">
@@ -154,30 +173,24 @@ export function RoleSwitcherSheet({
             </div>
             {options.map((option) => {
               const isActive = option.value === current;
+              const isPending = option.value === pending;
               const Icon = VIEW_ICONS[viewOf(option.value)] ?? UserCircle;
               return (
                 <button
                   key={option.value}
                   type="button"
-                  disabled={switching}
-                  onClick={() => {
-                    if (option.value === current) {
-                      setOpen(false);
-                      return;
-                    }
-                    startTransition(() => {
-                      void switchRoleView(option.value);
-                    });
-                  }}
+                  disabled={busy}
+                  onClick={() => choose(option.value)}
                   className={
                     "flex w-full items-center gap-3 border-t border-border/60 px-5 py-3.5 text-left first-of-type:border-t-0 " +
-                    (isActive ? "bg-accent/10" : "active:bg-secondary/60")
+                    (isActive || isPending ? "bg-accent/10" : "active:bg-secondary/60") +
+                    (busy && !isPending ? " opacity-50" : "")
                   }
                 >
                   <span
                     className={
                       "inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg " +
-                      (isActive
+                      (isActive || isPending
                         ? "bg-accent text-accent-foreground"
                         : "bg-secondary text-secondary-foreground")
                     }
@@ -188,23 +201,40 @@ export function RoleSwitcherSheet({
                     <span
                       className={
                         "block truncate text-sm leading-tight " +
-                        (isActive ? "font-semibold" : "font-normal")
+                        (isActive || isPending ? "font-semibold" : "font-normal")
                       }
                     >
                       {option.role}
                     </span>
                     <span className="block truncate text-xs leading-tight text-muted-foreground">
-                      {option.scope}
+                      {isPending && !stalled ? "Switching…" : option.scope}
                     </span>
                   </span>
-                  {isActive && <Check className="h-5 w-5 flex-none text-accent" />}
+                  {isPending && !stalled ? (
+                    <Loader2 className="h-5 w-5 flex-none animate-spin text-accent" />
+                  ) : isActive ? (
+                    <Check className="h-5 w-5 flex-none text-accent" />
+                  ) : null}
                 </button>
               );
             })}
+            {/* The greyed row is not enough on its own — say what is happening. */}
+            <p
+              role="status"
+              aria-live="polite"
+              className={
+                announcement
+                  ? "px-5 pt-3 text-[12px] leading-snug " +
+                    (stalled ? "text-destructive" : "text-muted-foreground")
+                  : "sr-only"
+              }
+            >
+              {announcement}
+            </p>
             <div className="px-5 pt-4">
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={dismiss}
                 className="w-full rounded-lg border border-border py-3.5 text-center text-sm font-semibold"
               >
                 Cancel

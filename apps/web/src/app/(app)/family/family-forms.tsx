@@ -449,7 +449,18 @@ export function RegisterForm({
   }
 
   return (
-    <form action={submit} className="space-y-5 rounded-lg border bg-secondary/20 p-4">
+    <form
+      action={submit}
+      className="space-y-5 rounded-lg border bg-secondary/20 p-4"
+      onChange={() => {
+        // Adam, 2026-09-01: a photo over 5MB was refused, "when I chose a
+        // different file, the same error message remains". The message was only
+        // cleared by a save that worked, so somebody who fixed the thing was
+        // still being told it was broken — and the refusal is about a file that
+        // is no longer the one in the box.
+        if (state.error) setState({});
+      }}
+    >
       <p className="text-sm">
         Registering <span className="font-medium">{personName}</span>
         {seasonName ? ` for ${seasonName}` : ""}.
@@ -652,11 +663,14 @@ export function AppAccessForm({
   childName,
   consent,
   minAccountAge,
+  dob,
 }: {
   childPersonId: string;
   childName: string;
   consent: { id: string; grantedAt: string } | null;
   minAccountAge: number;
+  /** The child's date of birth, so the screen can name the day access starts. */
+  dob: string | null;
 }) {
   const [grantState, grantAction, granting] = useActionState<FamilyActionState, FormData>(
     allowAppAccess,
@@ -666,6 +680,32 @@ export function AppAccessForm({
     withdrawAppAccess,
     {},
   );
+
+  // Adam, 2026-09-01: "it must only allow access on the 13th birthday and must
+  // say this under grant access."
+  //
+  // The database has always been the one that decides: SG-10's guard on
+  // `profiles` refuses an account to anyone below min_account_age, so a consent
+  // granted early buys nothing. What it does do is mislead — the badge reads
+  // "App access allowed" and the child cannot have an account for years. So the
+  // button waits for the day, and says which day it is waiting for.
+  const eligibleFrom = (() => {
+    if (!dob) return null;
+    const birth = new Date(`${dob}T00:00:00Z`);
+    if (Number.isNaN(birth.getTime())) return null;
+    const at = new Date(birth);
+    at.setUTCFullYear(at.getUTCFullYear() + minAccountAge);
+    return at;
+  })();
+  const notYet = !!eligibleFrom && eligibleFrom.getTime() > Date.now();
+  const eligibleLabel = eligibleFrom
+    ? eligibleFrom.toLocaleDateString("en-GB", {
+        timeZone: "Europe/London",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      })
+    : null;
 
   return (
     <div className="space-y-3">
@@ -696,20 +736,37 @@ export function AppAccessForm({
           </form>
         </div>
       ) : (
-        <div className="flex flex-wrap items-center gap-3">
-          <Badge variant="muted">No app access</Badge>
-          <form action={grantAction} className="w-full lg:w-auto">
-            <input type="hidden" name="child_person_id" value={childPersonId} />
-            <Button
-              type="submit"
-              size="sm"
-              variant="outline"
-              disabled={granting}
-              className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
-            >
-              {granting ? "Recording…" : "Allow app access"}
-            </Button>
-          </form>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge variant="muted">No app access</Badge>
+            <form action={grantAction} className="w-full lg:w-auto">
+              <input type="hidden" name="child_person_id" value={childPersonId} />
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                disabled={granting || notYet}
+                className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+              >
+                {granting ? "Recording…" : "Allow app access"}
+              </Button>
+            </form>
+          </div>
+          {/* The sentence sits UNDER the button, which is where somebody who has
+              just tried to press it is looking. */}
+          {notYet ? (
+            <p className="text-sm text-amber-800">
+              Not yet — {childName} can have their own login from{" "}
+              <span className="font-medium">{eligibleLabel}</span>, their {minAccountAge}th
+              birthday. Allowing it before then would record a permission that cannot take effect,
+              so the button waits: come back on the day and it will work.
+            </p>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {childName} is {minAccountAge} or over, so this takes effect as soon as it is
+              recorded.
+            </p>
+          )}
         </div>
       )}
 

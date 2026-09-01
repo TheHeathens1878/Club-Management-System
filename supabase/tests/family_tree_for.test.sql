@@ -30,7 +30,17 @@ insert into public.person_roles (person_id, role, granted_by)
 
 -- The parent's family: one child, and an ex-partner who also guards that child.
 insert into public.people (id, first_name, last_name, dob) values
-  ('c5c5c5c5-2713-4111-8111-000000000001', 'Kit', 'Parent', (current_date - interval '10 years')::date),
+  -- Ten years before the start of the CURRENT season, in January — not ten
+  -- years before today. A U-band is measured from the season, which turns
+  -- over mid-year, so a rolling dob crosses that line and the child silently
+  -- drops a band: this fixture was U11 all summer and became a U10 on the
+  -- day the 2026/27 season began (CI, 2026-09-01). The season expression is
+  -- the one the function itself uses; a January birthday is nowhere near the
+  -- 1 September boundary, so the band is U11 in every season.
+  ('c5c5c5c5-2713-4111-8111-000000000001', 'Kit', 'Parent',
+   make_date((case when extract(month from current_date) >= 7
+                   then extract(year from current_date)::int
+                   else extract(year from current_date)::int - 1 end) - 10, 1, 15)),
   ('c5c5c5c5-2713-4111-8111-000000000002', 'Ex',  'Partner', '1986-04-04');
 insert into public.guardianships (guardian_person_id, child_person_id, relationship) values
   (current_setting('ft.parent')::uuid, 'c5c5c5c5-2713-4111-8111-000000000001', 'parent'),

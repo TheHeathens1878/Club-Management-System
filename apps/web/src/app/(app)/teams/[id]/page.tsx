@@ -120,7 +120,17 @@ export default async function TeamPage({
   // to the member ones. The data gates above are unchanged — this is only
   // which button the page draws.
   const view = resolveRoleView(await getStoredRoleView(), capabilities);
-  const staffTools = canManageTeam && view !== "parent" && view !== "player" && view !== "me";
+  // Parent, Player and Me are the views a person wears to look at the team as
+  // a member of it. Everything a manager does is off in all three — for a
+  // coach, and for a club administrator too (Adam, 2026-09-01: "parents should
+  // not see the team settings tab whilst using that role, even if they are a
+  // coach or admin").
+  const memberView = view === "parent" || view === "player" || view === "me";
+  const staffTools = canManageTeam && !memberView;
+  // The committee's own furniture — Subs, Settings, and the Full-Time badge in
+  // the header — answers to the hat as well. Being on the committee is what
+  // ADMITS you to it; wearing a member's hat is what puts it away.
+  const committeeTools = committee && !memberView;
   // Adam, 2026-08-25: "make sure coaches cannot assign pitches". Allocation
   // — the season in one go, and the team's home-pitch defaults the allocator
   // starts from — is the club admin's, and only while wearing the admin hat.
@@ -133,13 +143,16 @@ export default async function TeamPage({
 
   // --------------------------------------------------------------------
   // What every tab needs: the team itself, the pitch list behind the home
-  // pitch badge, and — for the committee only — the Full-Time link that the
-  // header condenses into a badge. A coach never triggers the Full-Time read.
+  // pitch badge, and — for the committee wearing a committee hat — the
+  // Full-Time link that the header condenses into a badge. A coach never
+  // triggers the Full-Time read, and neither does an administrator looking at
+  // their own child's team as a parent: whether a team is linked to the FA
+  // feed is a thing the club does, not a thing the team's families see.
   // --------------------------------------------------------------------
   const [teamResult, matchDayPitches, linkRow] = await Promise.all([
     admin.from("teams").select("*").eq("id", id).maybeSingle(),
     loadPitches(),
-    committee
+    committeeTools
       ? admin
           .from("team_fulltime_links")
           .select("*")
@@ -187,7 +200,7 @@ export default async function TeamPage({
     // calendars" — the same instinct, applied to the tabs).
     ...(staffTools ? [{ key: "squad", label: "Squad" } as TeamTab] : []),
     { key: "training", label: "Training" },
-    ...(committee
+    ...(committeeTools
       ? [
           { key: "subs", label: "Subs" } as TeamTab,
           { key: "settings", label: "Settings" } as TeamTab,
@@ -611,7 +624,7 @@ export default async function TeamPage({
   // link and the importer with its run history. Admin-only by tab guard,
   // and every write still meets the same RLS as anywhere else.
   // --------------------------------------------------------------------
-  if (tab === "settings" && committee) {
+  if (tab === "settings" && committeeTools) {
     const [seasonsResult, runRows, clubNameResult] = await Promise.all([
       userClient
         .from("seasons")
@@ -683,7 +696,7 @@ export default async function TeamPage({
     payerName: string | null;
   };
   let subsRows: SubsRow[] = [];
-  if (tab === "subs" && committee) {
+  if (tab === "subs" && committeeTools) {
     const { data: roster } = await admin
       .from("team_memberships")
       .select("person_id,people(first_name,last_name,preferred_name)")
@@ -1447,7 +1460,7 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {/* Settings — admin-only: match day, Full-Time link, import runs    */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "settings" && committee && (
+        {tab === "settings" && committeeTools && (
           <div className="space-y-6">
             {/* Where this team plays and how long a match takes. Written
                 through the caller's own client, so `teams_staff_update` lets a
@@ -1620,7 +1633,7 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {/* Subs — committee only: who is billed what, player by player      */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "subs" && committee && (
+        {tab === "subs" && committeeTools && (
           <Card>
             <CardHeader>
               <CardTitle>Subs</CardTitle>

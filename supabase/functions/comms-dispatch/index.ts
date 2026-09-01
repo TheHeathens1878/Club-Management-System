@@ -5,11 +5,19 @@
 // alone.
 //
 // WHAT IT DOES. Drains up to 100 `queued` rows from `outbound_messages` and
-// hands each to its provider — Microsoft Graph for email, Twilio for SMS, Expo for push,
-// nothing at all for in_app (the row itself is the message; marking it sent is
-// the delivery). Every row ends the run in a terminal state: `sent` or
-// `failed`. There is no retry loop and no back-off timer here; a failed row is
-// a row a human or a later feature decides what to do with.
+// hands each to its provider — Microsoft Graph for email, Twilio for SMS, Expo
+// and/or Web Push for push, nothing at all for in_app (the row itself is the
+// message; marking it sent is the delivery). Every row ends the run in a
+// terminal state: `sent` or `failed`. There is no retry loop and no back-off
+// timer here; a failed row is a row a human or a later feature decides what to
+// do with.
+//
+// TWO KINDS OF PUSH, ONE ROW. A person may hold native app installs (Expo
+// tokens) and browsers on their Home Screen (Web Push subscriptions) at the
+// same time. Both are rows in `push_tokens`, told apart by `platform`, and the
+// message is sent to both. One `outbound_messages` row is one MESSAGE, not one
+// delivery, so it is marked `sent` if it reached any device and `failed` only
+// if every device refused it.
 //
 // A missing provider secret is DATA, not an exception: those rows are marked
 // failed with a message that names the secret, the other channels still go, and
@@ -30,9 +38,19 @@ type OutboundRow = {
   template: string | null;
   entity: string | null;
   entity_id: string | null;
+  link: string | null;
 };
 
-type PushToken = { token: string; platform: string | null };
+type WebSubscription = {
+  endpoint: string;
+  keys: { p256dh: string; auth: string };
+};
+
+type PushToken = {
+  token: string;
+  platform: string | null;
+  web_subscription: WebSubscription | null;
+};
 
 type Delivery = { ok: true; provider: string; ref: string | null } | { ok: false; error: string };
 
@@ -142,18 +160,7 @@ type ExpoTicket = {
   details?: { error?: string } | null;
 };
 
-async function sendPush(admin: Client, row: OutboundRow): Promise<Delivery> {
-  if (!row.person_id) return { ok: false, error: "push needs a person_id" };
-
-  const { data, error } = await admin
-    .from("push_tokens")
-    .select("token, platform")
-    .eq("person_id", row.person_id);
-  if (error) return { ok: false, error: `push_tokens: ${error.message}` };
-
-  const tokens = ((data ?? []) as PushToken[]).map((t) => t.token).filter((t) => t.length > 0);
-  if (tokens.length === 0) return { ok: false, error: "no registered device for this person" };
-
+async function sendExpo(admin: Client, row: OutboundRow, tokens: string[]): Promise<Delivery> {
   const messages = tokens.map((to) => ({
     to,
     title: row.subject ?? "AoM Sports Club",

@@ -29,6 +29,18 @@
     --input: 30 12% 85%;
     --ring: 12 75% 44%;
     --radius: 0.75rem;
+
+    /*
+     * The phone shell's two fixed strips, named once so that nothing has to
+     * guess at them again. They used to be guessed at, and disagreed: `<main>`
+     * padded itself by a hardcoded 64px to clear a tab bar that is really 55px
+     * tall, and the message composer offset ITSELF by that same wrong 64px on
+     * top of the padding. Between them they put the bottom of a conversation
+     * somewhere no gesture could reach (Adam, 2026-09-01: "you can't actually
+     * scroll to the bottom to see the details").
+     */
+    --mobile-header-h: 3.5rem; /* MobileHeader — below lg only */
+    --tab-bar-h: 55px; /* MobileTabBar: a 54px tab plus its hairline top border */
   }
 
   .dark {
@@ -89,6 +101,38 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  /*
+   * A route that fills the phone screen exactly — from under the sticky
+   * MobileHeader down to the top of the fixed tab bar — and cancels the bottom
+   * padding `<main>` adds to clear that bar, so the DOCUMENT itself does not
+   * scroll at all. Whatever is inside then becomes the only scroller, which is
+   * the whole point: a conversation with two or three referee cards in it had
+   * the page and the message list fighting over one flick, and the last card
+   * ended up underneath the composer with nothing left to scroll (Adam,
+   * 2026-09-01).
+   *
+   * `dvh`, not `vh`: on iOS the large viewport is the one with the URL bar
+   * hidden, so a `vh` shell is taller than the screen the moment the bar is
+   * showing — which is the same bug again, in a different disguise.
+   *
+   * Above lg the sidebar shell takes over and this is an ordinary block.
+   */
+  .app-shell-fill {
+    height: calc(
+      100dvh - var(--mobile-header-h) - var(--tab-bar-h) - env(safe-area-inset-bottom)
+    );
+    margin-bottom: calc(-1 * (var(--tab-bar-h) + env(safe-area-inset-bottom)));
+  }
+
+  @media (min-width: 1024px) {
+    .app-shell-fill {
+      height: auto;
+      margin-bottom: 0;
+    }
   }
 }
 

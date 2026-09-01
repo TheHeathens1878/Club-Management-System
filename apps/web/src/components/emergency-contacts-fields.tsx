@@ -59,9 +59,10 @@ export function EmergencyContactsFields({
     <fieldset className="space-y-3">
       <legend className="text-sm font-semibold">Emergency contacts</legend>
       <p className="text-xs text-muted-foreground">
-        Up to two people the club can ring about {personName}. They are kept on {personName}
-        &rsquo;s record rather than on a registration form, so they are asked for once and can be
-        changed at any time.
+        Who the club rings if something happens to {personName} — an injury at training, or
+        anything at a match that means somebody has to be told now. Up to two, and the first is
+        tried first. They are kept on {personName}&rsquo;s record rather than on a registration
+        form, so they are asked for once and can be changed at any time.
       </p>
 
       {lead && (

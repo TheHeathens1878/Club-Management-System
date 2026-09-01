@@ -6,7 +6,7 @@ import { recordPasswordLogin, requestMagicLink, sendPasswordReset } from "./acti
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ShieldCheck, Mail, KeyRound, Loader2, ArrowLeft, UserPlus } from "lucide-react";
+import { ShieldCheck, Mail, KeyRound, Loader2, ArrowLeft, UserPlus, ClipboardList } from "lucide-react";
 import { siteConfig } from "@/lib/site-config";
 import { isBookerRole } from "@/lib/types";
 
@@ -186,17 +186,43 @@ export function LoginForm({
               </p>
             )}
 
-            <div className="mt-6 border-t pt-4 text-center">
-              <p className="text-sm text-muted-foreground">New to the club app?</p>
+            {/* Adam, 2026-09-01: "the membership workflow should be prominent
+                and they should be able to register as a referee too."
+
+                Three doors, in the order most people need them. Joining the
+                club is the one nearly everybody arriving here wants and it was
+                not on this page at all — the only offer was an account, which
+                is the thing you need in order to do the thing you came to do.
+                So the wizard leads, in the solid button; the bare account is
+                the outline underneath it, for the coach or committee member who
+                already belongs and only wants a login; and refereeing gets its
+                own line, because a referee is not joining a club, they are
+                offering to take its games. */}
+            <div className="mt-6 space-y-2 border-t pt-4 text-center">
+              <p className="text-sm text-muted-foreground">New to {clubName}?</p>
+              <a href="/join" className={buttonVariants({ size: "sm" }) + " w-full"}>
+                <ClipboardList className="h-4 w-4" /> Join the club
+              </a>
+              <p className="text-xs text-muted-foreground">
+                Register yourself or your children as members — teams, subs and the season, in one
+                go.
+              </p>
               <a
                 href="/register"
-                className={buttonVariants({ variant: "outline", size: "sm" }) + " mt-2 w-full"}
+                className={buttonVariants({ variant: "outline", size: "sm" }) + " w-full"}
               >
-                <UserPlus className="h-4 w-4" /> Create an account
+                <UserPlus className="h-4 w-4" /> Just create an account
               </a>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Players, parents and coaches can sign up here. A club administrator approves what
-                you are asking to be.
+              <p className="text-xs text-muted-foreground">
+                For a coach or a committee member who already belongs and only needs a login.
+              </p>
+              <p className="pt-1 text-xs text-muted-foreground">
+                Refereeing for us?{" "}
+                <a href="/register?as=referee" className="font-medium text-foreground hover:underline">
+                  Register as a referee
+                </a>{" "}
+                — a club administrator approves it, and the games that need one appear in the
+                Referees group.
               </p>
             </div>
             <p className="mt-2 text-center text-xs text-muted-foreground">
