@@ -19,12 +19,24 @@ export function ThreadPanel({
   data,
   showLeave = true,
   postFixtures,
+  fill = false,
 }: {
   data: ThreadData;
   showLeave?: boolean;
   /** Referees group only: offer the "Post a game" composer, with these
       fixtures ready to auto-complete. */
   postFixtures?: FixtureOption[];
+  /**
+   * The standalone /messages/[id] page, where the thread IS the page: the
+   * banner and the referee form hold their height, the conversation takes
+   * whatever is left, and the composer sits on the floor of the screen. The
+   * team page embeds this panel among other blocks and stays as it was.
+   *
+   * `lg:flex-none` on each link of the chain matters: above lg the shell has
+   * no set height, and a `flex-1` (basis 0) item in an auto-height column
+   * measures as nothing — the thread would collapse to a sliver on the desk.
+   */
+  fill?: boolean;
 }) {
   const { conversation, participants, personId, myLive } = data;
 
@@ -43,13 +55,19 @@ export function ThreadPanel({
   ).filter((c) => c.name !== "" && c.name !== data.unnamedLabel);
 
   return (
-    <div className="space-y-4">
+    <div
+      className={
+        fill
+          ? "flex min-h-0 flex-1 flex-col gap-2 lg:flex-none lg:gap-4"
+          : "space-y-4"
+      }
+    >
       {/* SG-9: persistent and non-dismissible, in every code path — but on a
           phone the full paragraph pushed the conversation off the screen
           (Adam, 2026-08-25). The notice itself stays on every viewport; only
           its explanation is folded away below lg. */}
       {conversation.supervised_by_lead && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 lg:px-4 lg:py-3">
+        <div className="flex shrink-0 items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 lg:px-4 lg:py-3">
           <Eye className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-medium">
@@ -65,10 +83,13 @@ export function ThreadPanel({
       )}
 
       {data.isRefereesGroup && myLive && !conversation.closed_at && (
-        <MatchPostComposer conversationId={conversation.id} fixtures={postFixtures ?? []} />
+        <div className="shrink-0">
+          <MatchPostComposer conversationId={conversation.id} fixtures={postFixtures ?? []} />
+        </div>
       )}
 
       <ThreadClient
+        fill={fill}
         conversationId={conversation.id}
         conversationType={conversation.type}
         myPersonId={personId}

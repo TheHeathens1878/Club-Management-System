@@ -28,8 +28,13 @@ export function MobileHeader({
       .map((part) => part[0]?.toUpperCase() ?? "")
       .join("") || "?";
 
+  // A declared height, not one that falls out of the tallest child: the thread
+  // — and anything else that fills the screen — measures itself against
+  // `--mobile-header-h`, and a strip that quietly grew by a few pixels would
+  // push the bottom of those pages off the screen (Adam, 2026-09-01). It costs
+  // the 44px bell nothing; it still centres inside the 56px.
   return (
-    <header className="theme-ink sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-background px-4 py-2.5 text-foreground lg:hidden">
+    <header className="theme-ink sticky top-0 z-30 flex h-[var(--mobile-header-h)] items-center gap-3 border-b border-border bg-background px-4 text-foreground lg:hidden">
       {/* Same drop-shadow rim as the sidebar crest — black shield on ink. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img

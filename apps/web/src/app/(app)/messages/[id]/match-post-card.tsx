@@ -95,7 +95,11 @@ export function MatchPostCard({
   const releaseLabel = myPersonId === post.claimedByPersonId ? "I can't referee this" : "Release game";
 
   return (
-    <div className="my-1 min-w-[15rem] rounded-lg border bg-secondary/40 p-2.5">
+    /* No `min-w`: the card used to insist on 15rem inside a bubble capped at
+       75% of a phone, so it overflowed its own bubble rather than fitting it.
+       The bubble now gives a card the width of the screen and the card takes
+       whatever that is (Adam, 2026-09-01). */
+    <div className="min-w-0 rounded-lg border bg-secondary/40 p-2.5">
       <p className="font-display text-[10px] font-medium uppercase tracking-[0.14em] text-primary">
         Referee needed
       </p>

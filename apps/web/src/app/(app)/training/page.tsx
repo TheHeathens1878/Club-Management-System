@@ -5,6 +5,7 @@ import { CalendarPlus, ClipboardCheck } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { LinkRow } from "@/components/link-row";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
 import { resolveRoleView } from "@/lib/role-view";
@@ -134,7 +135,11 @@ export default async function TrainingPage() {
                   </thead>
                   <tbody>
                     {sessions.map((row) => (
-                      <tr key={row.booking_id} className="border-b last:border-b-0 hover:bg-secondary/40">
+                      <LinkRow
+                        key={row.booking_id}
+                        href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                        className="border-b last:border-b-0 hover:bg-secondary/40"
+                      >
                         <td className="px-4 py-3 align-top text-muted-foreground">
                           <span className="font-semibold">{formatEventDate(row.starts_at)}</span>
                           <br />
@@ -166,7 +171,7 @@ export default async function TrainingPage() {
                             <ClipboardCheck className="h-3.5 w-3.5" /> Register
                           </Link>
                         </td>
-                      </tr>
+                      </LinkRow>
                     ))}
                   </tbody>
                 </table>

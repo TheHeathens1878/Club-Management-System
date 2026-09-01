@@ -31,9 +31,20 @@ export type ThreadParticipant = {
 export function ParticipantsButton({
   participants,
   canOpenContacts,
+  compact = false,
+  footer,
 }: {
   participants: ThreadParticipant[];
   canOpenContacts: boolean;
+  /** Phone thread header: the icon and the count, with the word at lg. */
+  compact?: boolean;
+  /**
+   * Anything that belongs at the foot of the panel — in practice Leave, which
+   * is an action about who is in this conversation and so belongs with the
+   * list of who is in it, rather than as its own block under the composer
+   * where it cost a full row of the screen (Adam, 2026-09-01).
+   */
+  footer?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -65,9 +76,14 @@ export function ParticipantsButton({
         onClick={() => setOpen((value) => !value)}
         aria-expanded={open}
         aria-haspopup="dialog"
-        className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
+        className={
+          compact
+            ? "inline-flex h-11 items-center gap-1 rounded-full px-2 text-sm text-muted-foreground hover:bg-secondary lg:h-auto lg:min-h-0 lg:rounded-none lg:px-0 lg:hover:bg-transparent lg:hover:underline"
+            : "inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
+        }
       >
-        <Users className="h-4 w-4" /> Members
+        <Users className="h-4 w-4" />
+        <span className={compact ? "sr-only lg:not-sr-only" : undefined}>Members</span>
         <span className="text-xs">({live.length})</span>
       </button>
 
@@ -114,6 +130,8 @@ export function ParticipantsButton({
               ))}
             </ul>
           )}
+
+          {footer && <div className="mt-3 border-t pt-3">{footer}</div>}
         </div>
       )}
     </div>
