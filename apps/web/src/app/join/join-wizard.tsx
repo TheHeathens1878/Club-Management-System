@@ -59,7 +59,7 @@ const OUTCOME_LABELS: Record<PlayerOutcome, string> = {
  */
 export function JoinWizard({ signedIn, defaults }: {
   signedIn: boolean;
-  defaults: { fullName: string; email: string; phone: string };
+  defaults: { firstName: string; lastName: string; email: string; phone: string };
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [startError, setStartError] = useState<string | null>(null);
@@ -284,13 +284,53 @@ export function JoinWizard({ signedIn, defaults }: {
               {!signedIn && (
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
+                    {/* Two fields, as /register asks (Adam, 2026-09-01). One
+                        "Full name" had to be split by rule, and the rule takes
+                        the last word as the surname — a guess, and wrong for
+                        exactly the people it is worst to be wrong about. */}
                     <div className="space-y-1">
-                      <Label htmlFor="join-name">Full name</Label>
-                      <Input id="join-name" name="full_name" required defaultValue={defaults.fullName} />
+                      <Label htmlFor="join-first-name">First name</Label>
+                      <Input
+                        id="join-first-name"
+                        name="first_name"
+                        required
+                        autoComplete="given-name"
+                        defaultValue={defaults.firstName}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="join-last-name">Last name</Label>
+                      <Input
+                        id="join-last-name"
+                        name="last_name"
+                        required
+                        autoComplete="family-name"
+                        defaultValue={defaults.lastName}
+                      />
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="join-dob">Date of birth</Label>
                       <Input id="join-dob" name="dob" type="date" required />
+                    </div>
+                    {/* Adam, 2026-09-01: "biological sex (this is required for
+                        the FA's records)" — the club cannot enter a player into
+                        an age group without it. `people.sex` has held these two
+                        values since 20260825500000. */}
+                    <div className="space-y-1">
+                      <Label htmlFor="join-sex">Biological sex at birth</Label>
+                      <select
+                        id="join-sex"
+                        name="sex"
+                        required
+                        defaultValue=""
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      >
+                        <option value="" disabled>
+                          Choose…
+                        </option>
+                        <option value="female">Female</option>
+                        <option value="male">Male</option>
+                      </select>
                     </div>
                     <div className="space-y-1">
                       <Label htmlFor="join-email">Email</Label>

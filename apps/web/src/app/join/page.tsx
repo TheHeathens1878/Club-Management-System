@@ -25,7 +25,7 @@ export default async function JoinPage() {
   const [settings, supabase] = await Promise.all([getSettings(), createClient()]);
   const { data: auth } = await supabase.auth.getUser();
 
-  let defaults = { fullName: "", email: "", phone: "" };
+  let defaults = { firstName: "", lastName: "", email: "", phone: "" };
   if (auth.user) {
     const { data: personId } = await supabase.rpc("current_person_id");
     if (personId) {
@@ -36,7 +36,8 @@ export default async function JoinPage() {
         .maybeSingle();
       if (person) {
         defaults = {
-          fullName: `${person.first_name} ${person.last_name}`,
+          firstName: person.first_name,
+          lastName: person.last_name,
           email: person.email ?? auth.user.email ?? "",
           phone: person.phone ?? "",
         };
