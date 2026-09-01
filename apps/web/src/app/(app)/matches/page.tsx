@@ -5,6 +5,7 @@ import { CalendarPlus, LandPlot } from "lucide-react";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { LinkRow } from "@/components/link-row";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
 import { resolveRoleView } from "@/lib/role-view";
@@ -237,7 +238,11 @@ export default async function MatchesPage({
                       {fixtures.map((row) => {
                         const short = row.squad > 0 && row.accepted * 2 < row.squad;
                         return (
-                          <tr key={row.fixture_id} className="border-b last:border-b-0 hover:bg-secondary/40">
+                          <LinkRow
+                            key={row.fixture_id}
+                            href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                            className="border-b last:border-b-0 hover:bg-secondary/40"
+                          >
                             <td className="px-4 py-3 align-top text-muted-foreground">
                               <span className="font-semibold">{formatEventDate(row.kickoff_at)}</span>
                               <br />
@@ -280,7 +285,7 @@ export default async function MatchesPage({
                                 </span>
                               ) : null}
                             </td>
-                          </tr>
+                          </LinkRow>
                         );
                       })}
                     </tbody>

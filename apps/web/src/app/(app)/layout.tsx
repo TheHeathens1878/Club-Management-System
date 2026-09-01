@@ -78,8 +78,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     moreFallback: true,
   });
 
+  // `min-h-[100dvh]`, not `min-h-screen`: `vh` is the viewport with the URL bar
+  // hidden, so on a phone a `min-h-screen` shell is taller than the screen
+  // actually showing, and every page inherits a stray scroll of exactly the
+  // bar's height (Adam, 2026-09-01).
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
+    <div className="flex min-h-[100dvh] flex-col lg:flex-row">
       {/* Install-and-notifications, for signed-in members only. It draws
           itself fixed above the tab bar, so its place in the tree is
           immaterial; it renders nothing at all when there is no VAPID key,
@@ -165,8 +169,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       />
 
       {/* Bottom padding clears the fixed tab bar (plus the home indicator's
-          safe area) so nothing ends underneath it. */}
-      <main className="flex-1 overflow-x-clip bg-background pb-[calc(64px+env(safe-area-inset-bottom))] lg:pb-0">
+          safe area) so nothing ends underneath it — measured from the bar
+          itself now via `--tab-bar-h`, rather than the 64px this used to
+          guess at while the bar was 55px (globals.css). */}
+      <main className="flex-1 overflow-x-clip bg-background pb-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom))] lg:pb-0">
         {children}
       </main>
 

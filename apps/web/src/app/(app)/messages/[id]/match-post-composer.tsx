@@ -62,16 +62,25 @@ export function MatchPostComposer({
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="flex min-h-[44px] w-full items-center justify-between gap-2 px-4 py-2.5 text-sm font-semibold lg:min-h-0"
+        className="flex min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm font-semibold lg:min-h-0 lg:px-4 lg:py-2.5"
       >
         <span className="inline-flex items-center gap-2">
-          <Megaphone className="h-4 w-4 text-primary" /> Post a game that needs a referee
+          <Megaphone className="h-4 w-4 shrink-0 text-primary" /> Post a game that needs a referee
         </span>
-        <ChevronDown className={"h-4 w-4 transition-transform" + (open ? " rotate-180" : "")} />
+        <ChevronDown
+          className={"h-4 w-4 shrink-0 transition-transform" + (open ? " rotate-180" : "")}
+        />
       </button>
 
       {open && (
-        <form action={action} className="space-y-3 border-t px-4 py-3">
+        /* Capped and scrollable on a phone: the thread page is exactly one
+           screen tall, so a form free to grow to its natural height would
+           press the conversation underneath it out of existence (Adam,
+           2026-09-01). On the desk it grows as it always did. */
+        <form
+          action={action}
+          className="max-h-[42dvh] space-y-3 overflow-y-auto overscroll-contain border-t px-3 py-3 lg:max-h-none lg:overflow-visible lg:px-4"
+        >
           <input type="hidden" name="conversation_id" value={conversationId} />
           <input type="hidden" name="fixture_id" value={fixtureId} />
 
