@@ -3375,6 +3375,7 @@ export type Database = {
           platform: string
           token: string
           updated_at: string
+          web_subscription: Json | null
         }
         Insert: {
           created_at?: string
@@ -3383,6 +3384,7 @@ export type Database = {
           platform?: string
           token: string
           updated_at?: string
+          web_subscription?: Json | null
         }
         Update: {
           created_at?: string
@@ -3391,6 +3393,7 @@ export type Database = {
           platform?: string
           token?: string
           updated_at?: string
+          web_subscription?: Json | null
         }
         Relationships: [
           {
