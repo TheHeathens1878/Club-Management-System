@@ -187,6 +187,22 @@ export function JoinWizard({ signedIn, defaults }: {
     });
   }
 
+  /**
+   * Adam, 2026-09-01: a photo over 5MB was refused, "when I chose a different
+   * file, the same error message remains and it won't let me click on send
+   * registration". The message outlived the file it was about, because it was
+   * only ever cleared by a save that succeeded — so the reader fixed the thing
+   * and was told it was still broken. It goes the moment they change anything.
+   */
+  function clearPlayerError(personId: string) {
+    setPlayerErrors((current) => {
+      if (!(personId in current)) return current;
+      const next = { ...current };
+      delete next[personId];
+      return next;
+    });
+  }
+
   function submitFinish() {
     const formData = new FormData();
     for (const person of people) {
@@ -441,6 +457,7 @@ export function JoinWizard({ signedIn, defaults }: {
               isAdmin={isAdmin}
               outcome={outcomes[player.personId]}
               error={playerErrors[player.personId]}
+              onClearError={() => clearPlayerError(player.personId)}
               pending={pending}
               onSubmit={(formData) => submitPlayer(player, formData)}
             />
@@ -539,6 +556,7 @@ function PlayerPanel({
   isAdmin,
   outcome,
   error,
+  onClearError,
   pending,
   onSubmit,
 }: {
@@ -551,6 +569,8 @@ function PlayerPanel({
   isAdmin: boolean;
   outcome?: PlayerOutcome;
   error?: string;
+  /** Drop the message as soon as the reader changes what it was about. */
+  onClearError: () => void;
   pending: boolean;
   onSubmit: (formData: FormData) => void;
 }) {
@@ -579,7 +599,13 @@ function PlayerPanel({
         </p>
       </CardHeader>
       <CardContent>
-        <form action={onSubmit} className="space-y-4">
+        <form
+          action={onSubmit}
+          className="space-y-4"
+          onChange={() => {
+            if (error) onClearError();
+          }}
+        >
           {/* The two bands and the sex rule, applied where the choice is
               made (Adam, 2026-08-26) — and re-applied by
               `registrations_guard()` when the row is written. The "no team
@@ -630,7 +656,15 @@ function PlayerPanel({
             </label>
           )}
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && (
+            <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2">
+              <p className="text-sm text-destructive">{error}</p>
+              <p className="mt-1 text-xs text-destructive/80">
+                {player.firstName} is not saved yet, so the registration cannot be sent. Put it
+                right above and press Save player again.
+              </p>
+            </div>
+          )}
           <Button type="submit" size="sm" disabled={pending}>
             {pending ? "Saving…" : "Save player"}
           </Button>
