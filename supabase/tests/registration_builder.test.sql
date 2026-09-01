@@ -43,30 +43,30 @@ set local request.jwt.claims to '{"sub":"ab000000-1111-4111-8111-000000000001","
 set local role authenticated;
 
 select throws_like(
-  $ update public.registration_questions set qtype = 'short_text' where qkey = 'kit_size' $,
+  $$ update public.registration_questions set qtype = 'short_text' where qkey = 'kit_size' $$,
   '%its type cannot change%',
   'a built-in question keeps its type — the screen renders it by name');
 
 select lives_ok(
-  $ update public.registration_questions set archived_at = now() where qkey = 'kit_size' $,
+  $$ update public.registration_questions set archived_at = now() where qkey = 'kit_size' $$,
   'but the club may retire it: what is built in is how it is asked, not whether');
 
 select lives_ok(
-  $ update public.registration_questions set required = false where qkey = 'gdpr_consent' $,
+  $$ update public.registration_questions set required = false where qkey = 'gdpr_consent' $$,
   'and the club may make its own GDPR statement optional — its paperwork, its call');
 
 select throws_like(
-  $ update public.registration_questions set required = false where qkey = 'photo_consents' $,
+  $$ update public.registration_questions set required = false where qkey = 'photo_consents' $$,
   '%SG-5%',
   'photo permissions may not be made optional — SG-5 is the one the database keeps');
 
 select throws_like(
-  $ update public.registration_questions set archived_at = now() where qkey = 'photo_consents' $,
+  $$ update public.registration_questions set archived_at = now() where qkey = 'photo_consents' $$,
   '%SG-5%',
   'nor archived');
 
 select throws_like(
-  $ update public.registration_questions set locked = false where qkey = 'photo_consents' $,
+  $$ update public.registration_questions set locked = false where qkey = 'photo_consents' $$,
   '%SG-5%',
   'nor unlocked, which is what a weakening would have to do first');
 
