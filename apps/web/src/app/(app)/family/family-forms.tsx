@@ -449,7 +449,18 @@ export function RegisterForm({
   }
 
   return (
-    <form action={submit} className="space-y-5 rounded-lg border bg-secondary/20 p-4">
+    <form
+      action={submit}
+      className="space-y-5 rounded-lg border bg-secondary/20 p-4"
+      onChange={() => {
+        // Adam, 2026-09-01: a photo over 5MB was refused, "when I chose a
+        // different file, the same error message remains". The message was only
+        // cleared by a save that worked, so somebody who fixed the thing was
+        // still being told it was broken — and the refusal is about a file that
+        // is no longer the one in the box.
+        if (state.error) setState({});
+      }}
+    >
       <p className="text-sm">
         Registering <span className="font-medium">{personName}</span>
         {seasonName ? ` for ${seasonName}` : ""}.
