@@ -19,7 +19,7 @@
  * nobody added.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Check, ChevronLeft, UserPlus, Users } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -104,6 +104,16 @@ export function PeopleStep({
 }) {
   const copy = COPY[kind];
   const [dob, setDob] = useState("");
+
+  // React clears an uncontrolled form after a successful action, but the date
+  // of birth is CONTROLLED here (the referee tick depends on it), so it would
+  // survive into the next person — a second child inheriting the first one's
+  // birthday, with every other field blank. Clear it whenever somebody has
+  // been added.
+  useEffect(() => {
+    setDob("");
+  }, [people.length]);
+
   const full = householdCount >= MAX_HOUSEHOLD;
   const refereeAllowed = oldEnoughToReferee(dob || null, minRefereeAge);
   const canContinue = kind === "adult" || people.length > 0 || noneTicked;
