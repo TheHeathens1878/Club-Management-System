@@ -19,7 +19,7 @@
 
 begin;
 
-select plan(28);
+select plan(40);
 
 -- -----------------------------------------------------------------------------
 -- People
@@ -228,9 +228,19 @@ insert into public.team_memberships (id, person_id, team_id, season_id, role) va
 select ok(not pg_temp.in_group(current_setting('vg.groupA')::uuid, current_setting('vg.nodob')::uuid),
   'a coach with no date of birth is not admitted — SG-0 says unknown is a minor');
 
+-- A date of birth arriving later is picked up by the nightly reconcile, not by
+-- a trigger: SAFEGUARDING pins exactly one trigger on people.dob so that no two
+-- rules about somebody's age can disagree, and a venue group is not a good
+-- enough reason to be the second. Same clock as the season bound the reconcile
+-- already exists for.
 update public.people set dob = '1988-08-08' where id = current_setting('vg.nodob')::uuid;
+select ok(not pg_temp.in_group(current_setting('vg.groupA')::uuid, current_setting('vg.nodob')::uuid),
+  'a date of birth arriving does not move them on the spot — no trigger watches it');
+
+select lives_ok($$select public.sync_all_venue_coaches_groups()$$,
+  'the nightly reconcile runs');
 select ok(pg_temp.in_group(current_setting('vg.groupA')::uuid, current_setting('vg.nodob')::uuid),
-  'giving the date of birth at sign-in puts them in');
+  'and it puts them in');
 
 update public.people set dob = current_date - interval '15 years' where id = current_setting('vg.nodob')::uuid;
 select ok(not pg_temp.in_group(current_setting('vg.groupA')::uuid, current_setting('vg.nodob')::uuid),
