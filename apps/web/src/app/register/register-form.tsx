@@ -115,7 +115,7 @@ export function RegisterForm({
             ) : (
               <>
                 Join {clubName}. Once you are in you can tell us whether you are a player, a parent,
-                or a coach — a club administrator approves that part.
+                a coach or a referee — a club administrator approves that part.
               </>
             )}
           </CardDescription>
