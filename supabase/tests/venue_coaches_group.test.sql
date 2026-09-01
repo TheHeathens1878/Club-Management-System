@@ -27,25 +27,26 @@ select plan(28);
 insert into auth.users (id, email, raw_user_meta_data) values
   ('acacacac-5555-4111-8111-000000000001', 'vg-coach-a@test.invalid',   '{"full_name": "Ada Coach",    "dob": "1984-01-01"}'::jsonb),
   ('acacacac-5555-4111-8111-000000000002', 'vg-coach-b@test.invalid',   '{"full_name": "Ben Coach",    "dob": "1985-02-02"}'::jsonb),
-  ('acacacac-5555-4111-8111-000000000003', 'vg-coach-young@test.invalid','{"full_name": "Cass Young",  "dob": "1990-03-03"}'::jsonb),
-  ('acacacac-5555-4111-8111-000000000004', 'vg-coach-nodob@test.invalid','{"full_name": "Dee Nodob",   "dob": "1991-04-04"}'::jsonb),
   ('acacacac-5555-4111-8111-000000000005', 'vg-outsider@test.invalid',  '{"full_name": "Eve Outsider", "dob": "1979-05-05"}'::jsonb),
   ('acacacac-5555-4111-8111-000000000006', 'vg-admin@test.invalid',     '{"full_name": "Fay Admin",    "dob": "1974-06-06"}'::jsonb);
 
 select set_config('vg.a',        (select person_id::text from public.profiles where id = 'acacacac-5555-4111-8111-000000000001'), true);
 select set_config('vg.b',        (select person_id::text from public.profiles where id = 'acacacac-5555-4111-8111-000000000002'), true);
-select set_config('vg.young',    (select person_id::text from public.profiles where id = 'acacacac-5555-4111-8111-000000000003'), true);
-select set_config('vg.nodob',    (select person_id::text from public.profiles where id = 'acacacac-5555-4111-8111-000000000004'), true);
+-- No auth user for these two: SG-10 refuses a profile for a minor with no
+-- guardian consent, and its dob guard refuses to age an account-holder down into
+-- one. A young assistant coach and somebody whose date of birth the club has not
+-- got are people the club knows rather than people who sign in, which is exactly
+-- what the venue group's adults-only rule has to cope with.
+insert into public.people (id, first_name, last_name, dob) values
+  ('cacacaca-5555-4111-8111-000000000003', 'Cass', 'Young', (current_date - interval '13 years')::date),
+  ('cacacaca-5555-4111-8111-000000000004', 'Dee',  'Nodob', null);
+select set_config('vg.young',    'cacacaca-5555-4111-8111-000000000003', true);
+select set_config('vg.nodob',    'cacacaca-5555-4111-8111-000000000004', true);
 select set_config('vg.outsider', (select person_id::text from public.profiles where id = 'acacacac-5555-4111-8111-000000000005'), true);
 select set_config('vg.admin',    (select person_id::text from public.profiles where id = 'acacacac-5555-4111-8111-000000000006'), true);
 
 -- Belt and braces on the two that matter to the safeguarding cases.
--- Aged down AFTER the account exists: SG-10 refuses a profile for a minor
--- with no guardian consent, so a 13-year-old cannot be signed up in the first
--- place. What this fixture is for is the venue group's adults-only rule, which
--- reads the dob it finds now.
-update public.people set dob = current_date - interval '13 years' where id = current_setting('vg.young')::uuid;
-update public.people set dob = null where id = current_setting('vg.nodob')::uuid;
+
 
 insert into public.person_roles (person_id, role, granted_by)
   values (current_setting('vg.admin')::uuid, 'club_admin', 'acacacac-5555-4111-8111-000000000006');
