@@ -134,16 +134,18 @@ export default async function ProfilePage() {
               </CardContent>
             </Card>
 
-            {/* Only a player is asked for one (Adam, 2026-08-26): the club
-                rings an emergency contact about somebody on a pitch. Tick "I
-                am a player" above and the card appears. */}
+            {/* Only a player is asked for one (Adam, 2026-08-26): these are the
+                people the club rings when something happens to somebody on a
+                pitch. Tick "I am a player" above and the card appears. */}
             {person.is_player === true && (
             <Card>
               <CardHeader className="p-4 lg:p-6">
                 <CardTitle className="text-base">Emergency contacts</CardTitle>
                 <p className="text-sm text-muted-foreground">
-                  Up to two people the club can ring about you. Kept on your record, so they are
-                  asked for once rather than on every registration form.
+                  Who the club rings if something happens to you — an injury at training, or
+                  anything at a match that means somebody has to be told now. Up to two, and the
+                  first is tried first. Kept on your record, so they are asked for once rather
+                  than on every registration form.
                 </p>
               </CardHeader>
               <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
