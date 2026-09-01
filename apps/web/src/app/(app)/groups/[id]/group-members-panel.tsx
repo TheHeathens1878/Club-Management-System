@@ -31,6 +31,13 @@ export type GroupMemberRow = {
   basis: string;
   joinedAt: string;
   leftAt: string | null;
+  /**
+   * One line about this person in THIS group. Only the Referees group sets it
+   * today — the age groups they may take — and it is passed in rather than
+   * worked out here, because what a group knows about its members is the
+   * group's business and not this component's.
+   */
+  note?: string | null;
 };
 
 const BASIS_LABELS: Record<string, string> = {
@@ -131,6 +138,7 @@ export function GroupMembersPanel({
                   <span className="text-sm font-medium">{member.name}</span>
                 )}
                 <Badge variant="muted">{BASIS_LABELS[member.basis] ?? member.basis}</Badge>
+                {member.note && <Badge variant="outline">{member.note}</Badge>}
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">
                 In since {formatStamp(member.joinedAt)}
