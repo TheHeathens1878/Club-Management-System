@@ -15,10 +15,13 @@ export function RegisterForm({
   logoUrl,
   logoAlt,
   clubName,
+  asReferee = false,
 }: {
   logoUrl: string | null;
   logoAlt: string;
   clubName: string;
+  /** Arrived from the sign-in page's "Register as a referee" door. */
+  asReferee?: boolean;
 }) {
   const [state, action, pending] = useActionState<RegisterState, FormData>(registerAccount, {});
   const today = new Date().toISOString().slice(0, 10);
@@ -99,14 +102,27 @@ export function RegisterForm({
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           {logo}
-          <CardTitle className="text-2xl">Create an account</CardTitle>
+          <CardTitle className="text-2xl">
+            {asReferee ? "Register as a referee" : "Create an account"}
+          </CardTitle>
           <CardDescription>
-            Join {clubName}. Once you are in you can tell us whether you are a player, a parent, or
-            a coach — a club administrator approves that part.
+            {asReferee ? (
+              <>
+                Referee for {clubName}. This creates your account and puts your name in front of a
+                club administrator — once they approve it, the games that need a referee appear in
+                the Referees group for you to claim.
+              </>
+            ) : (
+              <>
+                Join {clubName}. Once you are in you can tell us whether you are a player, a parent,
+                a coach or a referee — a club administrator approves that part.
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form action={action} className="space-y-4">
+            {asReferee && <input type="hidden" name="requested_role" value="referee" />}
             {/* Two fields, not one (Adam, 2026-09-01). A single "Full name"
                 had to be split by rule, and the rule takes the last word as the
                 surname — which is a guess, and wrong for exactly the people it
@@ -204,7 +220,7 @@ export function RegisterForm({
 
             <Button type="submit" className="w-full" disabled={pending}>
               {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-              Create account
+              {asReferee ? "Create account and ask to referee" : "Create account"}
             </Button>
           </form>
 

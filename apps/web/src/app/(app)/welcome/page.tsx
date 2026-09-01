@@ -208,8 +208,8 @@ function UnlinkedPanel({ contactEmail }: { contactEmail: string }) {
       <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
         <p className="text-sm text-muted-foreground">
           You are signed in, but the club has not yet connected this sign-in to a player, a parent,
-          a coach or a member of staff. Until it does there is nothing here to show you — the app
-          only ever shows what your own record says you are.
+          a coach, a referee or a member of staff. Until it does there is nothing here to show you
+          — the app only ever shows what your own record says you are.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <Link

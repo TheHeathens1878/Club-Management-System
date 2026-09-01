@@ -59,6 +59,12 @@ export async function registerAccount(
   const confirm = String(formData.get("confirm_password") ?? "");
   const dob = text(formData, "dob");
   const phone = text(formData, "phone");
+  // The sign-in page's referee door (?as=referee). Only that one word is
+  // honoured — anything else in the field is ignored rather than passed on,
+  // because this is browser-supplied text and the fewer values it can carry
+  // the less there is to think about. It asks for nothing but a place in the
+  // approvals queue: a club administrator still decides.
+  const asReferee = text(formData, "requested_role") === "referee";
   const values = { firstName, lastName, email, dob, phone };
 
   // The two halves are asked for separately now (Adam, 2026-09-01), so they no
@@ -103,6 +109,7 @@ export async function registerAccount(
         full_name: `${firstName} ${lastName}`,
         dob,
         phone,
+        ...(asReferee ? { requested_role: "referee" } : {}),
       },
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
     },
