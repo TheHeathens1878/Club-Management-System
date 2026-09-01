@@ -18,11 +18,19 @@ export const REQUESTED_ROLES = [
   "coach",
   "assistant_coach",
   "manager",
+  "referee",
 ] as const;
 export type RequestedRole = (typeof REQUESTED_ROLES)[number];
 
 /** The roles a coach/manager tile may ask for — all of them need a team. */
 export const TEAM_STAFF_REQUEST_ROLES = ["coach", "assistant_coach", "manager"] as const;
+
+/**
+ * The club-wide roles: no team, because they are not a team's. A referee takes
+ * games from every team in the club — which is why the Referees group is
+ * club-wide — and a parent is a parent of a person, not of a squad.
+ */
+export const CLUB_WIDE_REQUEST_ROLES = ["parent", "referee"] as const;
 
 export const REQUESTED_ROLE_LABELS: Record<RequestedRole, string> = {
   player: "Player",
@@ -30,6 +38,7 @@ export const REQUESTED_ROLE_LABELS: Record<RequestedRole, string> = {
   coach: "Coach",
   assistant_coach: "Assistant coach",
   manager: "Team manager",
+  referee: "Referee",
 };
 
 export const STATUS_LABELS: Record<AccountRequestStatus, string> = {
