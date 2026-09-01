@@ -63,12 +63,6 @@ export async function registerAccount(
   // into an FA age group without it. `people.sex` has held these two values
   // since 20260825500000; the form offers exactly them.
   const sex = text(formData, "sex").toLowerCase();
-  // The sign-in page's referee door (?as=referee). Only that one word is
-  // honoured — anything else in the field is ignored rather than passed on,
-  // because this is browser-supplied text and the fewer values it can carry
-  // the less there is to think about. It asks for nothing but a place in the
-  // approvals queue: a club administrator still decides.
-  const asReferee = text(formData, "requested_role") === "referee";
   const values = { firstName, lastName, email, dob, phone, sex };
 
   // The two halves are asked for separately now (Adam, 2026-09-01), so they no
@@ -117,7 +111,6 @@ export async function registerAccount(
         dob,
         phone,
         sex,
-        ...(asReferee ? { requested_role: "referee" } : {}),
       },
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
     },

@@ -34,6 +34,7 @@ import {
   grantRole,
   revokeRole,
   setPersonEmergencyContacts,
+  setPersonReferee,
   type PersonDetailState,
 } from "./actions";
 
@@ -100,11 +101,41 @@ function Feedback({ state }: { state: PersonDetailState | PersonActionState }) {
 export function RolesPanel({ personId, roles }: { personId: string; roles: RoleRow[] }) {
   const [grantState, grantAction, granting] = useActionState(grantRole, EMPTY);
   const [revokeState, revokeAction] = useActionState(revokeRole, EMPTY);
+  const [refState, refAction, refPending] = useActionState(setPersonReferee, EMPTY);
 
   const held = roles.map((r) => r.role);
+  const isReferee = held.includes("referee");
 
   return (
     <div className="space-y-4">
+      {/* Adam, 2026-09-01: "admins should be able to tick a box in a user record
+          confirming they are a referee. That will add them to the referee
+          group." The dropdown below could always grant it — but a dropdown is a
+          place to look for something and a tick is a place to SEE it, and this
+          is a fact about a person an administrator wants to read at a glance.
+          The Referees group follows the role on its own. */}
+      <form action={refAction} className="rounded-lg border bg-secondary/20 p-3">
+        <input type="hidden" name="person_id" value={personId} />
+        <input type="hidden" name="is_referee" value={isReferee ? "no" : "yes"} />
+        <label className="flex items-start gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={isReferee}
+            disabled={refPending}
+            onChange={(event) => event.currentTarget.form?.requestSubmit()}
+            className="mt-0.5 h-4 w-4 accent-primary"
+          />
+          <span>
+            <span className="font-medium">This person is a referee</span>
+            <span className="block text-xs text-muted-foreground">
+              Puts them in the Referees group, where games needing a referee are posted and
+              claimed. The club registers referees from 14.
+            </span>
+          </span>
+        </label>
+        <Feedback state={refState} />
+      </form>
+
       {roles.length === 0 ? (
         <p className="text-sm text-muted-foreground">No roles are held right now.</p>
       ) : (
