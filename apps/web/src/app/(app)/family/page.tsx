@@ -285,7 +285,7 @@ export default async function FamilyPage() {
   // ------------------------------------------------------------------
   const [childContactResult, leadResult] = await Promise.all([
     childIds.length > 0
-      ? supabase.from("people").select("id,preferred_name,email,phone,address").in("id", childIds)
+      ? supabase.from("people").select("id,preferred_name,email,phone,address,dob").in("id", childIds)
       : Promise.resolve({
           data: [] as {
             id: string;
@@ -293,6 +293,7 @@ export default async function FamilyPage() {
             email: string | null;
             phone: string | null;
             address: Json | null;
+            dob: string | null;
           }[],
           error: null,
         }),
@@ -338,6 +339,12 @@ export default async function FamilyPage() {
   const isAdmin = isCommittee(session.profile?.role);
 
   const leadAddressLine = addressLine(leadAddress);
+  // Just the dates of birth, so the App access block can name the day it
+  // starts. The family TREE deliberately carries no dob (it shows an age group
+  // instead); this is the guardian's own read of their own child's row.
+  const dobByChild = new Map(
+    (childContactResult.data ?? []).map((row) => [row.id, row.dob as string | null] as const),
+  );
   const detailsByChild = new Map(
     (childContactResult.data ?? []).map((row) => {
       const line1 = addressField(row.address, "line1");
@@ -521,6 +528,7 @@ export default async function FamilyPage() {
                       childName={name}
                       consent={consentByChild.get(child.person_id) ?? null}
                       minAccountAge={minAccountAge}
+                      dob={dobByChild.get(child.person_id) ?? null}
                     />
                   </div>
 
