@@ -31,11 +31,18 @@ export type RegisterState = {
    * address is echoed back so it can say WHICH inbox to look in.
    */
   confirmEmail?: string;
-  values?: { fullName: string; email: string; dob: string; phone: string };
+  values?: { firstName: string; lastName: string; email: string; dob: string; phone: string };
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 8;
+/**
+ * Digits, once the spaces, dashes, brackets and a +44 people actually type are
+ * taken out. Loose on purpose: this is a "did you mean to leave this blank"
+ * check, not a directory validator, and refusing somebody's real number at the
+ * door is worse than storing an odd one.
+ */
+const PHONE_DIGITS_MIN = 10;
 
 function text(formData: FormData, name: string): string {
   return String(formData.get(name) ?? "").trim();
@@ -45,19 +52,26 @@ export async function registerAccount(
   _prev: RegisterState,
   formData: FormData,
 ): Promise<RegisterState> {
-  const fullName = text(formData, "full_name");
+  const firstName = text(formData, "first_name");
+  const lastName = text(formData, "last_name");
   const email = text(formData, "email");
   const password = String(formData.get("password") ?? "");
   const confirm = String(formData.get("confirm_password") ?? "");
   const dob = text(formData, "dob");
   const phone = text(formData, "phone");
-  const values = { fullName, email, dob, phone };
+  const values = { firstName, lastName, email, dob, phone };
 
-  if (fullName.length < 2) return { error: "Please enter your full name.", values };
-  if (!fullName.includes(" ")) {
-    return { error: "Please enter both your first name and your surname.", values };
-  }
+  // The two halves are asked for separately now (Adam, 2026-09-01), so they no
+  // longer have to be recovered from one string by taking the last word as the
+  // surname — a guess that is wrong for exactly the names it is worst to be
+  // wrong about.
+  if (firstName.length < 1) return { error: "Please enter your first name.", values };
+  if (lastName.length < 1) return { error: "Please enter your last name.", values };
   if (!EMAIL_RE.test(email)) return { error: "Please enter a valid email address.", values };
+  // Adam, 2026-09-01: "phone and email should be mandatory."
+  if (phone.replace(/[^0-9]/g, "").length < PHONE_DIGITS_MIN) {
+    return { error: "Please enter a phone number we can reach you on.", values };
+  }
   if (password.length < MIN_PASSWORD) {
     return { error: `Please choose a password of at least ${MIN_PASSWORD} characters.`, values };
   }
@@ -80,7 +94,16 @@ export async function registerAccount(
     email,
     password,
     options: {
-      data: { full_name: fullName, dob, phone: phone || null },
+      // Both halves as typed, and the joined name too: `handle_new_user()`
+      // prefers the pair (20260901120000) and `profiles.full_name` is what a
+      // good many screens still read.
+      data: {
+        first_name: firstName,
+        last_name: lastName,
+        full_name: `${firstName} ${lastName}`,
+        dob,
+        phone,
+      },
       emailRedirectTo: `${getSiteUrl()}/auth/callback`,
     },
   });
