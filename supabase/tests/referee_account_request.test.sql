@@ -19,7 +19,10 @@ insert into auth.users (id, email, raw_user_meta_data) values
    '{"first_name": "Ada", "last_name": "Admin", "dob": "1970-01-01"}'::jsonb),
   ('4e4e4e4e-1111-4111-8111-000000000002', 'rf-ref@test.invalid',
    '{"first_name": "Rita", "last_name": "Ref", "dob": "1990-06-06"}'::jsonb);
-update public.profiles set role = 'committee' where id = '4e4e4e4e-1111-4111-8111-000000000001';
+-- The club_admin grant below is what is_club_admin() reads. Setting
+-- profiles.role as well is what broke this on its first CI run: the profile
+-- role is synced into person_roles by trigger, and the explicit grant then
+-- collided with it on person_roles_active_idx. One or the other, not both.
 select set_config('rf.admin', (select person_id::text from public.profiles where id = '4e4e4e4e-1111-4111-8111-000000000001'), true);
 select set_config('rf.ref',   (select person_id::text from public.profiles where id = '4e4e4e4e-1111-4111-8111-000000000002'), true);
 insert into public.person_roles (person_id, role, granted_by)
