@@ -324,7 +324,23 @@ export function JoinWizard({ signedIn, defaults }: {
                 </label>
               </fieldset>
 
-              {startError && <p className="text-sm text-destructive">{startError}</p>}
+              {startError && (
+                <div className="space-y-1">
+                  <p className="text-sm text-destructive">{startError}</p>
+                  {/* When what is missing lives on the profile rather than on
+                      this form, say where to go AND bring them back — the round
+                      trip is the whole point (Adam, 2026-09-01: after saving "it
+                      should take you back to the Joining the club workflow"). */}
+                  {/profile|date of birth/i.test(startError) && (
+                    <a
+                      href="/profile?next=/join"
+                      className="inline-block text-sm font-medium underline underline-offset-2"
+                    >
+                      Complete your profile, then come straight back here
+                    </a>
+                  )}
+                </div>
+              )}
               <Button type="submit" disabled={pending}>
                 {pending ? "Saving…" : "Continue"}
               </Button>

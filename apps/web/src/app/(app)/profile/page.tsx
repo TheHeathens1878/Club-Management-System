@@ -11,8 +11,9 @@ import { personLabel } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
+import { safeRelativePath } from "@/lib/auth-email-hook";
 
-import { ContactDetailsForm, OwnEmergencyContactsForm, type ContactDetails } from "./profile-form";
+import { ProfileForm, type ContactDetails } from "./profile-form";
 
 /**
  * My Profile (Adam's parent menu, 2026-08-25) — the caller's own record.
@@ -39,7 +40,15 @@ function formatDob(dob: string | null): string {
   return parsed.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
-export default async function ProfilePage() {
+export default async function ProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  // ?next= — where saving returns to. The join wizard sends people here for the
+  // one thing it is missing and wants them back afterwards (Adam, 2026-09-01).
+  // `safeRelativePath` refuses anything that is not a path on this site.
+  const next = safeRelativePath((await searchParams).next ?? null);
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
@@ -122,39 +131,14 @@ export default async function ProfilePage() {
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader className="p-4 lg:p-6">
-                <CardTitle className="text-base">Contact details</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  These are yours to keep current — the club uses them to reach you.
-                </p>
-              </CardHeader>
-              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
-                {initial && <ContactDetailsForm initial={initial} />}
-              </CardContent>
-            </Card>
-
-            {/* Only a player is asked for one (Adam, 2026-08-26): these are the
-                people the club rings when something happens to somebody on a
-                pitch. Tick "I am a player" above and the card appears. */}
-            {person.is_player === true && (
-            <Card>
-              <CardHeader className="p-4 lg:p-6">
-                <CardTitle className="text-base">Emergency contacts</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Who the club rings if something happens to you — an injury at training, or
-                  anything at a match that means somebody has to be told now. Up to two, and the
-                  first is tried first. Kept on your record, so they are asked for once rather
-                  than on every registration form.
-                </p>
-              </CardHeader>
-              <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
-                <OwnEmergencyContactsForm
-                  initial={emergencyContacts}
-                  personName={person.preferred_name || person.first_name}
-                />
-              </CardContent>
-            </Card>
+            {initial && (
+              <ProfileForm
+                initial={initial}
+                emergencyContacts={emergencyContacts}
+                personName={person.preferred_name || person.first_name}
+                showEmergency={person.is_player === true}
+                next={next}
+              />
             )}
           </>
         )}

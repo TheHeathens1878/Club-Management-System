@@ -14,15 +14,34 @@
  */
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+
+import { safeRelativePath } from "@/lib/auth-email-hook";
 
 import { countyForTown } from "@/lib/address";
 import { createClient } from "@/lib/supabase/server";
-import { emergencyContactsFromFormData } from "@/lib/emergency-contacts";
+import { EMERGENCY_FIELDS_PRESENT, emergencyContactsFromFormData } from "@/lib/emergency-contacts";
 import { saveEmergencyContacts } from "@/lib/emergency-contacts-server";
 
 export type ProfileActionState = { error?: string; notice?: string };
 
-export async function updateContactDetails(
+/**
+ * One save for the whole page (Adam, 2026-09-01: "save changes ... should only
+ * appear once below emergency contacts"). The page used to be two forms with a
+ * button each, which asked the reader to notice that their emergency contacts
+ * had their own save and to press it — and the half that was not pressed was
+ * quietly not kept.
+ *
+ * The two writes underneath are still two: `update_own_contact()` for the
+ * contact details and `set_emergency_contacts()` for the contacts, each with
+ * its own rules. This does them in that order and stops at the first refusal,
+ * so a message about the address is never shown beside contacts that did save.
+ *
+ * `next` is where to go afterwards — the join wizard sends people here to fill
+ * in what it needs and expects them back (Adam, same message). It is passed
+ * through `safeRelativePath`, so it can only ever be a path on this site.
+ */
+export async function updateProfile(
   _prev: ProfileActionState,
   formData: FormData,
 ): Promise<ProfileActionState> {
@@ -68,7 +87,19 @@ export async function updateContactDetails(
     return { error: error.message };
   }
 
+  // Emergency contacts, but only when the form actually carried them: they are
+  // shown to a player, and an absent fieldset means "not asked", not "clear the
+  // two numbers the club would ring in an emergency".
+  if (formData.get(EMERGENCY_FIELDS_PRESENT) === "yes") {
+    const contactsError = await saveOwnEmergencyContacts(formData);
+    if (contactsError) return { error: contactsError };
+  }
+
   revalidatePath("/profile");
+
+  const next = safeRelativePath(String(formData.get("next") ?? ""));
+  if (next) redirect(next);
+
   return { notice: "Saved." };
 }
 
@@ -78,25 +109,16 @@ export async function updateContactDetails(
  * empty list is allowed here: clearing your own contacts is your call, and
  * the registration is what insists on one.
  */
-export async function updateEmergencyContacts(
-  _prev: ProfileActionState,
-  formData: FormData,
-): Promise<ProfileActionState> {
+async function saveOwnEmergencyContacts(formData: FormData): Promise<string | null> {
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
   if (!personId) {
-    return {
-      error:
-        "Your sign-in is not linked to a member record yet, so there is nothing to update. Ask the club to link your account.",
-    };
+    return "Your sign-in is not linked to a member record yet, so there is nothing to update. Ask the club to link your account.";
   }
 
   const posted = emergencyContactsFromFormData(formData);
-  if ("error" in posted) return { error: posted.error };
+  if ("error" in posted) return posted.error;
 
   const saved = await saveEmergencyContacts(personId, posted);
-  if (saved.error) return { error: saved.error };
-
-  revalidatePath("/profile");
-  return { notice: "Emergency contacts saved." };
+  return saved.error ?? null;
 }
