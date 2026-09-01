@@ -71,7 +71,20 @@ function QuestionRow({
   const [editState, editAction, editPending] = useActionState(updateQuestion, EMPTY);
   const [archiveState, archiveAction, archivePending] = useActionState(setQuestionArchived, EMPTY);
 
-  const canArchive = !question.system && !question.locked;
+  // Adam, 2026-09-01: "on the editable registration form, a club admin should
+  // still be able to turn off built in and always on form questions."
+  //
+  // The database has always allowed this. Its guard refuses to archive a LOCKED
+  // question — photo permissions, GDPR, the terms — and nothing else; a built-in
+  // question that is not locked, like the medical block or the kit size, may be
+  // retired like any other. It was this screen that would not let go of it, by
+  // asking `!question.system` as well, and a UI stricter than the rule it is
+  // enforcing is just a rule nobody wrote down.
+  //
+  // What "built in" actually means is that the KEY and the TYPE are fixed —
+  // an emergency contact is three fields and cannot become a text box — which
+  // is a different thing from whether the club asks it at all.
+  const canArchive = !question.locked;
   const canBeOptional = !question.locked;
   const hasOptions = question.qtype === "select" || question.qtype === "kit_size";
 
@@ -122,7 +135,7 @@ function QuestionRow({
             <Lock className="mr-1 h-3 w-3" /> Always on
           </Badge>
         ) : question.system ? (
-          <Badge variant="muted" title="Built in — its key and type are fixed">
+          <Badge variant="muted" title="Built in — its key and type are fixed, but the club can still retire it">
             <Lock className="mr-1 h-3 w-3" /> Built in
           </Badge>
         ) : null}
