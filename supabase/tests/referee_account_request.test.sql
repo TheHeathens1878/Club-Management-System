@@ -32,10 +32,12 @@ select lives_ok($$
   values ('4a4a4a4a-1111-4111-8111-000000000001', current_setting('rf.ref')::uuid, 'referee')
 $$, 'referee is a role somebody may ask for, with no team');
 
+-- Coach stopped needing one on 2026-09-01 (20260901200000) — the joining form
+-- asks before anybody has been placed. Assistant coach and manager did not.
 select throws_ok($$
   insert into public.account_requests (person_id, requested_role)
-  values (current_setting('rf.ref')::uuid, 'coach')
-$$, '23514', null, 'a coaching role still has to name a team');
+  values (current_setting('rf.ref')::uuid, 'manager')
+$$, '23514', null, 'a squad role still has to name a team');
 
 -- C / D. The sign-up door that used to open this request was removed on
 -- 2026-09-01 (20260901160000): referees ask through the joining workflow now,

@@ -59,9 +59,13 @@ select throws_ok($$
   insert into public.account_requests (person_id, requested_role, team_id)
   values (current_setting('ar.coach')::uuid, 'coach', '7d7d7d7d-1111-4111-8111-000000000001')
 $$, '23505', null, 'one open request per person/role/team');
+-- 'manager', not 'coach': 20260901200000 lets "I coach" be said on the joining
+-- form before the club has placed anybody, so a team-less coach request is now
+-- allowed and approving it grants the club-wide hat alone. Assistant coach and
+-- manager are still said about a squad, and the CHECK still says so.
 select throws_ok($$
   insert into public.account_requests (person_id, requested_role)
-  values (current_setting('ar.coach')::uuid, 'coach')
+  values (current_setting('ar.coach')::uuid, 'manager')
 $$, '23514', null, 'a team role needs a team');
 select throws_ok($$ select public.approve_account_request('a9a9a9a9-1111-4111-8111-000000000001') $$,
   '42501', null, 'a non-admin cannot approve');

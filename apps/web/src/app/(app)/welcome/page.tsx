@@ -212,16 +212,20 @@ function UnlinkedPanel({ contactEmail }: { contactEmail: string }) {
           — the app only ever shows what your own record says you are.
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
+          {/* /join, not /register: this reader is already signed in, and the
+              joining workflow knows it — it confirms their contact details
+              instead of asking them to create a second account, which is what
+              the old link would have done. */}
           <Link
-            href="/register"
+            href="/join"
             className="flex min-h-[44px] items-start gap-3 rounded-xl border bg-card p-4 transition hover:border-primary/40 hover:bg-secondary"
           >
             <UserPlus className="mt-0.5 h-5 w-5 shrink-0 text-muted-foreground" />
             <span>
-              <span className="block text-sm font-semibold">Register with the club</span>
+              <span className="block text-sm font-semibold">Join the club</span>
               <span className="mt-1 block text-xs text-muted-foreground">
-                The form the club uses to add a player, and to record a parent or guardian
-                alongside them.
+                Four steps: your profile, your children, any adults on your membership, then the
+                registrations. Say there whether you play, coach or referee.
               </span>
             </span>
           </Link>
