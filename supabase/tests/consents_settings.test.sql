@@ -669,9 +669,6 @@ values
   ('e9e9e9e9-9999-4999-8999-000000000018',
    'd8d8d8d8-8888-4888-8888-000000000018',
    current_setting('test.guardian_person')::uuid, 'app_account', 'notice-2026-08-v1'),
-  ('e9e9e9e9-9999-4999-8999-000000000019',
-   'd8d8d8d8-8888-4888-8888-000000000019',
-   current_setting('test.guardian_person')::uuid, 'app_account', 'notice-2026-08-v1'),
   ('e9e9e9e9-9999-4999-8999-00000000012a',
    'd8d8d8d8-8888-4888-8888-000000000012',
    current_setting('test.guardian_person')::uuid, 'app_account', 'notice-2026-08-v1'),
@@ -1665,7 +1662,7 @@ select lives_ok(
 select throws_ok(
   $$insert into public.guardian_consents
       (child_person_id, guardian_person_id, consent_type, notice_version)
-    values ('d8d8d8d8-8888-4888-8888-000000000019',
+    values ('d8d8d8d8-8888-4888-8888-000000000025',
             current_setting('test.guardian_person')::uuid, 'app_account', 'v1')$$,
   '42501',
   null,
@@ -1707,7 +1704,7 @@ select throws_ok(
 select throws_ok(
   $$insert into public.guardian_consents
       (child_person_id, guardian_person_id, consent_type, notice_version)
-    values ('d8d8d8d8-8888-4888-8888-000000000019',
+    values ('d8d8d8d8-8888-4888-8888-000000000025',
             'd8d8d8d8-8888-4888-8888-000000000011', 'app_account', 'v1')$$,
   '42501',
   null,
