@@ -1,8 +1,10 @@
 ## Project plan
 Read PLAN.md before starting any work. Follow its phases in order. Respect the
 hard rules in §2: all schema changes via Supabase CLI migrations rehearsed on a
-branch; RLS on every table; no auto-merge on anything touching member data,
-safeguarding, messaging, auth, payments or RLS. Update task statuses in PLAN.md
+branch; RLS on every table; a written §11 review in the PR body for anything
+touching member data, safeguarding, messaging, auth, payments or RLS — Adam
+delegated the merge itself to Claude on 2026-09-01, so those PRs no longer wait
+for him, but a PR that weakens a §2.4 safeguarding invariant still does. Update task statuses in PLAN.md
 as you complete them.
 
 ## Attribution
