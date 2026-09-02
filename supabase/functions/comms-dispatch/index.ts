@@ -263,9 +263,21 @@ async function sendPush(admin: Client, row: OutboundRow): Promise<Delivery> {
         privateKey: optionalEnv("VAPID_PRIVATE_KEY")!,
         subject: optionalEnv("VAPID_EMAIL")!,
       };
+      // The shape public/sw.js reads, which is not the shape Expo reads:
+      //   · `url` at the top level — the worker refuses anything that is not a
+      //     path, and lands on /notifications when it is absent. Without it
+      //     every notification the club sends opened the same screen, whatever
+      //     it was about, and `outbound_messages.link` was sitting there
+      //     holding /messages/<id> the whole time.
+      //   · `tag` at the top level — the worker's comment says "the dispatcher
+      //     sends the entity id as the tag", and now it does: a second push
+      //     about one conversation replaces the first on the lock screen
+      //     instead of stacking under it.
       const payload = {
         title: row.subject ?? "AoM Sports Club",
         body: row.body ?? "",
+        url: row.link ?? undefined,
+        tag: row.entity_id ?? undefined,
         data: { entity: row.entity, entity_id: row.entity_id, template: row.template },
       };
       const dead: string[] = [];
