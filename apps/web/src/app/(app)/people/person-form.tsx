@@ -11,6 +11,7 @@
 
 import { useActionState } from "react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { TownCountyFields } from "@/components/town-county-fields";
@@ -76,7 +77,10 @@ export function PersonForm({
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="space-y-1.5">
           <Label htmlFor="dob">Date of birth</Label>
-          <Input id="dob" name="dob" type="date" defaultValue={values.dob} />
+          {/* No default: this one form edits a nine-year-old and a club
+              secretary, and guessing 1990 for either would be a guess written
+              into the record. The bounds still shorten the wheel. */}
+          <DateOfBirthInput id="dob" defaultValue={values.dob} />
           <p className="text-xs text-muted-foreground">
             An unknown date of birth counts as a minor everywhere (SG-0), so leaving it blank is
             never neutral.

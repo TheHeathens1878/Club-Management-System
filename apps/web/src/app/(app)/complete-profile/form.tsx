@@ -2,26 +2,31 @@
 
 import { useActionState } from "react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { buttonVariants } from "@/components/ui/button";
 
 import { completeDob, type ActionState } from "./actions";
 
 export function CompleteProfileForm() {
   const [state, action, pending] = useActionState<ActionState, FormData>(completeDob, {});
-  const today = new Date().toISOString().slice(0, 10);
 
   return (
     <form action={action} className="space-y-4">
-      <label className="block space-y-1 text-sm">
-        <span className="font-medium">Date of birth</span>
-        <input
-          type="date"
-          name="dob"
+      <div className="space-y-1 text-sm">
+        <label htmlFor="complete-dob" className="block font-medium">
+          Date of birth
+        </label>
+        {/* Almost everybody sent here is an adult — the coaching staff the club
+            imported without a date of birth — so the picker opens on 1 January
+            1990 rather than on today. The line under it is what stops a
+            grown-up's real date being replaced by the scaffolding. */}
+        <DateOfBirthInput
+          id="complete-dob"
           required
-          max={today}
-          className="block min-h-[44px] w-full rounded-md border bg-background px-3 py-2 lg:min-h-0"
+          start="adult"
+          className="min-h-[44px] lg:min-h-0"
         />
-      </label>
+      </div>
       {state.error ? <p className="text-sm text-destructive">{state.error}</p> : null}
       <button
         type="submit"

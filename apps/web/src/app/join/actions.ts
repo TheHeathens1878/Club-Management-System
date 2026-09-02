@@ -90,26 +90,31 @@ const EMPTY_ASK: RoleAsk = { asked: [], refused: [] };
  * duplicate when the form is submitted twice. A null return means the hat is
  * already held, which is not worth a sentence.
  *
- * The coach request carries no team. On the joining form "I coach" is usually
- * said by somebody the club has not placed yet, and 20260901200000 makes the
- * team optional for exactly that: approving grants the club-wide hat and an
- * administrator puts them on a squad from the team page.
+ * The coach request names a team where the form named one (Adam, 2026-09-02:
+ * "the coach should also select the team on sign up — a search box for team
+ * name"), and carries none where it did not: 20260901200000 makes the team
+ * optional because somebody may genuinely not know yet, and approving a
+ * team-less one grants the club-wide hat for an administrator to place.
  */
 async function askForRoles(
   personId: string,
   who: string,
-  wants: { coach: boolean; referee: boolean },
+  wants: { coach: boolean; referee: boolean; coachTeamId: string | null },
 ): Promise<RoleAsk> {
-  const roles: Array<{ role: "coach" | "referee"; sentence: string }> = [];
+  const roles: Array<{ role: "coach" | "referee"; teamId: string | null; sentence: string }> = [];
   if (wants.coach) {
     roles.push({
       role: "coach",
-      sentence: `${who} asked to coach — a club administrator will confirm it and put them with a team.`,
+      teamId: wants.coachTeamId,
+      sentence: wants.coachTeamId
+        ? `${who} asked to coach the team named — a club administrator will confirm it.`
+        : `${who} asked to coach — a club administrator will confirm it and put them with a team.`,
     });
   }
   if (wants.referee) {
     roles.push({
       role: "referee",
+      teamId: null,
       sentence: `${who} asked to referee — a club administrator will confirm it.`,
     });
   }
@@ -117,10 +122,11 @@ async function askForRoles(
 
   const supabase = await createClient();
   const result: RoleAsk = { asked: [], refused: [] };
-  for (const { role, sentence } of roles) {
+  for (const { role, teamId, sentence } of roles) {
     const { data, error } = await supabase.rpc("request_role_for", {
       p_person_id: personId,
       p_role: role,
+      ...(teamId ? { p_team_id: teamId } : {}),
     });
     if (error) {
       result.refused.push(tidyRpcMessage(error.message));
@@ -132,11 +138,15 @@ async function askForRoles(
   return result;
 }
 
-/** "You"/their first name, for the sentences above. */
-function askedFor(formData: FormData): { coach: boolean; referee: boolean } {
+/** The ticks, as the form posts them. */
+function askedFor(formData: FormData): { coach: boolean; referee: boolean; coachTeamId: string | null } {
   return {
     coach: formData.get("coaching") === "yes",
     referee: formData.get("refereeing") === "yes",
+    // Adam, 2026-09-02: the coach names their team as they tick. Blank is
+    // still allowed — 20260901200000 made the team optional precisely because
+    // somebody may not know yet — and then the club places them.
+    coachTeamId: text(formData, "coach_team_id") || null,
   };
 }
 
@@ -332,6 +342,32 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
   }
   if (password !== confirm) return { error: "The two passwords do not match." };
   if (!validDob(dob)) return { error: "Please enter a valid date of birth." };
+
+  // Ask the database whether this sign-up can work BEFORE asking Auth to try
+  // it (Adam, 2026-09-02: "it says the account could not be created: Database
+  // error saving new user"). Any exception raised inside `handle_new_user()`
+  // reaches the browser as GoTrue's own `unexpected_failure`, so a refusal is
+  // that sentence however carefully the trigger words it. The only place a
+  // reason can be given is here, first. See 20260902100000 §3.
+  const { data: precheck } = await supabase.rpc("signup_email_check", {
+    p_email: email,
+    p_dob: dob,
+  });
+  if (precheck === "has_login") {
+    return { error: "An account with that email already exists — sign in, then come back to /join." };
+  }
+  if (precheck === "child_no_access") {
+    return {
+      error:
+        "The club sets up accounts for under-16s through a parent or guardian. Ask them to add you under Children & family and to give you app access — then this address will work.",
+    };
+  }
+  if (precheck === "dob_mismatch") {
+    return {
+      error:
+        "The club already holds a record for that email address with a different date of birth. Check the date, or ask a club administrator to connect the two.",
+    };
+  }
 
   const { data, error } = await supabase.auth.signUp({
     email,

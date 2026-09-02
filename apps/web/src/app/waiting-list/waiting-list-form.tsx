@@ -3,6 +3,7 @@
 import { useActionState, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Select, Textarea } from "@/components/ui/field";
@@ -55,12 +56,12 @@ export function WaitingListForm({
     );
   }
 
-  function handleDobChange(event: React.ChangeEvent<HTMLInputElement>) {
+  function handleDobChange(dob: string) {
     // The <input type="date"> value IS the calendar date: yyyy-mm-dd. Handing
     // it to `new Date()` made it midnight UTC, and a browser west of
     // Greenwich then read the day before — a 1 September birthday landing in
     // the wrong FA cohort. The string goes straight through instead.
-    const suggested = ageGroupFromDobString(event.target.value);
+    const suggested = ageGroupFromDobString(dob);
     if (!suggested) return;
     setSchoolYear(AGE_GROUP_TO_SCHOOL_YEAR[suggested] ?? "");
     if (open.has(suggested)) setAgeGroup(suggested);
@@ -106,7 +107,9 @@ export function WaitingListForm({
           <Label htmlFor="dob">
             Date of birth <span className="text-destructive">*</span>
           </Label>
-          <Input id="dob" name="dob" type="date" required onChange={handleDobChange} />
+          {/* A player joining the waiting list is a child, so no default — but
+              the bounds still shorten iOS's year wheel. */}
+          <DateOfBirthInput id="dob" required onValueChange={handleDobChange} />
           <p className="text-xs text-muted-foreground">
             We use this to work out the right age group — you can change it below.
           </p>

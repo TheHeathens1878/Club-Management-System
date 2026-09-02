@@ -22,9 +22,12 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronLeft, UserPlus, Users } from "lucide-react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
+import { TeamPicker, type TeamOption } from "@/components/team-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
+import { ADULT_DOB_DEFAULT } from "@/lib/date-of-birth";
 import { oldEnoughToReferee, refereeFromSentence } from "@/lib/referee-age";
 
 import { MAX_HOUSEHOLD } from "./constants";
@@ -70,6 +73,7 @@ const COPY: Record<
 export function PeopleStep({
   kind,
   people,
+  clubTeams,
   householdCount,
   minRefereeAge,
   pending,
@@ -86,6 +90,8 @@ export function PeopleStep({
   kind: PeopleStepKind;
   /** The people of this kind added so far. */
   people: HouseholdPerson[];
+  /** Every active team, for a connected adult's coach tick. */
+  clubTeams: TeamOption[];
   /** Everybody on the membership, the registrant included — the cap is on this. */
   householdCount: number;
   minRefereeAge: number;
@@ -103,16 +109,23 @@ export function PeopleStep({
   onContinue: () => void;
 }) {
   const copy = COPY[kind];
-  const [dob, setDob] = useState("");
+  // Where this step's picker opens. A connected adult gets 1 January 1990 so
+  // the iOS wheel starts near a grown-up's answer; a child gets nothing,
+  // because 1990 would open the wheel FURTHER from a child's birth year than
+  // today does, and `add_child()` refuses a thirty-six-year-old anyway.
+  const startingDob = kind === "adult" ? ADULT_DOB_DEFAULT : "";
+  const [dob, setDob] = useState(startingDob);
+  const [coaching, setCoaching] = useState(false);
 
   // React clears an uncontrolled form after a successful action, but the date
   // of birth is CONTROLLED here (the referee tick depends on it), so it would
   // survive into the next person — a second child inheriting the first one's
-  // birthday, with every other field blank. Clear it whenever somebody has
-  // been added.
+  // birthday, with every other field blank. Put it back to this step's
+  // starting point whenever somebody has been added.
   useEffect(() => {
-    setDob("");
-  }, [people.length]);
+    setDob(startingDob);
+    setCoaching(false);
+  }, [people.length, startingDob]);
 
   const full = householdCount >= MAX_HOUSEHOLD;
   const refereeAllowed = oldEnoughToReferee(dob || null, minRefereeAge);
@@ -182,13 +195,12 @@ export function PeopleStep({
               <Input name="last_name" placeholder="Surname" required />
               <div className="space-y-1">
                 <Label htmlFor={`add-${kind}-dob`}>Date of birth</Label>
-                <Input
+                <DateOfBirthInput
                   id={`add-${kind}-dob`}
-                  name="dob"
-                  type="date"
                   required
+                  start={kind === "adult" ? "adult" : "blank"}
                   value={dob}
-                  onChange={(event) => setDob(event.target.value)}
+                  onValueChange={setDob}
                 />
               </div>
               {kind === "adult" && (
@@ -206,15 +218,35 @@ export function PeopleStep({
               </label>
 
               {kind === "adult" && (
-                <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" name="coaching" value="yes" className="mt-0.5 h-4 w-4" />
-                  <span>
-                    They coach, or would like to
-                    <span className="block text-xs text-muted-foreground">
-                      A club administrator confirms it and puts them with a team.
+                <>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="coaching"
+                      value="yes"
+                      checked={coaching}
+                      onChange={(event) => setCoaching(event.target.checked)}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span>
+                      They coach, or would like to
+                      <span className="block text-xs text-muted-foreground">
+                        A club administrator confirms it before it takes effect.
+                      </span>
                     </span>
-                  </span>
-                </label>
+                  </label>
+                  {coaching && (
+                    <div className="pl-6">
+                      <TeamPicker
+                        id="add-adult-coach-team"
+                        name="coach_team_id"
+                        teams={clubTeams}
+                        label="Which team do they coach?"
+                        help="Leave it blank if they do not know yet — the club will place them."
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               {/* The referee tick, on children as well as on adults (Adam,

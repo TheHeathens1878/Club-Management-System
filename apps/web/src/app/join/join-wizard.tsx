@@ -7,7 +7,10 @@ import { ChevronLeft, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
+import { TeamPicker, type TeamOption } from "@/components/team-picker";
 import { TownCountyFields } from "@/components/town-county-fields";
+import { ADULT_DOB_DEFAULT } from "@/lib/date-of-birth";
 import { customQuestionsPayload, stageRegistrationUploads } from "@/components/registration-question-block";
 import type { RegistrationQuestion } from "@/lib/registration-questions";
 import {
@@ -49,9 +52,11 @@ import { OUTCOME_LABELS, PlayerPanel, type PlayerOutcome } from "./player-panel"
  * (created people and submitted registrations stay — the wizard says so
  * instead of pretending otherwise).
  */
-export function JoinWizard({ signedIn, defaults }: {
+export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
   signedIn: boolean;
   defaults: { firstName: string; lastName: string; email: string; phone: string };
+  /** Every active team, for the coach tick's search box (Adam, 2026-09-02). */
+  teams: TeamOption[];
 }) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [startError, setStartError] = useState<string | null>(null);
@@ -298,6 +303,7 @@ export function JoinWizard({ signedIn, defaults }: {
         <ProfileStep
           signedIn={signedIn}
           defaults={defaults}
+          clubTeams={teamOptions}
           minRefereeAge={minRefereeAge}
           error={startError}
           pending={pending}
@@ -328,6 +334,7 @@ export function JoinWizard({ signedIn, defaults }: {
           <PeopleStep
             kind="child"
             people={children}
+            clubTeams={teamOptions}
             householdCount={people.length}
             minRefereeAge={minRefereeAge}
             pending={pending}
@@ -348,6 +355,7 @@ export function JoinWizard({ signedIn, defaults }: {
         <PeopleStep
           kind="adult"
           people={adults}
+          clubTeams={teamOptions}
           householdCount={people.length}
           minRefereeAge={minRefereeAge}
           pending={pending}
@@ -478,6 +486,7 @@ export function JoinWizard({ signedIn, defaults }: {
 function ProfileStep({
   signedIn,
   defaults,
+  clubTeams,
   minRefereeAge,
   error,
   pending,
@@ -485,12 +494,17 @@ function ProfileStep({
 }: {
   signedIn: boolean;
   defaults: { firstName: string; lastName: string; email: string; phone: string };
+  clubTeams: TeamOption[];
   minRefereeAge: number;
   error: string | null;
   pending: boolean;
   onSubmit: (formData: FormData) => void;
 }) {
-  const [dob, setDob] = useState("");
+  // Seeded, because the field is controlled and a controlled input shows what
+  // it is given: `start="adult"` on the component below only decides where an
+  // UNCONTROLLED one opens.
+  const [dob, setDob] = useState(ADULT_DOB_DEFAULT);
+  const [coaching, setCoaching] = useState(false);
   // Signed in, the date of birth is already on the record and this form does
   // not ask for it again — so the tick is offered and the database's own age
   // guard is what answers. Signed out, the date is right here on the form and
@@ -537,13 +551,12 @@ function ProfileStep({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="join-dob">Date of birth</Label>
-                <Input
+                <DateOfBirthInput
                   id="join-dob"
-                  name="dob"
-                  type="date"
                   required
+                  start="adult"
                   value={dob}
-                  onChange={(event) => setDob(event.target.value)}
+                  onValueChange={setDob}
                 />
               </div>
               {/* Adam, 2026-09-01: "biological sex (this is required for
@@ -612,14 +625,36 @@ function ProfileStep({
               I will be playing
             </label>
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" name="coaching" value="yes" className="mt-0.5 h-4 w-4" />
+              <input
+                type="checkbox"
+                name="coaching"
+                value="yes"
+                checked={coaching}
+                onChange={(event) => setCoaching(event.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
               <span>
                 I coach, or would like to
                 <span className="block text-xs text-muted-foreground">
-                  A club administrator confirms it and puts you with a team.
+                  A club administrator confirms it before it takes effect.
                 </span>
               </span>
             </label>
+            {/* The team, named as the tick is made (Adam, 2026-09-02). Not
+                required: somebody volunteering before the club has placed them
+                leaves it blank, which is exactly what the team-less coach
+                request in 20260901200000 is for. */}
+            {coaching && (
+              <div className="pl-6">
+                <TeamPicker
+                  id="join-coach-team"
+                  name="coach_team_id"
+                  teams={clubTeams}
+                  label="Which team do you coach?"
+                  help="Leave it blank if you do not know yet — the club will place you."
+                />
+              </div>
+            )}
             {/* The tick is always HERE, and only sometimes tickable. Hiding it
                 until a date of birth had been typed meant somebody who came to
                 this page specifically to referee found no mention of

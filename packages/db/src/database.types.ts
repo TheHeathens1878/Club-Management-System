@@ -5958,6 +5958,10 @@ export type Database = {
         Returns: number
       }
       is_account_eligible: { Args: { p_person_id: string }; Returns: boolean }
+      is_account_eligible_for: {
+        Args: { p_dob: string | null; p_person_id: string }
+        Returns: boolean
+      }
       is_active_guardian_of: { Args: { p_child: string }; Returns: boolean }
       is_active_participant: {
         Args: { p_conversation_id: string }
@@ -6593,6 +6597,11 @@ export type Database = {
         }[]
       }
       sg6_enforcement_enabled: { Args: never; Returns: boolean }
+      signup_email_check: {
+        Args: { p_dob?: string | null; p_email: string }
+        /** null to go ahead, else has_login | child_no_access | dob_mismatch. */
+        Returns: string | null
+      }
       social_events: {
         Args: { p_limit?: number }
         Returns: {
@@ -6796,6 +6805,14 @@ export type Database = {
         }[]
       }
       venues_for_team: { Args: { p_team_id: string }; Returns: string[] }
+      team_options: {
+        Args: never
+        Returns: {
+          age_group: string | null
+          id: string
+          name: string
+        }[]
+      }
       team_admits_sex: {
         Args: { p_sex: string; p_team_gender: string }
         Returns: boolean
