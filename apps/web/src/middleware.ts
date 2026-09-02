@@ -7,6 +7,9 @@ import { isBookerRole } from "@/lib/types";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
 
+/** "This signed-in user has a recorded DOB" — see the gate below for why. */
+const DOB_OK_COOKIE = "club.dob_ok";
+
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -106,8 +109,15 @@ export async function middleware(request: NextRequest) {
   // P3.3 first-login gate: an account imported from the pitch-booking app
   // must record its date of birth before anything else (SG-0 treats an
   // unknown DOB as a minor, so the person's teams stay hidden until then).
-  // One cheap SECURITY DEFINER call per page request; API, auth and asset
-  // paths are left alone so the page itself can load and sign out works.
+  // API, auth and asset paths are left alone so the page itself can load and
+  // sign out works.
+  //
+  // The answer only ever moves one way — a recorded date of birth is never
+  // un-recorded by the person themself — so a "no, nothing needed" is
+  // remembered in a cookie keyed to the user id, and the RPC is asked once
+  // per browser rather than once per page. The cookie is a routing hint and
+  // nothing more: someone who forges it skips a nudge page, while SG-0 in the
+  // database keeps their teams hidden exactly as before.
   if (
     user &&
     !isPublic &&
@@ -115,12 +125,21 @@ export async function middleware(request: NextRequest) {
     !path.startsWith("/api") &&
     !path.startsWith("/auth")
   ) {
-    const { data: needsDob } = await supabase.rpc("needs_dob_completion");
-    if (needsDob === true) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/complete-profile";
-      url.search = "";
-      return NextResponse.redirect(url);
+    const dobOk = request.cookies.get(DOB_OK_COOKIE)?.value === user.id;
+    if (!dobOk) {
+      const { data: needsDob } = await supabase.rpc("needs_dob_completion");
+      if (needsDob === true) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/complete-profile";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+      response.cookies.set(DOB_OK_COOKIE, user.id, {
+        maxAge: 60 * 60 * 24 * 30,
+        sameSite: "lax",
+        httpOnly: true,
+        path: "/",
+      });
     }
   }
 

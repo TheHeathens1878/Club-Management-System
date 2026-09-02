@@ -173,16 +173,22 @@ export default async function EventPage({
   const { tab: rawTab } = await searchParams;
 
   const supabase = await createClient();
-  const { data: detailRaw, error: detailError } = await supabase.rpc("event_detail", {
-    p_event_id: id,
-  });
+  // The four opening questions are independent of one another — the detail,
+  // the roster, the caller's capabilities and their stored hat — so they go
+  // out together rather than as four round trips in a row.
+  const [{ data: detailRaw, error: detailError }, peopleResult, capabilities, storedView] =
+    await Promise.all([
+      supabase.rpc("event_detail", { p_event_id: id }),
+      supabase.rpc("event_people", { p_event_id: id }),
+      getCapabilities(),
+      getStoredRoleView(),
+    ]);
   if (detailError) notFound();
   const detail = parseDetail(detailRaw);
   if (!detail) notFound();
 
   // The roster is refused to outsiders (P0001) — that is a fact to render,
   // not a failure.
-  const peopleResult = await supabase.rpc("event_people", { p_event_id: id });
   const roster: RosterRow[] = peopleResult.data ?? [];
   const rosterHidden = !!peopleResult.error;
 
@@ -191,11 +197,10 @@ export default async function EventPage({
 
   // Admins assign the pitch right here (Adam, 2026-08-25): offered when the
   // event holds no confirmed pitch yet — a fixture reassign included.
-  const capabilities = await getCapabilities();
   // …and only while wearing the admin hat (Adam, 2026-08-25: "make sure
   // coaches cannot assign pitches") — an admin looking at the event as a
   // coach sees what a coach sees.
-  const hat = resolveRoleView(await getStoredRoleView(), capabilities);
+  const hat = resolveRoleView(storedView, capabilities);
   const canAssignPitch =
     capabilities.isClubAdmin &&
     (hat === "admin" || hat === null) &&

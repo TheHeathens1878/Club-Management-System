@@ -1,3 +1,5 @@
+import { cache } from "react";
+
 import { createAdminClient } from "@/lib/supabase/admin";
 
 export type SiteSettings = {
@@ -57,7 +59,14 @@ const DEFAULTS: SiteSettings = {
   notify_auto_cancellation: "[]",
 };
 
-export async function getSettings(): Promise<SiteSettings> {
+/**
+ * `cache()`d for the same reason as `getSessionProfile`: the root layout asks
+ * on every request, and the pages that theme an email or read a deposit
+ * default ask again in the same render. One request, one read — the table is
+ * a handful of rows and changes only when an administrator saves Settings, so
+ * the per-request answer is always fresh enough.
+ */
+export const getSettings = cache(async function getSettings(): Promise<SiteSettings> {
   try {
     const admin = createAdminClient();
     const { data } = await admin.from("site_settings").select("key,value");
@@ -67,7 +76,7 @@ export async function getSettings(): Promise<SiteSettings> {
   } catch {
     return DEFAULTS;
   }
-}
+});
 
 export const THEMES = {
   // The club's own palette — crest orange on warm ink and paper, from the
