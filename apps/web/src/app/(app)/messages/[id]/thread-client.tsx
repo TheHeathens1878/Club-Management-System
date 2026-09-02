@@ -109,6 +109,8 @@ const POLL_MS = 15000;
 const PAGE_SIZE = 100;
 const QUICK_EMOJI = ["👍", "❤️", "😂", "😮", "😢", "🙏"];
 const MAX_UPLOAD_BYTES = 20 * 1024 * 1024;
+/** Stable, so the Set memo below is not rebuilt on every render. */
+const EMPTY_REFEREES: string[] = [];
 
 type Pending = { id: string; body: string; created_at: string; reply_to_id: string | null };
 
@@ -130,6 +132,7 @@ export function ThreadClient({
   mentionables = [],
   matchPosts = {},
   isReferee = false,
+  refereePersonIds = EMPTY_REFEREES,
   isRefereesGroup = false,
   isAdmin = false,
   isSuperUser = false,
@@ -154,6 +157,14 @@ export function ThreadClient({
   /** The Referees group's game cards, keyed by message id. */
   matchPosts?: Record<string, MatchPostView>;
   isReferee?: boolean;
+  /**
+   * Everybody in this room who holds the referee hat, so a post says so.
+   *
+   * Adam, 2026-09-02: "I also want it to show when they post." In the referees
+   * group most of the people are coaches, and a game posted by a coach and a
+   * game posted by somebody who can take it read very differently.
+   */
+  refereePersonIds?: string[];
   /** The Referees group: games are requested through the form, not the chat. */
   isRefereesGroup?: boolean;
   isAdmin?: boolean;
@@ -174,6 +185,7 @@ export function ThreadClient({
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
+  const referees = useMemo(() => new Set(refereePersonIds), [refereePersonIds]);
   const [live, setLive] = useState<ThreadMessage[]>([]);
   const [earlier, setEarlier] = useState<ThreadMessage[]>([]);
   const [moreEarlier, setMoreEarlier] = useState(hasEarlier);
@@ -998,8 +1010,13 @@ export function ThreadClient({
                       }
                     >
                       {showSenderNames && !mine && firstOfRun && (
-                        <p className="text-xs font-semibold text-primary">
+                        <p className="flex flex-wrap items-center gap-1.5 text-xs font-semibold text-primary">
                           {names[message.sender_person_id] ?? "Club member"}
+                          {referees.has(message.sender_person_id) && (
+                            <span className="rounded-full bg-amber-100 px-1.5 py-px text-[10px] font-medium text-amber-800">
+                              Referee
+                            </span>
+                          )}
                         </p>
                       )}
 
