@@ -39,7 +39,7 @@ insert into public.people (id, first_name, last_name, dob, created_by) values
   ('92aa0000-3333-4111-8111-000000000001', 'Hattie', 'Household', '1988-08-08',
    '22aa0000-3333-4111-8111-000000000001');
 insert into public.household_links (owner_user_id, person_id, match_basis) values
-  ('22aa0000-3333-4111-8111-000000000001', '92aa0000-3333-4111-8111-000000000001', 'created');
+  ('22aa0000-3333-4111-8111-000000000001', '92aa0000-3333-4111-8111-000000000001', 'email');
 
 -- A ── unlimited teams ───────────────────────────────────────────────────────
 
@@ -129,7 +129,7 @@ set local request.jwt.claims to '{}';
 select set_config('tt.stranger_person',
   (select person_id::text from public.profiles where id = '22aa0000-3333-4111-8111-000000000002'), true);
 insert into public.household_links (owner_user_id, person_id, match_basis)
-values ('22aa0000-3333-4111-8111-000000000001', current_setting('tt.stranger_person')::uuid, 'created');
+values ('22aa0000-3333-4111-8111-000000000001', current_setting('tt.stranger_person')::uuid, 'email');
 
 set local role authenticated;
 set local request.jwt.claims to '{"sub":"22aa0000-3333-4111-8111-000000000001","role":"authenticated"}';
