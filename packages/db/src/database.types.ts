@@ -5853,6 +5853,10 @@ export type Database = {
         Returns: string
       }
       fixture_event_minutes: { Args: { p_team_id: string }; Returns: number }
+      fixture_event_title: {
+        Args: { p_is_home: boolean; p_opponent: string; p_team_id: string }
+        Returns: string
+      }
       fixture_team_id: { Args: { p_fixture_id: string }; Returns: string }
       fulltime_club_codes: {
         Args: never

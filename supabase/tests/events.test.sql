@@ -18,7 +18,7 @@
 
 begin;
 
-select plan(32);
+select plan(34);
 
 -- Setup ----------------------------------------------------------------------
 insert into auth.users (id, email, raw_user_meta_data) values
@@ -54,8 +54,14 @@ select set_config('ev.f1ev', (select id::text from public.events where fixture_i
 
 select is((select type::text from public.events where fixture_id = 'f1f1f1f1-3333-4111-8111-000000000001'),
   'league_match', 'a fixture insert creates a league_match event');
+-- Both teams, home first (20260902140000, Adam: "on the match calendar, it
+-- should also have the home team as well as the away team").
 select is((select title from public.events where fixture_id = 'f1f1f1f1-3333-4111-8111-000000000001'),
-  'vs Rovers (H)', 'the event title carries opponent and home/away');
+  'EV United v Rovers (H)', 'the event title carries both teams and home/away');
+select is(public.fixture_event_title('8e8e8e8e-3333-4111-8111-000000000001', 'Rovers', false),
+  'Rovers v EV United (A)', 'and away puts the other lot first, as a fixture list does');
+select is(public.fixture_event_title(null, 'Rovers', true),
+  'vs Rovers (H)', 'a fixture with no team yet keeps the half-sentence rather than losing a name');
 select is(public.event_type_for_competition('Presidents Cup')::text, 'cup_match', 'a cup competition maps to cup_match');
 
 -- B. notifications -----------------------------------------------------------
