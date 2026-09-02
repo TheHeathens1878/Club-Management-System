@@ -11,6 +11,8 @@ import {
   widgetHtmlFrom,
   widgetTeamName,
   widgetUrl,
+  foldTeamName,
+  resolveClubTeams,
 } from "../src/widget.ts";
 import { fixturesForTeam } from "../src/team.ts";
 import { fixture } from "./helpers.ts";
@@ -47,7 +49,7 @@ describe("parseWidgetHtml on a recorded team widget", () => {
 
   it("reads every fixture row with the FA fixture id as the external ref", () => {
     expect(page.warnings).toEqual([]);
-    expect(page.fixtures.length).toBeGreaterThan(10);
+    expect(page.fixtures.length).toBe(20);
     const first = page.fixtures[0]!;
     expect(first).toMatchObject({
       externalRef: "30540038",
@@ -327,5 +329,108 @@ describe("classifyFixtureRow", () => {
       homeTeam: "Home FC",
       awayTeam: "Away FC",
     });
+  });
+});
+
+describe("suppressed young-age-group scores (the U8 'X')", () => {
+  it("peels a bare X off each side of the separator and records no score", () => {
+    expect(
+      classifyFixtureRow([
+        "",
+        "Ashton On Mersey FC U8 Sparrows Black",
+        "X",
+        "v",
+        "X",
+        "Altrincham FC Juniors U8 Girls Toucans",
+        "Platt Lane Pitch 1",
+      ]),
+    ).toEqual({
+      type: "",
+      homeTeam: "Ashton On Mersey FC U8 Sparrows Black",
+      awayTeam: "Altrincham FC Juniors U8 Girls Toucans",
+      venue: "Platt Lane Pitch 1",
+    });
+  });
+
+  it("accepts a joined 'X - X' as the separator itself", () => {
+    expect(classifyFixtureRow(["Home FC", "X - X", "Away FC"])).toEqual({
+      type: "",
+      homeTeam: "Home FC",
+      awayTeam: "Away FC",
+    });
+  });
+
+  it("never swallows a team actually called X", () => {
+    // The `> 1` guard: the last thing standing on a side is the team.
+    expect(classifyFixtureRow(["X", "v", "Away FC"]).homeTeam).toBe("X");
+  });
+
+  it("parses the recorded U8 widget with real team names throughout", () => {
+    const page = parseWidgetHtml(fixture("widget-league-611418289.html"));
+    expect(page.fixtures.length).toBe(7);
+    for (const f of page.fixtures) {
+      expect(f.homeTeam).not.toMatch(/^x$/i);
+      expect(f.awayTeam).not.toMatch(/^x$/i);
+      expect(f.homeScore).toBeUndefined();
+      expect(f.awayScore).toBeUndefined();
+    }
+  });
+
+  it("names the widget's own team again, which is the whole diagnosis", () => {
+    // The recording is the snippet Adam pasted for Sparrows Black on
+    // 2026-09-02 — and it is actually the Toucans' widget; Sparrows Black is
+    // in one row, as their opponent. Before this fix the suppressed scores
+    // parsed as team names and verify reported the widget as belonging to
+    // "X"; now it reports the truth, which tells the person exactly what to
+    // fetch instead.
+    const page = parseWidgetHtml(fixture("widget-league-611418289.html"));
+    expect(widgetTeamName(page.fixtures)).toBe("Altrincham FC Juniors U8 Girls Toucans");
+  });
+});
+
+describe("resolveClubTeams — two squads, one club record", () => {
+  const clubTeams = ["U08 Sparrows Girls", "U14 Mavericks"];
+  const prefix = "Ashton On Mersey FC";
+
+  it("refuses a club team claimed by two squads, with a warning naming both", () => {
+    const { assignments, warnings } = resolveClubTeams(
+      [
+        "Ashton On Mersey FC U8 Sparrows Black",
+        "Ashton On Mersey FC U8 Sparrows Orange",
+        "Timperley FC U8 Hammarby",
+      ],
+      clubTeams,
+      prefix,
+    );
+    expect(assignments.size).toBe(0);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("Sparrows Black");
+    expect(warnings[0]).toContain("Sparrows Orange");
+    expect(warnings[0]).toContain("U08 Sparrows Girls");
+  });
+
+  it("lets an exact name beat a squad-qualified one instead of tying with it", () => {
+    const { assignments, warnings } = resolveClubTeams(
+      ["Ashton On Mersey FC U14 Mavericks", "Ashton On Mersey FC U14 Mavericks Blue"],
+      clubTeams,
+      prefix,
+    );
+    expect(assignments.get(foldTeamName("Ashton On Mersey FC U14 Mavericks"))).toBe(
+      "U14 Mavericks",
+    );
+    expect(assignments.get(foldTeamName("Ashton On Mersey FC U14 Mavericks Blue"))).toBeUndefined();
+    expect(warnings).toHaveLength(1);
+  });
+
+  it("assigns a lone squad-qualified name exactly as before", () => {
+    const { assignments, warnings } = resolveClubTeams(
+      ["Ashton On Mersey FC U8 Sparrows Black", "Sale United U8 Foxes"],
+      clubTeams,
+      prefix,
+    );
+    expect(assignments.get(foldTeamName("Ashton On Mersey FC U8 Sparrows Black"))).toBe(
+      "U08 Sparrows Girls",
+    );
+    expect(warnings).toHaveLength(0);
   });
 });

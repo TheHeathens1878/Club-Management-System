@@ -21,6 +21,8 @@
 import { adminClient, json, requireServiceRole, userClient, type Client } from "../_shared/auth.ts";
 import {
   matchClubTeam,
+  foldTeamName,
+  resolveClubTeams,
   fetchViaPgNet,
   fixturesForTeam,
   parseFixturesPage,
@@ -258,10 +260,20 @@ async function importClub(admin: Client, linkedTeamIds: Set<string>, onlyTeam: s
   );
   const names = teams.map((t) => t.name);
 
+  // Every widget name resolved AT ONCE, so two squads folding onto one club
+  // record ("…U8 Sparrows Black" and "…U8 Sparrows Orange" both claiming
+  // "U08 Sparrows Girls") is caught here instead of importing twice over.
+  const resolution = resolveClubTeams(
+    fixtures.flatMap((f) => [f.homeTeam, f.awayTeam]),
+    names,
+    clubPrefix,
+  );
+  pageWarnings.push(...resolution.warnings);
+
   for (const team of teams) {
     const mine = fixtures.flatMap((f) => {
-      const isHome = matchClubTeam(f.homeTeam, names, clubPrefix) === team.name;
-      const isAway = matchClubTeam(f.awayTeam, names, clubPrefix) === team.name;
+      const isHome = resolution.assignments.get(foldTeamName(f.homeTeam)) === team.name;
+      const isAway = resolution.assignments.get(foldTeamName(f.awayTeam)) === team.name;
       if (!isHome && !isAway) return [];
       return [{ ...f, isHome, opponent: isHome ? f.awayTeam : f.homeTeam }];
     });

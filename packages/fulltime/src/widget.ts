@@ -117,6 +117,16 @@ export function widgetTeamName(fixtures: readonly ParsedFixture[]): string | und
 const NUMBER = /^\d{1,3}$/;
 const SCORE_PAIR = /^(\d{1,3})\s*[-–—]\s*(\d{1,3})$/;
 const SEPARATOR = /^(?:v|vs)\.?$|^[-–—]$/i;
+/**
+ * The FA suppresses results for the youngest age groups (U7/U8 play
+ * non-competitive football) and prints a bare "X" where each score would go —
+ * "Team A  X  v  X  Team B". Those cells hug the separator exactly like real
+ * scores, so they peel off the same way; they just record nothing. Without
+ * this, both teams of every U8 game parsed as a side called "X" (Adam,
+ * 2026-09-02, the Sparrows league snippet).
+ */
+const HIDDEN_SCORE = /^x$/i;
+const HIDDEN_PAIR = /^x\s*[-–—]\s*x$/i;
 const TYPE_LETTER = /^[A-Za-z]{1,3}$/;
 const NOTHING_TO_SHOW = /^\s*no\s+(results|fixtures|matches|games)\b/i;
 const STATUS_WORDS: ReadonlyArray<readonly [RegExp, FixtureStatus]> = [
@@ -193,7 +203,7 @@ export function classifyFixtureRow(cellTexts: readonly string[]): ClassifiedRow 
   for (let i = 1; i < cellTexts.length; i += 1) {
     const text = cellTexts[i] ?? "";
     if (text === "") continue;
-    if (SEPARATOR.test(text)) {
+    if (SEPARATOR.test(text) || HIDDEN_PAIR.test(text)) {
       sepIndex = i;
       break;
     }
@@ -222,6 +232,12 @@ export function classifyFixtureRow(cellTexts: readonly string[]): ClassifiedRow 
       before.pop();
       continue;
     }
+    if (HIDDEN_SCORE.test(last)) {
+      // A suppressed young-age-group score: peeled like a number, records
+      // nothing.
+      before.pop();
+      continue;
+    }
     const word = cellStatusIn(last);
     if (word) {
       cellStatus = cellStatus ?? word;
@@ -234,6 +250,10 @@ export function classifyFixtureRow(cellTexts: readonly string[]): ClassifiedRow 
     const head = after[0] ?? "";
     if (NUMBER.test(head)) {
       awayScore = awayScore ?? Number(head);
+      after.shift();
+      continue;
+    }
+    if (HIDDEN_SCORE.test(head)) {
       after.shift();
       continue;
     }
@@ -433,31 +453,124 @@ export function matchClubTeam(
   clubTeamNames: readonly string[],
   clubPrefix?: string,
 ): string | undefined {
+  const hits = clubTeamNames.filter(
+    (short) => matchTier(widgetTeamName, short, clubPrefix) !== undefined,
+  );
+  return hits.length === 1 ? hits[0] : undefined;
+}
+
+/**
+ * How strongly a widget team name claims one club team — lower is stronger —
+ * or undefined for no claim at all.
+ *
+ *   0  the names are the same (with or without the club prefix in front);
+ *   1  the club record carries a section word Full-Time does not print
+ *      ("U14 Ravens Girls" vs "Ashton On Mersey FC U14 Ravens");
+ *   2  the widget name carries a qualifier beyond the club record — a squad
+ *      colour, usually ("…U8 Sparrows Black" vs "U08 Sparrows Girls").
+ *
+ * Tier 2 is the dangerous one: when the club fields TWO squads that differ
+ * only by that qualifier, both fold onto the same record. One name at a time
+ * that is undetectable, which is why {@link resolveClubTeams} exists.
+ */
+function matchTier(
+  widgetTeamName: string,
+  clubTeamName: string,
+  clubPrefix?: string,
+): 0 | 1 | 2 | undefined {
   const full = foldTeamName(widgetTeamName);
   if (full === "") return undefined;
+  const exact = foldTeamName(clubTeamName);
+  if (exact === "") return undefined;
+  if (full === exact) return 0;
+
   const prefix = clubPrefix === undefined ? undefined : foldTeamName(clubPrefix);
   const rest =
     prefix !== undefined && full.startsWith(`${prefix} `) ? full.slice(prefix.length + 1) : undefined;
+  // The club's own record may carry a section qualifier Full-Time does not
+  // print ("U14 Ravens Girls" vs "Ashton On Mersey FC U14 Ravens").
+  const bare = exact.replace(/\s+(girls|boys|ladies|men|women)$/, "");
+  if (prefix === undefined) {
+    // No club prefix to anchor on: suffix match, exact names only. This is
+    // deliberately narrow — "AFC Urmston Meadowside U14 Mavericks" must not
+    // claim a club team called "U14 Mavericks".
+    return full.endsWith(` ${exact}`) ? 0 : undefined;
+  }
+  if (rest === undefined) return undefined;
+  if (rest === exact) return 0;
+  if (rest === bare) return 1;
+  // Anchored on the club's name; the remainder may carry a squad qualifier
+  // the club record folds together ("U8 Sparrows Orange" → "U08 Sparrows Girls").
+  if (rest.startsWith(`${bare} `)) return 2;
+  return undefined;
+}
 
-  const hits = clubTeamNames.filter((short) => {
-    const exact = foldTeamName(short);
-    if (exact === "") return false;
-    if (full === exact) return true;
-    // The club's own record may carry a section qualifier Full-Time does not
-    // print ("U14 Ravens Girls" vs "Ashton On Mersey FC U14 Ravens").
-    const bare = exact.replace(/\s+(girls|boys|ladies|men|women)$/, "");
-    if (prefix === undefined) {
-      // No club prefix to anchor on: suffix match, exact names only. This is
-      // deliberately narrow — "AFC Urmston Meadowside U14 Mavericks" must not
-      // claim a club team called "U14 Mavericks".
-      return full.endsWith(` ${exact}`);
+export type ClubTeamResolution = {
+  /** {@link foldTeamName}(widget team name) → the club team it imports as. */
+  assignments: Map<string, string>;
+  /** One sentence per squad clash — for the import run's warnings. */
+  warnings: string[];
+};
+
+/**
+ * Every widget team name resolved against the club's teams AT ONCE, so a
+ * collision is visible before anything imports.
+ *
+ * `matchClubTeam` folds a squad qualifier away — the right thing when the
+ * club record and the FA disagree about one team's name, and exactly wrong
+ * when the club fields two squads in one division ("…U8 Sparrows Black" AND
+ * "…U8 Sparrows Orange", club record "U08 Sparrows Girls"; Adam, 2026-09-02:
+ * both imported onto the one team, every Saturday twice over, plus a
+ * Black-v-Orange game recorded as the team playing itself).
+ *
+ * The rule: for each club team, the STRONGEST claim wins; a tie between two
+ * different widget names is a real ambiguity, and nobody imports — with a
+ * warning that says to link the right squad's own snippet on the team page,
+ * where `ft_team_name` pins the FA name exactly.
+ */
+export function resolveClubTeams(
+  widgetTeamNames: readonly string[],
+  clubTeamNames: readonly string[],
+  clubPrefix?: string,
+): ClubTeamResolution {
+  const claims = new Map<string, { name: string; tier: number }[]>();
+  const seen = new Set<string>();
+  for (const name of widgetTeamNames) {
+    const key = foldTeamName(name);
+    if (key === "" || seen.has(key)) continue;
+    seen.add(key);
+    const hits = clubTeamNames
+      .map((short) => ({ short, tier: matchTier(name, short, clubPrefix) }))
+      .filter((hit): hit is { short: string; tier: 0 | 1 | 2 } => hit.tier !== undefined);
+    // The same rule as matchClubTeam: a name claiming two club teams claims
+    // neither.
+    if (hits.length !== 1) continue;
+    const hit = hits[0]!;
+    const list = claims.get(hit.short) ?? [];
+    list.push({ name, tier: hit.tier });
+    claims.set(hit.short, list);
+  }
+
+  const assignments = new Map<string, string>();
+  const warnings: string[] = [];
+  for (const [club, list] of claims) {
+    const best = Math.min(...list.map((claim) => claim.tier));
+    const top = list.filter((claim) => claim.tier === best);
+    if (top.length === 1) {
+      assignments.set(foldTeamName(top[0]!.name), club);
+      const dropped = list.filter((claim) => claim !== top[0]);
+      if (dropped.length > 0) {
+        warnings.push(
+          `${dropped.map((d) => `"${d.name}"`).join(" and ")} look like another squad of "${club}" — only "${top[0]!.name}" imported.`,
+        );
+      }
+    } else {
+      warnings.push(
+        `${top.map((claim) => `"${claim.name}"`).join(" and ")} would all match the club team "${club}" — two squads in one division, so none of them imported. Link the right squad's own snippet on the team's page to pin it.`,
+      );
     }
-    if (rest === undefined) return false;
-    // Anchored on the club's name; the remainder may carry a squad qualifier
-    // the club record folds together ("U8 Sparrows Orange" → "U08 Sparrows Girls").
-    return rest === exact || rest === bare || rest.startsWith(`${bare} `);
-  });
-  return hits.length === 1 ? hits[0] : undefined;
+  }
+  return { assignments, warnings };
 }
 
 /**
