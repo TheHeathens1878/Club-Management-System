@@ -22,7 +22,7 @@ import { getSessionProfile } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { eventTabFrom, eventTabsFor } from "@/lib/match-tabs";
-import { resolveRoleView } from "@/lib/role-view";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { scorelineLabel } from "@/lib/scoreline";
 import { createClient } from "@/lib/supabase/server";
 
@@ -265,11 +265,19 @@ export default async function EventPage({
   // their own child's match as a parent gets the parent's bar, the same rule
   // the team page's tabs follow.
   const eventTabs = eventTabsFor({
-    memberView: hat === "parent" || hat === "player" || hat === "me",
+    memberView: isMemberView(hat),
     kickedOff: new Date(detail.startsAt).getTime() <= Date.now(),
   });
   const tab = detail.fixtureId ? eventTabFrom(rawTab, eventTabs) : "details";
-  const canManageMatch = isStaff || capabilities.isClubAdmin;
+  // The hat puts the coach's tools away (Adam, 2026-09-02: "Where I am in
+  // parent view, I don't want to see any of my coach or club admin
+  // privileges"). `memberHat` is already what the tab list is built from a few
+  // lines up; everything else on this page now asks it too — the match tools,
+  // the edit form, and the availability NOTES, which are other families'
+  // sentences and the most private thing on the screen.
+  const memberHat = isMemberView(hat);
+  const staffHere = isStaff && !memberHat;
+  const canManageMatch = (isStaff || capabilities.isClubAdmin) && !memberHat;
 
   // The header badge: the effective scoreline, which is the coach's pair when
   // they entered one and Full-Time's otherwise — `lib/scoreline.ts` owns that
@@ -302,6 +310,7 @@ export default async function EventPage({
   // thing to anyone who reaches the form another way.
   const canEdit =
     (isStaff || capabilities.isClubAdmin) &&
+    !memberHat &&
     !cancelled &&
     !detail.fixtureId &&
     new Date(detail.startsAt).getTime() > Date.now();
@@ -593,7 +602,7 @@ export default async function EventPage({
                               *
                             </span>
                           ) : null}
-                          {isStaff && row.note ? (
+                          {staffHere && row.note ? (
                             <span className="text-muted-foreground"> — {row.note}</span>
                           ) : null}
                         </li>
@@ -625,7 +634,7 @@ export default async function EventPage({
                               *
                             </span>
                           ) : null}
-                          {isStaff && row.note ? (
+                          {staffHere && row.note ? (
                             <span className="text-muted-foreground"> — {row.note}</span>
                           ) : null}
                         </li>
@@ -655,7 +664,7 @@ export default async function EventPage({
                       ))}
                     </ul>
                   )}
-                  {isStaff && awaiting.length > 0 && !cancelled ? (
+                  {staffHere && awaiting.length > 0 && !cancelled ? (
                     <RemindButton eventId={detail.id} />
                   ) : null}
                 </div>

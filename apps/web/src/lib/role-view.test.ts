@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isMemberView,
   parseViewOption,
   roleSwitchAnnouncement,
   roleSwitcherProps,
   roleViewOptions,
+  ROLE_VIEWS,
   type Capabilities,
 } from "@/lib/role-view";
 
@@ -80,5 +82,47 @@ describe("roleSwitchAnnouncement", () => {
     const stalled = roleSwitchAnnouncement("Coach, U14 Mavericks", true);
     expect(stalled).not.toContain("One moment");
     expect(stalled).toContain("longer than it should");
+  });
+});
+
+/**
+ * Adam, 2026-09-02: "As a parent for the U14 Mavericks, I can mark who
+ * attended. This should only be available to coaches (even though I am also a
+ * coach)… Where I am in parent view, I don't want to see any of my coach or
+ * club admin privileges. I want to see what other parents can see."
+ *
+ * The audit that followed found the same shape in eight places, and the reason
+ * was always the same: the gate asked what the person CAN do and forgot to ask
+ * which hat they were wearing. `isMemberView` is the missing half, written
+ * once so the next screen cannot forget it by accident.
+ */
+describe("isMemberView", () => {
+  it("is true for the three hats you wear to look at the club as a member", () => {
+    expect(isMemberView("me")).toBe(true);
+    expect(isMemberView("parent")).toBe(true);
+    expect(isMemberView("player")).toBe(true);
+  });
+
+  it("is false for the hats you wear to run something", () => {
+    expect(isMemberView("coach")).toBe(false);
+    expect(isMemberView("admin")).toBe(false);
+    expect(isMemberView("referee")).toBe(false);
+    expect(isMemberView("function_room")).toBe(false);
+  });
+
+  /**
+   * Null is "no view resolved" — an account the club has not linked to
+   * anybody. It must NOT read as a member view: the pages that fall back to
+   * `view === null` treat it as "no hat chosen, show me everything I hold",
+   * and flipping that would hide an administrator's own tools from them.
+   */
+  it("is false when no view resolved at all", () => {
+    expect(isMemberView(null)).toBe(false);
+  });
+
+  it("answers for every view the club has, so a new one cannot be forgotten", () => {
+    for (const view of ROLE_VIEWS) {
+      expect(typeof isMemberView(view)).toBe("boolean");
+    }
   });
 });

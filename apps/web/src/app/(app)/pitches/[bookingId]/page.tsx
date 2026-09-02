@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import {
   loadBookingDetail,
   loadBookingFixture,
@@ -76,7 +78,19 @@ export default async function BookingDetailPage({
     supabase.rpc("my_children"),
   ]);
 
-  const canMarkAttendance = staffResult.data === true || adminResult.data === true;
+  // Adam, 2026-09-02: "As a parent for the U14 Mavericks, I can mark who
+  // attended. This should only be available to coaches (even though I am also
+  // a coach)." Holding the coach hat is what ADMITS somebody to the register;
+  // wearing a parent's hat is what puts it away. Without the second half, the
+  // one person on the team who is both saw the whole squad's answers and the
+  // attendance ticks on a screen every other parent gets the availability form
+  // on — which is precisely the difference he is asking to see.
+  //
+  // The roster read below hangs off this too, so a parent view does not fetch
+  // the squad at all: the hidden panel was not the only leak, the data was.
+  const view = resolveRoleView(await getStoredRoleView(), await getCapabilities());
+  const canMarkAttendance =
+    (staffResult.data === true || adminResult.data === true) && !isMemberView(view);
   const personId = personResult.data ?? null;
   const teamIds = teams.map((team) => team.id);
   const teamNameById = new Map(teams.map((team) => [team.id, team.name]));

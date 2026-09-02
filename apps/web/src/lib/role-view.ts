@@ -207,6 +207,36 @@ export function resolveRoleView(stored: RoleView | null, c: Capabilities): RoleV
   return defaultRoleView(c);
 }
 
+/**
+ * Is this person looking at the club as a MEMBER of it?
+ *
+ * Me, Parent and Player are the three hats somebody wears to see what the club
+ * looks like from the inside — their own family, their own team, their own
+ * fixtures. Coach, Club admin, Referee and Function room are the hats you wear
+ * to run something.
+ *
+ * Adam, 2026-09-02: "As a parent for the U14 Mavericks, I can mark who
+ * attended. This should only be available to coaches (even though I am also a
+ * coach)… Where I am in parent view, I don't want to see any of my coach or
+ * club admin privileges. I want to see what other parents can see."
+ *
+ * THE RULE THIS ENCODES, and the reason it is a function rather than a habit:
+ * a capability ADMITS you to something; the hat is what puts it away. Both
+ * halves are needed at every render gate, and the pages that got it right
+ * wrote `view === "parent" || view === "player" || view === "me"` out longhand
+ * — so the pages that got it wrong are the ones where nobody remembered to.
+ *
+ * WHAT IT IS NOT. This never widens anything and it is never a security
+ * boundary: RLS and the SECURITY DEFINER functions decide what the database
+ * will hand over, and they answer to the person, not to a cookie. This decides
+ * what the SCREEN offers. A parent-view page that still reads a coach's data
+ * is a leak of information; one that merely holds a capability the reader has
+ * genuinely got is not.
+ */
+export function isMemberView(view: RoleView | null): boolean {
+  return view === "parent" || view === "player" || view === "me";
+}
+
 // ---------------------------------------------------------------------------
 // The "Viewing as" dropdown — role–team combinations (Adam, 2026-08-25)
 // ---------------------------------------------------------------------------

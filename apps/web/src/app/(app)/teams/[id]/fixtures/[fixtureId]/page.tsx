@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import { headcountLabel, summariseAvailability } from "@/lib/headcount";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames } from "@/lib/person";
@@ -63,7 +65,14 @@ export default async function FixtureAttendancePage({
     supabase.from("events").select("id").eq("fixture_id", fixtureId).maybeSingle(),
   ]);
   const eventId = eventResult.data?.id ?? null;
-  const canManage = staffResult.data === true || admin;
+  // The hat, not only the capability (Adam, 2026-09-02: "Where I am in parent
+  // view, I don't want to see any of my coach or club admin privileges. I want
+  // to see what other parents can see"). Being staff ADMITS you to the squad's
+  // answers, the organiser list, the kick-off and the delete; wearing a
+  // parent's, player's or Me hat puts all four away, and what is left is the
+  // page every other parent gets — their own household's availability.
+  const view = resolveRoleView(await getStoredRoleView(), await getCapabilities());
+  const canManage = (staffResult.data === true || admin) && !isMemberView(view);
 
   // What deleting this fixture would destroy with it. Offered to the team's
   // staff as well as to administrators (Adam, 2026-08-27), so the counts are
