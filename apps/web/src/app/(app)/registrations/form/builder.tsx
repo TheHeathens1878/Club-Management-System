@@ -136,30 +136,62 @@ function QuestionRow({
         ) : null}
 
         <span className="ml-auto flex items-center gap-1">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => onMove(index, -1)}
-            disabled={index === 0}
-            aria-label={`Move ${question.label} up`}
-            className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"
-          >
-            <ArrowUp className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => onMove(index, 1)}
-            disabled={index === count - 1}
-            aria-label={`Move ${question.label} down`}
-            className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"
-          >
-            <ArrowDown className="h-3.5 w-3.5" />
-          </Button>
+          {/* A retired row's one action lives ON the row (Adam, 2026-09-02:
+              "Restore is missing after I retired it" — it existed, two taps
+              deep behind the label with nothing pointing at it, which is the
+              same thing as missing). The reorder arrows mean nothing off the
+              form, so the button takes their place. */}
+          {question.archivedAt ? (
+            <form action={archiveAction}>
+              <input type="hidden" name="question_id" value={question.id} />
+              <input type="hidden" name="archived" value="no" />
+              <Button
+                type="submit"
+                size="sm"
+                variant="outline"
+                disabled={archivePending}
+                className="min-h-[44px] lg:min-h-0"
+              >
+                <RotateCcw className="mr-1 h-3.5 w-3.5" />
+                {archivePending ? "Putting back…" : "Put back on the form"}
+              </Button>
+            </form>
+          ) : (
+            <>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => onMove(index, -1)}
+                disabled={index === 0}
+                aria-label={`Move ${question.label} up`}
+                className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"
+              >
+                <ArrowUp className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={() => onMove(index, 1)}
+                disabled={index === count - 1}
+                aria-label={`Move ${question.label} down`}
+                className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"
+              >
+                <ArrowDown className="h-3.5 w-3.5" />
+              </Button>
+            </>
+          )}
         </span>
       </div>
+
+      {/* A refusal must land next to the button that earned it, not inside a
+          panel nobody has opened. */}
+      {question.archivedAt && (archiveState.error || archiveState.notice) ? (
+        <div className="px-3 pb-2">
+          <Message state={archiveState} />
+        </div>
+      ) : null}
 
       {open && (
         <div className="space-y-3 border-t p-3">
@@ -241,15 +273,6 @@ function QuestionRow({
                   className="min-h-[44px] text-destructive lg:min-h-0"
                 >
                   <Trash2 className="mr-1 h-3.5 w-3.5" /> Retire
-                </Button>
-              </form>
-            )}
-            {question.archivedAt && (
-              <form action={archiveAction} className="ml-auto">
-                <input type="hidden" name="question_id" value={question.id} />
-                <input type="hidden" name="archived" value="no" />
-                <Button type="submit" size="sm" variant="ghost" disabled={archivePending} className="min-h-[44px] lg:min-h-0">
-                  <RotateCcw className="mr-1 h-3.5 w-3.5" /> Put back on the form
                 </Button>
               </form>
             )}
@@ -417,7 +440,7 @@ export function FormBuilder({ questions }: { questions: RegistrationQuestion[] }
       {retired.length > 0 && (
         <details className="rounded-lg border bg-card">
           <summary className="min-h-[44px] cursor-pointer px-4 py-3 text-sm font-medium">
-            Retired questions ({retired.length})
+            Retired questions ({retired.length}) — kept here to put back next season
           </summary>
           <ul className="space-y-2 border-t p-3">
             {retired.map((question, index) => (
