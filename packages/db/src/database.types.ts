@@ -4645,6 +4645,7 @@ export type Database = {
           match_halves: number
           name: string
           notes: string | null
+          playing_format: string | null
           recruiting: boolean
           session_details: string | null
           show_coach_contact: boolean
@@ -4675,6 +4676,7 @@ export type Database = {
           match_halves?: number
           name: string
           notes?: string | null
+          playing_format?: string | null
           recruiting?: boolean
           session_details?: string | null
           show_coach_contact?: boolean
@@ -4705,6 +4707,7 @@ export type Database = {
           match_halves?: number
           name?: string
           notes?: string | null
+          playing_format?: string | null
           recruiting?: boolean
           session_details?: string | null
           show_coach_contact?: boolean

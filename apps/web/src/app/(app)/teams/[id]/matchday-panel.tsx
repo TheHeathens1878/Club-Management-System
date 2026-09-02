@@ -34,7 +34,21 @@ import { updateTeamMatchDay, type MatchDayState } from "./matchday-actions";
 
 export type MatchDayPitch = { id: string; name: string };
 
+/** The four shapes the club fields a side in, plus "work it out from the age". */
+const FORMAT_OPTIONS = ["5v5", "7v7", "9v9", "11v11"] as const;
+
 export type MatchDayValues = {
+  /** The team's own name — a club administrator may correct it here. */
+  name: string;
+  /**
+   * `teams.playing_format` (20260902150000): null means "use the age group",
+   * which is right for every youth team and keeps the summer rollover
+   * automatic. Adam, 2026-09-02: "one of our adult women's teams plays 9 a
+   * side" — an age group can never say that, so this can.
+   */
+  playing_format: string | null;
+  /** What the FA table says for this age group, shown as the default's meaning. */
+  derived_format: string | null;
   home_resource_id: string | null;
   home_kickoff_time: string | null;
   central_venue_name: string | null;
@@ -69,11 +83,18 @@ export function MatchDayPanel({
   pitches,
   values,
   canEdit,
+  canRename = false,
 }: {
   teamId: string;
   pitches: MatchDayPitch[];
   values: MatchDayValues;
   canEdit: boolean;
+  /**
+   * A club administrator may correct the team's name here (Adam, 2026-09-02).
+   * Separate from `canEdit`, which a coach also holds: a coach setting their
+   * own kick-off time is housekeeping, a coach renaming the team is not.
+   */
+  canRename?: boolean;
 }) {
   const [state, action, pending] = useActionState<MatchDayState, FormData>(updateTeamMatchDay, {});
 
@@ -117,6 +138,13 @@ export function MatchDayPanel({
             ? "No match length set — new fixtures are given the club's standard 90 minutes."
             : `${halvesValue} × ${halfLengthValue} + ${halfTimeValue} = ${duration} min pitch slot.`}
         </p>
+        <p>
+          {values.playing_format
+            ? `Plays ${values.playing_format} — set by the club, not read from the age group.`
+            : values.derived_format
+              ? `Plays ${values.derived_format}, from the age group.`
+              : "No playing format — the age group does not say, and the club has not set one."}
+        </p>
         {values.league && (
           <p>
             Plays in {values.league}
@@ -130,6 +158,44 @@ export function MatchDayPanel({
   return (
     <form action={action} className="space-y-5">
       <input type="hidden" name="team_id" value={teamId} />
+
+      {/* The name and the format. A rename is a club administrator's; the
+          format is the team's own business and a coach may set it. */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {canRename && (
+          <div className="space-y-1">
+            <Label htmlFor={`team-name-${teamId}`}>Team name</Label>
+            <Input id={`team-name-${teamId}`} name="name" defaultValue={values.name} required maxLength={120} />
+            <p className="text-xs text-muted-foreground">
+              Renaming carries the team&apos;s message rooms and its fixtures with it.
+            </p>
+          </div>
+        )}
+        <div className="space-y-1">
+          <Label htmlFor={`playing-format-${teamId}`}>Playing format</Label>
+          <Select
+            id={`playing-format-${teamId}`}
+            name="playing_format"
+            defaultValue={values.playing_format ?? ""}
+          >
+            <option value="">
+              {values.derived_format
+                ? `From the age group — ${values.derived_format}`
+                : "From the age group"}
+            </option>
+            {FORMAT_OPTIONS.map((format) => (
+              <option key={format} value={format}>
+                {format}
+              </option>
+            ))}
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            Leave it on the age group for a youth team — it then follows them up at the summer
+            rollover. Set it for a side the age group cannot describe, like an adult team playing
+            9v9.
+          </p>
+        </div>
+      </div>
 
       <div className="space-y-3">
         <div className="space-y-1">

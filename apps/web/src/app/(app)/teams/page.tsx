@@ -28,6 +28,7 @@ import { faFormatDetail, faFormatFor } from "@/lib/fa-formats";
 import { createSeason, createTeam, setCurrentSeason } from "./actions";
 import { ClubWidgetsPanel } from "./club-widgets-panel";
 import { FormatsPanel } from "./formats-panel";
+import { HomeVenueCell } from "./home-venue-cell";
 import { TeamFilterGrid, type TeamFilterItem } from "./team-filter";
 
 /** The Full-Time link columns this list condenses into one dot and one label. */
@@ -67,6 +68,14 @@ type TeamCard = {
   gender: string | null;
   active: boolean;
   homePitch: string | null;
+  /** `teams.home_resource_id`, for the picker on the row. */
+  homeResourceId: string | null;
+  /** "10:30", or null when the team has no standing kick-off. */
+  homeKickoff: string | null;
+  /** A venue the club does not manage — no pitch booking is ever made. */
+  centralVenue: string | null;
+  /** `teams.playing_format` — the club's own answer, over the age group's. */
+  playingFormat: string | null;
   /** Which competition the team plays in — the teams outside the club
       Full-Time leagues are exactly the ones this column accounts for. */
   league: string | null;
@@ -301,7 +310,7 @@ export default async function TeamsPage({
   // enough — the admin client is kept for the two admin-only reads below.
   let teamsQuery = supabase
     .from("teams")
-    .select("id,name,age_group,gender,active,home_resource_id,league,division");
+    .select("id,name,age_group,gender,active,home_resource_id,home_kickoff_time,central_venue_name,playing_format,league,division");
   if (!canAdmin) teamsQuery = teamsQuery.in("id", staffTeamIds);
 
   const [teamsResult, seasonsResult] = await Promise.all([
@@ -492,6 +501,10 @@ export default async function TeamsPage({
         gender: team.gender,
         active: team.active,
         homePitch: team.home_resource_id ? pitchNames.get(team.home_resource_id) ?? null : null,
+        homeResourceId: team.home_resource_id,
+        homeKickoff: team.home_kickoff_time ? String(team.home_kickoff_time).slice(0, 5) : null,
+        centralVenue: team.central_venue_name,
+        playingFormat: team.playing_format,
         league: team.league,
         division: team.division,
         players: players.size,
@@ -527,8 +540,13 @@ export default async function TeamsPage({
     for (const personId of playerIds.get(team.id) ?? []) distinctPlayers.add(personId);
   }
 
-  // The Formats & rules tab wants every active pitch by name.
-  const allPitches = formatsTab
+  // Every active pitch by name — the Formats & rules tab lists them, and the
+  // home-venue picker on each row of the list needs them to offer a choice
+  // (Adam, 2026-09-02: "from the teams page … the ability to assign teams to
+  // pitches and allocate all home games rather than having to go into the team
+  // itself").
+  const allPitches =
+    formatsTab || canAdmin
     ? await supabase
         .from("resources")
         .select("id,name")
@@ -658,13 +676,19 @@ export default async function TeamsPage({
                   from age group
                 </span>
               </th>
+              <th className="px-4 py-2.5 font-medium">
+                Home
+                <span className="block font-normal normal-case tracking-normal text-muted-foreground/80">
+                  venue and kick-off
+                </span>
+              </th>
               <th className="px-4 py-2.5 font-medium">Staff</th>
               <th className="px-4 py-2.5 font-medium">Squad</th>
               <th className="px-4 py-2.5 font-medium">Next out</th>
               {canAdmin && <th className="px-4 py-2.5 font-medium">Subs</th>}
             </tr>
           }
-          footerNote="Format is read from the age group, not stored per team"
+          footerNote="Format follows the age group unless the club has set one on the team"
           items={allTeams.map((team): TeamFilterItem => {
             const ft = canAdmin
               ? fullTimeState(
@@ -712,7 +736,17 @@ export default async function TeamsPage({
                     </p>
                   </td>
                   <td className="px-4 py-3 align-top">
-                    {rules ? (
+                    {team.playingFormat ? (
+                      <>
+                        {/* The club's own answer, where it has given one
+                            (20260902150000). Said to be the club's, so nobody
+                            reads it as the FA's rule for the age group. */}
+                        <p>{team.playingFormat}</p>
+                        <p className="text-xs text-muted-foreground">
+                          set by the club{rules ? ` · age group says ${rules.format}` : ""}
+                        </p>
+                      </>
+                    ) : rules ? (
                       <>
                         <p>{rules.format}</p>
                         <p className="text-xs text-muted-foreground">{faFormatDetail(rules)}</p>
@@ -720,6 +754,18 @@ export default async function TeamsPage({
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    <HomeVenueCell
+                      teamId={team.id}
+                      teamName={team.name}
+                      homePitch={team.homePitch}
+                      homeResourceId={team.homeResourceId}
+                      homeKickoff={team.homeKickoff}
+                      centralVenue={team.centralVenue}
+                      pitches={allPitches}
+                      canEdit={canAdmin}
+                    />
                   </td>
                   <td className="px-4 py-3 align-top">
                     {team.lead !== null || team.others > 0 ? (
@@ -792,10 +838,20 @@ export default async function TeamsPage({
                     <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                       {team.ageGroup ?? "No age group"}
                       {team.gender ? ` · ${GENDER_LABELS[team.gender] ?? team.gender}` : ""}
-                      {rules ? ` · ${rules.format}` : ""}
+                      {team.playingFormat ? ` · ${team.playingFormat}` : rules ? ` · ${rules.format}` : ""}
                       {team.league
                         ? ` · ${team.league}${team.division ? `, ${team.division}` : ""}`
                         : ""}
+                    </span>
+                    {/* Where they play, on the phone too — reading only: the
+                        card is one big link, and a form cannot live inside it.
+                        The pitch picker is the table's, on a wider screen. */}
+                    <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                      {team.centralVenue
+                        ? `${team.centralVenue} · central venue`
+                        : team.homePitch
+                          ? `${team.homePitch}${team.homeKickoff ? ` · ${team.homeKickoff}` : ""}`
+                          : "No home pitch"}
                     </span>
                     <span className="mt-1.5 block text-xs">
                       {team.lead !== null ? (

@@ -71,4 +71,22 @@ describe("formations", () => {
     expect(playingFormatFor("U15")).toBe("11v11");
     expect(playingFormatFor(null)).toBe("11v11");
   });
+
+  /**
+   * Adam, 2026-09-02: "one of our adult women's teams plays 9 a side." No age
+   * group can say that — Senior means 11v11 in the FA table and always will —
+   * so `teams.playing_format` overrides it outright (20260902150000).
+   */
+  it("lets the club's own answer win over the age group", () => {
+    expect(playingFormatFor("Open Age", "9v9")).toBe("9v9");
+    expect(playingFormatFor("U15", "7v7")).toBe("7v7");
+  });
+
+  it("falls back to the age group when the club has set nothing, or nonsense", () => {
+    expect(playingFormatFor("U12", null)).toBe("9v9");
+    expect(playingFormatFor("U12", "")).toBe("9v9");
+    // Not one of the four shapes the club fields a side in: ignored rather
+    // than trusted, because there is no formation set behind it.
+    expect(playingFormatFor("U12", "3v3 (carousel)")).toBe("9v9");
+  });
 });

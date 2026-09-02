@@ -132,13 +132,45 @@ export async function updateTeamMatchDay(
     };
   }
 
+  // The shape the team actually plays (20260902150000). Blank means "read it
+  // from the age group", which is the state every youth team is in and the
+  // reason the rollover needs no help.
+  const format = String(formData.get("playing_format") ?? "").trim();
+  if (format !== "" && !["5v5", "7v7", "9v9", "11v11"].includes(format)) {
+    return { error: "The playing format must be 5v5, 7v7, 9v9, 11v11, or left to the age group." };
+  }
+
   const supabase = await createClient();
+
+  // The name, and only for a club administrator (Adam, 2026-09-02: "I also
+  // need the ability as admin to change a team name"). It is a separate
+  // statement rather than a column on the update below because the form is
+  // also a coach's, and a coach's post must not be able to carry a rename in
+  // it — the field is not rendered for them, and this is what makes that a
+  // rule rather than a hope. `is_club_admin()` is the `person_roles` answer.
+  const name = String(formData.get("name") ?? "").trim();
+  if (name !== "") {
+    const { data: admin } = await supabase.rpc("is_club_admin");
+    if (admin === true) {
+      if (name.length > 120) return { error: "A team name is 120 characters at most." };
+      const { error: nameError } = await supabase
+        .from("teams")
+        .update({ name })
+        .eq("id", teamId);
+      if (nameError) {
+        if (nameError.code === "23505") return { error: "Another team already has that name." };
+        return { error: nameError.message };
+      }
+    }
+  }
+
   const { data, error } = await supabase
     .from("teams")
     .update({
       home_resource_id: homeResourceId,
       home_kickoff_time: homeKickoffTime,
       central_venue_name: central ? centralVenueName : null,
+      playing_format: format === "" ? null : format,
       league,
       division,
       match_halves: halves,
@@ -170,6 +202,8 @@ export async function updateTeamMatchDay(
   }
 
   revalidatePath(`/teams/${teamId}`);
+  // The list shows the home venue, the kick-off and the format now too.
+  revalidatePath("/teams");
   // New fixtures inherit the duration, and allocation now defaults to the home
   // pitch, kick-off and the team's buffers — those screens read this row.
   revalidatePath("/pitches");

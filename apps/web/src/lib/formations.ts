@@ -213,7 +213,18 @@ export const PLAYING_FORMATS = Object.keys(FORMATIONS) as PlayingFormat[];
  * with no fixed formation; they get the 5v5 board, the smallest one we draw,
  * rather than nothing. An age group we cannot read at all falls back to 11v11.
  */
-export function playingFormatFor(ageGroup: string | null | undefined): PlayingFormat {
+export function playingFormatFor(
+  ageGroup: string | null | undefined,
+  /**
+   * `teams.playing_format` (20260902150000) — the club's own answer, which
+   * wins outright where it has given one. Adam, 2026-09-02: "one of our adult
+   * women's teams plays 9 a side", and no age group will ever say so.
+   */
+  override?: string | null,
+): PlayingFormat {
+  if (override === "5v5" || override === "7v7" || override === "9v9" || override === "11v11") {
+    return override;
+  }
   const format = faFormatFor(ageGroup)?.format;
   if (format === "5v5" || format === "7v7" || format === "9v9" || format === "11v11") {
     return format;

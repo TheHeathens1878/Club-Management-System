@@ -75,13 +75,14 @@ export async function saveFixtureLineup(
   // which formations exist at all (the FA table, via `playingFormatFor`).
   const { data: fixture } = await supabase
     .from("fixtures")
-    .select("id,team_id,teams:team_id(age_group)")
+    .select("id,team_id,teams:team_id(age_group,playing_format)")
     .eq("id", fixtureId)
     .eq("team_id", teamId)
     .maybeSingle();
   if (!fixture) return { error: "That fixture is not on this team." };
 
-  const format = playingFormatFor((fixture.teams as { age_group: string | null } | null)?.age_group);
+  const teamRow = fixture.teams as { age_group: string | null; playing_format: string | null } | null;
+  const format = playingFormatFor(teamRow?.age_group, teamRow?.playing_format);
   const chosen = formationsFor(format).find((f) => f.name === formationName);
   if (!chosen) return { error: `A ${format} team cannot line up in ${formationName || "that shape"}.` };
 
