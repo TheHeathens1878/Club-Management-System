@@ -128,6 +128,13 @@ and SG-10 can be stated precisely.
 > `safeguarding.unsupervised_messaging_min_age` years old **and** for whom an
 > active `unsupervised_messaging` consent is held on the same terms (SG-10).
 
+> **SG-0.3 (definitional, added 2026-09-02).** A **known minor** is a person
+> whose `dob` **is on record** and who is under 18 on the date of evaluation.
+> An unknown DOB is *not* a known minor. This term exists for SG-1 alone —
+> `public.is_known_minor(person_id uuid)` — and nothing else in this document
+> or in the database may be restated in terms of it. Everywhere else, SG-0
+> stands: unknown means minor.
+
 Notes:
 
 - **Both are derived, never stored**, for the same reason SG-0 is a function and
@@ -229,9 +236,29 @@ and DOB are in it and not only the two messaging tables.
 administrative/oversight capacity — see SG-1.5). The conversation is
 **non-compliant** when:
 
-`count(A) = 2 AND exactly one of A is a minor (SG-0) AND no adult in A is a
-guardian of that minor AND NOT (that minor is supervision-exempt (SG-0.2) AND
-the conversation is flagged supervised_by_lead)`
+`count(A) = 2 AND exactly one of A is a known minor (SG-0.3) AND no adult in A
+is a guardian of that minor AND NOT (that minor is supervision-exempt (SG-0.2)
+AND the conversation is flagged supervised_by_lead)`
+
+**Why *known* minor and not simply minor (2026-09-02, Adam's decision — §6.1).**
+Read with SG-0's fail-closed sense of "minor", this predicate is not
+order-independent, and that is fatal to it. Take a room whose two participants
+both have no DOB. It passes: two minors, not one. Record the true date of birth
+of *either* of them and it fails: one adult, one "minor". Record the other's
+first and it fails identically. There is no order, and no single statement, in
+which the club can write down the ages it has just been told — the rule forbids
+the recording of the fact that would satisfy it. Seven of this club's team rooms
+were in exactly that state, and 33 of its 45 coaches had no DOB with which to
+leave it. A safeguarding rule that punishes a club for improving its register
+makes children less safe, not more.
+
+Narrowing SG-1 to *known* minors makes the predicate monotone in knowledge: an
+age can always be recorded, and recording one never turns a compliant room into
+a refusal unless the person recorded really is a child. What is given up is the
+shield over a child whose age the club has never held — and since P2.2 makes
+`dob` mandatory at registration and `/join` will not create a child without one,
+that case no longer arises through any screen the club owns. What is kept is the
+whole of SG-1 over every child the club has an age for.
 
 **Edge cases — all of these are part of the invariant and all need tests:**
 
@@ -1430,6 +1457,26 @@ invariants above *require to exist*.
 
 ### 6.1 Review log
 
+- **2026-09-02 — SG-1 reads "known minor" (Adam's decision, §6.2 record):**
+  Adam hit the rule twice in an afternoon — once approving a fifty-year-old's
+  registration for the over-45s, once typing a coach's date of birth into his
+  own record — and said *"remove these restrictive safeguarding rules."* He was
+  offered three answers: narrow SG-1 to children the club has a DOB for; keep
+  SG-1 whole and move its enforcement off the DOB write; or remove SG-1
+  altogether. He chose the first, and this entry is the record of it. **SG-0.3**
+  defines *known minor* and **SG-1's precise form** now uses it; the reasoning,
+  including why the old form could not be satisfied in any order, is written
+  under SG-1. This is a weakening and touches PLAN.md §2.4, so it needed his
+  agreement and has it. Scope: `conversation_is_compliant`,
+  `conversation_exemptable`, `conversation_has_minor` and `conversations_guard`,
+  and nothing else — `is_minor()` keeps SG-0's fail-closed reading in SG-4,
+  SG-6, SG-9, SG-10, registrations, media and the venue groups. SG-1.4, SG-1.7,
+  SG-1.8, SG-1.9 and SG-1.10 are unchanged in substance and still tested.
+  Migration `20260902120000_sg1_known_minor.sql` audits every open conversation
+  that the narrower reading exposes as non-compliant rather than silently
+  admitting it; one did — a U11 team room holding a ten-year-old and a coach
+  with no recorded guardianship between them, which the old reading had been
+  hiding behind the coach's missing date of birth.
 - **2026-08-26 — SG-6's in-app tier retired (Adam's decision, §6.2 record):**
   "remove all DBS, Safeguarding and Coaching qualifications from the App. We
   use the FA's Club Portal for this." Written up as **SG-6.1**: every screen,

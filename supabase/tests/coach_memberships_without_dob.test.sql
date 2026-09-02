@@ -11,7 +11,7 @@
 
 begin;
 
-select plan(10);
+select plan(11);
 
 -- The relaxation follows the SG-6 switch, and this club runs with it off
 -- (20260824240000). Set it explicitly so the case under test is the one the
@@ -71,6 +71,18 @@ select is((select dob from public.people where id = current_setting('nd.coach'):
 
 
 -- C. the date arrives ----------------------------------------------------------------
+-- Percy gets a guardian first, and the reason is SG-1 (20260902120000). Since
+-- the pair test reads "no dob" as "not known to be a child", the coach counts
+-- as the adult of this room. A thirteen-year-old joining a team room whose only
+-- other member is that coach would be one adult and one child alone — which is
+-- exactly what SG-1 is for, and it refuses. Every real child arrives with a
+-- guardian (SG-4 will not let a minor be registered without one), the
+-- guardian is added to the room alongside them, and the room is three people.
+-- What is under test here is the import queue, so give the fixture the family
+-- every real one has.
+insert into public.guardianships (guardian_person_id, child_person_id, relationship)
+  values (current_setting('nd.known')::uuid, current_setting('nd.player')::uuid, 'parent');
+
 update public.people set dob = (current_date - interval '13 years')::date
  where id = current_setting('nd.player')::uuid;
 select lives_ok($$ select * from public.apply_neon_pending() $$, 'the queue runs again');
@@ -80,6 +92,12 @@ select is(
       and m.team_id = '7d0b7d0b-6666-4111-8111-000000000001'
       and m.role = 'player' and m.left_at is null), 1::bigint,
   'and the player joins as soon as the club knows their age');
+select ok(
+  exists (select 1 from public.conversation_participants p
+            join public.conversations c on c.id = p.conversation_id
+           where c.team_id = '7d0b7d0b-6666-4111-8111-000000000001' and c.type = 'team'
+             and p.person_id = current_setting('nd.known')::uuid and p.left_at is null),
+  'and the guardian is in the team room with them, so the child is never alone with the coach');
 
 
 -- D. the first-login gate ------------------------------------------------------------
