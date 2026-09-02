@@ -30,6 +30,11 @@ import {
   LineupSection,
   loadLineupSection,
 } from "../../teams/[id]/fixtures/[fixtureId]/lineup/lineup-section";
+import {
+  DeleteFixtureCard,
+  type DeleteFixtureCounts,
+} from "../../teams/[id]/fixtures/[fixtureId]/delete-fixture-card";
+import { DeleteEventCard } from "./delete-event-card";
 import { AssignPitch } from "./assign-pitch";
 import { EventTabs } from "./event-tabs";
 import { MatchStatsSection } from "./match-stats-section";
@@ -309,6 +314,46 @@ export default async function EventPage({
       ? await loadLineupSection(detail.teamId, detail.fixtureId, { canManage: canManageMatch })
       : null;
 
+  // Deleting, from the page people are actually on (Adam, 2026-09-02: "I
+  // still can't delete an event as club admin. This should be in the event
+  // page for admins and coaches"). A match's diary entry belongs to its
+  // fixture, so a fixture-mirrored event renders THE FIXTURE'S own delete
+  // card — same action, same counts, same pitch honesty — and a manual event
+  // gets its own simpler one. Both loads hang off the gate: a member view
+  // fetches none of it.
+  let fixtureForDelete: {
+    id: string;
+    team_id: string;
+    booking_id: string | null;
+    mirror_fixture_id: string | null;
+    source: string;
+    no_longer_published_at: string | null;
+  } | null = null;
+  let fixtureDeleteCounts: DeleteFixtureCounts | null = null;
+  if (canManageMatch && detail.fixtureId && tab === "details") {
+    const { data: fixtureRow } = await supabase
+      .from("fixtures")
+      .select("id,team_id,booking_id,mirror_fixture_id,source,no_longer_published_at")
+      .eq("id", detail.fixtureId)
+      .maybeSingle();
+    fixtureForDelete = fixtureRow ?? null;
+    if (fixtureForDelete) {
+      const [availabilityCount, lineupCount, statsCount, eventCount] = await Promise.all([
+        supabase.from("availability").select("id", { count: "exact", head: true }).eq("fixture_id", detail.fixtureId),
+        supabase.from("fixture_lineups").select("id", { count: "exact", head: true }).eq("fixture_id", detail.fixtureId),
+        supabase.from("fixture_player_stats").select("id", { count: "exact", head: true }).eq("fixture_id", detail.fixtureId),
+        supabase.from("events").select("id", { count: "exact", head: true }).eq("fixture_id", detail.fixtureId),
+      ]);
+      fixtureDeleteCounts = {
+        availability: availabilityCount.count ?? 0,
+        lineups: lineupCount.count ?? 0,
+        playerStats: statsCount.count ?? 0,
+        events: eventCount.count ?? 0,
+      };
+    }
+  }
+  const canDeleteManual = canManageMatch && !detail.fixtureId;
+
   // Editing (Adam, 2026-08-25): the team's staff and club admins, on a manual
   // event that has not been cancelled and has not happened. A fixture-mirrored
   // event is edited through its fixture — `update_team_event` says the same
@@ -543,6 +588,30 @@ export default async function EventPage({
               ) : null}
             </CardContent>
           </Card>
+
+          {fixtureForDelete && fixtureDeleteCounts && (
+            <DeleteFixtureCard
+              fixtureId={fixtureForDelete.id}
+              teamId={fixtureForDelete.team_id}
+              label={`${detail.title} — ${formatEventDate(detail.startsAt)}`}
+              hasPitch={!!fixtureForDelete.booking_id}
+              isMirrored={!!fixtureForDelete.mirror_fixture_id}
+              stillPublished={
+                fixtureForDelete.source === "fulltime" &&
+                !fixtureForDelete.no_longer_published_at
+              }
+              counts={fixtureDeleteCounts}
+            />
+          )}
+
+          {canDeleteManual && (
+            <DeleteEventCard
+              eventId={detail.id}
+              label={`${detail.title} — ${formatEventDate(detail.startsAt)}`}
+              answers={roster.filter((row) => row.response !== null).length}
+              hasPitch={detail.booked}
+            />
+          )}
         </div>
 
         {/* -------------------------------------------------- who's coming */}

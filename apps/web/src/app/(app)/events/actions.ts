@@ -394,3 +394,98 @@ export async function cancelEvent(
   revalidatePath("/pitches/mine");
   return { notice: "Event cancelled. Any pitch it was holding has been released." };
 }
+
+// ---------------------------------------------------------------------------
+// Delete — a manual event only (Adam, 2026-09-02: "I still can't delete an
+// event as club admin. This should be in the event page for admins and
+// coaches").
+//
+// `events_staff_delete` has allowed this since events existed — club admin or
+// the team's staff — and nothing in the app ever offered it. A
+// fixture-mirrored event is refused HERE by name: its diary entry belongs to
+// the fixture, and the event page renders the fixture's own delete card for
+// it instead, so the pitch and the mirror get the honesty they already have.
+// Everyone's answers go with the event (`event_responses` cascades); the card
+// says so before the button arms.
+
+export type DeleteEventState = { error?: string };
+
+export async function deleteEvent(
+  _prev: DeleteEventState,
+  formData: FormData,
+): Promise<DeleteEventState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in first." };
+
+  const eventId = String(formData.get("event_id") ?? "").trim();
+  if (!eventId) return { error: "No event given." };
+
+  const supabase = await createClient();
+  const { data: event } = await supabase
+    .from("events")
+    .select("id,team_id,title,type,fixture_id,starts_at,status,booking_id")
+    .eq("id", eventId)
+    .maybeSingle();
+  if (!event) return { error: "That event no longer exists." };
+  if (event.fixture_id) {
+    return { error: "A match's diary entry is removed with its fixture — use the match's own delete card." };
+  }
+
+  // The same question RLS will answer, asked early so the refusal is a
+  // sentence rather than a delete that quietly removes no rows.
+  const { data: admin } = await supabase.rpc("is_club_admin");
+  const { data: isStaff } = await supabase.rpc("is_team_staff", { p_team_id: event.team_id });
+  if (admin !== true && isStaff !== true) {
+    return { error: "Only this team's staff or a club administrator can delete an event." };
+  }
+
+  // Counted while they still exist: the audit row is the only record left.
+  const { count: answers } = await supabase
+    .from("event_responses")
+    .select("id", { count: "exact", head: true })
+    .eq("event_id", eventId);
+
+  // The pitch first, while the event still exists to be found by: an event
+  // can hold a booking, and deleting the row would leave that slot standing,
+  // confirmed, attached to nothing. `cancel_team_event` is the accessor that
+  // already knows how to hand it back.
+  if (event.booking_id && event.status !== "cancelled") {
+    const { error: releaseError } = await supabase.rpc("cancel_team_event", {
+      p_event_id: eventId,
+    });
+    if (releaseError) {
+      return {
+        error: friendlyDbError(
+          releaseError,
+          "The pitch could not be given back, so the event has been left alone.",
+        ),
+      };
+    }
+  }
+
+  const { data: deleted, error } = await supabase
+    .from("events")
+    .delete()
+    .eq("id", eventId)
+    .select("id");
+  if (error) return { error: friendlyDbError(error, "The database refused that delete.") };
+  if ((deleted ?? []).length === 0) {
+    return { error: "Only this team's staff or a club administrator can delete an event." };
+  }
+
+  await supabase.rpc("write_audit", {
+    p_action: "event.deleted",
+    p_entity: "events",
+    p_entity_id: eventId,
+    p_detail: {
+      title: event.title,
+      type: event.type,
+      team_id: event.team_id,
+      starts_at: event.starts_at,
+      responses_deleted: answers ?? 0,
+    },
+  });
+
+  revalidatePath("/events");
+  redirect("/events");
+}
