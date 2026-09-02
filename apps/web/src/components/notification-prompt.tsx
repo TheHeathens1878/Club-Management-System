@@ -40,6 +40,7 @@ import {
   disableWebPush,
   enableWebPush,
   isIosSafari,
+  installSupported,
   isStandalone,
   pushSupported,
   reconcileSubscription,
@@ -106,8 +107,17 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
   /** Why turning them on did not work, when the browser gave a reason. */
   const [trouble, setTrouble] = useState<string | null>(null);
 
+  // The two halves are asked separately (Adam, 2026-09-02). Notifications need
+  // a VAPID key to be configured; putting the club on a Home Screen does not,
+  // and on iOS it is the PRECONDITION of notifications rather than a
+  // consequence of them — so gating the install behind the push check meant
+  // that with no key configured the app offered neither, which is what it was
+  // doing on production this morning.
+  const canPush = pushSupported();
+  const canInstall = installSupported();
+
   useEffect(() => {
-    if (!personId || !pushSupported()) return;
+    if (!personId || (!canPush && !canInstall)) return;
 
     let cancelled = false;
 
@@ -133,23 +143,42 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
       // site installable in the first place.
       await navigator.serviceWorker.register("/sw.js").catch(() => {});
 
-      const subscription = await currentSubscription().catch(() => null);
-      if (cancelled) return;
+      if (canPush) {
+        const subscription = await currentSubscription().catch(() => null);
+        if (cancelled) return;
 
-      if (subscription) {
-        // Already on. Make sure the table agrees — a member who cleared site
-        // data and came back has a subscription we have never seen.
-        void reconcileSubscription(personId);
-        return;
+        if (subscription) {
+          // Already on, and installed or not, there is nothing left to ask.
+          // Make sure the table agrees — a member who cleared site data and
+          // came back has a subscription we have never seen.
+          void reconcileSubscription(personId);
+          return;
+        }
       }
-      if (Notification.permission === "denied") return;
 
       const standalone = isStandalone();
-      if (isIosSafari() && !standalone) {
+      // Already on the Home Screen: the install half has nothing to say, so
+      // this is only ever the notifications question, and only if it can be
+      // answered.
+      if (standalone) {
+        if (canPush
+            && Notification.permission !== "denied"
+            && !dismissedRecently(NOTIFICATIONS_DISMISSED, NOTIFICATIONS_TTL)) {
+          setStep((current) => (current === "install" ? current : "enable"));
+        }
+        return;
+      }
+
+      if (isIosSafari()) {
         if (!dismissedRecently(INSTALL_DISMISSED, INSTALL_TTL)) setStep("ios-install");
         return;
       }
-      if (!dismissedRecently(NOTIFICATIONS_DISMISSED, NOTIFICATIONS_TTL)) {
+      // Android and desktop Chrome: `beforeinstallprompt` decides whether the
+      // install is offered, and the listener above sets that step when it
+      // fires. Notifications can be asked for in a tab, so they are.
+      if (canPush
+          && Notification.permission !== "denied"
+          && !dismissedRecently(NOTIFICATIONS_DISMISSED, NOTIFICATIONS_TTL)) {
         setStep((current) => (current === "install" ? current : "enable"));
       }
     })();
@@ -159,13 +188,15 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
       window.removeEventListener("beforeinstallprompt", onBeforeInstall);
       navigator.serviceWorker.removeEventListener("message", onWorkerMessage);
     };
-  }, [personId]);
+  }, [personId, canPush, canInstall]);
 
   const dismissInstall = useCallback(() => {
     remember(INSTALL_DISMISSED);
     setInstallEvent(null);
-    setStep(dismissedRecently(NOTIFICATIONS_DISMISSED, NOTIFICATIONS_TTL) ? "hidden" : "enable");
-  }, []);
+    setStep(
+      canPush && !dismissedRecently(NOTIFICATIONS_DISMISSED, NOTIFICATIONS_TTL) ? "enable" : "hidden",
+    );
+  }, [canPush]);
 
   const dismissEnable = useCallback(() => {
     remember(NOTIFICATIONS_DISMISSED);
@@ -184,8 +215,12 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
       await installEvent.prompt();
       const { outcome } = await installEvent.userChoice;
       setInstallEvent(null);
-      // Accepted or not, notifications are the point; ask next.
-      setStep(outcome === "accepted" || !dismissedRecently(NOTIFICATIONS_DISMISSED, NOTIFICATIONS_TTL) ? "enable" : "hidden");
+      // Accepted or not, notifications are the point where they can be had.
+      setStep(
+        canPush && (outcome === "accepted" || !dismissedRecently(NOTIFICATIONS_DISMISSED, NOTIFICATIONS_TTL))
+          ? "enable"
+          : "hidden",
+      );
     } finally {
       setBusy(false);
     }
@@ -241,8 +276,9 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
                   Add AoM SC Portal to your Home Screen
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  It opens like an app — and on an iPhone it is the only way the club can send you
-                  notifications, so this is the step that turns them on.
+                  {canPush
+                    ? "It opens like an app — and on an iPhone it is the only way the club can send you notifications, so this is the step that turns them on."
+                    : "It opens like an app, full screen, with the crest on your Home Screen instead of a browser tab."}
                 </p>
               </div>
               <button
@@ -270,7 +306,16 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
               <li className="flex items-center gap-2.5">
                 <StepNumber n={3} />
                 <span>
-                  Open it from your Home Screen, then tap <strong>Turn on notifications</strong>
+                  {canPush ? (
+                    <>
+                      Open it from your Home Screen, then tap{" "}
+                      <strong>Turn on notifications</strong>
+                    </>
+                  ) : (
+                    <>
+                      Open it from your Home Screen — it signs you in as it is
+                    </>
+                  )}
                 </span>
               </li>
             </ol>
@@ -285,21 +330,25 @@ export function NotificationPrompt({ personId }: { personId: string | null }) {
                 Install AoM SC Portal
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Keep the club on your home screen, and get match and message notifications.
+                {canPush
+                  ? "Keep the club on your home screen, and get match and message notifications."
+                  : "Keep the club on your home screen — it opens full screen, like an app."}
               </p>
               <div className="mt-3 flex flex-wrap items-center gap-2">
                 <Button size="sm" className="min-h-[44px] lg:min-h-0" onClick={handleInstall} disabled={busy}>
                   Install
                 </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="min-h-[44px] lg:min-h-0"
-                  onClick={() => setStep("enable")}
-                  disabled={busy}
-                >
-                  Notifications only
-                </Button>
+                {canPush && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="min-h-[44px] lg:min-h-0"
+                    onClick={() => setStep("enable")}
+                    disabled={busy}
+                  >
+                    Notifications only
+                  </Button>
+                )}
               </div>
             </div>
             <button

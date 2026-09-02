@@ -30,6 +30,21 @@ export type EnableResult =
   | { status: "unsupported" }
   | { status: "error"; message: string };
 
+/**
+ * Can this browser be ADDED TO A HOME SCREEN and shown an install prompt?
+ *
+ * Deliberately separate from `pushSupported()`. Adam, 2026-09-02: "on mobile
+ * view, it should prompt you to add to homepage and to enable notifications" —
+ * and it was doing neither, because the whole banner hung off the push check
+ * and no VAPID key had been configured yet. Putting an app icon on somebody's
+ * Home Screen is worth doing on its own, and it is the step iOS makes a
+ * PRECONDITION of notifications, so gating it behind the thing it unlocks was
+ * exactly the wrong way round.
+ */
+export function installSupported(): boolean {
+  return typeof window !== "undefined" && "serviceWorker" in navigator;
+}
+
 /** Does this browser have the three pieces web push needs, and do we have a key? */
 export function pushSupported(): boolean {
   return (

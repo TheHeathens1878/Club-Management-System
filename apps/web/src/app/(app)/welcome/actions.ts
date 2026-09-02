@@ -35,6 +35,7 @@ import {
   type RoleView,
 } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
+import { tidyRpcMessage } from "@/lib/waiting-list";
 
 const PATH = "/welcome";
 const ONE_YEAR = 60 * 60 * 24 * 365;
@@ -133,4 +134,64 @@ export async function withdrawAccountRequest(
 
   revalidatePath(PATH);
   return { notice: "Request withdrawn." };
+}
+
+/**
+ * Asking to coach or to referee, after sign-up.
+ *
+ * Adam, 2026-09-02: "we also need the ability for users to request to become a
+ * coach (selecting the team they coach) and a referee AFTER sign up."
+ *
+ * The joining form asks these two on its first step, which is fine for someone
+ * arriving today and no use at all to the several hundred people already here.
+ * Same question, same queue, same function: `request_role_for()`
+ * (20260901200000) lands a PENDING row that /approvals decides. Nothing is
+ * granted by asking.
+ *
+ * PLAYER AND PARENT ARE STILL NOT HERE. The docstring at the top of this file
+ * says why creating account requests was removed in the first place — a player
+ * or a parent is attached through registration, and a queue for them only
+ * duplicated it. That reasoning is untouched: coach and referee are the two
+ * hats registration has never had a way to ask for.
+ */
+export async function requestClubRole(
+  _prev: RequestState,
+  formData: FormData,
+): Promise<RequestState> {
+  const role = String(formData.get("role") ?? "").trim();
+  if (role !== "coach" && role !== "referee") return { error: "Choose coach or referee." };
+  const teamId = String(formData.get("team_id") ?? "").trim();
+
+  const supabase = await createClient();
+  const { data: personId } = await supabase.rpc("current_person_id");
+  if (!personId) {
+    return { error: "Your account is not linked to a member record yet — ask the club." };
+  }
+
+  const { data, error } = await supabase.rpc("request_role_for", {
+    p_person_id: personId,
+    p_role: role,
+    ...(role === "coach" && teamId ? { p_team_id: teamId } : {}),
+  });
+  if (error) {
+    // The referee age guard names the date somebody may ask on. That sentence
+    // is the answer; summarising it would throw the date away.
+    return { error: tidyRpcMessage(error.message) };
+  }
+  if (!data) {
+    return {
+      notice:
+        role === "coach"
+          ? "You already hold the coach hat at the club."
+          : "You are already a referee at the club.",
+    };
+  }
+
+  revalidatePath(PATH);
+  return {
+    notice:
+      role === "coach"
+        ? "Asked. A club administrator will confirm it."
+        : "Asked. A club administrator will confirm it and add you to the referees group.",
+  };
 }

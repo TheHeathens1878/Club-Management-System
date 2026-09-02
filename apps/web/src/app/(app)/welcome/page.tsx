@@ -14,6 +14,7 @@ import { ROLE_VIEW_HOME, qualifiedViews, resolveRoleView } from "@/lib/role-view
 import { getSettings } from "@/lib/settings";
 import { createClient } from "@/lib/supabase/server";
 
+import { AskRoleCard } from "./ask-role-form";
 import { RoleTiles } from "./role-tiles";
 import { WithdrawForm } from "./withdraw-form";
 
@@ -21,14 +22,20 @@ import { WithdrawForm } from "./withdraw-form";
  * "Which hat are you wearing?" — the login tiles, and the page the nav's "My
  * role" link comes back to.
  *
- * Only views the person actually HOLDS are drawn. There is nothing to ask for
- * here any more: a player or a parent is attached to a team through the club's
- * public registration forms, and an account the club has not linked to a
- * member record yet is told so plainly rather than being offered a queue.
+ * Only views the person actually HOLDS are drawn. A player or a parent is
+ * still attached to a team through the club's registration forms rather than
+ * by asking here, and an account the club has not linked to a member record
+ * yet is told so plainly rather than being offered a queue.
  *
- * Requests made before that changed are still listed, read-only, so somebody
- * who already asked can see where it got to and take it back if they want.
- * `/approvals` still decides them.
+ * TWO THINGS CAN BE ASKED FOR (Adam, 2026-09-02: "we also need the ability for
+ * users to request to become a coach (selecting the team they coach) and a
+ * referee AFTER sign up"). The joining form asks both on its first step, which
+ * serves everybody who arrives from today and nobody who arrived before — so
+ * the same two questions are here too. They are the two hats registration has
+ * never had a way to ask for; player and parent stay out for the reason above.
+ *
+ * Requests, old and new, are listed below with a way to take back one that is
+ * still waiting. `/approvals` decides them all.
  *
  * User-scoped client throughout; `account_requests_self_read` is what returns
  * the rows below, and it returns nobody else's.
@@ -79,6 +86,16 @@ export default async function WelcomePage({
     requests = data ?? [];
   }
 
+  // Every active team, for the coach ask's search box. `team_options()` rather
+  // than a `teams` read because it is the one door the joining form can use
+  // too, and one door is easier to keep honest than two.
+  const { data: teamRows } = await supabase.rpc("team_options");
+  const teams = (teamRows ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    ageGroup: row.age_group,
+  }));
+
   const teamIds = Array.from(
     new Set(requests.map((request) => request.team_id).filter((id): id is string => Boolean(id))),
   );
@@ -109,15 +126,30 @@ export default async function WelcomePage({
           <UnlinkedPanel contactEmail={contactEmail} />
         )}
 
+        {personId && (
+          <Card>
+            <CardHeader className="p-4 lg:p-6">
+              <CardTitle className="text-base">Do something else at the club</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                A club administrator confirms either of these before it takes effect. Playing is
+                not here — a player joins a team through the registration forms.
+              </p>
+            </CardHeader>
+            <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+              <AskRoleCard teams={teams} />
+            </CardContent>
+          </Card>
+        )}
+
         {requests.length > 0 ? (
           <Card>
             <CardHeader className="p-4 lg:p-6">
-              <CardTitle className="text-base">Requests you have already sent</CardTitle>
+              <CardTitle className="text-base">Requests you have sent</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
               <p className="text-sm text-muted-foreground">
-                These were sent before the club moved joining to the registration forms. A club
-                administrator still decides them; you can take back one that is still waiting.
+                A club administrator decides each of these; you can take back one that is still
+                waiting.
               </p>
               <ul className="space-y-3">
                 {requests.map((request) => (
