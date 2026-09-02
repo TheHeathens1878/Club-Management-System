@@ -272,10 +272,25 @@ whole of SG-1 over every child the club has an age for.
   scheduled *blocking* is needed for this direction. The reverse — an adult
   becoming a minor — is impossible. However, a *correction* to `dob` can flip a
   participant to minor. `people.dob` UPDATE therefore fires a re-evaluation of
-  every conversation the person actively participates in, and is **rejected** if
-  any becomes non-compliant, with an error naming the conversations, so an admin
-  can fix the DOB and the participants in one deliberate sequence. Tests:
-  `dob_correction_blocked_when_it_creates_1to1`,
+  every conversation the person actively participates in.
+
+  **Amended 2026-09-02 (Adam's decision, §6.1): the write is RECORDED, never
+  rejected.** It used to be rejected, with an error naming the conversations.
+  That was wrong in a way that took three deadlocks to see: an age is a fact
+  about a person, not an act. Noah Taylor was ten before anybody typed it and
+  Dave Taylor was forty-six before anybody typed it; the pairing the rule
+  objected to already existed in the world, and refusing the write achieved
+  nothing except keeping the club's register wrong about it. Worse, it was
+  circular — the club's own remedy is to record a guardianship, `guardianships`
+  will not accept a guardian whose date of birth is unknown, and this guard
+  would not let that date be recorded until the guardianship existed.
+
+  The correction is written, an audit row (`safeguarding.sg1_exposed_by_dob`)
+  names every conversation it leaves non-compliant, and **SG-1.7 refuses every
+  message in those conversations** until a guardian is recorded, a third person
+  joins, or the child leaves. The prohibited *conversation* remains impossible;
+  only the prohibited *record* is now allowed to be corrected. Tests:
+  `sg1_known_minor.test.sql` (recorded, audited, room shut, room reopened),
   `minor_turning_18_does_not_break_existing_conversation`.
 - **SG-1.3 One adult + two minors.** **Permitted by this invariant** (it is not
   a 1:1) but it is *not* good practice under C1 and it is **Open Decision D2**.
@@ -320,10 +335,18 @@ whole of SG-1 over every child the club has an age for.
   (`BEFORE DELETE`, and `BEFORE UPDATE OF guardian_person_id, child_person_id`)
   finds every conversation in which the outgoing guardian was the **qualifying
   participant** — every conversation whose active participant set (SG-1.5)
-  would become non-compliant once the link no longer holds — and **rejects the
-  change unless every one of those conversations is already closed or
-  archived** (`conversations.closed_at IS NOT NULL`). The error names the
-  conversations, exactly as SG-1.2's does.
+  would become non-compliant once the link no longer holds — and **records the
+  change, naming those conversations in an audit row**
+  (`safeguarding.sg1_exposed_by_guardianship`).
+
+  **Amended 2026-09-02 (Adam's decision, §6.1).** It used to reject the change
+  unless every affected conversation was already closed. That falls to the same
+  argument as SG-1.2 above: a placement that has ended has ended, and a register
+  that says a child is accompanied by somebody who is no longer their guardian
+  is worse than one that says they are not. SG-1.7 refuses every message in the
+  affected conversations, so the prohibited conversation is still impossible —
+  it is only the prohibited *record* that may now be corrected. Test:
+  `sg1_known_minor.test.sql`, and `messaging.test.sql`'s SG-1.8 group.
 
   Why "reject unless closed" rather than a flat reject: a flat reject makes a
   mistyped or genuinely-ended guardianship permanently unremovable, which is
@@ -1457,6 +1480,26 @@ invariants above *require to exist*.
 
 ### 6.1 Review log
 
+- **2026-09-02 (later the same day) — recording a fact is never refused
+  (Adam's decision, §6.2 record):** *"Please can you remove all these
+  safeguarding rules leaving a player alone in an adult conversation. They are
+  stopping us from actually using the app properly. I couldn't update Dave
+  Taylor's DOB… I can't add a guardianship as Dave doesn't have a DOB."* He had
+  found the circle: SG-1.2 would not record that the coach is an adult until
+  the room was compliant, SG-4 would not accept him as a guardian until his age
+  was known, and the room could not become compliant without that guardianship.
+  Three rules, each right on its own, arranged so the club could not move.
+  **SG-1.2 and SG-1.8 now record and audit instead of refusing** — see their
+  entries above for the reasoning, which is that an age and an ended placement
+  are facts, not acts, and refusing to write them protects nobody while making
+  the register wrong. **SG-1.1 and SG-1.7 are untouched**, so putting a child
+  alone in a room with an adult, and saying anything in such a room, are both
+  still impossible; that is where SG-1's protection actually lives. Adam asked
+  for SG-1 to be removed outright and it has not been: what is removed is the
+  pair of guards that refused the cure rather than the disease, which is what
+  was blocking him. Migration
+  `20260902160000_recording_a_fact_is_never_refused.sql`, which also adds
+  `sg1_open_breaches()` so the backlog can be read rather than inferred.
 - **2026-09-02 — SG-1 reads "known minor" (Adam's decision, §6.2 record):**
   Adam hit the rule twice in an afternoon — once approving a fifty-year-old's
   registration for the over-45s, once typing a coach's date of birth into his
