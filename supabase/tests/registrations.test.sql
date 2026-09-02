@@ -95,10 +95,13 @@ select throws_ok(
   $$insert into public.registrations (person_id, season_id)
     values (current_setting('r.parent')::uuid, '5f5f5f5f-1111-4111-8111-000000000001')$$,
   'P0001', null, 'an adult cannot register another adult (guard fires before the policy)');
+-- 20260902200000: the live key includes the team — unlimited teams, but the
+-- SAME team twice is still one registration.
 select throws_ok(
-  $$insert into public.registrations (person_id, season_id)
-    values (current_setting('r.adult')::uuid, '5f5f5f5f-1111-4111-8111-000000000001')$$,
-  '23505', null, 'one live registration per person per season');
+  $$insert into public.registrations (person_id, season_id, team_id)
+    values (current_setting('r.adult')::uuid, '5f5f5f5f-1111-4111-8111-000000000001',
+            '7f7f7f7f-1111-4111-8111-000000000002')$$,
+  '23505', null, 'one live registration per person per team per season');
 select throws_ok(
   $$insert into public.registrations (person_id, season_id, status)
     values (current_setting('r.adult')::uuid, '5f5f5f5f-1111-4111-8111-000000000001', 'approved')$$,

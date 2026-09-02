@@ -179,7 +179,10 @@ export type TeamRegistrationInput = {
 
 function registrationErrorMessage(error: { code?: string; message: string }): string {
   if (error.code === "23505") {
-    return "There is already a registration waiting or approved for this season. Withdraw it first if you need to change it.";
+    // Since 20260902200000 the unique key includes the team: a player may
+    // hold a live registration per team (Adam: "They should be able to join
+    // unlimited teams"), so a 23505 now means THIS team, twice.
+    return "There is already a registration waiting or approved for this team this season. Withdraw it first if you need to change it.";
   }
   if (error.code === "42501") {
     return "The club's records do not show you as able to register this player — only they, an active guardian or a club administrator can.";
