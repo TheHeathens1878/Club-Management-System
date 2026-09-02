@@ -6609,6 +6609,19 @@ export type Database = {
           type: Database["public"]["Enums"]["conversation_type"]
         }[]
       }
+      sg1_open_breaches: {
+        Args: {
+          p_dob?: string
+          p_ignore_child?: string
+          p_ignore_guardian?: string
+          p_person_id?: string
+        }
+        Returns: {
+          conversation_id: string
+          title: string
+          type: Database["public"]["Enums"]["conversation_type"]
+        }[]
+      }
       sg6_enforcement_enabled: { Args: never; Returns: boolean }
       signup_email_check: {
         Args: { p_dob?: string | null; p_email: string }

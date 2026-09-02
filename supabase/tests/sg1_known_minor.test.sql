@@ -17,7 +17,7 @@
 
 begin;
 
-select plan(15);
+select plan(22);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('c0da0000-7777-4111-8111-000000000001', 'km-adult@test.invalid',
@@ -114,13 +114,25 @@ select lives_ok($$
   values ('c0117777-7777-4111-8111-000000000004', 'c0da0000-7777-4111-8111-0000000000d2', 'member')
 $$, 'their own guardian still may (SG-1.4)');
 
--- SG-1.8 has not moved either: the guardianship that excuses that room cannot
--- simply be ended out from under it.
-select throws_ok($$
+-- SG-1.8 since 20260902160000: ending the guardianship that excuses that room
+-- is RECORDED rather than refused — the placement has ended whether or not the
+-- database says so — and SG-1.7 shuts the room instead.
+select lives_ok($$
   update public.guardianships set ended_at = now()
    where child_person_id = 'c0da0000-7777-4111-8111-0000000000d2'
+$$, 'the guardianship can be ended, because ending it is recording a fact');
+select ok(
+  not public.conversation_is_compliant('c0117777-7777-4111-8111-000000000004'),
+  'the room it was holding up is now non-compliant, and says so');
+select throws_ok($$
+  insert into public.messages (conversation_id, sender_person_id, body)
+  values ('c0117777-7777-4111-8111-000000000004', current_setting('km.parent')::uuid, 'hello')
 $$, 'P0001', null,
-  'and the guardianship cannot be ended while that room is open (SG-1.8)');
+  'so nothing can be said in it (SG-1.7) — which is the rule that matters');
+select is((select count(*) from public.audit_log
+            where action = 'safeguarding.sg1_exposed_by_guardianship'
+              and entity_id = 'c0da0000-7777-4111-8111-0000000000d2'),
+  1::bigint, 'and a safeguarding lead can find it in the audit log');
 
 -- "Does this room hold a child" answers the same way, or the admitting trigger
 -- and the test it calls would disagree about the same room.
@@ -142,15 +154,29 @@ insert into public.conversations (id, type, created_by_person_id)
 insert into public.conversation_participants (conversation_id, person_id, basis) values
   ('c0117777-7777-4111-8111-000000000005', current_setting('km.adult')::uuid, 'member'),
   ('c0117777-7777-4111-8111-000000000005', 'c0da0000-7777-4111-8111-0000000000c4', 'member');
-select throws_ok($$
+select lives_ok($$
   update public.people set dob = (current_date - interval '9 years')::date
    where id = 'c0da0000-7777-4111-8111-0000000000c4'
+$$, 'a date of birth that makes somebody a child alone with an adult is RECORDED (SG-1.2, 20260902160000)');
+select ok(
+  not public.conversation_is_compliant('c0117777-7777-4111-8111-000000000005'),
+  'the room it exposed is non-compliant');
+select throws_ok($$
+  insert into public.messages (conversation_id, sender_person_id, body)
+  values ('c0117777-7777-4111-8111-000000000005', current_setting('km.adult')::uuid, 'hello')
 $$, 'P0001', null,
-  'a date of birth that makes somebody a child alone with an adult is still refused (SG-1.2)');
+  'and is shut to messages until it is put right (SG-1.7)');
+select is((select count(*) from public.audit_log
+            where action = 'safeguarding.sg1_exposed_by_dob'
+              and entity_id = 'c0da0000-7777-4111-8111-0000000000c4'),
+  1::bigint, 'with the room named in the audit log');
 select lives_ok($$
   update public.people set dob = '1990-06-06'
    where id = 'c0da0000-7777-4111-8111-0000000000c4'
 $$, 'the same person may be recorded as an adult');
+select ok(
+  public.conversation_is_compliant('c0117777-7777-4111-8111-000000000005'),
+  'which puts the room right again');
 
 
 -- =============================================================================

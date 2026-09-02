@@ -116,12 +116,14 @@ select throws_ok($$insert into public.messages (conversation_id, sender_person_i
 select is((select count(*) from public.sg1_nightly_check() where conversation_id = 'e1e1e1e1-2222-4111-8111-000000000009'), 1::bigint, 'nightly check reports the non-compliant conversation');
 update public.conversations set closed_at = now() where id = 'e1e1e1e1-2222-4111-8111-000000000009';
 
--- SG-1.2 dob_correction_blocked_when_it_creates_1to1: adult+adult dm, then
--- correct one to 15 (2026-08-25: 16 is now self-account age, so a correction
--- to 16 leaves the 1:1 compliant under SG-1.10 — 15 still trips the guard).
+-- Correcting an adult+adult dm's member down to 15 is still refused — but by
+-- SG-10, not SG-1.2, since 20260902160000: this person holds an app account,
+-- and 15 is below the self-account age with no app_account consent on record.
+-- SG-1.2's own behaviour (record it, audit the room) is proved in
+-- sg1_known_minor.test.sql, on somebody with no login for SG-10 to catch.
 select set_config('g.claims0', '{}', true);
 select throws_ok($$update public.people set dob = current_date - interval '15 years' where id = current_setting('g.member')::uuid$$,
-  'P0001', null, 'dob_correction_blocked_when_it_creates_1to1');
+  'P0001', null, 'an account holder cannot be corrected down to 15 (SG-10)');
 -- minor_turning_18_does_not_break_existing_conversation
 select lives_ok($$select pg_temp.conv('dm', 'e1e1e1e1-2222-4111-8111-000000000010', current_setting('g.other')::uuid, 'd9d9d9d9-2222-4111-8111-000000000004')$$,
   'guardian + 17-year-old dm');
@@ -129,13 +131,20 @@ update public.people set dob = current_date - interval '18 years' where id = 'd9
 select lives_ok($$insert into public.messages (conversation_id, sender_person_id, body) values ('e1e1e1e1-2222-4111-8111-000000000010', current_setting('g.other')::uuid, 'happy birthday')$$,
   'minor_turning_18_does_not_break_existing_conversation');
 
--- SG-1.8 guardianship_delete_blocked_when_it_creates_1to1 (dm 3: parent + Kid Ten)
-select throws_ok($$delete from public.guardianships where guardian_person_id = current_setting('g.parent')::uuid and child_person_id = 'd9d9d9d9-2222-4111-8111-000000000001'$$,
-  'P0001', null, 'guardianship_delete_blocked_when_it_creates_1to1');
-select throws_ok($$update public.guardianships set ended_at = now() where guardian_person_id = current_setting('g.parent')::uuid and child_person_id = 'd9d9d9d9-2222-4111-8111-000000000001'$$,
-  'P0001', null, 'ending the guardianship is blocked the same way');
-select throws_ok($$update public.guardianships set child_person_id = 'd9d9d9d9-2222-4111-8111-000000000003' where guardian_person_id = current_setting('g.parent')::uuid and child_person_id = 'd9d9d9d9-2222-4111-8111-000000000001'$$,
-  'P0001', null, 'guardianship_retarget_blocked_when_it_creates_1to1');
+-- SG-1.8, rewritten by 20260902160000 (dm 3: parent + Kid Ten). Ending a
+-- guardianship is the recording of a fact — the placement has ended whether or
+-- not the database says so — and refusing it left the register claiming a
+-- child was accompanied by somebody who is no longer their guardian. It is now
+-- written, audited, and SG-1.7 shuts the room it exposed.
+select lives_ok($$update public.guardianships set ended_at = now() where guardian_person_id = current_setting('g.parent')::uuid and child_person_id = 'd9d9d9d9-2222-4111-8111-000000000001'$$,
+  'ending a guardianship that leaves an adult alone with a minor is recorded, not refused');
+select is((select count(*) from public.audit_log
+            where action = 'safeguarding.sg1_exposed_by_guardianship'
+              and entity_id = 'd9d9d9d9-2222-4111-8111-000000000001'),
+  1::bigint, 'and the conversations it exposed are named in the audit log');
+select throws_ok($$insert into public.messages (conversation_id, sender_person_id, body) values ('e1e1e1e1-2222-4111-8111-000000000003', current_setting('g.parent')::uuid, 'hello')$$,
+  'P0001', null, 'but nothing can be said in the room it left non-compliant (SG-1.7)');
+update public.guardianships set ended_at = null where guardian_person_id = current_setting('g.parent')::uuid and child_person_id = 'd9d9d9d9-2222-4111-8111-000000000001';
 -- guardianship_delete_allowed_when_no_affected_conversation
 select lives_ok($$delete from public.guardianships where guardian_person_id = current_setting('g.other')::uuid and child_person_id = 'd9d9d9d9-2222-4111-8111-000000000004'$$,
   'guardianship_delete_allowed_when_no_affected_conversation (child is 18 now)');
