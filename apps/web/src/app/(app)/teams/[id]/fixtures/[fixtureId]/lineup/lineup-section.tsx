@@ -61,14 +61,14 @@ export async function loadLineupSection(
 
   const { data: fixture } = await supabase
     .from("fixtures")
-    .select("id,team_id,kickoff_at,is_home,opponent,venue_text,teams:team_id(name,age_group)")
+    .select("id,team_id,kickoff_at,is_home,opponent,venue_text,teams:team_id(name,age_group,playing_format)")
     .eq("id", fixtureId)
     .eq("team_id", teamId)
     .maybeSingle();
   if (!fixture) return null;
 
-  const team = fixture.teams as { name: string; age_group: string | null } | null;
-  const format = playingFormatFor(team?.age_group);
+  const team = fixture.teams as { name: string; age_group: string | null; playing_format: string | null } | null;
+  const format = playingFormatFor(team?.age_group, team?.playing_format);
 
   const [staff, admin, lineupResult, membershipResult, availabilityResult] = await Promise.all([
     // The caller may already know both answers (the event page computes them

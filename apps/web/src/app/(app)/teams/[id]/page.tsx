@@ -754,6 +754,9 @@ export default async function TeamPage({
   // Overview derivations: the FA rules strip, the availability tallies, and
   // the chat tail. All cheap, all from data already in hand.
   const formatRules = faFormatFor(team.age_group);
+  // The club's own answer wins over the FA table where it has given one
+  // (20260902150000): an adult side playing 9v9 is a thing no age group says.
+  const playedFormat = team.playing_format ?? formatRules?.format ?? null;
   // The phone's next-match card (mobile artboard) says the same thing as the
   // ink card, on one line under the opponent.
   const nextMatch = fixtures[0] ?? null;
@@ -855,7 +858,7 @@ export default async function TeamPage({
       {tab === "matchday" && formatRules && (
         <div className="theme-ink grid grid-cols-4 gap-2 border-b border-border bg-card px-4 py-3 text-foreground lg:hidden">
           {[
-            ["Format", formatRules.format],
+            ["Format", playedFormat ?? formatRules.format],
             ["Halves", formatRules.matchLength],
             ["Pitch", formatRules.pitchSize],
             ["Ball", formatRules.ball],
@@ -1178,7 +1181,7 @@ export default async function TeamPage({
                 {formatRules && (
                   <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3 border-t border-border pt-4">
                     {[
-                      ["Format", formatRules.format],
+                      ["Format", playedFormat ?? formatRules.format],
                       ["Match length", formatRules.matchLength],
                       ["Pitch size", formatRules.pitchSize],
                       ["Ball", formatRules.ball],
@@ -1483,8 +1486,12 @@ export default async function TeamPage({
                 <MatchDayPanel
                   teamId={team.id}
                   canEdit={allocationTools}
+                  canRename={clubAdmin}
                   pitches={matchDayPitches}
                   values={{
+                    name: team.name,
+                    playing_format: team.playing_format,
+                    derived_format: faFormatFor(team.age_group)?.format ?? null,
                     home_resource_id: team.home_resource_id,
                     home_kickoff_time: team.home_kickoff_time,
                     central_venue_name: team.central_venue_name,
