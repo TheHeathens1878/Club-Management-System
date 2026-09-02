@@ -7,6 +7,7 @@ import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabili
 import { loadUnreadNotificationCount } from "@/lib/notifications-data";
 import { MORE_REPORT_HREF, mobileTabsFor, moreScreenGroups } from "@/lib/mobile-nav";
 import { navFor, navForUnlinked } from "@/lib/nav";
+import { loadNavCounts, NO_NAV_COUNTS } from "@/lib/nav-counts";
 import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
 import { RoleSwitcherSheet } from "@/components/role-switcher-sheet";
 
@@ -40,6 +41,14 @@ export default async function MorePage() {
   // group is a numbered flow, which keeps every step. See `moreScreenGroups`.
   const tabHrefs = new Set(mobileTabsFor(view, capabilities).map((tab) => tab.href));
   const listed = moreScreenGroups(groups, tabHrefs);
+
+  // The same waiting-counts the sidebar draws (Adam, 2026-09-02). This screen
+  // matters more than the sidebar does for them: on a phone it is the ONLY way
+  // to reach Approvals, so a queue that looks empty here is a queue nobody
+  // opens.
+  const counts = listed.some((g) => g.items.some((i) => i.badge))
+    ? await loadNavCounts(capabilities.isClubAdmin)
+    : NO_NAV_COUNTS;
 
   return (
     <div className="mx-auto w-full max-w-2xl">
@@ -86,6 +95,7 @@ export default async function MorePage() {
             <div className="overflow-hidden rounded-xl border bg-card">
               {group.items.map((item) => {
                 const Icon = item.icon;
+                const waiting = item.badge ? counts[item.badge] : 0;
                 return (
                   <Link
                     key={item.href}
@@ -94,6 +104,13 @@ export default async function MorePage() {
                   >
                     <Icon className="h-[18px] w-[18px] flex-none text-foreground/75" />
                     <span className="flex-1 text-sm">{item.label}</span>
+                    {/* Same pill the bell above uses, so two waiting counts on
+                        one screen do not look like two different things. */}
+                    {waiting > 0 && (
+                      <span className="rounded-full bg-accent px-2 py-0.5 text-[10.5px] font-semibold leading-none text-accent-foreground">
+                        {waiting > 99 ? "99+" : waiting}
+                      </span>
+                    )}
                     <ChevronRight className="h-4 w-4 flex-none text-muted-foreground" />
                   </Link>
                 );

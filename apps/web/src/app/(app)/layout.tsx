@@ -5,6 +5,7 @@ import { HeaderTools } from "@/components/header-tools";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isBooker } from "@/lib/auth";
 import { navFor, navForUnlinked } from "@/lib/nav";
+import { loadNavCounts, NO_NAV_COUNTS } from "@/lib/nav-counts";
 import { NavLink } from "@/components/nav-link";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
 import { loadUnreadNotificationCount } from "@/lib/notifications-data";
@@ -47,6 +48,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const storedView = await getStoredRoleView();
   const view = resolveRoleView(storedView, capabilities);
   const groups = view ? navFor(view, capabilities) : navForUnlinked();
+
+  // What is waiting behind Approvals and Registrations (Adam, 2026-09-02).
+  // Only asked for when the menu actually draws those entries, so an ordinary
+  // member's page load costs nothing extra.
+  const counts = groups.some((g) => g.items.some((i) => i.badge))
+    ? await loadNavCounts(capabilities.isClubAdmin)
+    : NO_NAV_COUNTS;
   // The role–team dropdown (Adam, 2026-08-25): every hat the person holds,
   // team by team. With one option the component renders plain text.
   const scope = view ? await getTeamScope(view, capabilities) : null;
@@ -137,8 +145,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </p>
               {group.items.map((item) => {
                 const Icon = item.icon;
+                // Zero is not drawn: an empty queue should look empty, and a
+                // pill reading "0" is a thing to check rather than a thing to
+                // ignore.
+                const waiting = item.badge ? counts[item.badge] : 0;
                 return (
-                  <NavLink key={item.href} href={item.href} child={item.child}>
+                  <NavLink
+                    key={item.href}
+                    href={item.href}
+                    child={item.child}
+                    badge={waiting > 0 ? waiting : undefined}
+                  >
                     <Icon className={item.child ? "h-3 w-3" : "h-4 w-4"} /> {item.label}
                   </NavLink>
                 );
