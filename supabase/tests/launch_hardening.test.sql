@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(22);
+select plan(23);
 
 -- A ── init-planned policies ─────────────────────────────────────────────────
 

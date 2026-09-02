@@ -67,6 +67,11 @@ alter policy household_links_owner_read on public.household_links
 -- public loses anon/authenticated EXECUTE in one sweep, so the next
 -- migration's trigger function is not a new hole to remember.
 
+-- PUBLIC included in every revoke, not just the two named roles: a freshly
+-- created function grants EXECUTE to the PUBLIC pseudo-role, and anon holds
+-- it THROUGH that grant — `revoke … from anon` alone changes nothing on a
+-- clean rebuild (CI proved it). Triggers keep firing: the owner's rights are
+-- implicit and untouched.
 do $do$
 declare
   fn record;
@@ -78,16 +83,20 @@ begin
     where n.nspname = 'public'
       and p.prorettype = 'pg_catalog.trigger'::regtype
   loop
-    execute format('revoke execute on function %s from anon, authenticated', fn.sig);
+    execute format('revoke execute on function %s from public, anon, authenticated', fn.sig);
   end loop;
 end
 $do$;
 
 -- Member-only RPCs: signed-out visitors have no business asking. The app
--- only ever calls these with a session.
-revoke execute on function public.event_people(uuid) from anon;
-revoke execute on function public.my_events(integer) from anon;
-revoke execute on function public.is_known_minor(uuid) from anon;
+-- only ever calls these with a session — so the roles that do call them get
+-- their grants back explicitly once PUBLIC's blanket grant is gone.
+revoke execute on function public.event_people(uuid) from public, anon;
+revoke execute on function public.my_events(integer) from public, anon;
+revoke execute on function public.is_known_minor(uuid) from public, anon;
+grant execute on function public.event_people(uuid) to authenticated, service_role;
+grant execute on function public.my_events(integer) to authenticated, service_role;
+grant execute on function public.is_known_minor(uuid) to authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
 -- 3. Pin the nine stray search_paths.
