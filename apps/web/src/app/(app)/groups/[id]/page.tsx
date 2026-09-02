@@ -110,16 +110,33 @@ export default async function ManageGroupPage({
   const participants = participantRows ?? [];
   const names = await resolveNames(participants.map((p) => p.person_id));
 
+  // WHO HOLDS THE HAT, in every group. Adam, 2026-09-02: "being a member of
+  // the referees group doesn't automatically make you a referee — all coaches
+  // should be in there also. Member just means member of the group, I want the
+  // referees to be obvious and highlighted." `conversation_referees()`
+  // (20260902130000) is the only thing that can tell them apart: `person_roles`
+  // is not a member's to read, and the participation basis says how somebody
+  // got in, not what they are.
+  const { data: refereeIds } = await supabase.rpc("conversation_referees", {
+    p_conversation_id: id,
+  });
+  const referees = new Set<string>(refereeIds ?? []);
+
   // The Referees group, and only it, shows what each referee may take: one
   // age band below their own until they are 16 (Adam, 2026-09-01). The bands
   // come from `referees_group_bands()`, which computes them once and answers
   // only for somebody who can already see this group — the same readers this
   // page has. Every other group's list is unchanged.
+  //
+  // The band is kept for REFEREES ONLY. The function returns one for every
+  // participant, so before today a coach who had never refereed a game was
+  // shown the age groups they may take, which is not a thing about them.
   const { data: refereesGroupId } = await supabase.rpc("referees_group_id");
   const bands = new Map<string, string>();
   if (refereesGroupId === id) {
     const { data: bandRows } = await supabase.rpc("referees_group_bands");
     for (const row of bandRows ?? []) {
+      if (!referees.has(row.person_id)) continue;
       bands.set(
         row.person_id,
         refereeBandSummary({
@@ -140,6 +157,7 @@ export default async function ManageGroupPage({
     joinedAt: p.joined_at,
     leftAt: p.left_at,
     note: bands.get(p.person_id) ?? null,
+    isReferee: referees.has(p.person_id),
   }));
 
   const { venues, teams } = await loadAttachmentOptions();
@@ -257,10 +275,12 @@ export default async function ManageGroupPage({
             </p>
             {refereesGroupId === id && (
               <p className="text-sm text-muted-foreground">
-                Each referee shows their own age group and the games they may take. The club
-                follows the FA: a referee under 16 takes one age group below their own, and from 16
-                they take any of them. A game above somebody&apos;s age group cannot be claimed by
-                them — the database refuses it, not the screen.
+                Coaches are in this group as well as referees, so that a game needing an official
+                can be posted here. The <span className="font-medium text-amber-700">referees</span>{" "}
+                are marked, and each one shows their own age group and the games they may take: the
+                club follows the FA, so a referee under 16 takes one age group below their own and
+                from 16 takes any of them. A game above somebody&apos;s age group cannot be claimed
+                by them — the database refuses it, not the screen.
               </p>
             )}
           </CardHeader>

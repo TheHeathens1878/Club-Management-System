@@ -5666,6 +5666,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      conversation_referees: {
+        Args: { p_conversation_id: string }
+        Returns: string[]
+      }
       create_board_post: {
         Args: {
           p_age_groups?: string[]

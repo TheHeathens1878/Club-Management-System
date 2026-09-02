@@ -38,6 +38,16 @@ export type GroupMemberRow = {
    * group's business and not this component's.
    */
   note?: string | null;
+  /**
+   * They hold the referee hat (`conversation_referees()`, 20260902130000).
+   *
+   * Adam, 2026-09-02: "being a member of the referees group doesn't
+   * automatically make you a referee — all coaches should be in there also…
+   * Member just means member of the group, I want the referees to be obvious
+   * and highlighted." So this is not the participation basis, which says how
+   * somebody got into the room; it is what they are.
+   */
+  isReferee?: boolean;
 };
 
 const BASIS_LABELS: Record<string, string> = {
@@ -123,7 +133,13 @@ export function GroupMembersPanel({
         {active.map((member) => (
           <div
             key={member.personId}
-            className="flex flex-wrap items-start justify-between gap-2 rounded-lg border p-3"
+            className={
+              "flex flex-wrap items-start justify-between gap-2 rounded-lg border p-3 " +
+              // A referee's card is a different colour, and that is the whole
+              // request: in a room where most people are coaches, the ones who
+              // can actually take a game have to be findable at a glance.
+              (member.isReferee ? "border-amber-300 bg-amber-50" : "")
+            }
           >
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
@@ -137,7 +153,14 @@ export function GroupMembersPanel({
                 ) : (
                   <span className="text-sm font-medium">{member.name}</span>
                 )}
-                <Badge variant="muted">{BASIS_LABELS[member.basis] ?? member.basis}</Badge>
+                {member.isReferee ? (
+                  // "Referee" instead of "Member", not beside it: the basis is
+                  // how they got in, and next to the fact that they referee it
+                  // is noise. The basis still shows for everybody else.
+                  <Badge variant="warning">Referee</Badge>
+                ) : (
+                  <Badge variant="muted">{BASIS_LABELS[member.basis] ?? member.basis}</Badge>
+                )}
                 {member.note && <Badge variant="outline">{member.note}</Badge>}
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">

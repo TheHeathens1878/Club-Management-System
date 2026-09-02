@@ -107,6 +107,7 @@ export function ThreadPanel({
         mentionables={mentionables}
         matchPosts={data.matchPosts}
         isReferee={data.isReferee}
+        refereePersonIds={data.refereePersonIds}
         isRefereesGroup={data.isRefereesGroup}
         isAdmin={data.isClubAdmin}
         isSuperUser={data.isSuperUser}

@@ -58,6 +58,12 @@ export type ThreadData = {
   matchPosts: Record<string, MatchPostView>;
   /** The caller holds the referee hat — may claim a posted game. */
   isReferee: boolean;
+  /**
+   * Everybody in this room who holds it, so a post can say so (Adam,
+   * 2026-09-02). Not the same question as `isReferee`, and not answerable from
+   * `person_roles` by an ordinary member — see `conversation_referees()`.
+   */
+  refereePersonIds: string[];
   /** This is the seeded Referees group, where games are posted. */
   isRefereesGroup: boolean;
   /** The caller is a club admin — may release any claimed game. */
@@ -151,6 +157,15 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
         .maybeSingle(),
     ]);
 
+  // And everybody else's, for the badge beside a post. Adam, 2026-09-02: "I
+  // also want it to show when they post." A member cannot read anybody's
+  // `person_roles` but their own, so this is the accessor's job
+  // (`conversation_referees()`, 20260902130000) — scoped to this room, and
+  // answering only because the caller is already in it.
+  const { data: refereeIds } = await supabase.rpc("conversation_referees", {
+    p_conversation_id: conversationId,
+  });
+
   const names = await resolveNames([
     ...participants.map((p) => p.person_id),
     ...messages.map((m) => m.sender_person_id),
@@ -228,6 +243,8 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
       ]),
     ),
     isReferee: !!refereeRole.data,
+    /** Everybody in this room who holds the referee hat — the badge on a post. */
+    refereePersonIds: (refereeIds ?? []) as string[],
     isRefereesGroup,
     isClubAdmin: await isClubAdmin(),
     isSuperUser: isSuperUser(session.profile?.role),
