@@ -381,10 +381,26 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
         phone: phone || null,
         sex,
         address,
+        // The ticks travel WITH the account, because the account may take a
+        // trip through an inbox before it comes back (Adam, 2026-09-02: he
+        // joined as a coach and a referee and no approvals appeared). Sign-up
+        // returns no session when the address has to be confirmed, so this
+        // action used to return "check your email" and drop the two ticks on
+        // the floor. `profiles_open_requested_roles()` (20260902110000) opens
+        // the requests from these three keys the moment the account exists,
+        // confirmed or not.
+        wants_coach: wants.coach,
+        wants_referee: wants.referee,
+        coach_team_id: wants.coachTeamId,
       },
       // The club's own domain, named here rather than left to the project's
-      // Site URL (Adam, 2026-08-25: the link pointed at the old Vercel host).
-      emailRedirectTo: `${getSiteUrl()}/auth/callback`,
+      // Site URL (Adam, 2026-08-25: the link pointed at the old Vercel host)
+      // — and back to the WIZARD, not the lobby (Adam, 2026-09-02: "there is
+      // no joining flow on mobile. I have to save my profile and then click on
+      // more and then connected adults"). Confirming the address landed
+      // everybody on /lobby, four steps into a form they had started and one
+      // step through it, with no way back but the menu.
+      emailRedirectTo: `${getSiteUrl()}/auth/callback?next=%2Fjoin`,
     },
   });
   if (error) {
