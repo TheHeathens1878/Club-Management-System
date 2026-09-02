@@ -22,9 +22,11 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronLeft, UserPlus, Users } from "lucide-react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
+import { ADULT_DOB_DEFAULT } from "@/lib/date-of-birth";
 import { oldEnoughToReferee, refereeFromSentence } from "@/lib/referee-age";
 
 import { MAX_HOUSEHOLD } from "./constants";
@@ -103,16 +105,21 @@ export function PeopleStep({
   onContinue: () => void;
 }) {
   const copy = COPY[kind];
-  const [dob, setDob] = useState("");
+  // Where this step's picker opens. A connected adult gets 1 January 1990 so
+  // the iOS wheel starts near a grown-up's answer; a child gets nothing,
+  // because 1990 would open the wheel FURTHER from a child's birth year than
+  // today does, and `add_child()` refuses a thirty-six-year-old anyway.
+  const startingDob = kind === "adult" ? ADULT_DOB_DEFAULT : "";
+  const [dob, setDob] = useState(startingDob);
 
   // React clears an uncontrolled form after a successful action, but the date
   // of birth is CONTROLLED here (the referee tick depends on it), so it would
   // survive into the next person — a second child inheriting the first one's
-  // birthday, with every other field blank. Clear it whenever somebody has
-  // been added.
+  // birthday, with every other field blank. Put it back to this step's
+  // starting point whenever somebody has been added.
   useEffect(() => {
-    setDob("");
-  }, [people.length]);
+    setDob(startingDob);
+  }, [people.length, startingDob]);
 
   const full = householdCount >= MAX_HOUSEHOLD;
   const refereeAllowed = oldEnoughToReferee(dob || null, minRefereeAge);
@@ -182,13 +189,12 @@ export function PeopleStep({
               <Input name="last_name" placeholder="Surname" required />
               <div className="space-y-1">
                 <Label htmlFor={`add-${kind}-dob`}>Date of birth</Label>
-                <Input
+                <DateOfBirthInput
                   id={`add-${kind}-dob`}
-                  name="dob"
-                  type="date"
                   required
+                  start={kind === "adult" ? "adult" : "blank"}
                   value={dob}
-                  onChange={(event) => setDob(event.target.value)}
+                  onValueChange={setDob}
                 />
               </div>
               {kind === "adult" && (

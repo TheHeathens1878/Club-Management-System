@@ -7,7 +7,9 @@ import { ChevronLeft, MailCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { TownCountyFields } from "@/components/town-county-fields";
+import { ADULT_DOB_DEFAULT } from "@/lib/date-of-birth";
 import { customQuestionsPayload, stageRegistrationUploads } from "@/components/registration-question-block";
 import type { RegistrationQuestion } from "@/lib/registration-questions";
 import {
@@ -490,7 +492,10 @@ function ProfileStep({
   pending: boolean;
   onSubmit: (formData: FormData) => void;
 }) {
-  const [dob, setDob] = useState("");
+  // Seeded, because the field is controlled and a controlled input shows what
+  // it is given: `start="adult"` on the component below only decides where an
+  // UNCONTROLLED one opens.
+  const [dob, setDob] = useState(ADULT_DOB_DEFAULT);
   // Signed in, the date of birth is already on the record and this form does
   // not ask for it again — so the tick is offered and the database's own age
   // guard is what answers. Signed out, the date is right here on the form and
@@ -537,13 +542,12 @@ function ProfileStep({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="join-dob">Date of birth</Label>
-                <Input
+                <DateOfBirthInput
                   id="join-dob"
-                  name="dob"
-                  type="date"
                   required
+                  start="adult"
                   value={dob}
-                  onChange={(event) => setDob(event.target.value)}
+                  onValueChange={setDob}
                 />
               </div>
               {/* Adam, 2026-09-01: "biological sex (this is required for

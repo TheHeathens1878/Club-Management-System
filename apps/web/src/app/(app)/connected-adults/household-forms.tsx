@@ -17,6 +17,7 @@
 import { useActionState, useState } from "react";
 import { UserPlus } from "lucide-react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 
@@ -142,7 +143,9 @@ export function AddAdultForm() {
         <Label htmlFor="adult-dob">
           Date of birth <span className="text-destructive">*</span>
         </Label>
-        <Input id="adult-dob" name="dob" type="date" required />
+        {/* An adult by construction — `add_household_adult()` refuses a minor
+            — so the picker opens where an adult's answer lives. */}
+        <DateOfBirthInput id="adult-dob" required start="adult" />
         <p className="text-xs text-muted-foreground">
           Only an adult can be connected here — a child is added on My Children so the club
           records you as their guardian.

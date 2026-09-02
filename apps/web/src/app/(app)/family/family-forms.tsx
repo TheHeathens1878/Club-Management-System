@@ -13,6 +13,7 @@
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { Pencil, Plus, UserPlus } from "lucide-react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -132,7 +133,9 @@ export function AddChildForm() {
         <Label htmlFor="child-dob">
           Date of birth <span className="text-destructive">*</span>
         </Label>
-        <Input id="child-dob" name="dob" type="date" required />
+        {/* Left blank on purpose: 1 January 1990 would open the wheel further
+            from a child's birth year than today already is. */}
+        <DateOfBirthInput id="child-dob" required />
         <p className="text-xs text-muted-foreground">
           The club needs this to place your child in the right age group and to apply its
           safeguarding rules — those rules treat anyone whose date of birth is unknown as a child,
