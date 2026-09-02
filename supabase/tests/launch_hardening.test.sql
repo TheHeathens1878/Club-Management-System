@@ -20,38 +20,38 @@ select plan(22);
 
 -- A ── init-planned policies ─────────────────────────────────────────────────
 
-select like(
+select alike(
   (select pg_get_expr(polqual, polrelid) from pg_policy where polname = 'profiles_self_read'),
   '%( SELECT auth.uid()%',
   'profiles_self_read asks auth.uid() once per statement'
 );
 
-select like(
+select alike(
   (select pg_get_expr(polqual, polrelid) from pg_policy where polname = 'holiday_requests_own_read'),
   '%( SELECT is_staff()%',
   'holiday_requests_own_read asks is_staff() once per statement'
 );
 
-select like(
+select alike(
   (select pg_get_expr(polwithcheck, polrelid) from pg_policy where polname = 'holiday_requests_own_insert'),
   '%( SELECT auth.uid()%',
   'holiday_requests_own_insert asks auth.uid() once per statement'
 );
 
-select like(
+select alike(
   (select pg_get_expr(polwithcheck, polrelid) from pg_policy where polname = 'identity_documents_insert'),
   '%( SELECT auth.uid()%',
   'identity_documents_insert asks auth.uid() once per statement'
 );
 
 -- …and the row-dependent limb stayed per-row, because it must.
-select like(
+select alike(
   (select pg_get_expr(polwithcheck, polrelid) from pg_policy where polname = 'identity_documents_insert'),
   '%can_act_for(person_id)%',
   'identity_documents_insert still asks can_act_for per row'
 );
 
-select like(
+select alike(
   (select pg_get_expr(polqual, polrelid) from pg_policy where polname = 'household_links_owner_read'),
   '%( SELECT auth.uid()%',
   'household_links_owner_read asks auth.uid() once per statement'
