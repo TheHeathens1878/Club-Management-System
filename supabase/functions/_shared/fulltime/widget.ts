@@ -134,6 +134,192 @@ function statusWordIn(text: string): FixtureStatus | undefined {
 }
 
 /**
+ * A status printed in a score cell, as a whole word.
+ *
+ * Deliberately tighter than {@link statusWordIn}, which reads a whole row and
+ * may match a word inside a longer sentence. Beside the separator we are
+ * looking at cells that could be a TEAM NAME, and a side called "Athletic P"
+ * must not be swallowed as "postponed".
+ */
+const CELL_STATUS: ReadonlyArray<readonly [RegExp, FixtureStatus]> = [
+  [/^aban(doned)?$/i, "abandoned"],
+  [/^(?:cancell?ed|void)$/i, "cancelled"],
+  [/^(?:p|pp|post(?:poned)?)$/i, "postponed"],
+];
+
+function cellStatusIn(text: string): FixtureStatus | undefined {
+  for (const [pattern, status] of CELL_STATUS) {
+    if (pattern.test(text)) return status;
+  }
+  return undefined;
+}
+
+export type ClassifiedRow = {
+  type: string;
+  homeTeam?: string;
+  awayTeam?: string;
+  homeScore?: number;
+  awayScore?: number;
+  cellStatus?: FixtureStatus;
+  venue?: string;
+};
+
+/**
+ * Which cell of a fixture row is which.
+ *
+ * THE SEPARATOR IS THE ANCHOR, not the column count and not the position.
+ * Every variant Full-Time serves puts the two teams either side of a cell
+ * holding "v", a dash, or the score itself ("3 - 1"); the home team is the
+ * last thing before it and the away team the first thing after it. Scores and
+ * a postponement marker hug the separator on the inside; the venue trails the
+ * away team; anything left in front of the home team is the type column.
+ *
+ * Counting from the left instead — which is what this did until 2026-09-02 —
+ * works only while the type column holds a bare letter. Adam pasted a Division
+ * Three widget whose type column prints "D3", and because "D3" has a digit in
+ * it, it failed the type test, became the first "text", and was taken for the
+ * home team. Every home game came in as an away game against "D3", and every
+ * away game vanished, because the team's own name was then in neither slot.
+ *
+ * Falls back to the old left-to-right reading when there is no separator at
+ * all, so a variant nobody has seen yet still produces something.
+ */
+export function classifyFixtureRow(cellTexts: readonly string[]): ClassifiedRow {
+  // The separator can never be the first cell: something has to be the home
+  // team. That also stops a type column reading "V" from being mistaken for
+  // one.
+  let sepIndex = -1;
+  let pairScores: [number, number] | undefined;
+  for (let i = 1; i < cellTexts.length; i += 1) {
+    const text = cellTexts[i] ?? "";
+    if (text === "") continue;
+    if (SEPARATOR.test(text)) {
+      sepIndex = i;
+      break;
+    }
+    const pair = SCORE_PAIR.exec(text);
+    if (pair) {
+      sepIndex = i;
+      pairScores = [Number(pair[1]), Number(pair[2])];
+      break;
+    }
+  }
+  if (sepIndex < 1) return classifyByOrder(cellTexts);
+
+  const before = cellTexts.slice(0, sepIndex).filter((t) => t !== "");
+  const after = cellTexts.slice(sepIndex + 1).filter((t) => t !== "");
+  let homeScore: number | undefined = pairScores?.[0];
+  let awayScore: number | undefined = pairScores?.[1];
+  let cellStatus: FixtureStatus | undefined;
+
+  // Peel scores and status markers off the inside edge of each side. The
+  // `> 1` guard is what keeps a team name safe: the last thing standing on a
+  // side is the team, whatever it looks like.
+  while (before.length > 1) {
+    const last = before[before.length - 1] ?? "";
+    if (NUMBER.test(last)) {
+      homeScore = homeScore ?? Number(last);
+      before.pop();
+      continue;
+    }
+    const word = cellStatusIn(last);
+    if (word) {
+      cellStatus = cellStatus ?? word;
+      before.pop();
+      continue;
+    }
+    break;
+  }
+  while (after.length > 1) {
+    const head = after[0] ?? "";
+    if (NUMBER.test(head)) {
+      awayScore = awayScore ?? Number(head);
+      after.shift();
+      continue;
+    }
+    const word = cellStatusIn(head);
+    if (word) {
+      cellStatus = cellStatus ?? word;
+      after.shift();
+      continue;
+    }
+    break;
+  }
+
+  const homeTeam = before[before.length - 1];
+  const awayTeam = after[0];
+  const venue = after.slice(1).join(", ") || undefined;
+  // Whatever sits in front of the home team is the type column ("D3", "L",
+  // "CUP"). More than one such cell has never been seen; the first wins.
+  const type = before.length > 1 ? (before[0] ?? "").toUpperCase() : "";
+
+  return {
+    type,
+    ...(homeTeam === undefined ? {} : { homeTeam }),
+    ...(awayTeam === undefined ? {} : { awayTeam }),
+    ...(homeScore === undefined ? {} : { homeScore }),
+    ...(awayScore === undefined ? {} : { awayScore }),
+    ...(cellStatus === undefined ? {} : { cellStatus }),
+    ...(venue === undefined ? {} : { venue }),
+  };
+}
+
+/** The pre-2026-09-02 reading, kept for rows with no separator at all. */
+function classifyByOrder(cellTexts: readonly string[]): ClassifiedRow {
+  let type = "";
+  const texts: string[] = [];
+  const numbers: number[] = [];
+  let homeScore: number | undefined;
+  let awayScore: number | undefined;
+  let cellStatus: FixtureStatus | undefined;
+  let first = true;
+  for (const text of cellTexts) {
+    if (text === "") {
+      first = false;
+      continue;
+    }
+    if (first && TYPE_LETTER.test(text) && !SEPARATOR.test(text)) {
+      type = text.toUpperCase();
+      first = false;
+      continue;
+    }
+    first = false;
+    if (SEPARATOR.test(text) && texts.length === 1) continue;
+    const pair = SCORE_PAIR.exec(text);
+    if (pair && texts.length === 1) {
+      homeScore = Number(pair[1]);
+      awayScore = Number(pair[2]);
+      continue;
+    }
+    const word = statusWordIn(text);
+    if (word && texts.length <= 1) {
+      cellStatus = cellStatus ?? word;
+      continue;
+    }
+    if (NUMBER.test(text) && texts.length >= 1 && texts.length <= 2) {
+      numbers.push(Number(text));
+      continue;
+    }
+    texts.push(text);
+  }
+  const [homeTeam, awayTeam, ...rest] = texts;
+  if (homeScore === undefined && numbers.length === 2) {
+    homeScore = numbers[0];
+    awayScore = numbers[1];
+  }
+  const venue = rest.join(", ") || undefined;
+  return {
+    type,
+    ...(homeTeam === undefined ? {} : { homeTeam }),
+    ...(awayTeam === undefined ? {} : { awayTeam }),
+    ...(homeScore === undefined ? {} : { homeScore }),
+    ...(awayScore === undefined ? {} : { awayScore }),
+    ...(cellStatus === undefined ? {} : { cellStatus }),
+    ...(venue === undefined ? {} : { venue }),
+  };
+}
+
+/**
  * What a fixture row is between date rows: the team variant carries a kick-off
  * date and time; a club variant's "Postponed" group carries a status and no
  * date at all.
@@ -198,59 +384,15 @@ export function parseWidgetHtml(payload: string): ParsedPage {
       continue;
     }
 
-    // Classify the cells: the optional type letter comes first, the first two
-    // longer texts are the teams, digits between them are the score, and
-    // whatever text follows the away team is the venue.
-    let type = "";
-    const texts: string[] = [];
-    const numbers: number[] = [];
-    let homeScore: number | undefined;
-    let awayScore: number | undefined;
-    let cellStatus: FixtureStatus | undefined;
-    let first = true;
-    for (const cell of cells) {
-      const text = cell.text.trim();
-      if (text === "") {
-        first = false;
-        continue;
-      }
-      if (first && TYPE_LETTER.test(text) && !SEPARATOR.test(text)) {
-        type = text.toUpperCase();
-        first = false;
-        continue;
-      }
-      first = false;
-      if (SEPARATOR.test(text) && texts.length === 1) continue;
-      const pair = SCORE_PAIR.exec(text);
-      if (pair && texts.length === 1) {
-        homeScore = Number(pair[1]);
-        awayScore = Number(pair[2]);
-        continue;
-      }
-      const word = statusWordIn(text);
-      if (word && texts.length <= 1) {
-        cellStatus = cellStatus ?? word;
-        continue;
-      }
-      if (NUMBER.test(text) && texts.length >= 1 && texts.length <= 2) {
-        numbers.push(Number(text));
-        continue;
-      }
-      texts.push(text);
-    }
-
-    const [homeTeam, awayTeam, ...rest] = texts;
+    const classified = classifyFixtureRow(cells.map((cell) => cell.text.trim()));
+    const { type, homeTeam, awayTeam, venue } = classified;
+    const { homeScore, awayScore, cellStatus } = classified;
     if (homeTeam === undefined || awayTeam === undefined) {
       warnings.push(`Fixture row without both teams: ${row.text.slice(0, 80)}`);
       continue;
     }
-    if (homeScore === undefined && numbers.length === 2) {
-      homeScore = numbers[0];
-      awayScore = numbers[1];
-    }
     const played = homeScore !== undefined && awayScore !== undefined;
     const status: FixtureStatus = cellStatus ?? current.status ?? (played ? "played" : "scheduled");
-    const venue = rest.join(", ") || undefined;
     const { date, time } = current;
 
     fixtures.push({
