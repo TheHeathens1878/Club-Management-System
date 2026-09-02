@@ -11,7 +11,7 @@ import { groupAttachment, type AttachmentChoice } from "@/lib/group-scope";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { refereeBandSummary } from "@/lib/referee-bands";
-import { resolveRoleView } from "@/lib/role-view";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { loadAttachmentOptions } from "../attachment-options";
@@ -99,7 +99,9 @@ export default async function ManageGroupPage({
   // nobody else, so the link is offered on exactly that answer — a group's
   // creator who is not on the committee keeps the plain name rather than a
   // link that would bounce them to the room diary.
-  const canOpenContacts = isCommittee(session.profile?.role);
+  // …and only while wearing a hat that runs something. In a member view the
+  // name stays a name (Adam, 2026-09-02).
+  const canOpenContacts = isCommittee(session.profile?.role) && !isMemberView(hat);
 
   const { data: participantRows } = await supabase
     .from("conversation_participants")

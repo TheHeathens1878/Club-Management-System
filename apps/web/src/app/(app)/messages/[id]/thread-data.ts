@@ -1,4 +1,6 @@
 import { getSessionProfile, isSuperUser } from "@/lib/auth";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { getCurrentPersonId, isClubAdmin, nameOf, resolveNames, UNNAMED } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
@@ -191,8 +193,16 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
         ? "Announcements are one-way. Only team staff can post here."
         : null;
 
+  // Group settings answer to the hat as well as to the standing (Adam,
+  // 2026-09-02: in a member's view "I want to see what other parents can
+  // see"). Creating the group, or being an administrator, is what ADMITS
+  // somebody to its settings; wearing a parent's, player's or Me hat puts the
+  // door away. Reading the room and posting in it are untouched — those are
+  // things every participant does.
+  const memberHat = isMemberView(resolveRoleView(await getStoredRoleView(), await getCapabilities()));
   const canManageGroup =
     conversation.type === "group" &&
+    !memberHat &&
     (conversation.created_by_person_id === personId || (await isClubAdmin()));
 
   const title =
@@ -246,7 +256,9 @@ export async function loadThread(conversationId: string): Promise<ThreadData | n
     /** Everybody in this room who holds the referee hat — the badge on a post. */
     refereePersonIds: (refereeIds ?? []) as string[],
     isRefereesGroup,
-    isClubAdmin: await isClubAdmin(),
+    // The admin extras in a thread (releasing anybody's claimed game, the
+    // wider message actions) are the admin hat's, not the standing's.
+    isClubAdmin: !memberHat && (await isClubAdmin()),
     isSuperUser: isSuperUser(session.profile?.role),
   };
 }

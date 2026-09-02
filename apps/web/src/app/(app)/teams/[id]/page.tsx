@@ -8,7 +8,7 @@ import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-con
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
-import { resolveRoleView } from "@/lib/role-view";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { personLabel } from "@/lib/people-display";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -126,7 +126,7 @@ export default async function TeamPage({
   // coach, and for a club administrator too (Adam, 2026-09-01: "parents should
   // not see the team settings tab whilst using that role, even if they are a
   // coach or admin").
-  const memberView = view === "parent" || view === "player" || view === "me";
+  const memberView = isMemberView(view);
   const staffTools = canManageTeam && !memberView;
   // The committee's own furniture — Subs, Settings, and the Full-Time badge in
   // the header — answers to the hat as well. Being on the committee is what
@@ -245,7 +245,7 @@ export default async function TeamPage({
       userClient.rpc("team_board_posts", { p_team_id: id, p_limit: 20 }),
       // The glance card is staff furniture; a parent's client would count
       // only their own household as "the squad", so it is not asked.
-      canManageTeam ? teamPlayerIds(userClient, id) : Promise.resolve([]),
+      staffTools ? teamPlayerIds(userClient, id) : Promise.resolve([]),
       loadTeamPitchBookings(id, 1),
     ]);
     if (roomResult.data) threadData = await loadThread(roomResult.data.id);
@@ -415,12 +415,12 @@ export default async function TeamPage({
       //
       // Exactly what the Overview tab does: the next fixture, then the
       // `availability` rows against it. STAFF AND ADMINISTRATORS ONLY —
-      // which the Squad tab already is (`canManageTeam` gates the tab and
+      // which the Squad tab already is (`staffTools` gates the tab and
       // its render) — because a parent's client returns only their own
       // household's availability rows, and a partial read shown as a squad
       // status would lie.
       // ----------------------------------------------------------------
-      if (canManageTeam && squadPlayerIds.length > 0) {
+      if (staffTools && squadPlayerIds.length > 0) {
         const { data: nextFixture } = await userClient
           .from("fixtures")
           .select("id,kickoff_at")
@@ -517,7 +517,7 @@ export default async function TeamPage({
   let availabilityList: OverviewAvailability[] = [];
 
   if (tab === "matchday") {
-    const squadIds = canManageTeam ? await teamPlayerIds(userClient, id) : [];
+    const squadIds = staffTools ? await teamPlayerIds(userClient, id) : [];
     const [fixturesResult, postsResult, roomResult] = await Promise.all([
       userClient
         .from("fixtures")
@@ -555,7 +555,7 @@ export default async function TeamPage({
     fixturesFailed = !!fixturesResult.error;
     // Staff only: a parent's client reads just their own household's
     // availability rows, and a partial read shown as a squad count would lie.
-    const fixtureCounts = canManageTeam
+    const fixtureCounts = staffTools
       ? await fixtureHeadcounts(
           userClient,
           (fixturesResult.data ?? []).map((row) => row.id),
@@ -595,7 +595,7 @@ export default async function TeamPage({
 
     // The Availability card: the squad by name against the next match, the
     // exceptions surfaced first. Staff only, same reason as the headcounts.
-    if (canManageTeam && fixtures[0] && squadIds.length > 0) {
+    if (staffTools && fixtures[0] && squadIds.length > 0) {
       const [{ data: availRows }, names] = await Promise.all([
         userClient
           .from("availability")
@@ -671,7 +671,7 @@ export default async function TeamPage({
   let pitchBookings: PitchBookingItem[] = [];
   if (tab === "training") {
     pitchBookings = await loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT);
-    if (canManageTeam) {
+    if (staffTools) {
       const playerIds = await teamPlayerIds(userClient, id);
       bookingCounts = Object.fromEntries(
         await bookingHeadcounts(
@@ -907,7 +907,7 @@ export default async function TeamPage({
                 </p>
               </CardHeader>
               <CardContent>
-                <BoardPanel teamId={team.id} posts={boardPosts} canPost={canManageTeam} />
+                <BoardPanel teamId={team.id} posts={boardPosts} canPost={staffTools} />
               </CardContent>
             </Card>
 
@@ -924,7 +924,7 @@ export default async function TeamPage({
                 </Card>
               )}
 
-              {canManageTeam && (
+              {staffTools && (
               <Card>
                 <CardHeader>
                   <CardTitle className="text-base">Team at a glance</CardTitle>
@@ -1028,7 +1028,7 @@ export default async function TeamPage({
               <CardContent>
                 <RecruitingPanel
                   teamId={team.id}
-                  canEdit={canManageTeam}
+                  canEdit={staffTools}
                   values={{
                     recruiting: team.recruiting,
                     gender: team.gender,
@@ -1212,7 +1212,7 @@ export default async function TeamPage({
                 source order is the column order again. */}
             <div className="grid items-start gap-4 lg:grid-cols-2">
               <div className="order-2 space-y-4 lg:order-1">
-                {canManageTeam && fixtures[0] && availabilityList.length > 0 && (
+                {staffTools && fixtures[0] && availabilityList.length > 0 && (
                   <Card className="overflow-hidden">
                     <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-4">
                       <CardTitle className="text-base">Availability</CardTitle>
@@ -1453,7 +1453,7 @@ export default async function TeamPage({
                     Could not load this team&apos;s fixtures.
                   </p>
                 ) : (
-                  <FixturesTable fixtures={fixtures} canManage={canManageTeam} teamId={team.id} />
+                  <FixturesTable fixtures={fixtures} canManage={staffTools} teamId={team.id} />
                 )}
               </CardContent>
             </Card>
@@ -1663,7 +1663,7 @@ export default async function TeamPage({
               <TeamPitchBookings
                 teamId={team.id}
                 items={pitchBookings}
-                canManage={canManageTeam}
+                canManage={staffTools}
                 headcounts={bookingCounts}
               />
             </CardContent>

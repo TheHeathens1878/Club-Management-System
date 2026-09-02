@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { formatStamp, personLabel } from "@/lib/people-display";
 import { getCurrentPersonId } from "@/lib/person";
@@ -188,7 +190,12 @@ export default async function RegisterPlayerPage() {
   );
   // "Show all teams" is a club administrator's escape and nobody else's
   // (Adam, 2026-08-26).
-  const isAdmin = isCommittee(session.profile?.role);
+  // …and only under an administrator's hat (Adam, 2026-09-02). Registering a
+  // child from the parent view offers the two age bands every other parent
+  // gets, not the whole club's team list.
+  const isAdmin =
+    isCommittee(session.profile?.role) &&
+    !isMemberView(resolveRoleView(await getStoredRoleView(), await getCapabilities()));
 
   const childIds = new Set(children.map((child) => child.person_id));
 

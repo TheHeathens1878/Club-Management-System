@@ -5,7 +5,8 @@ import { ChevronLeft, Settings, Shield } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { getCapabilities } from "@/lib/capabilities";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { instantToLocal } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
 import { createClient } from "@/lib/supabase/server";
@@ -40,6 +41,13 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
   const { id } = await params;
   const data = await loadThread(id);
   if (!data) notFound();
+
+  // A member hat puts the committee extras away (Adam, 2026-09-02): a parent
+  // reading a team room sees the names, not a link into every one of those
+  // people's contact records.
+  const memberHat = isMemberView(
+    resolveRoleView(await getStoredRoleView(), await getCapabilities()),
+  );
 
   // A team room's thread also lives on its team page — offer the way there.
   const teamHref = data.conversation.team_id ? `/teams/${data.conversation.team_id}` : null;
@@ -145,7 +153,7 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
                 isSelf: p.person_id === data.personId,
                 left: p.left_at !== null,
               }))}
-              canOpenContacts={isCommittee(session.profile?.role)}
+              canOpenContacts={!memberHat && isCommittee(session.profile?.role)}
               footer={
                 data.myLive && !data.conversation.closed_at ? (
                   <LeaveButton conversationId={data.conversation.id} />

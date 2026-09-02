@@ -8,7 +8,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { resolveRoleView } from "@/lib/role-view";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { RespondButtons } from "./respond-buttons";
@@ -50,7 +50,11 @@ export default async function EventsPage() {
   const scope = await getTeamScope(view, capabilities);
 
   const events = (data ?? []).filter((event) => !scope || event.team_id === scope.id);
-  const canCreate = capabilities.isTeamStaff || capabilities.isClubAdmin;
+  // "New event" is a coach's or an administrator's button, and only while
+  // they are wearing that hat (Adam, 2026-09-02). In a member view the list is
+  // what every other parent sees: what is on, and nothing to run.
+  const canCreate =
+    (capabilities.isTeamStaff || capabilities.isClubAdmin) && !isMemberView(view);
 
   return (
     <>
