@@ -10,19 +10,15 @@ import { Input, Label } from "@/components/ui/input";
 import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { TeamPicker, type TeamOption } from "@/components/team-picker";
 import { TownCountyFields } from "@/components/town-county-fields";
-import { ADULT_DOB_DEFAULT } from "@/lib/date-of-birth";
 import { customQuestionsPayload, stageRegistrationUploads } from "@/components/registration-question-block";
 import type { RegistrationQuestion } from "@/lib/registration-questions";
-import {
-  DEFAULT_MIN_REFEREE_AGE,
-  oldEnoughToReferee,
-  refereeFromSentence,
-} from "@/lib/referee-age";
+import { DEFAULT_MIN_REFEREE_AGE } from "@/lib/referee-age";
 
 import {
   joinAddPerson,
   joinFinish,
   joinPlayerDetails,
+  joinSignUp,
   joinStart,
   type FinishState,
   type JoinTeamOption,
@@ -34,31 +30,46 @@ import { PeopleStep, type HouseholdPerson } from "./people-step";
 import { OUTCOME_LABELS, PlayerPanel, type PlayerOutcome } from "./player-panel";
 
 /**
- * Joining the club, in four steps (Adam, 2026-09-01): your profile, your
- * children, your connected adults, the registrations.
+ * Joining the club, in five steps (Adam, 2026-09-02): your account, your
+ * profile, your children, your connected adults, the registrations.
  *
- * It was three, and the middle one was "your people" — children and adult
- * players added through the same little form. They are not the same thing. A
- * child gets a guardianship recorded and a parent answering for them; a
- * connected adult is a grown-up whose membership happens to sit with yours.
- * Asking about them separately is what lets each step say what it actually
- * means, and it is what makes the no-children tick possible: a step that only
- * ever asked about "people" could not notice that nobody had mentioned a
- * child.
+ * IT WAS FOUR, AND THE FIRST ONE ASKED FOR THINGS IT COULD NOT KEEP. "I
+ * entered my Address and Phone on the first page and said I wanted to coach
+ * and referee before confirming my email. When I come back to it after
+ * confirming email, I need to re-enter address and phone, and confirm if I
+ * want to be coach and a referee. Can the very first page just be to confirm
+ * Name and DOB?"
  *
- * The whole flow still lives in client state on one route: people added in
- * steps 2 and 3 accumulate; step 4 renders one panel per player and then the
+ * Yes, and it is not a bug to patch: `signUp()` returns no session when the
+ * address needs confirming, and an address, a phone and a role request all
+ * need one. The first page could only ever hold facts that travel inside the
+ * sign-up itself — the name and the date of birth — or facts that get thrown
+ * away. So the account step asks for exactly the first kind, and the profile
+ * step, which now always runs signed in, asks for everything else once.
+ *
+ * A member who is already signed in starts at step 2 and never sees step 1.
+ *
+ * The middle two steps were one until 2026-09-01, "your people" — children and
+ * adult players added through the same little form. They are not the same
+ * thing. A child gets a guardianship recorded and a parent answering for them;
+ * a connected adult is a grown-up whose membership happens to sit with yours.
+ * Asking separately is what lets each step say what it means, and it is what
+ * makes the no-children tick possible.
+ *
+ * The whole flow lives in client state on one route: people added in steps 3
+ * and 4 accumulate; step 5 renders one panel per player and then the
  * membership. Going back never loses anything already saved to the database
  * (created people and submitted registrations stay — the wizard says so
  * instead of pretending otherwise).
  */
 export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
   signedIn: boolean;
-  defaults: { firstName: string; lastName: string; email: string; phone: string };
+  defaults: { firstName: string; lastName: string; email: string; phone: string; sex: string | null };
   /** Every active team, for the coach tick's search box (Adam, 2026-09-02). */
   teams: TeamOption[];
 }) {
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4 | 5>(signedIn ? 2 : 1);
+  const [accountError, setAccountError] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   /** Set when the sign-up needs the email confirmed before anything else. */
   const [confirmEmail, setConfirmEmail] = useState<string | null>(null);
@@ -78,7 +89,7 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
   const [profileRoles, setProfileRoles] = useState<RoleAsk | null>(null);
   const [addedRoles, setAddedRoles] = useState<RoleAsk | null>(null);
 
-  // Steps 2 and 3 — add-person form state
+  // Steps 3 and 4 — add-person form state
   const [addError, setAddError] = useState<string | null>(null);
   // A possible duplicate on the club's records: the sentence to show, and the
   // post to repeat if the member says it is somebody else (20260825490000).
@@ -86,7 +97,7 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
   /** "I have no children to add" (Adam, 2026-09-01). */
   const [noChildren, setNoChildren] = useState(false);
 
-  // Step 4 — per-player outcomes, then the membership
+  // Step 5 — per-player outcomes, then the membership
   const [outcomes, setOutcomes] = useState<Record<string, PlayerOutcome>>({});
   const [playerErrors, setPlayerErrors] = useState<Record<string, string>>({});
   const [finish, setFinish] = useState<FinishState>({});
@@ -96,13 +107,32 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
   const players = useMemo(() => people.filter((person) => person.playing), [people]);
   const allPlayersDone = players.every((player) => outcomes[player.personId]);
 
-  function submitStart(formData: FormData) {
+  /**
+   * Step 1 — create the account, and then stop. Nothing else on this page can
+   * be saved until the address is confirmed, which is the whole reason the
+   * step is this short.
+   */
+  function submitAccount(formData: FormData) {
     startTransition(async () => {
-      const result = await joinStart({}, formData);
+      const result = await joinSignUp({}, formData);
       if (result.confirmEmail) {
         setConfirmEmail(result.confirmEmail);
         return;
       }
+      if (result.error) {
+        setAccountError(result.error);
+        return;
+      }
+      // A session came straight back (email confirmation is switched off):
+      // walk on to the profile step rather than sending them to the inbox.
+      setAccountError(null);
+      setStep(2);
+    });
+  }
+
+  function submitStart(formData: FormData) {
+    startTransition(async () => {
+      const result = await joinStart({}, formData);
       if (result.error || !result.registrant) {
         setStartError(result.error ?? "Something went wrong.");
         return;
@@ -115,8 +145,10 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
       setMinRefereeAge(result.minRefereeAge ?? DEFAULT_MIN_REFEREE_AGE);
       setQuestions(result.questions ?? []);
       setProfileRoles(result.roles ?? null);
+      // The email is not on this form any more — the account step owns it — so
+      // it comes from the record the page was rendered with.
       setRegistrantContact({
-        email: String(formData.get("email") ?? defaults.email ?? ""),
+        email: defaults.email,
         phone: String(formData.get("phone") ?? defaults.phone ?? ""),
       });
       setPeople([
@@ -132,7 +164,7 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
           sex: result.registrant.sex,
         },
       ]);
-      setStep(2);
+      setStep(3);
     });
   }
 
@@ -168,7 +200,7 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
   }
 
   /** Leaving a people step clears its one-off messages. */
-  function goToStep(next: 1 | 2 | 3 | 4) {
+  function goToStep(next: 1 | 2 | 3 | 4 | 5) {
     setAddError(null);
     setAddConfirm(null);
     setAddedRoles(null);
@@ -239,7 +271,7 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
   }
 
   // -------------------------------------------------------------------------
-  const steps = ["Your profile", "Your children", "Connected adults", "Registrations"];
+  const steps = ["Your account", "Your profile", "Your children", "Connected adults", "Registrations"];
 
   // The account exists but the address is unconfirmed: that instruction is the
   // whole screen (Adam, 2026-08-25), because nothing else on this page can be
@@ -264,9 +296,10 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
             <li>3. Sign in, then come back here to finish joining.</li>
           </ol>
           <p className="text-xs text-muted-foreground">
-            Your account keeps your name, date of birth and address. Everything after that — your
-            children, your connected adults and what each of you does at the club — is asked again
-            when you come back, because none of it can be saved until you have signed in.
+            That link brings you straight back to this form at step 2. Your name and date of birth
+            are already saved; the rest — your address, what you do at the club, your children and
+            your connected adults — is asked once, there, because none of it can be saved until you
+            have signed in.
           </p>
           <Link
             href="/login"
@@ -300,18 +333,25 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
       </ol>
 
       {step === 1 && (
+        <AccountStep
+          defaults={defaults}
+          error={accountError}
+          pending={pending}
+          onSubmit={submitAccount}
+        />
+      )}
+
+      {step === 2 && (
         <ProfileStep
-          signedIn={signedIn}
           defaults={defaults}
           clubTeams={teamOptions}
-          minRefereeAge={minRefereeAge}
           error={startError}
           pending={pending}
           onSubmit={submitStart}
         />
       )}
 
-      {step === 2 && registrant && (
+      {step === 3 && registrant && (
         <>
           {profileRoles && (profileRoles.asked.length > 0 || profileRoles.refused.length > 0) && (
             <div className="space-y-2">
@@ -345,13 +385,13 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
             onNoneChange={setNoChildren}
             onAdd={submitAddPerson}
             onConfirmAnyway={confirmAddAnyway}
-            onBack={() => goToStep(1)}
-            onContinue={() => goToStep(3)}
+            onBack={() => goToStep(2)}
+            onContinue={() => goToStep(4)}
           />
         </>
       )}
 
-      {step === 3 && registrant && (
+      {step === 4 && registrant && (
         <PeopleStep
           kind="adult"
           people={adults}
@@ -366,12 +406,12 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
           onNoneChange={() => {}}
           onAdd={submitAddPerson}
           onConfirmAnyway={confirmAddAnyway}
-          onBack={() => goToStep(2)}
-          onContinue={() => goToStep(4)}
+          onBack={() => goToStep(3)}
+          onContinue={() => goToStep(5)}
         />
       )}
 
-      {step === 4 && (
+      {step === 5 && (
         <div className="space-y-4">
           {players.map((player) => (
             <PlayerPanel
@@ -453,7 +493,7 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
                 <>
                   {finish.error && <p className="text-sm text-destructive">{finish.error}</p>}
                   <div className="flex justify-between">
-                    <Button variant="ghost" size="sm" onClick={() => goToStep(3)}>
+                    <Button variant="ghost" size="sm" onClick={() => goToStep(4)}>
                       <ChevronLeft className="h-4 w-4" /> Back
                     </Button>
                     <Button onClick={submitFinish} disabled={pending || !allPlayersDone}>
@@ -475,134 +515,185 @@ export function JoinWizard({ signedIn, defaults, teams: teamOptions }: {
 }
 
 /**
- * Step 1 — your profile.
+ * Step 1 — your account. A visitor only, and deliberately five fields.
  *
- * For a visitor this creates the club account; for somebody already signed in
- * it confirms their contact details. Either way it is where the three ticks
- * live: playing, coaching, refereeing. Playing is not a request — the
- * registration on step 4 is how somebody becomes a player. The other two are:
- * each one opens a pending request a club administrator decides.
+ * Adam, 2026-09-02: "Can the very first page just be to confirm Name and DOB?"
+ * It can, and it should, because a sign-up that needs its address confirmed
+ * comes back with no session — so anything asked here beyond what travels
+ * inside the sign-up itself is asked twice and kept once. Name and date of
+ * birth travel (handle_new_user() reads them); the date of birth cannot wait in
+ * any case, because SG-10 decides from it whether this account may exist.
+ *
+ * Everything else — sex at birth, phone, address, and what you do at the club
+ * — is step 2, on the far side of the inbox, where there is a session to save
+ * it with.
  */
-function ProfileStep({
-  signedIn,
+function AccountStep({
   defaults,
-  clubTeams,
-  minRefereeAge,
   error,
   pending,
   onSubmit,
 }: {
-  signedIn: boolean;
-  defaults: { firstName: string; lastName: string; email: string; phone: string };
-  clubTeams: TeamOption[];
-  minRefereeAge: number;
+  defaults: { firstName: string; lastName: string; email: string };
   error: string | null;
   pending: boolean;
   onSubmit: (formData: FormData) => void;
 }) {
-  // Seeded, because the field is controlled and a controlled input shows what
-  // it is given: `start="adult"` on the component below only decides where an
-  // UNCONTROLLED one opens.
-  const [dob, setDob] = useState(ADULT_DOB_DEFAULT);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Your account</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Your name and your date of birth, and an email address to confirm. The club asks for
+          everything else on the next step, once you are signed in — so nothing you type there has
+          to be typed twice.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <form action={onSubmit} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Two fields, as /register asked (Adam, 2026-09-01). One
+                "Full name" had to be split by rule, and the rule takes the
+                last word as the surname — a guess, and wrong for exactly the
+                people it is worst to be wrong about. */}
+            <div className="space-y-1">
+              <Label htmlFor="join-first-name">First name</Label>
+              <Input
+                id="join-first-name"
+                name="first_name"
+                required
+                autoComplete="given-name"
+                defaultValue={defaults.firstName}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="join-last-name">Last name</Label>
+              <Input
+                id="join-last-name"
+                name="last_name"
+                required
+                autoComplete="family-name"
+                defaultValue={defaults.lastName}
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="join-dob">Date of birth</Label>
+              <DateOfBirthInput id="join-dob" required start="adult" />
+              <p className="text-xs text-muted-foreground">
+                The club&rsquo;s safeguarding rules depend on knowing who is an adult, so this is
+                asked before anything else.
+              </p>
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="join-email">Email</Label>
+              <Input
+                id="join-email"
+                name="email"
+                type="email"
+                required
+                autoComplete="email"
+                defaultValue={defaults.email}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label htmlFor="join-password">Password</Label>
+              <Input
+                id="join-password"
+                name="password"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+              />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="join-confirm">Confirm password</Label>
+              <Input
+                id="join-confirm"
+                name="confirm_password"
+                type="password"
+                required
+                minLength={8}
+                autoComplete="new-password"
+              />
+            </div>
+          </div>
+
+          {error && <p className="whitespace-pre-line text-sm text-destructive">{error}</p>}
+          <Button type="submit" disabled={pending}>
+            {pending ? "Creating your account…" : "Create my account"}
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Step 2 — your profile. Always signed in.
+ *
+ * Everything the club asks once and everything that needs a session: the sex
+ * at birth the FA's records need, the phone, the home address, and the three
+ * ticks. Playing is not a request — the registration on step 5 is how somebody
+ * becomes a player. The other two are: each one opens a pending request a club
+ * administrator decides.
+ *
+ * The date of birth is already on the record by the time anybody reaches this
+ * step, so the referee tick is simply offered and the database's own age guard
+ * is what answers.
+ */
+function ProfileStep({
+  defaults,
+  clubTeams,
+  error,
+  pending,
+  onSubmit,
+}: {
+  defaults: { phone: string; sex: string | null };
+  clubTeams: TeamOption[];
+  error: string | null;
+  pending: boolean;
+  onSubmit: (formData: FormData) => void;
+}) {
   const [coaching, setCoaching] = useState(false);
-  // Signed in, the date of birth is already on the record and this form does
-  // not ask for it again — so the tick is offered and the database's own age
-  // guard is what answers. Signed out, the date is right here on the form and
-  // there is no reason to offer a tick it will refuse.
-  const refereeAllowed = signedIn || oldEnoughToReferee(dob || null, minRefereeAge);
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Your profile</CardTitle>
         <p className="text-sm text-muted-foreground">
-          {signedIn
-            ? "Confirm your contact details and tell us what you do at the club."
-            : "This creates your club account. Your date of birth is needed because the club's safeguarding rules depend on knowing who is an adult."}
+          Confirm your details and tell us what you do at the club.
         </p>
       </CardHeader>
       <CardContent>
         <form action={onSubmit} className="space-y-4">
-          {!signedIn && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {/* Two fields, as /register asked (Adam, 2026-09-01). One
-                  "Full name" had to be split by rule, and the rule takes
-                  the last word as the surname — a guess, and wrong for
-                  exactly the people it is worst to be wrong about. */}
-              <div className="space-y-1">
-                <Label htmlFor="join-first-name">First name</Label>
-                <Input
-                  id="join-first-name"
-                  name="first_name"
-                  required
-                  autoComplete="given-name"
-                  defaultValue={defaults.firstName}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="join-last-name">Last name</Label>
-                <Input
-                  id="join-last-name"
-                  name="last_name"
-                  required
-                  autoComplete="family-name"
-                  defaultValue={defaults.lastName}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="join-dob">Date of birth</Label>
-                <DateOfBirthInput
-                  id="join-dob"
-                  required
-                  start="adult"
-                  value={dob}
-                  onValueChange={setDob}
-                />
-              </div>
-              {/* Adam, 2026-09-01: "biological sex (this is required for
-                  the FA's records)" — the club cannot enter a player into
-                  an age group without it. `people.sex` has held these two
-                  values since 20260825500000. */}
-              <div className="space-y-1">
-                <Label htmlFor="join-sex">Biological sex at birth</Label>
-                <select
-                  id="join-sex"
-                  name="sex"
-                  required
-                  defaultValue=""
-                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                >
-                  <option value="" disabled>
-                    Choose…
-                  </option>
-                  <option value="female">Female</option>
-                  <option value="male">Male</option>
-                </select>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="join-email">Email</Label>
-                <Input id="join-email" name="email" type="email" required defaultValue={defaults.email} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="join-phone">Phone</Label>
-                <Input id="join-phone" name="phone" defaultValue={defaults.phone} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="join-password">Password</Label>
-                <Input id="join-password" name="password" type="password" required minLength={8} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="join-confirm">Confirm password</Label>
-                <Input id="join-confirm" name="confirm_password" type="password" required minLength={8} />
-              </div>
-            </div>
-          )}
-          {signedIn && (
+          <div className="grid gap-4 sm:grid-cols-2">
+            {/* Adam, 2026-09-01: "biological sex (this is required for the
+                FA's records)" — the club cannot enter a player into an age
+                group without it. `people.sex` has held these two values since
+                20260825500000, and this is where it is asked now: it is not
+                one of the facts that survives the trip through the inbox. */}
             <div className="space-y-1">
-              <Label htmlFor="join-phone-in">Phone</Label>
-              <Input id="join-phone-in" name="phone" defaultValue={defaults.phone} />
+              <Label htmlFor="join-sex">Biological sex at birth</Label>
+              <select
+                id="join-sex"
+                name="sex"
+                required
+                defaultValue={defaults.sex ?? ""}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+              >
+                <option value="" disabled>
+                  Choose…
+                </option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+              </select>
             </div>
-          )}
+            <div className="space-y-1">
+              <Label htmlFor="join-phone">Phone</Label>
+              <Input id="join-phone" name="phone" type="tel" autoComplete="tel" defaultValue={defaults.phone} />
+            </div>
+          </div>
 
           <fieldset className="space-y-2">
             <legend className="text-sm font-medium">Home address</legend>
@@ -640,43 +731,32 @@ function ProfileStep({
                 </span>
               </span>
             </label>
-            {/* The team, named as the tick is made (Adam, 2026-09-02). Not
-                required: somebody volunteering before the club has placed them
-                leaves it blank, which is exactly what the team-less coach
-                request in 20260901200000 is for. */}
+            {/* The teams, named as the tick is made. More than one, because
+                some coach two (Adam, 2026-09-02) — each becomes its own
+                request, decided on its own. Not required: somebody
+                volunteering before the club has placed them leaves it blank,
+                which is what the team-less coach request in 20260901200000 is
+                for. */}
             {coaching && (
               <div className="pl-6">
                 <TeamPicker
                   id="join-coach-team"
                   name="coach_team_id"
                   teams={clubTeams}
-                  label="Which team do you coach?"
-                  help="Leave it blank if you do not know yet — the club will place you."
+                  multiple
+                  label="Which teams do you coach?"
+                  help="Add as many as you coach. Leave it blank if you do not know yet — the club will place you."
                 />
               </div>
             )}
-            {/* The tick is always HERE, and only sometimes tickable. Hiding it
-                until a date of birth had been typed meant somebody who came to
-                this page specifically to referee found no mention of
-                refereeing at all (caught on the live page, 2026-09-01). It is
-                disabled instead, with the reason beside it — which is also how
-                the reader learns the club has a rule about the age. */}
             <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                name="refereeing"
-                value="yes"
-                disabled={!refereeAllowed}
-                className="mt-0.5 h-4 w-4 disabled:opacity-50"
-              />
-              <span className={refereeAllowed ? undefined : "text-muted-foreground"}>
+              <input type="checkbox" name="refereeing" value="yes" className="mt-0.5 h-4 w-4" />
+              <span>
                 I referee, or would like to
                 <span className="block text-xs text-muted-foreground">
-                  {refereeAllowed
-                    ? "Puts you in the club’s referees group once an administrator confirms it, where games needing a referee are posted."
-                    : dob === ""
-                      ? `Fill in your date of birth first — the club registers referees from ${minRefereeAge}.`
-                      : refereeFromSentence(dob, minRefereeAge, "you")}
+                  Puts you in the club’s referees group once an administrator confirms it, where
+                  games needing a referee are posted. The club registers referees from a set age,
+                  and will say so if you are not there yet.
                 </span>
               </span>
             </label>

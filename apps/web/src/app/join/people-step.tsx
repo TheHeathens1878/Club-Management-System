@@ -241,8 +241,9 @@ export function PeopleStep({
                         id="add-adult-coach-team"
                         name="coach_team_id"
                         teams={clubTeams}
-                        label="Which team do they coach?"
-                        help="Leave it blank if they do not know yet — the club will place them."
+                        multiple
+                        label="Which teams do they coach?"
+                        help="Add as many as they coach. Leave it blank if they do not know yet — the club will place them."
                       />
                     </div>
                   )}
