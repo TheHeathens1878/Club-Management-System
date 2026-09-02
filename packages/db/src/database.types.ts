@@ -5989,6 +5989,8 @@ export type Database = {
         Args: { p_person_id: string }
         Returns: boolean
       }
+      is_known_minor: { Args: { person_id: string }; Returns: boolean }
+      is_known_minor_dob: { Args: { d: string }; Returns: boolean }
       is_member_of_booking: {
         Args: { p_booking_id: string; p_person_id: string }
         Returns: boolean
