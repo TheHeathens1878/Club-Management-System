@@ -26,6 +26,7 @@
 
 import { adminClient, type Client, json, requireServiceRole } from "../_shared/auth.ts";
 import { checkSecrets, optionalEnv } from "../_shared/env.ts";
+import { sendWebPush } from "../_shared/webpush.ts";
 
 type OutboundRow = {
   id: string;
@@ -204,6 +205,90 @@ async function sendExpo(admin: Client, row: OutboundRow, tokens: string[]): Prom
   const first = tickets[0];
   const reason = first?.details?.error ?? first?.message ?? "no ticket returned";
   return { ok: false, error: `expo rejected every token: ${reason}` };
+}
+
+/**
+ * One message, every device that person has.
+ *
+ * THIS FUNCTION WAS MISSING. The header above has described "two kinds of
+ * push, one row" since 20260901100000 (#218) added `web_subscription`, and the
+ * switch below has called `sendPush` since then — but nobody wrote it, so
+ * every push row died on a ReferenceError, was caught by the try/catch around
+ * the switch, and was marked failed with "sendPush is not defined". Expo push
+ * has not worked since that PR either, because `sendExpo` was left with no
+ * caller. Found on 2026-09-02 while asking why the notification prompt never
+ * appeared.
+ *
+ * A message is `sent` if it reached ANY device and `failed` only if every
+ * device refused it — the rule the header states, applied across both kinds.
+ * A device that the provider says is gone is deleted, whichever kind it is:
+ * Expo's `DeviceNotRegistered` and Web Push's 404/410 mean the same thing.
+ */
+async function sendPush(admin: Client, row: OutboundRow): Promise<Delivery> {
+  if (!row.person_id) return { ok: false, error: "no person on the message" };
+
+  const { data, error } = await admin
+    .from("push_tokens")
+    .select("token, platform, web_subscription")
+    .eq("person_id", row.person_id);
+  if (error) return { ok: false, error: `push tokens: ${error.message}` };
+
+  const tokens = (data ?? []) as PushToken[];
+  if (tokens.length === 0) return { ok: false, error: "no push tokens for this person" };
+
+  const web = tokens.filter((t) => t.platform === "web" && t.web_subscription !== null);
+  const expo = tokens.filter((t) => t.platform !== "web").map((t) => t.token);
+
+  const failures: string[] = [];
+  let provider: string | null = null;
+  let ref: string | null = null;
+
+  if (expo.length > 0) {
+    const result = await sendExpo(admin, row, expo);
+    if (result.ok) {
+      provider = result.provider;
+      ref = result.ref;
+    } else {
+      failures.push(result.error);
+    }
+  }
+
+  if (web.length > 0) {
+    const secrets = checkSecrets(["VAPID_PUBLIC_KEY", "VAPID_PRIVATE_KEY", "VAPID_EMAIL"]);
+    if (!secrets.ok) {
+      failures.push(`web push not configured: ${secrets.missing.join(", ")} not set`);
+    } else {
+      const vapid = {
+        publicKey: optionalEnv("VAPID_PUBLIC_KEY")!,
+        privateKey: optionalEnv("VAPID_PRIVATE_KEY")!,
+        subject: optionalEnv("VAPID_EMAIL")!,
+      };
+      const payload = {
+        title: row.subject ?? "AoM Sports Club",
+        body: row.body ?? "",
+        data: { entity: row.entity, entity_id: row.entity_id, template: row.template },
+      };
+      const dead: string[] = [];
+      for (const subscription of web) {
+        const outcome = await sendWebPush(subscription.web_subscription!, payload, vapid);
+        if (outcome.ok) {
+          provider ??= "web_push";
+        } else {
+          if (outcome.gone) dead.push(subscription.token);
+          failures.push(outcome.error);
+        }
+      }
+      if (dead.length > 0) {
+        await admin.from("push_tokens").delete().eq("person_id", row.person_id).in("token", dead);
+      }
+    }
+  }
+
+  if (provider) return { ok: true, provider, ref };
+  return {
+    ok: false,
+    error: failures.length > 0 ? failures.join("; ") : "no deliverable push token for this person",
+  };
 }
 
 // ---------------------------------------------------------------------------
