@@ -7,7 +7,7 @@ import { signPeoplePhotos } from "@/lib/avatars";
 import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
-import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
+import { nameOf, resolveNames } from "@/lib/person";
 import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { personLabel } from "@/lib/people-display";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -300,7 +300,13 @@ export default async function TeamPage({
   // entitled to the whole answer — see where they are filled in below.
   let squadAvailability: SquadAvailability | null = null;
   let squadSubs: SquadSubs | null = null;
-  let clubAdmin = false;
+  // One answer for the whole page, hat included. This used to be a `let`
+  // filled in ONLY by the Squad tab's branch — so the rename field on
+  // Settings and the bulk match panel on Match day, both gated on it, never
+  // rendered for anyone (Adam, 2026-09-02: "The team name field is not there
+  // for club admin"). `my_capabilities()` already answered, so this costs no
+  // extra round trip.
+  const clubAdmin = capabilities.isClubAdmin && !memberView;
   let memberSeason: { id: string; name: string } | null = null;
 
   // The roster is the coach's and the club's screen. Adam, 2026-08-25:
@@ -309,7 +315,7 @@ export default async function TeamPage({
   // parent, looking at the team as a parent, gets the team's life and not
   // its management, and `?tab=squad` typed by hand lands on Overview.
   if (tab === "squad" && staffTools) {
-    const [seasonsResult, pendingResult, adminAnswer] = await Promise.all([
+    const [seasonsResult, pendingResult] = await Promise.all([
       userClient.from("seasons").select("id,name,is_current").order("starts_on", {
         ascending: false,
       }),
@@ -326,10 +332,7 @@ export default async function TeamPage({
         .eq("kind", "membership")
         .is("applied_at", null)
         .order("created_at"),
-      isClubAdmin(),
     ]);
-
-    clubAdmin = adminAnswer;
 
     const currentSeason = (seasonsResult.data ?? []).find((season) => season.is_current) ?? null;
     memberSeason = currentSeason ? { id: currentSeason.id, name: currentSeason.name } : null;
@@ -385,7 +388,7 @@ export default async function TeamPage({
       squadLeave = {
         // A club administrator has End, which does it immediately; offering
         // them the queue as well would only be a slower End.
-        canRequest: teamStaff === true && !adminAnswer,
+        canRequest: teamStaff === true && !clubAdmin,
         pendingMembershipIds: (leaveRows ?? []).map((row) => row.team_membership_id),
       };
 
@@ -1460,11 +1463,13 @@ export default async function TeamPage({
 
             {/* Bulk cancel, delete and kick-off for this team (Adam,
                 2026-09-02: "…for an individual team and the matches tab").
-                Shut until an administrator opens it, and admin-only: a coach
+                Shut until an administrator opens it, and admin-only — under
+                the ADMIN hat, the same rule as the photos export and the
+                allocate door: a coach (or an admin wearing the coach hat)
                 still deletes and moves one match at a time on the match
                 itself, where the counts of what goes with it are in front of
                 them. */}
-            {clubAdmin && fixtures.length > 0 && (
+            {clubAdmin && (view === "admin" || view === null) && fixtures.length > 0 && (
               <details className="rounded-xl border bg-card">
                 <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
                   <Wrench className="h-4 w-4 text-muted-foreground" />
