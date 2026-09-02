@@ -18,6 +18,7 @@ import { fixtureStatusVariant } from "../../fixtures-shared";
 import { googleMapsUrl } from "../../../../events/shared";
 import { FixtureAvailabilityPanel, type FixtureSubject } from "./availability-panel";
 import { DeleteFixtureCard } from "./delete-fixture-card";
+import { KickoffCard } from "./kickoff-card";
 
 type AvailabilityStatus = Database["public"]["Enums"]["availability_status"];
 
@@ -364,6 +365,18 @@ export default async function FixtureAttendancePage({
               </p>
             </CardContent>
           </Card>
+        )}
+
+        {/* Moving the kick-off — a coach's as much as an administrator's
+            (Adam, 2026-09-02: "Coaches to have the ability on the event"). */}
+        {canManage && (
+          <KickoffCard
+            fixtureId={fixture.id}
+            date={local.date}
+            time={local.time}
+            hasPitch={!!fixture.booking_id}
+            fromFullTime={fixture.source === "fulltime"}
+          />
         )}
 
         {canManage && deleteCounts && (

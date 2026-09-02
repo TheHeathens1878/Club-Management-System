@@ -178,6 +178,20 @@ export function instantToLocal(iso: string | Date): LocalDateTime {
 }
 
 /**
+ * The same day, at a different time of day, in Europe/London.
+ *
+ * "Put every ticked match at 10:00" (Adam, 2026-09-02) is a wall-clock
+ * statement, and the club's season crosses the last Sunday in October. Adding
+ * or subtracting hours from the instant would put every game after the clocks
+ * change an hour out; going out to the local date and back in is what keeps
+ * 10:00 meaning ten o'clock in November as well as September.
+ */
+export function atLocalTime(iso: string | Date, time: string): string {
+  const local = instantToLocal(iso);
+  return localToInstant(local.date, normaliseTime(time));
+}
+
+/**
  * The legacy `date` + `start_time` + `end_time` triple as a pair of instants,
  * applying the rule the old `room_bookings` constraint encoded: an end time
  * earlier than the start time means the booking ends the next day.

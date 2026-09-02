@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Wrench } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
@@ -36,6 +36,7 @@ import { AllocateAllPanel } from "./allocate-all-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
 import { RecruitingPanel } from "./recruiting-panel";
 import { FixturesTable, type TeamFixture } from "./fixtures-list";
+import { ManageMatchesPanel } from "../../matches/manage-matches-panel";
 import { fixtureHref, lineupHref } from "./fixtures-shared";
 import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
@@ -1456,6 +1457,38 @@ export default async function TeamPage({
                 )}
               </CardContent>
             </Card>
+
+            {/* Bulk cancel, delete and kick-off for this team (Adam,
+                2026-09-02: "…for an individual team and the matches tab").
+                Shut until an administrator opens it, and admin-only: a coach
+                still deletes and moves one match at a time on the match
+                itself, where the counts of what goes with it are in front of
+                them. */}
+            {clubAdmin && fixtures.length > 0 && (
+              <details className="rounded-xl border bg-card">
+                <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+                  <Wrench className="h-4 w-4 text-muted-foreground" />
+                  Manage these matches
+                  <span className="text-xs font-normal text-muted-foreground">
+                    cancel, delete or set a kick-off for several at once
+                  </span>
+                </summary>
+                <div className="border-t p-4">
+                  <ManageMatchesPanel
+                    heading={`${fixtures.length} upcoming ${fixtures.length === 1 ? "match" : "matches"}`}
+                    matches={fixtures.map((fixture) => ({
+                      id: fixture.id,
+                      kickoffAt: fixture.kickoffAt,
+                      isHome: fixture.isHome,
+                      opponent: fixture.opponent,
+                      status: fixture.status,
+                      notInFullTime: !!fixture.noLongerPublishedAt,
+                      hasPitch: !!fixture.bookingId,
+                    }))}
+                  />
+                </div>
+              </details>
+            )}
 
           </div>
         )}

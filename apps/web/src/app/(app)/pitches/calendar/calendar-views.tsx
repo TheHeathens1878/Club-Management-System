@@ -178,6 +178,7 @@ function EntryPopover({
   const feedback = [closureState, confirmState, declineState, cancelState, deleteState];
   const error = feedback.map((s) => s.error).find(Boolean);
   const notice = feedback.map((s) => s.notice).find(Boolean);
+  const fixtureHref = deleteState.fixtureHref;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -219,6 +220,16 @@ function EntryPopover({
         </div>
 
         {error && <p className="text-xs text-destructive">{error}</p>}
+        {/* "You want the match, not the booking" — the refusal that names the
+            match links straight to it (Adam, 2026-09-02). */}
+        {fixtureHref && (
+          <Link
+            href={fixtureHref}
+            className="inline-block text-xs font-medium text-primary underline underline-offset-2"
+          >
+            Open the match
+          </Link>
+        )}
         {notice && <p className="text-xs text-emerald-700">{notice}</p>}
 
         {/* Every action in the sheet is a 44px target on a phone. */}

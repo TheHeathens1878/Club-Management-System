@@ -66,6 +66,12 @@ export type PitchBookingActionState = {
   clashes?: string[];
   /** Set on a successful create, so the form can link to the team page. */
   teamId?: string;
+  /**
+   * The match this booking belongs to, when a refusal is really "you want the
+   * match, not the booking" (Adam, 2026-09-02). The screen turns it into a
+   * link, because a sentence naming another page is only half an answer.
+   */
+  fixtureHref?: string;
 };
 
 const NOT_ALLOWED =
@@ -736,8 +742,35 @@ export async function deletePitchBooking(
     .eq("id", bookingId)
     .maybeSingle();
   if (!existing) return { error: "That booking no longer exists." };
+
+  // A fixture's slot is not a booking anybody should delete: the fixture would
+  // keep pointing at a row that no longer exists, or — worse, since
+  // `bookings.fixture_id` is ON DELETE SET NULL the other way round — the
+  // fixture would still be there with nowhere to play.
+  //
+  // Adam, 2026-09-02: "I can't delete a match which is flagged as not being in
+  // full-time. I try and delete from the bookings calendar but comes up with
+  // [this message]." He was not trying to delete a booking; he was trying to
+  // delete a MATCH, from the only screen he had it on. Refusing was right and
+  // the sentence was useless — it named a screen, not the two things he could
+  // actually do. So it now names both, and the caller shows the second as a
+  // link straight to the match.
   if (existing.kind === "fixture" || existing.fixture_id) {
-    return { error: "A fixture's pitch slot is removed by unallocating it on Pitches, not deleted." };
+    const { data: fixture } = existing.fixture_id
+      ? await admin
+          .from("fixtures")
+          .select("id,team_id")
+          .eq("id", existing.fixture_id)
+          .maybeSingle()
+      : { data: null };
+    return {
+      error:
+        "This slot belongs to a match, so deleting the booking on its own would leave the match with nowhere to play. Free the pitch by unallocating the match on Pitches — or, if the match itself is off, cancel or delete it on the match, which gives the pitch back at the same time.",
+      fixtureHref:
+        fixture?.team_id && fixture.id
+          ? `/teams/${fixture.team_id}/fixtures/${fixture.id}`
+          : undefined,
+    };
   }
 
   const { error } = await admin.from("bookings").delete().eq("id", bookingId);

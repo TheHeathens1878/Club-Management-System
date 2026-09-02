@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   addDays,
+  atLocalTime,
   formatBookingDate,
   formatBookingDateNumeric,
   formatBookingDateShort,
@@ -231,5 +232,35 @@ describe("formatters", () => {
   });
   it("does not shift the date near midnight", () => {
     expect(formatBookingDate("2026-07-01")).toBe("Wednesday, 1 July 2026");
+  });
+});
+
+/**
+ * "Put every ticked match at 10:00" (Adam, 2026-09-02) is a statement about
+ * the wall clock, and a football season crosses the last Sunday in October.
+ * Shifting the instant by a fixed number of hours would put every game after
+ * the clocks change an hour out; going out to the local date and back is what
+ * keeps ten o'clock meaning ten o'clock in November as well as September.
+ */
+describe("atLocalTime", () => {
+  it("keeps the local date and sets the local time, through BST", () => {
+    // 5 Sept 2026 is BST (UTC+1): 09:00Z is 10:00 local, 14:00 local is 13:00Z.
+    expect(atLocalTime("2026-09-05T09:00:00Z", "14:00")).toBe("2026-09-05T13:00:00.000Z");
+  });
+
+  it("and through GMT, where the same wall clock is a different instant", () => {
+    // 5 Dec 2026 is GMT: 14:00 local IS 14:00Z. An hours-arithmetic version of
+    // this function would have produced 13:00Z here and been an hour early.
+    expect(atLocalTime("2026-12-05T10:00:00Z", "14:00")).toBe("2026-12-05T14:00:00.000Z");
+  });
+
+  it("does not move a match to another day", () => {
+    // 23:30 local on the last night of BST stays on the same local date.
+    expect(instantToLocal(atLocalTime("2026-10-24T09:00:00Z", "23:30")).date).toBe("2026-10-24");
+    expect(instantToLocal(atLocalTime("2026-10-25T09:00:00Z", "00:30")).date).toBe("2026-10-25");
+  });
+
+  it("accepts a sloppy time the way the rest of this module does", () => {
+    expect(atLocalTime("2026-12-05T10:00:00Z", "9:05")).toBe("2026-12-05T09:05:00.000Z");
   });
 });

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarPlus, LandPlot } from "lucide-react";
+import { CalendarPlus, LandPlot, Wrench } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,8 @@ import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabili
 import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
+
+import { ManageMatchesPanel } from "./manage-matches-panel";
 
 /**
  * Matches — the Matchday desk (spec §2). A coach sees their teams, an admin
@@ -145,6 +147,37 @@ export default async function MatchesPage({
             ) : null}
           </span>
         </div>
+
+        {/* Bulk cancel, delete and kick-off (Adam, 2026-09-02). Shut until an
+            administrator opens it — the desk's ordinary job is reading, and a
+            page of checkboxes is a different page. Admin only, and only under
+            the admin hat: an administrator reading the desk as a coach sees
+            what a coach sees, the rule every other screen here follows. */}
+        {capabilities.isClubAdmin && (view === "admin" || view === null) && fixtures.length > 0 && (
+          <details className="rounded-xl border bg-card">
+            <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+              <Wrench className="h-4 w-4 text-muted-foreground" />
+              Manage these matches
+              <span className="text-xs font-normal text-muted-foreground">
+                cancel, delete or set a kick-off for several at once
+              </span>
+            </summary>
+            <div className="border-t p-4">
+              <ManageMatchesPanel
+                heading={`${fixtures.length} ${fixtures.length === 1 ? "match" : "matches"} in this window`}
+                matches={fixtures.map((row) => ({
+                  id: row.fixture_id,
+                  kickoffAt: row.kickoff_at,
+                  isHome: row.is_home,
+                  opponent: row.opponent,
+                  status: row.status,
+                  teamName: row.team_name,
+                  hasPitch: row.allocated === true,
+                }))}
+              />
+            </div>
+          </details>
+        )}
 
         {error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
