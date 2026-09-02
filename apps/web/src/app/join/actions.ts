@@ -1,14 +1,17 @@
 "use server";
 
 /**
- * Join the club — the one registration flow (Adam, 2026-08-24), in four steps
- * since 2026-09-01: your profile, your children, your connected adults, the
- * registrations.
+ * Join the club — the one registration flow (Adam, 2026-08-24). Five steps
+ * since 2026-09-02: your account, your profile, your children, your connected
+ * adults, the registrations. The first exists only for a visitor, and is only
+ * as long as it is because everything on it has to survive a trip through an
+ * email inbox — see `joinSignUp`.
  *
  * Authorisation lives in the database throughout:
- *   · the PROFILE step is a Supabase Auth sign-up (handle_new_user() stores
- *     name, DOB, sex, phone and address; the SG-10 guard refuses under-age
- *     accounts), or — already signed in — update_own_contact();
+ *   · the ACCOUNT step is a Supabase Auth sign-up (handle_new_user() stores
+ *     the name and the date of birth; the SG-10 guard refuses under-age
+ *     accounts). The PROFILE step needs a session and uses
+ *     update_own_contact() and set_person_sex();
  *   · the CHILDREN and CONNECTED ADULTS steps create people through
  *     add_child() / add_household_adult(), whose SG-4 guards speak for
  *     themselves;
@@ -95,34 +98,32 @@ const EMPTY_ASK: RoleAsk = { asked: [], refused: [] };
  * name"), and carries none where it did not: 20260901200000 makes the team
  * optional because somebody may genuinely not know yet, and approving a
  * team-less one grants the club-wide hat for an administrator to place.
+ *
+ * TWO TEAMS IS TWO REQUESTS (Adam, 2026-09-02: "should be able to select more
+ * than 1 team in the coach dropdown as some coach two"). Not one request with
+ * a list: `account_requests` carries a single `team_id`, /approvals decides one
+ * row at a time, and a club that wants to confirm the U12s today and think
+ * about the U14s tomorrow can. `request_role_for()`'s idempotence is per team,
+ * so re-submitting the form adds nothing.
  */
 async function askForRoles(
   personId: string,
   who: string,
-  wants: { coach: boolean; referee: boolean; coachTeamId: string | null },
+  wants: { coach: boolean; referee: boolean; coachTeamIds: string[] },
 ): Promise<RoleAsk> {
-  const roles: Array<{ role: "coach" | "referee"; teamId: string | null; sentence: string }> = [];
+  const asks: Array<{ role: "coach" | "referee"; teamId: string | null }> = [];
   if (wants.coach) {
-    roles.push({
-      role: "coach",
-      teamId: wants.coachTeamId,
-      sentence: wants.coachTeamId
-        ? `${who} asked to coach the team named — a club administrator will confirm it.`
-        : `${who} asked to coach — a club administrator will confirm it and put them with a team.`,
-    });
+    if (wants.coachTeamIds.length === 0) asks.push({ role: "coach", teamId: null });
+    for (const teamId of wants.coachTeamIds) asks.push({ role: "coach", teamId });
   }
-  if (wants.referee) {
-    roles.push({
-      role: "referee",
-      teamId: null,
-      sentence: `${who} asked to referee — a club administrator will confirm it.`,
-    });
-  }
-  if (roles.length === 0) return EMPTY_ASK;
+  if (wants.referee) asks.push({ role: "referee", teamId: null });
+  if (asks.length === 0) return EMPTY_ASK;
 
   const supabase = await createClient();
   const result: RoleAsk = { asked: [], refused: [] };
-  for (const { role, teamId, sentence } of roles) {
+  let coachAsks = 0;
+  let refereeAsked = false;
+  for (const { role, teamId } of asks) {
     const { data, error } = await supabase.rpc("request_role_for", {
       p_person_id: personId,
       p_role: role,
@@ -133,25 +134,45 @@ async function askForRoles(
       continue;
     }
     // null: the hat is already held. Nothing was asked and nothing is owed.
-    if (data) result.asked.push(sentence);
+    if (!data) continue;
+    if (role === "coach") coachAsks += 1;
+    else refereeAsked = true;
+  }
+
+  // One sentence per hat, not one per row: two coach requests for two teams
+  // are still the single fact "you asked to coach", and repeating it would
+  // read as a stutter (and, rendered by sentence, as a duplicate key).
+  if (coachAsks === 1 && wants.coachTeamIds.length === 0) {
+    result.asked.push(`${who} asked to coach — a club administrator will confirm it and put them with a team.`);
+  } else if (coachAsks === 1) {
+    result.asked.push(`${who} asked to coach the team named — a club administrator will confirm it.`);
+  } else if (coachAsks > 1) {
+    result.asked.push(`${who} asked to coach ${coachAsks} teams — a club administrator confirms each one separately.`);
+  }
+  if (refereeAsked) {
+    result.asked.push(`${who} asked to referee — a club administrator will confirm it.`);
   }
   return result;
 }
 
 /** The ticks, as the form posts them. */
-function askedFor(formData: FormData): { coach: boolean; referee: boolean; coachTeamId: string | null } {
+function askedFor(formData: FormData): { coach: boolean; referee: boolean; coachTeamIds: string[] } {
   return {
     coach: formData.get("coaching") === "yes",
     referee: formData.get("refereeing") === "yes",
-    // Adam, 2026-09-02: the coach names their team as they tick. Blank is
-    // still allowed — 20260901200000 made the team optional precisely because
-    // somebody may not know yet — and then the club places them.
-    coachTeamId: text(formData, "coach_team_id") || null,
+    // Adam, 2026-09-02: the coach names their teams as they tick — more than
+    // one, because some coach two. None is still allowed: 20260901200000 made
+    // the team optional precisely because somebody may not know yet, and then
+    // the club places them.
+    coachTeamIds: formData
+      .getAll("coach_team_id")
+      .map((value) => String(value).trim())
+      .filter((value) => value !== ""),
   };
 }
 
 // ---------------------------------------------------------------------------
-// Step 1 — about you
+// Steps 1 and 2 — your account, then your profile
 // ---------------------------------------------------------------------------
 
 export type JoinTeamOption = {
@@ -252,73 +273,43 @@ async function loadJoinContext(): Promise<{
   };
 }
 
-export async function joinStart(_prev: StartState, formData: FormData): Promise<StartState> {
-  const playing = formData.get("playing") === "yes";
-  const wants = askedFor(formData);
-  // No "tick at least one" any more (Adam, 2026-09-01). The four steps ask
-  // about children and connected adults in their own right, so somebody who is
-  // none of these three things is not making a mistake — they are a committee
-  // member who wants a login, which is what /register used to be for and is
-  // now this form with everything left unticked.
+/**
+ * Step 1 — your account. Signed-out only.
+ *
+ * Adam, 2026-09-02: "On the join process, I entered my Address and Phone on
+ * the first page and said I wanted to coach and referee before confirming my
+ * email. When I come back to it after confirming email, I need to re-enter
+ * address and phone, and confirm if I want to be coach and a referee. Can the
+ * very first page just be to confirm Name and DOB?"
+ *
+ * He is right, and the reason is structural rather than a bug to patch. When
+ * an address needs confirming, `signUp()` returns NO SESSION, and everything
+ * this flow does after that point — the address, the ticks, the children —
+ * needs one. So the first page could only ever ask for two kinds of thing: the
+ * facts that travel inside the sign-up itself, and facts that get thrown away.
+ * It now asks only for the first kind.
+ *
+ * WHAT TRAVELS: first name, last name, date of birth, email, password. The
+ * name and the date of birth are read by `handle_new_user()` out of the
+ * sign-up metadata as the person row is created, and the date of birth cannot
+ * wait — SG-10 decides whether this account may exist at all from it, and
+ * SG-0 would otherwise have the account holder down as a child until they came
+ * back. Everything else waits for step 2, where there is a session to save it
+ * with.
+ *
+ * The ticks in particular are better here than they were: they now happen once,
+ * on a signed-in page, instead of being asked before confirmation, carried in
+ * metadata, and re-asked afterwards anyway.
+ */
+export type SignUpState = {
+  error?: string;
+  /** The account exists and the address has to be confirmed before signing in. */
+  confirmEmail?: string;
+  /** A session came straight back (confirmation is off): go on to step 2. */
+  ready?: boolean;
+};
 
-  const town = text(formData, "address_town");
-  const address = {
-    line1: text(formData, "address_line1"),
-    line2: text(formData, "address_line2"),
-    town,
-    // The town settles the county where the club knows the place (Adam,
-    // 2026-08-25); re-derived rather than trusted from the browser.
-    county: countyForTown(town) ?? text(formData, "address_county"),
-    postcode: text(formData, "address_postcode"),
-  };
-  if (!address.line1 || !address.town || !address.postcode) {
-    return { error: "Please fill in the first address line, the town and the postcode." };
-  }
-  const phone = text(formData, "phone");
-  const sex = text(formData, "sex").toLowerCase();
-
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getUser();
-
-  if (auth.user) {
-    // Already signed in (e.g. came from /register earlier): update contact
-    // details and read the person back.
-    const { error: contactError } = await supabase.rpc("update_own_contact", {
-      p_address: address,
-      p_phone: phone || undefined,
-    });
-    if (contactError) return { error: tidyRpcMessage(contactError.message) };
-
-    const { data: personId } = await supabase.rpc("current_person_id");
-    if (!personId) return { error: "Your account is not linked to a member record yet." };
-    const { data: person } = await supabase
-      .from("people")
-      .select("first_name,last_name,dob,sex")
-      .eq("id", personId)
-      .maybeSingle();
-    if (!person) return { error: "Your member record could not be read." };
-    if (!person.dob) {
-      return { error: "Your date of birth is missing — complete your profile first." };
-    }
-    const context = await loadJoinContext();
-    return {
-      registrant: {
-        personId,
-        fullName: `${person.first_name} ${person.last_name}`,
-        firstName: person.first_name,
-        lastName: person.last_name,
-        dob: person.dob,
-        playing,
-        needsId: await needsIdDocument(personId),
-        sex: person.sex,
-      },
-      roles: await askForRoles(personId, "You", wants),
-      ...context,
-    };
-  }
-
-  // Signed out: this is the account creation, exactly like /register plus the
-  // address. SG-10 refusals from the profiles guard come back verbatim.
+export async function joinSignUp(_prev: SignUpState, formData: FormData): Promise<SignUpState> {
   const firstName = text(formData, "first_name");
   const lastName = text(formData, "last_name");
   const fullName = `${firstName} ${lastName}`.trim();
@@ -331,17 +322,14 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
   // recovering a surname from one string by taking its last word.
   if (!firstName) return { error: "Please enter your first name." };
   if (!lastName) return { error: "Please enter your last name." };
-  // "Biological sex (this is required for the FA's records)" — the club cannot
-  // enter a player into an age group without it.
-  if (sex !== "male" && sex !== "female") {
-    return { error: "Please choose your biological sex at birth." };
-  }
   if (!EMAIL_RE.test(email)) return { error: "Please enter a valid email address." };
   if (password.length < MIN_PASSWORD) {
     return { error: `Please choose a password of at least ${MIN_PASSWORD} characters.` };
   }
   if (password !== confirm) return { error: "The two passwords do not match." };
   if (!validDob(dob)) return { error: "Please enter a valid date of birth." };
+
+  const supabase = await createClient();
 
   // Ask the database whether this sign-up can work BEFORE asking Auth to try
   // it (Adam, 2026-09-02: "it says the account could not be created: Database
@@ -373,33 +361,13 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     email,
     password,
     options: {
-      data: {
-        first_name: firstName,
-        last_name: lastName,
-        full_name: fullName,
-        dob,
-        phone: phone || null,
-        sex,
-        address,
-        // The ticks travel WITH the account, because the account may take a
-        // trip through an inbox before it comes back (Adam, 2026-09-02: he
-        // joined as a coach and a referee and no approvals appeared). Sign-up
-        // returns no session when the address has to be confirmed, so this
-        // action used to return "check your email" and drop the two ticks on
-        // the floor. `profiles_open_requested_roles()` (20260902110000) opens
-        // the requests from these three keys the moment the account exists,
-        // confirmed or not.
-        wants_coach: wants.coach,
-        wants_referee: wants.referee,
-        coach_team_id: wants.coachTeamId,
-      },
+      data: { first_name: firstName, last_name: lastName, full_name: fullName, dob },
       // The club's own domain, named here rather than left to the project's
       // Site URL (Adam, 2026-08-25: the link pointed at the old Vercel host)
       // — and back to the WIZARD, not the lobby (Adam, 2026-09-02: "there is
       // no joining flow on mobile. I have to save my profile and then click on
       // more and then connected adults"). Confirming the address landed
-      // everybody on /lobby, four steps into a form they had started and one
-      // step through it, with no way back but the menu.
+      // everybody on /lobby, one step into a form with no way back but the menu.
       emailRedirectTo: `${getSiteUrl()}/auth/callback?next=%2Fjoin`,
     },
   });
@@ -417,22 +385,93 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
     // text under a form reads as a failure when it is a next step.
     return { confirmEmail: email };
   }
+  return { ready: true };
+}
+
+/**
+ * Step 2 — your profile. Signed-in only, always.
+ *
+ * Everything that needs a session and everything the club asks once: the sex
+ * at birth the FA's records need, the phone, the home address, and the three
+ * ticks. A visitor reaches it after confirming their email; somebody who was
+ * already signed in starts here.
+ */
+export async function joinStart(_prev: StartState, formData: FormData): Promise<StartState> {
+  const playing = formData.get("playing") === "yes";
+  const wants = askedFor(formData);
+  // No "tick at least one" any more (Adam, 2026-09-01). The four steps ask
+  // about children and connected adults in their own right, so somebody who is
+  // none of these three things is not making a mistake — they are a committee
+  // member who wants a login, which is what /register used to be for and is
+  // now this form with everything left unticked.
+
+  const town = text(formData, "address_town");
+  const address = {
+    line1: text(formData, "address_line1"),
+    line2: text(formData, "address_line2"),
+    town,
+    // The town settles the county where the club knows the place (Adam,
+    // 2026-08-25); re-derived rather than trusted from the browser.
+    county: countyForTown(town) ?? text(formData, "address_county"),
+    postcode: text(formData, "address_postcode"),
+  };
+  if (!address.line1 || !address.town || !address.postcode) {
+    return { error: "Please fill in the first address line, the town and the postcode." };
+  }
+  const phone = text(formData, "phone");
+  const sex = text(formData, "sex").toLowerCase();
+
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) {
+    // Only reachable if the session went away between the two steps.
+    return { error: "You are not signed in any more — sign in and come back to /join." };
+  }
+
+  const { error: contactError } = await supabase.rpc("update_own_contact", {
+    p_address: address,
+    p_phone: phone || undefined,
+  });
+  if (contactError) return { error: tidyRpcMessage(contactError.message) };
 
   const { data: personId } = await supabase.rpc("current_person_id");
-  if (!personId) return { error: "Your account was created but is not linked to a member record yet." };
+  if (!personId) return { error: "Your account is not linked to a member record yet." };
 
+  // "Biological sex (this is required for the FA's records)" — the club cannot
+  // enter a player into an age group without it. Asked here rather than at
+  // sign-up because it is not one of the facts that survives the trip through
+  // the inbox, and `set_person_sex()` needs a session anyway.
+  if (sex) {
+    if (sex !== "male" && sex !== "female") {
+      return { error: "Please choose your biological sex at birth." };
+    }
+    const { error: sexError } = await supabase.rpc("set_person_sex", {
+      p_person_id: personId,
+      p_sex: sex,
+    });
+    if (sexError) return { error: tidyRpcMessage(sexError.message) };
+  }
+
+  const { data: person } = await supabase
+    .from("people")
+    .select("first_name,last_name,dob,sex")
+    .eq("id", personId)
+    .maybeSingle();
+  if (!person) return { error: "Your member record could not be read." };
+  if (!person.dob) {
+    return { error: "Your date of birth is missing — complete your profile first." };
+  }
   const context = await loadJoinContext();
   return {
     registrant: {
       personId,
-      fullName,
-      firstName,
-      lastName,
-      dob,
+      fullName: `${person.first_name} ${person.last_name}`,
+      firstName: person.first_name,
+      lastName: person.last_name,
+      dob: person.dob,
       playing,
       needsId: await needsIdDocument(personId),
-      // A brand-new account: nothing on record yet, so the form asks.
-      sex: null,
+      sex: person.sex,
     },
     roles: await askForRoles(personId, "You", wants),
     ...context,
@@ -440,7 +479,7 @@ export async function joinStart(_prev: StartState, formData: FormData): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// Step 2 — your people
+// Steps 3 and 4 — your children, your connected adults
 // ---------------------------------------------------------------------------
 
 export type AddPersonState = {

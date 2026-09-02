@@ -36,13 +36,20 @@ export default async function JoinPage() {
     ageGroup: row.age_group,
   }));
 
-  let defaults = { firstName: "", lastName: "", email: "", phone: "" };
+  let defaults: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    /** `people.sex`, so step 2 shows what the club already holds. */
+    sex: string | null;
+  } = { firstName: "", lastName: "", email: "", phone: "", sex: null };
   if (auth.user) {
     const { data: personId } = await supabase.rpc("current_person_id");
     if (personId) {
       const { data: person } = await supabase
         .from("people")
-        .select("first_name,last_name,email,phone")
+        .select("first_name,last_name,email,phone,sex")
         .eq("id", personId)
         .maybeSingle();
       if (person) {
@@ -51,6 +58,7 @@ export default async function JoinPage() {
           lastName: person.last_name,
           email: person.email ?? auth.user.email ?? "",
           phone: person.phone ?? "",
+          sex: person.sex,
         };
       }
     }
@@ -62,8 +70,9 @@ export default async function JoinPage() {
         <div className="mb-8 text-center">
           <h1 className="text-2xl font-bold">Join {settings.club_name || "the club"}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Four steps for the whole household: your profile, your children, any adults on your
-            membership, then the registrations.
+            {auth.user
+              ? "Four steps for the whole household: your profile, your children, any adults on your membership, then the registrations."
+              : "Your account first — just your name and date of birth — then your profile, your children, any adults on your membership, and the registrations."}
           </p>
           {!auth.user && (
             <p className="mt-2 text-xs text-muted-foreground">

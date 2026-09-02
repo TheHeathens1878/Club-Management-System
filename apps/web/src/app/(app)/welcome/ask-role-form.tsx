@@ -52,8 +52,9 @@ export function AskToCoachForm({ teams }: { teams: TeamOption[] }) {
         id="ask-coach-team"
         name="team_id"
         teams={teams}
-        label="Which team?"
-        help="Leave it blank if you do not know yet — the club will place you."
+        multiple
+        label="Which teams?"
+        help="Add as many as you coach — each one is confirmed separately. Leave it blank if you do not know yet and the club will place you."
       />
       <Feedback state={state} />
       <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">

@@ -160,7 +160,16 @@ export async function requestClubRole(
 ): Promise<RequestState> {
   const role = String(formData.get("role") ?? "").trim();
   if (role !== "coach" && role !== "referee") return { error: "Choose coach or referee." };
-  const teamId = String(formData.get("team_id") ?? "").trim();
+  // More than one, because some coach two (Adam, 2026-09-02). Each team is its
+  // own request: `account_requests` carries a single team and /approvals
+  // decides one row at a time.
+  const teamIds =
+    role === "coach"
+      ? formData
+          .getAll("team_id")
+          .map((value) => String(value).trim())
+          .filter((value) => value !== "")
+      : [];
 
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
@@ -168,17 +177,22 @@ export async function requestClubRole(
     return { error: "Your account is not linked to a member record yet — ask the club." };
   }
 
-  const { data, error } = await supabase.rpc("request_role_for", {
-    p_person_id: personId,
-    p_role: role,
-    ...(role === "coach" && teamId ? { p_team_id: teamId } : {}),
-  });
-  if (error) {
-    // The referee age guard names the date somebody may ask on. That sentence
-    // is the answer; summarising it would throw the date away.
-    return { error: tidyRpcMessage(error.message) };
+  const targets: Array<string | null> = teamIds.length > 0 ? teamIds : [null];
+  let asked = 0;
+  for (const teamId of targets) {
+    const { data, error } = await supabase.rpc("request_role_for", {
+      p_person_id: personId,
+      p_role: role,
+      ...(teamId ? { p_team_id: teamId } : {}),
+    });
+    if (error) {
+      // The referee age guard names the date somebody may ask on. That
+      // sentence is the answer; summarising it would throw the date away.
+      return { error: tidyRpcMessage(error.message) };
+    }
+    if (data) asked += 1;
   }
-  if (!data) {
+  if (asked === 0) {
     return {
       notice:
         role === "coach"
@@ -191,7 +205,9 @@ export async function requestClubRole(
   return {
     notice:
       role === "coach"
-        ? "Asked. A club administrator will confirm it."
+        ? asked > 1
+          ? `Asked for ${asked} teams. A club administrator confirms each one separately.`
+          : "Asked. A club administrator will confirm it."
         : "Asked. A club administrator will confirm it and add you to the referees group.",
   };
 }
