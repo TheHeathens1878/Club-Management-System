@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(44);
+select plan(46);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -281,34 +281,66 @@ update public.profiles set role = 'member'
 
 
 -- ---------------------------------------------------------------------------
--- F. No auto-link by email
+-- F. Linking by email, and the one case that must never link
 -- ---------------------------------------------------------------------------
--- A new login NEVER adopts an existing person that happens to share its email.
--- Families share an email address; a child's record may legitimately carry a
--- parent's contact address; matching on it would hand a brand-new account
--- somebody else's identity along with every guardianship, role and conversation
--- attached to it. See DECISIONS.md 2026-08-22.
+-- This section used to say a login NEVER adopts a person sharing its email,
+-- for a good reason: families share an address, a child's record may carry a
+-- PARENT's contact address, and matching on it would hand a new account
+-- somebody else's identity along with every guardianship, role and
+-- conversation attached to it (DECISIONS.md 2026-08-22).
+--
+-- Adam reversed the blanket rule on 2026-09-02 (20260902100000), because it
+-- also meant a child the club had deliberately GIVEN app access to could not
+-- create the account they had been given, and because the club's coaching
+-- staff could not claim their own records. The objection did not go away — it
+-- moved to where it belongs: a person with a live guardianship is matched
+-- ONLY where their guardian has granted app_account.
 
-insert into public.people (id, first_name, last_name, email) values
-  ('77777777-7777-4777-8777-000000000001', 'Existing', 'Parent', 'shared@test.invalid');
+-- (i) An adult the club knows, with no login. Claimed.
+insert into public.people (id, first_name, last_name, email, dob) values
+  ('77777777-7777-4777-8777-000000000001', 'Existing', 'Parent', 'shared@test.invalid', '1978-04-04');
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('66666666-6666-4666-8666-000000000005', 'shared@test.invalid',
-   '{"full_name": "Child Sharesemail"}'::jsonb);
+   '{"full_name": "Existing Parent", "dob": "1978-04-04", "phone": "07700 900555"}'::jsonb);
 
-select isnt(
+select is(
   (select person_id from public.profiles
     where id = '66666666-6666-4666-8666-000000000005'),
   '77777777-7777-4777-8777-000000000001'::uuid,
-  'a login sharing an email with an existing person gets its OWN person, never that one'
+  'a login joins the person the club already holds at that address'
 );
 
-select results_eq(
-  $$select pe.first_name, pe.last_name
-      from public.profiles p join public.people pe on pe.id = p.person_id
-     where p.id = '66666666-6666-4666-8666-000000000005'$$,
-  $$values ('Child'::text, 'Sharesemail'::text)$$,
-  'the new person is named from the signup metadata, not copied from the match'
+select is(
+  (select phone from public.people where id = '77777777-7777-4777-8777-000000000001'),
+  '07700 900555',
+  'and the sign-up fills the blanks on that record'
+);
+
+select is(
+  (select count(*)::int from public.people where lower(email) = 'shared@test.invalid'),
+  1,
+  'one person at that address, not two'
+);
+
+-- (ii) A child with a live guardian and no app_account consent, whose record
+-- carries a parent's address. This is the case F was written for, and it still
+-- holds: the parent gets a person of their own.
+insert into public.people (id, first_name, last_name, email, dob) values
+  ('77777777-7777-4777-8777-000000000002', 'Kid', 'Onparentsaddress', 'family@test.invalid',
+   (current_date - interval '9 years')::date);
+insert into public.guardianships (guardian_person_id, child_person_id, relationship) values
+  ('77777777-7777-4777-8777-000000000001', '77777777-7777-4777-8777-000000000002', 'parent');
+
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('66666666-6666-4666-8666-000000000006', 'family@test.invalid',
+   '{"full_name": "Mum Onparentsaddress", "dob": "1985-06-06"}'::jsonb);
+
+select isnt(
+  (select person_id from public.profiles
+    where id = '66666666-6666-4666-8666-000000000006'),
+  '77777777-7777-4777-8777-000000000002'::uuid,
+  'a sign-up never becomes a guarded child whose record holds that address'
 );
 
 -- people_email_unique_live_idx would reject the duplicate address, and an
@@ -316,7 +348,7 @@ select results_eq(
 -- instead; the person and the login are still created.
 select is(
   (select pe.email from public.profiles p join public.people pe on pe.id = p.person_id
-    where p.id = '66666666-6666-4666-8666-000000000005'),
+    where p.id = '66666666-6666-4666-8666-000000000006'),
   null,
   'a colliding email is left null rather than aborting the signup'
 );

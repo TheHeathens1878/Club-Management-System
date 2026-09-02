@@ -42,7 +42,7 @@
 
 begin;
 
-select plan(165);
+select plan(167);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -1524,9 +1524,17 @@ select results_eq(
   'it still creates a person from full_name with a NULL dob, exactly as P1.2 wrote it'
 );
 
--- 151 — STILL NO AUTO-LINK BY EMAIL (P1.2's decision, which SG-10 calls "doubly
--- important here, since families share addresses"). Sam's person row carries
--- this address; a brand-new login using it must adopt nothing.
+-- 151 — LINKING BY EMAIL, reversed by Adam on 2026-09-02 (20260902100000).
+-- P1.2 refused to link on email at all, and SG-10 called that "doubly
+-- important here, since families share addresses". The objection was right;
+-- the blanket refusal was the wrong answer to it, because it also meant a
+-- child the club had deliberately GIVEN app access to could not create the
+-- account they had been given — which is what production did on 2026-09-02.
+--
+-- So the address now links, and the families-share-addresses case is answered
+-- where it actually lives: a person with a live guardianship is matched only
+-- where their guardian has granted app_account. Sam is an adult with no
+-- guardian, so Sam is claimed; test 152a below holds the other half.
 select lives_ok(
   $$insert into auth.users (id, email, raw_user_meta_data)
     values ('c7c7c7c7-7777-4777-8777-000000000047', 'cshared@test.invalid',
@@ -1538,8 +1546,32 @@ select lives_ok(
 select is(
   (select person_id = 'd8d8d8d8-8888-4888-8888-000000000026'
      from public.profiles where id = 'c7c7c7c7-7777-4777-8777-000000000047'),
+  true,
+  'and it joins the record the club already held for that address'
+);
+
+-- 152a — and the objection P1.2 raised still holds. A child with a live
+-- guardian and no app_account consent, whose record carries a PARENT's
+-- address: a sign-up from that address must not become her. (A fresh person
+-- rather than one of the fixtures above — this file grants consents as it
+-- goes, and a fixture's consent state at line 1550 is not what its name says.)
+insert into public.people (id, first_name, last_name, email, dob) values
+  ('d8d8d8d8-8888-4888-8888-000000000099', 'Nell', 'Onparentsaddress',
+   'cparentaddr@test.invalid', (current_date - interval '9 years')::date);
+insert into public.guardianships (guardian_person_id, child_person_id, relationship)
+values (current_setting('test.guardian_person')::uuid,
+        'd8d8d8d8-8888-4888-8888-000000000099', 'parent');
+select lives_ok(
+  $mig$insert into auth.users (id, email, raw_user_meta_data)
+    values ('c7c7c7c7-7777-4777-8777-000000000048', 'cparentaddr@test.invalid',
+            '{"full_name": "Pat Parentaddr", "dob": "1979-09-09"}'::jsonb)$mig$,
+  'a parent signs up with the address the club has on their child''s record'
+);
+select is(
+  (select person_id = 'd8d8d8d8-8888-4888-8888-000000000099'
+     from public.profiles where id = 'c7c7c7c7-7777-4777-8777-000000000048'),
   false,
-  'and it adopts nobody: handle_new_user() never matches on email'
+  'and does not become their own child: a guarded child with no app_account consent is never matched'
 );
 
 

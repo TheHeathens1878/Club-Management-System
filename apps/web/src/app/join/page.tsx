@@ -25,6 +25,17 @@ export default async function JoinPage() {
   const [settings, supabase] = await Promise.all([getSettings(), createClient()]);
   const { data: auth } = await supabase.auth.getUser();
 
+  // The teams a coach can name as they tick (Adam, 2026-09-02). Loaded here
+  // rather than in the wizard's own actions because the first step is filled
+  // in by somebody who is not signed in yet, and `teams_read` is
+  // `to authenticated` — `team_options()` is the door for exactly that.
+  const { data: teamRows } = await supabase.rpc("team_options");
+  const teams = (teamRows ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    ageGroup: row.age_group,
+  }));
+
   let defaults = { firstName: "", lastName: "", email: "", phone: "" };
   if (auth.user) {
     const { data: personId } = await supabase.rpc("current_person_id");
@@ -64,7 +75,7 @@ export default async function JoinPage() {
             </p>
           )}
         </div>
-        <JoinWizard signedIn={!!auth.user} defaults={defaults} />
+        <JoinWizard signedIn={!!auth.user} defaults={defaults} teams={teams} />
       </div>
     </main>
   );

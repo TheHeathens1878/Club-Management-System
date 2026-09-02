@@ -23,6 +23,7 @@ import { useEffect, useState } from "react";
 import { Check, ChevronLeft, UserPlus, Users } from "lucide-react";
 
 import { DateOfBirthInput } from "@/components/date-of-birth-input";
+import { TeamPicker, type TeamOption } from "@/components/team-picker";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -72,6 +73,7 @@ const COPY: Record<
 export function PeopleStep({
   kind,
   people,
+  clubTeams,
   householdCount,
   minRefereeAge,
   pending,
@@ -88,6 +90,8 @@ export function PeopleStep({
   kind: PeopleStepKind;
   /** The people of this kind added so far. */
   people: HouseholdPerson[];
+  /** Every active team, for a connected adult's coach tick. */
+  clubTeams: TeamOption[];
   /** Everybody on the membership, the registrant included — the cap is on this. */
   householdCount: number;
   minRefereeAge: number;
@@ -111,6 +115,7 @@ export function PeopleStep({
   // today does, and `add_child()` refuses a thirty-six-year-old anyway.
   const startingDob = kind === "adult" ? ADULT_DOB_DEFAULT : "";
   const [dob, setDob] = useState(startingDob);
+  const [coaching, setCoaching] = useState(false);
 
   // React clears an uncontrolled form after a successful action, but the date
   // of birth is CONTROLLED here (the referee tick depends on it), so it would
@@ -119,6 +124,7 @@ export function PeopleStep({
   // starting point whenever somebody has been added.
   useEffect(() => {
     setDob(startingDob);
+    setCoaching(false);
   }, [people.length, startingDob]);
 
   const full = householdCount >= MAX_HOUSEHOLD;
@@ -212,15 +218,35 @@ export function PeopleStep({
               </label>
 
               {kind === "adult" && (
-                <label className="flex items-start gap-2 text-sm">
-                  <input type="checkbox" name="coaching" value="yes" className="mt-0.5 h-4 w-4" />
-                  <span>
-                    They coach, or would like to
-                    <span className="block text-xs text-muted-foreground">
-                      A club administrator confirms it and puts them with a team.
+                <>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="coaching"
+                      value="yes"
+                      checked={coaching}
+                      onChange={(event) => setCoaching(event.target.checked)}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span>
+                      They coach, or would like to
+                      <span className="block text-xs text-muted-foreground">
+                        A club administrator confirms it before it takes effect.
+                      </span>
                     </span>
-                  </span>
-                </label>
+                  </label>
+                  {coaching && (
+                    <div className="pl-6">
+                      <TeamPicker
+                        id="add-adult-coach-team"
+                        name="coach_team_id"
+                        teams={clubTeams}
+                        label="Which team do they coach?"
+                        help="Leave it blank if they do not know yet — the club will place them."
+                      />
+                    </div>
+                  )}
+                </>
               )}
 
               {/* The referee tick, on children as well as on adults (Adam,
