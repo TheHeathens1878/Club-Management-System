@@ -5,6 +5,7 @@ import {
   widgetCodeLabels,
   widgetCodesFrom,
   parseWidgetDate,
+  classifyFixtureRow,
   parseWidgetHtml,
   widgetCodeFrom,
   widgetHtmlFrom,
@@ -222,5 +223,109 @@ describe("widgetCodeLabels", () => {
     const labels = widgetCodeLabels("Timperley: 885630049, Other name: 885630049");
     expect(labels.get("885630049")).toBe("Timperley");
     expect(labels.size).toBe(1);
+  });
+});
+
+/**
+ * Adam, 2026-09-02: "I am only getting home fixtures from this snippet and
+ * it's saying they are away", about Trafford United 2nd's Division Three
+ * widget (code 60006558) and Trafford United's Division One one (25374225).
+ *
+ * Both leagues print a DIVISION CODE in the type column — "D3", "D1" — rather
+ * than the bare letter the youth widgets use. The old reader classified cells
+ * left to right and only recognised a type cell of one to three LETTERS, so
+ * "D3" failed that test, became the first text on the row, and was taken for
+ * the home team. Every home game arrived as an away game against "D3", and
+ * every away game vanished, because the team's own name was then in neither
+ * slot. The reader now anchors on the "v" instead.
+ */
+describe("a widget whose type column carries a division code", () => {
+  const page = parseWidgetHtml(fixture("widget-team-60006558.html"));
+  const mine = fixturesForTeam(page, "Trafford United 2nd");
+
+  it("reads the row without mistaking the division code for a team", () => {
+    expect(page.warnings).toEqual([]);
+    const first = page.fixtures[0]!;
+    expect(first.homeTeam).toBe("Trafford United 2nd");
+    expect(first.awayTeam).toBe("South Manchester");
+    expect(first.type).toBe("D3");
+    expect(first.venue).toBe("ASHTON-ON-MERSEY SPORTS CLUB Pitch 2 Grass");
+  });
+
+  it("keeps the away fixtures, which used to be dropped altogether", () => {
+    expect(mine.length).toBe(page.fixtures.length);
+    expect(mine.some((f) => f.isHome)).toBe(true);
+    expect(mine.some((f) => !f.isHome)).toBe(true);
+  });
+
+  it("puts the team on the right side of its own home games", () => {
+    const home = mine.find((f) => f.opponent === "South Manchester" && f.venue?.startsWith("ASHTON"));
+    expect(home?.isHome).toBe(true);
+    const away = mine.find((f) => f.opponent === "Boothstown");
+    expect(away?.isHome).toBe(false);
+    expect(away?.venue).toBe("Bridgewater Park");
+  });
+
+  it("names the team the widget belongs to", () => {
+    expect(widgetTeamName(page.fixtures)).toBe("Trafford United 2nd");
+  });
+});
+
+describe("a widget mixing league, cup and friendly rows", () => {
+  const page = parseWidgetHtml(fixture("widget-team-25374225.html"));
+  const mine = fixturesForTeam(page, "Trafford United");
+
+  it("reads a played friendly whose separator is the dash between the scores", () => {
+    const friendly = page.fixtures[0]!;
+    expect(friendly.type).toBe("FR");
+    expect(friendly.homeTeam).toBe("AFC Oldham");
+    expect(friendly.awayTeam).toBe("Trafford United");
+    expect(friendly.homeScore).toBe(7);
+    expect(friendly.awayScore).toBe(0);
+    expect(friendly.status).toBe("played");
+  });
+
+  it("reads the league and cup rows either side of it", () => {
+    expect(new Set(page.fixtures.map((f) => f.type))).toContain("D1");
+    expect(mine.length).toBe(page.fixtures.length);
+    expect(mine.some((f) => f.isHome)).toBe(true);
+    expect(mine.some((f) => !f.isHome)).toBe(true);
+  });
+});
+
+describe("classifyFixtureRow", () => {
+  it("anchors on the separator, wherever the type column is", () => {
+    expect(classifyFixtureRow(["D3", "Home FC", "", "v", "", "Away FC", "The Park"])).toEqual({
+      type: "D3",
+      homeTeam: "Home FC",
+      awayTeam: "Away FC",
+      venue: "The Park",
+    });
+  });
+
+  it("reads scores that hug the separator", () => {
+    expect(classifyFixtureRow(["L", "Home FC", "3", "v", "1", "Away FC", "The Park"])).toEqual({
+      type: "L",
+      homeTeam: "Home FC",
+      awayTeam: "Away FC",
+      homeScore: 3,
+      awayScore: 1,
+      venue: "The Park",
+    });
+  });
+
+  it("takes a postponement marker but never a team name that looks like one", () => {
+    expect(classifyFixtureRow(["L", "Home FC", "P", "v", "", "Away FC"]).cellStatus).toBe("postponed");
+    // "Athletic P" is a side, not a status: it is the last thing standing on
+    // its side of the separator, so it is the team.
+    expect(classifyFixtureRow(["D1", "Athletic P", "v", "Away FC"]).homeTeam).toBe("Athletic P");
+  });
+
+  it("works with no type column at all", () => {
+    expect(classifyFixtureRow(["Home FC", "v", "Away FC"])).toEqual({
+      type: "",
+      homeTeam: "Home FC",
+      awayTeam: "Away FC",
+    });
   });
 });
