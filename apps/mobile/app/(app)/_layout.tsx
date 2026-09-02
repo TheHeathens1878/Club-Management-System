@@ -54,6 +54,8 @@ export default function AppLayout() {
       >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="messages/[id]" options={{ title: "Conversation" }} />
+        <Stack.Screen name="coach/fixture/[id]" options={{ title: "Match" }} />
+        <Stack.Screen name="coach/register/[id]" options={{ title: "Register" }} />
         <Stack.Screen name="complete-profile" options={{ title: "One more thing", headerBackVisible: false }} />
       </Stack>
     </HouseholdProvider>
