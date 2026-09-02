@@ -14,7 +14,8 @@
       "supportsTablet": false,
       "bundleIdentifier": "uk.co.aomsportsclub.club",
       "infoPlist": {
-        "NSPhotoLibraryUsageDescription": "The app needs access to your photos so you can attach them to club messages."
+        "NSPhotoLibraryUsageDescription": "The app needs access to your photos so you can attach them to club messages.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -22,7 +23,11 @@
       "permissions": [
         "android.permission.INTERNET",
         "POST_NOTIFICATIONS"
-      ]
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#14100E"
+      }
     },
     "plugins": [
       "expo-router",
@@ -30,17 +35,32 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "The app needs access to your photos so you can attach them to club messages."
+          "photosPermission": "The app needs access to your photos so you can attach them to club messages.",
+          "microphonePermission": false,
+          "cameraPermission": false
         }
       ],
       [
         "expo-notifications",
-        {}
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#C23D1C"
+        }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#14100E"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": false
-    }
+    },
+    "icon": "./assets/icon.png"
   }
 }
