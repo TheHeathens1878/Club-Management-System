@@ -99,7 +99,21 @@ export type NavEntry = {
   views: readonly RoleView[];
   /** Rendered indented, as a shortcut belonging to the entry above. */
   child?: boolean;
+  /**
+   * Which waiting-count to draw beside the label (Adam, 2026-09-02: "in
+   * approvals and registrations, there should be a number icon showing how
+   * many are waiting").
+   *
+   * A KEY, not a number: this table is a static description of the menu and
+   * is imported by client components, so it cannot hold a value that has to be
+   * read from the database. The layout counts and the link draws; this only
+   * says which entries have something worth counting.
+   */
+  badge?: NavBadge;
 };
+
+/** The counts a nav entry can carry. */
+export type NavBadge = "approvals" | "registrations";
 
 export const NAV: readonly NavEntry[] = [
   // --- Membership Flow (Adam, 2026-08-26) ----------------------------------
@@ -342,6 +356,7 @@ export const NAV: readonly NavEntry[] = [
     group: "Club",
     allowed: (c) => c.isClubAdmin,
     views: ["admin"],
+    badge: "approvals",
   },
   {
     href: "/registrations",
@@ -350,6 +365,7 @@ export const NAV: readonly NavEntry[] = [
     group: "Club",
     allowed: (c) => c.isClubAdmin,
     views: ["admin"],
+    badge: "registrations",
   },
   {
     // The form itself, as a shortcut under the queue that uses it.
