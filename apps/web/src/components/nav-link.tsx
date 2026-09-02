@@ -17,12 +17,20 @@ import { Lock } from "lucide-react";
 
 export function NavLink({
   href,
+  hrefs,
   child = false,
   badge,
   lock = false,
   children,
 }: {
   href: string;
+  /**
+   * Every href in the menu, so the highlight can go to the BEST match and
+   * only that one. `/pitches/calendar` starts with `/pitches`, and without
+   * this both "Pitch calendar" and "Allocate fixtures" lit up together
+   * (Adam, 2026-09-02) — the row that matches more of the path owns it.
+   */
+  hrefs?: string[];
   /** Indented sub-entry (the nav's `child` items). */
   child?: boolean;
   /** Right-aligned count pill, e.g. an unread count. Omitted = no pill. */
@@ -32,7 +40,13 @@ export function NavLink({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const active = pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+  const matches = (candidate: string): boolean =>
+    pathname === candidate || (candidate !== "/" && pathname.startsWith(`${candidate}/`));
+  const active =
+    matches(href) &&
+    !(hrefs ?? []).some(
+      (other) => other !== href && other.length > href.length && matches(other),
+    );
 
   return (
     <Link

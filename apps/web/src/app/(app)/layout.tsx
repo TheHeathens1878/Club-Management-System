@@ -48,6 +48,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const storedView = await getStoredRoleView();
   const view = resolveRoleView(storedView, capabilities);
   const groups = view ? navFor(view, capabilities) : navForUnlinked();
+  // Every href in this menu — NavLink gives the highlight to the best match
+  // and only that one (/pitches/calendar must not also light /pitches).
+  const navHrefs = groups.flatMap((group) => group.items.map((item) => item.href));
 
   // Four independent questions, asked together: this shell renders on every
   // navigation, so its cost is the app's floor — a waterfall here is a
@@ -155,6 +158,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   <NavLink
                     key={item.href}
                     href={item.href}
+                    hrefs={navHrefs}
                     child={item.child}
                     badge={waiting > 0 ? waiting : undefined}
                   >
