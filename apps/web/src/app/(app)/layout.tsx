@@ -49,26 +49,28 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const view = resolveRoleView(storedView, capabilities);
   const groups = view ? navFor(view, capabilities) : navForUnlinked();
 
-  // What is waiting behind Approvals and Registrations (Adam, 2026-09-02).
-  // Only asked for when the menu actually draws those entries, so an ordinary
-  // member's page load costs nothing extra.
-  const counts = groups.some((g) => g.items.some((i) => i.badge))
-    ? await loadNavCounts(capabilities.isClubAdmin)
-    : NO_NAV_COUNTS;
-  // The role–team dropdown (Adam, 2026-08-25): every hat the person holds,
-  // team by team. With one option the component renders plain text.
-  const scope = view ? await getTeamScope(view, capabilities) : null;
+  // Four independent questions, asked together: this shell renders on every
+  // navigation, so its cost is the app's floor — a waterfall here is a
+  // waterfall on every screen.
+  //   · counts — what is waiting behind Approvals and Registrations (Adam,
+  //     2026-09-02). Only asked for when the menu actually draws those
+  //     entries, so an ordinary member's page load costs nothing extra.
+  //   · scope — the role–team dropdown (Adam, 2026-08-25): every hat the
+  //     person holds, team by team. With one option it renders plain text.
+  //   · unread — the bell.
+  //   · personId — who the browser would be registering a device for (Adam,
+  //     2026-09-01: notifications prompt). Null for a sign-in not yet linked
+  //     to a member record — there is nobody to address a push to, so the
+  //     prompt stays away.
+  const [counts, scope, unread, personId] = await Promise.all([
+    groups.some((g) => g.items.some((i) => i.badge))
+      ? loadNavCounts(capabilities.isClubAdmin)
+      : NO_NAV_COUNTS,
+    view ? getTeamScope(view, capabilities) : null,
+    loadUnreadNotificationCount(),
+    getCurrentPersonId(),
+  ]);
   const switcher = view ? roleSwitcherProps(capabilities, view, scope?.id ?? null) : null;
-
-  // The phone shell (Club CRM mobile design): identity strip on top, a
-  // five-slot tab bar underneath — the view's front doors plus More. Icons are
-  // rendered here so the capability-scoped list stays a server concern.
-  const unread = await loadUnreadNotificationCount();
-  // Who the browser would be registering a device for (Adam, 2026-09-01: "ask
-  // the user to create the app as a web app with notifications enabled"). Null
-  // for a sign-in not yet linked to a member record — there is nobody to
-  // address a push to, so the prompt stays away.
-  const personId = await getCurrentPersonId();
   const tabs: MobileTabItem[] = mobileTabsFor(view, capabilities).map((tab) => {
     const Icon = tab.icon;
     return {
