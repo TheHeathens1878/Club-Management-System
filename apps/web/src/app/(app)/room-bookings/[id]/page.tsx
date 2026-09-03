@@ -1,5 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { extrasSummary } from "@/lib/booking-extras";
+import { SecurityDepositCard } from "../security-deposit-card";
 import Link from "next/link";
 import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth";
 import { DeleteBookingButton } from "../delete-booking-button";
@@ -37,11 +38,49 @@ export default async function RoomBookingDetailPage({
   const { id } = await params;
   const admin = createAdminClient();
 
-  const [{ data: booking }, { data: rooms }, { data: paymentRows }] = await Promise.all([
+  const [
+    { data: booking },
+    { data: rooms },
+    { data: paymentRows },
+    { data: legacyComms },
+    { data: outbound },
+  ] = await Promise.all([
     admin.from("bookings").select("*").eq("id", id).maybeSingle(),
     admin.from("resources").select("id,name").eq("type", FUNCTION_ROOM).order("sort_order"),
     admin.from("payments").select("*").eq("booking_id", id).order("paid_at", { ascending: false }),
+    // Every email about this booking, old app and new: the migrated
+    // booking_comms history plus outbound_messages rows stamped with this
+    // entity (reminders, quotes, confirmations, thank-yous).
+    admin
+      .from("booking_comms")
+      .select("id,kind,to_address,subject,sent_at,sent_by_name")
+      .eq("booking_id", id)
+      .order("sent_at", { ascending: false }),
+    admin
+      .from("outbound_messages")
+      .select("id,to_address,subject,template,status,sent_at,created_at")
+      .eq("entity", "bookings")
+      .eq("entity_id", id)
+      .eq("channel", "email")
+      .order("created_at", { ascending: false }),
   ]);
+
+  const emailLog = [
+    ...(outbound ?? []).map((m) => ({
+      id: `o-${m.id}`,
+      at: m.sent_at ?? m.created_at,
+      to: m.to_address ?? "—",
+      subject: m.subject ?? m.template ?? "Email",
+      via: m.status === "sent" ? "sent" : m.status,
+    })),
+    ...(legacyComms ?? []).map((m) => ({
+      id: `l-${m.id}`,
+      at: m.sent_at,
+      to: m.to_address ?? "—",
+      subject: m.subject ?? m.kind,
+      via: m.sent_by_name ? `by ${m.sent_by_name}` : "sent",
+    })),
+  ].sort((a, b) => String(b.at).localeCompare(String(a.at)));
 
   if (!booking) notFound();
 
@@ -110,6 +149,15 @@ export default async function RoomBookingDetailPage({
               <Detail label="Time" value={`${window.startTime} – ${window.endTime}`} />
               {booking.occasion && <Detail label="Occasion" value={booking.occasion} />}
               {booking.estimated_guests !== null && <Detail label="Estimated guests" value={String(booking.estimated_guests)} />}
+              {(booking.member_discount_pence ?? 0) > 0 && (
+                <Detail label="Member discount" value={`−${formatCurrency(booking.member_discount_pence ?? 0)}`} />
+              )}
+              {booking.is_member && (
+                <Detail
+                  label="Club member"
+                  value={[booking.membership_type, booking.member_number].filter(Boolean).join(" · ") || "Yes"}
+                />
+              )}
               {extrasSummary(booking.selected_extras) && (
                 <Detail label="Extras" value={extrasSummary(booking.selected_extras)} />
               )}
@@ -232,6 +280,47 @@ export default async function RoomBookingDetailPage({
                 depositPence={depositPence}
                 canDelete={canDelete}
               />
+            </CardContent>
+          </Card>
+
+          {(booking.security_deposit_pence ?? 0) > 0 && (
+            <Card>
+              <CardHeader><CardTitle>Security deposit</CardTitle></CardHeader>
+              <CardContent>
+                <SecurityDepositCard
+                  bookingId={id}
+                  amountPence={booking.security_deposit_pence ?? 0}
+                  returnedAt={booking.security_deposit_returned_at}
+                  returnedMethod={booking.security_deposit_returned_method}
+                  returnedNote={booking.security_deposit_returned_note}
+                />
+              </CardContent>
+            </Card>
+          )}
+
+          <Card>
+            <CardHeader><CardTitle>Emails sent</CardTitle></CardHeader>
+            <CardContent>
+              {emailLog.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing sent about this booking yet.</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {emailLog.slice(0, 12).map((m) => (
+                    <li key={m.id} className="border-b pb-2 last:border-b-0 last:pb-0">
+                      <p className="font-medium leading-snug">{m.subject}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {m.at
+                          ? new Date(m.at).toLocaleString("en-GB", {
+                              day: "numeric", month: "short", year: "numeric",
+                              hour: "2-digit", minute: "2-digit",
+                            })
+                          : "—"}{" "}
+                        · {m.to} · {m.via}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
 

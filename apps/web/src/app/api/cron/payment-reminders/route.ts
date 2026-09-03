@@ -223,5 +223,123 @@ export async function GET(request: Request) {
     }
   }
 
-  return NextResponse.json({ ok: true, depositSent, balanceSent, autoCancelled });
+  // --- Quote follow-up: quoted 3+ days ago, nothing confirmed, one nudge ---
+  let quoteFollowups = 0;
+  {
+    const threeDaysAgo = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    const { data: quoted } = await admin
+      .from("bookings")
+      .select("id,booker_name,booker_email,starts_at,ends_at,total_pence,updated_at,resources(name)")
+      .eq("status", "quoted")
+      .is("quote_followup_sent_at", null)
+      .lt("updated_at", threeDaysAgo)
+      .gt("starts_at", new Date().toISOString());
+
+    for (const b of (quoted ?? []) as unknown as Booking[]) {
+      if (!b.booker_email) continue;
+      try {
+        const tpl = await renderEmailTemplate("quote_followup", {
+          name: b.booker_name || "there",
+          room_name: roomNameOf(b),
+          booking_date: formatBookingDate(instantsToLocalWindow(b.starts_at, b.ends_at).date),
+          total_cost: formatCurrency(Number(b.total_pence ?? 0)),
+          portal_url: portalUrl,
+        }, brandColor);
+        await sendEmail({
+          to: b.booker_email,
+          ...tpl,
+          category: "reminder",
+          template: "quote_followup",
+          entity: "bookings",
+          entityId: b.id,
+        });
+        await admin.from("bookings").update({ quote_followup_sent_at: new Date().toISOString() }).eq("id", b.id);
+        quoteFollowups++;
+      } catch (e) {
+        console.error("[cron] quote follow-up failed for", b.id, e);
+      }
+    }
+  }
+
+  // --- Thank-you: the day after a confirmed booking happened (7-day window,
+  // so a paused cron does not thank people about ancient history) ---
+  let thankYous = 0;
+  {
+    const now = new Date().toISOString();
+    const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+    const { data: finished } = await admin
+      .from("bookings")
+      .select("id,booker_name,booker_email,starts_at,ends_at,resources(name)")
+      .eq("status", "confirmed")
+      .is("thank_you_sent_at", null)
+      .lt("ends_at", now)
+      .gt("ends_at", weekAgo);
+
+    for (const b of (finished ?? []) as Booking[]) {
+      if (!b.booker_email) continue;
+      try {
+        const tpl = await renderEmailTemplate("room_booking_thank_you", {
+          name: b.booker_name || "there",
+          room_name: roomNameOf(b),
+          booking_date: formatBookingDate(instantsToLocalWindow(b.starts_at, b.ends_at).date),
+        }, brandColor);
+        await sendEmail({
+          to: b.booker_email,
+          ...tpl,
+          category: "reminder",
+          template: "room_booking_thank_you",
+          entity: "bookings",
+          entityId: b.id,
+        });
+        await admin.from("bookings").update({ thank_you_sent_at: new Date().toISOString() }).eq("id", b.id);
+        thankYous++;
+      } catch (e) {
+        console.error("[cron] thank-you failed for", b.id, e);
+      }
+    }
+  }
+
+  // --- Security deposit: the event has happened, the £200 has not gone back —
+  // nudge THE STAFF, once. Returning it is recorded on the booking's page. ---
+  let securityNudges = 0;
+  {
+    const now = new Date().toISOString();
+    const { data: held } = await admin
+      .from("bookings")
+      .select("id,booker_name,starts_at,ends_at,security_deposit_pence,resources(name)")
+      .gt("security_deposit_pence", 0)
+      .is("security_deposit_returned_at", null)
+      .is("security_deposit_nudge_sent_at", null)
+      .lt("ends_at", now);
+
+    const staff = await getRecipientEmails("notify_booking_request").catch(() => []);
+    for (const b of (held ?? []) as (Booking & { security_deposit_pence: number })[]) {
+      if (staff.length === 0) break;
+      try {
+        const window = instantsToLocalWindow(b.starts_at, b.ends_at);
+        await sendEmail({
+          to: staff,
+          subject: `Security deposit to return — ${b.booker_name} (${formatBookingDate(window.date)})`,
+          html: `<p>${b.booker_name}'s event in the ${roomNameOf(b)} on ${formatBookingDate(window.date)} has taken place, and their refundable security deposit of ${formatCurrency(b.security_deposit_pence)} has not been recorded as returned.</p><p>When it goes back, record it on the booking's page so this stops chasing you: ${portalUrl.replace("/portal", `/room-bookings/${b.id}`)}</p>`,
+          text: `${b.booker_name}'s event on ${formatBookingDate(window.date)} is over; the ${formatCurrency(b.security_deposit_pence)} security deposit has not been recorded as returned.`,
+          entity: "bookings",
+          entityId: b.id,
+        });
+        await admin.from("bookings").update({ security_deposit_nudge_sent_at: new Date().toISOString() }).eq("id", b.id);
+        securityNudges++;
+      } catch (e) {
+        console.error("[cron] security deposit nudge failed for", b.id, e);
+      }
+    }
+  }
+
+  return NextResponse.json({
+    ok: true,
+    depositSent,
+    balanceSent,
+    autoCancelled,
+    quoteFollowups,
+    thankYous,
+    securityNudges,
+  });
 }

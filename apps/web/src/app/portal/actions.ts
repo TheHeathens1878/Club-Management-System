@@ -31,12 +31,25 @@ export async function createCheckoutForBooking(
   bookingId: string,
   amountPence: number,
   purpose: "deposit" | "balance",
+  termsAccepted = false,
 ): Promise<{ checkoutId?: string; error?: string }> {
   if (!amountPence || amountPence <= 0) return { error: "Invalid amount." };
   // SumUp's UK minimum card transaction is £1.00.
   if (amountPence < 100) return { error: "Card payments must be at least £1.00." };
   const owned = await ownedBooking(bookingId);
   if ("error" in owned) return { error: owned.error };
+
+  // Paying the deposit is what accepts the deposit terms, so the tick is
+  // required here too and the moment is stamped once (Adam, 2026-09-03).
+  if (purpose === "deposit") {
+    if (!termsAccepted) return { error: "Please accept the deposit terms first." };
+    const admin = createAdminClient();
+    await admin
+      .from("bookings")
+      .update({ deposit_terms_accepted_at: new Date().toISOString() })
+      .eq("id", bookingId)
+      .is("deposit_terms_accepted_at", null);
+  }
 
   const roomName = owned.booking.resources?.name ?? "Function room";
 
