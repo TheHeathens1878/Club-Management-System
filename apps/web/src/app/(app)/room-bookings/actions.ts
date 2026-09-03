@@ -1039,3 +1039,135 @@ export async function declineAndDeleteSeries(
   revalidatePath("/room-bookings");
   return { deleted: count ?? rows.length };
 }
+
+// ---------------------------------------------------------------------------
+// The desk's older jobs, reinstated (Adam, 2026-09-03: "Do an audit of what
+// used to be in the room booking part of the app and ensure it's all wired
+// up"). The columns waited through the cutover; these are the moving parts.
+
+/**
+ * Send a quote: prices an enquiry (or a pending request) WITHOUT holding the
+ * slot — the status becomes 'quoted', which `bookings_no_overlap` ignores
+ * exactly as it ignores 'enquiry'. Confirming later is what takes the date.
+ * The follow-up stamp is cleared so the cron can nudge once about THIS quote.
+ */
+export async function sendQuote(
+  bookingId: string,
+  input: { totalPence: number | null },
+): Promise<{ error?: string }> {
+  const session = await getSessionProfile();
+  if (!session || !isSuperUser(session.profile?.role)) return { error: "Not authorised." };
+  if (!input.totalPence || input.totalPence <= 0) {
+    return { error: "Give the quote a price." };
+  }
+
+  const admin = createAdminClient();
+  const { data: booking } = await admin
+    .from("bookings")
+    .select("id,status,booker_name,booker_email,starts_at,ends_at,resources(name)")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!booking) return { error: "Booking not found." };
+  if (booking.status === "confirmed" || booking.status === "cancelled") {
+    return { error: "Only an enquiry or a pending request can be quoted." };
+  }
+
+  const { error } = await admin
+    .from("bookings")
+    .update({
+      status: "quoted",
+      total_pence: input.totalPence,
+      quote_followup_sent_at: null,
+    })
+    .eq("id", bookingId);
+  if (error) return { error: conflictOrMessage(error, "The database refused that.") };
+
+  if (booking.booker_email) {
+    try {
+      const brandColor = await getEmailBrandColor().catch(() => undefined);
+      const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
+      const tpl = await renderEmailTemplate(
+        "room_booking_quote",
+        {
+          name: booking.booker_name || "there",
+          room_name: (booking.resources as { name: string } | null)?.name ?? "Function room",
+          booking_date: formatBookingDate(window.date),
+          start_time: window.startTime,
+          end_time: window.endTime,
+          total_cost: formatCurrency(input.totalPence),
+          portal_url: `${getSiteUrl()}/portal`,
+        },
+        brandColor,
+      );
+      await sendEmail({
+        to: booking.booker_email,
+        ...tpl,
+        template: "room_booking_quote",
+        entity: "bookings",
+        entityId: bookingId,
+      });
+    } catch (e) {
+      console.error("[room-booking] quote email failed:", e);
+    }
+  }
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "quote",
+    entity: "room_booking",
+    entityId: bookingId,
+    detail: { total_pence: input.totalPence },
+  });
+
+  revalidatePath(`/room-bookings/${bookingId}`);
+  revalidatePath("/room-bookings");
+  return {};
+}
+
+/**
+ * The 18th-birthday security deposit's other half: the club gives it back,
+ * and the record says when, how and by whom — which is also what stops the
+ * post-event nudge from asking again.
+ */
+export async function markSecurityDepositReturned(
+  bookingId: string,
+  input: { method: string; note: string | null },
+): Promise<{ error?: string }> {
+  const session = await getSessionProfile();
+  if (!session || !isSuperUser(session.profile?.role)) return { error: "Not authorised." };
+  const method = input.method.trim();
+  if (!method) return { error: "Say how it was returned." };
+
+  const admin = createAdminClient();
+  const { data: booking } = await admin
+    .from("bookings")
+    .select("id,security_deposit_pence,security_deposit_returned_at")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!booking) return { error: "Booking not found." };
+  if (!booking.security_deposit_pence) return { error: "This booking holds no security deposit." };
+  if (booking.security_deposit_returned_at) return { error: "Already recorded as returned." };
+
+  const { error } = await admin
+    .from("bookings")
+    .update({
+      security_deposit_returned_at: new Date().toISOString(),
+      security_deposit_returned_method: method,
+      security_deposit_returned_note: input.note?.trim() || null,
+    })
+    .eq("id", bookingId);
+  if (error) return { error: conflictOrMessage(error, "The database refused that.") };
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "security_deposit_returned",
+    entity: "room_booking",
+    entityId: bookingId,
+    detail: { method, amount_pence: booking.security_deposit_pence },
+  });
+
+  revalidatePath(`/room-bookings/${bookingId}`);
+  return {};
+}

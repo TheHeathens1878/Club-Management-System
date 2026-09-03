@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { confirmBooking, cancelBooking } from "./actions";
+import { confirmBooking, cancelBooking, sendQuote } from "./actions";
 
 export function StatusForm({
   bookingId,
@@ -33,6 +33,21 @@ export function StatusForm({
   const [depositPounds, setDepositPounds] = useState(
     String((currentDepositPence ?? defaultDepositPence) / 100 || ""),
   );
+
+  const [quotePounds, setQuotePounds] = useState(
+    currentTotalPence ? String(currentTotalPence / 100) : "",
+  );
+
+  async function runQuote() {
+    setError(null);
+    setLoading("quote");
+    const result = await sendQuote(bookingId, {
+      totalPence: quotePounds ? Math.round(Number(quotePounds) * 100) : null,
+    });
+    setLoading(null);
+    if (result.error) setError(result.error);
+    else { setConfirm(null); router.refresh(); }
+  }
 
   async function runConfirm() {
     setError(null);
@@ -63,8 +78,48 @@ export function StatusForm({
 
   return (
     <div className="space-y-4">
-      {/* Confirm booking */}
-      {currentStatus === "pending" && (
+      {/* Send a quote — prices the ask WITHOUT holding the slot; the
+          status becomes 'quoted', which the no-overlap rule ignores exactly
+          like 'enquiry'. Confirming later is what takes the date. */}
+      {(currentStatus === "enquiry" || currentStatus === "pending" || currentStatus === "quoted") && (
+        <>
+          {confirm === "quote" ? (
+            <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
+              <p className="text-sm font-medium">
+                {currentStatus === "quoted" ? "Re-send the quote" : "Send a quote"}
+              </p>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground uppercase">Quoted total (£)</label>
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={quotePounds}
+                  onChange={(e) => setQuotePounds(e.target.value)}
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The booker is emailed the price with a room-not-held note. If nothing is
+                confirmed within three days, one follow-up goes out automatically.
+              </p>
+              <div className="flex gap-2">
+                <Button size="sm" onClick={runQuote} disabled={loading !== null} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
+                  {loading === "quote" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send quote"}
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="min-h-[44px] lg:min-h-0">Back</Button>
+              </div>
+            </div>
+          ) : (
+            <Button size="sm" variant="outline" onClick={() => setConfirm("quote")} disabled={loading !== null} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
+              {currentStatus === "quoted" ? "Re-quote" : "Send a quote"}
+            </Button>
+          )}
+        </>
+      )}
+
+      {/* Confirm booking — from an enquiry or a quote too: confirming is the
+          act that takes the slot, and the constraint arbitrates any race. */}
+      {(currentStatus === "enquiry" || currentStatus === "quoted" || currentStatus === "pending") && (
         <>
           {confirm === "confirm" ? (
             <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
@@ -109,7 +164,7 @@ export function StatusForm({
       )}
 
       {/* Cancel booking */}
-      {(currentStatus === "pending" || currentStatus === "confirmed") && (
+      {(currentStatus === "enquiry" || currentStatus === "quoted" || currentStatus === "pending" || currentStatus === "confirmed") && (
         <>
           {confirm === "cancel" ? (
             <div className="space-y-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">

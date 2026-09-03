@@ -10,6 +10,9 @@ export type TemplateKey =
   | "payment_received"
   | "deposit_reminder"
   | "balance_reminder"
+  | "room_booking_quote"
+  | "quote_followup"
+  | "room_booking_thank_you"
   | "password_set";
 
 export type TemplateVariable = {
@@ -129,6 +132,58 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
 <li><strong>Balance outstanding:</strong> {{outstanding}}</li>
 </ul>
 <p>If you have any questions about your booking or payments, please contact us.</p>`,
+  },
+
+  room_booking_quote: {
+    name: "Quote Sent",
+    description:
+      "Sent when staff quote a price for an enquiry or request. The date is NOT held by a quote.",
+    variables: [
+      { key: "name", label: "Booker name", example: "Jane Smith" },
+      { key: "room_name", label: "Room name", example: "Main Function Room" },
+      { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
+      { key: "start_time", label: "Start time", example: "19:00" },
+      { key: "end_time", label: "End time", example: "23:00" },
+      { key: "total_cost", label: "Quoted total", example: "£350.00" },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
+    ],
+    defaultSubject: (c) => `${c} — your quote`,
+    defaultBody: (c) => `<p>Dear {{name}},</p>
+<p>Thank you for your interest in hiring the {{room_name}} at ${c}. For {{booking_date}}, {{start_time}} – {{end_time}}, the price would be <strong>{{total_cost}}</strong>.</p>
+<p>Please note the date is <strong>not held</strong> by this quote — it stays open to other bookings until you confirm one with us.</p>
+<p>To go ahead, just reply to this email or contact the club, and we will confirm the booking with you.</p>
+<p><a href="{{portal_url}}">View this in your portal</a></p>`,
+  },
+
+  quote_followup: {
+    name: "Quote Follow-up",
+    description: "Sent a few days after a quote if nothing has been confirmed.",
+    variables: [
+      { key: "name", label: "Booker name", example: "Jane Smith" },
+      { key: "room_name", label: "Room name", example: "Main Function Room" },
+      { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
+      { key: "total_cost", label: "Quoted total", example: "£350.00" },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
+    ],
+    defaultSubject: (c) => `${c} — still interested in {{booking_date}}?`,
+    defaultBody: (c) => `<p>Dear {{name}},</p>
+<p>A few days ago we quoted <strong>{{total_cost}}</strong> for the {{room_name}} on {{booking_date}}. The date is still open — and still not held — so if you would like to go ahead, reply to this email or contact the club and we will confirm it for you.</p>
+<p>If your plans have changed, no need to do anything.</p>
+<p><a href="{{portal_url}}">View this in your portal</a></p>`,
+  },
+
+  room_booking_thank_you: {
+    name: "Thank You (after the event)",
+    description: "Sent the day after a confirmed booking has taken place.",
+    variables: [
+      { key: "name", label: "Booker name", example: "Jane Smith" },
+      { key: "room_name", label: "Room name", example: "Main Function Room" },
+      { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
+    ],
+    defaultSubject: (c) => `Thank you from ${c}`,
+    defaultBody: (c) => `<p>Dear {{name}},</p>
+<p>Thank you for holding your event in the {{room_name}} at ${c} on {{booking_date}} — we hope it went brilliantly.</p>
+<p>We would love to welcome you back: if you ever want the room again, you know where we are.</p>`,
   },
 
   deposit_reminder: {

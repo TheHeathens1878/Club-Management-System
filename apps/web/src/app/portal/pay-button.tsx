@@ -46,17 +46,25 @@ export function PayButton({
   const containerId = `sumup-${reactId.replace(/[:]/g, "")}`;
   const [stage, setStage] = useState<"idle" | "loading" | "widget">("idle");
   const [error, setError] = useState<string | null>(null);
+  // The deposit terms tick (Adam, 2026-09-03, reinstated): paying the deposit
+  // is what accepts them, so the tick comes first and the moment is stamped
+  // on the booking by the checkout action.
+  const [termsAccepted, setTermsAccepted] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   async function startSumUp() {
     setError(null);
+    if (purpose === "deposit" && !termsAccepted) {
+      setError("Please tick to accept the deposit terms first.");
+      return;
+    }
     // SumUp's UK minimum card transaction is £1.00.
     if (amountPence < 100) {
       setError("Card payments must be at least £1.00. Please contact the club to pay a smaller amount.");
       return;
     }
     setStage("loading");
-    const res = await createCheckoutForBooking(bookingId, amountPence, purpose);
+    const res = await createCheckoutForBooking(bookingId, amountPence, purpose, termsAccepted);
     if (res.error || !res.checkoutId) {
       setError(res.error ?? "Could not start payment.");
       setStage("idle");
@@ -108,6 +116,24 @@ export function PayButton({
     });
   }
 
+  // The deposit terms tick — shown with the idle button; paying the deposit
+  // is what accepts them, so the tick gates the start of the checkout.
+  const termsTick =
+    purpose === "deposit" ? (
+      <label className="flex items-start gap-2 text-xs text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={termsAccepted}
+          onChange={(e) => { setTermsAccepted(e.target.checked); setError(null); }}
+          className="mt-0.5 h-4 w-4"
+        />
+        <span>
+          I accept the deposit terms: the deposit secures the booking and is refundable only as
+          set out in the club&apos;s booking terms.
+        </span>
+      </label>
+    ) : null;
+
   if (stage === "widget") {
     return (
       <div className="w-full space-y-2 rounded-md border bg-muted/20 p-3">
@@ -126,11 +152,12 @@ export function PayButton({
   }
 
   return (
-    <div className="space-y-1">
+    <div className="space-y-1.5">
+      {termsTick}
       <Button
         size="sm"
         variant={variant}
-        disabled={isPending || stage === "loading"}
+        disabled={isPending || stage === "loading" || (purpose === "deposit" && !termsAccepted)}
         onClick={sumupEnabled ? startSumUp : startMock}
       >
         {stage === "loading" ? "Starting…" : isPending ? "Processing…" : `${label} (${formatCurrency(amountPence)})`}
