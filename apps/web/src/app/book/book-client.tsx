@@ -98,11 +98,17 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
 
   const todayStr = dateStr(today);
 
+  // "book" secures a slot (pending, conflict-checked); "enquiry" holds
+  // NOTHING and says so everywhere (Adam, 2026-09-03, reinstated from the
+  // old room app). Set by whichever button submits the form.
+  const [intent, setIntent] = useState<"book" | "enquiry">("book");
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     const fd = new FormData();
+    fd.set("intent", intent);
     fd.set("room_id", selectedRoomId);
     fd.set("date", selectedDate ?? "");
     fd.set("start_time", startTime);
@@ -398,13 +404,44 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
                 <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
               )}
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Submitting…</> : "Request booking"}
+              <Button
+                type="submit"
+                className="w-full"
+                disabled={loading}
+                onClick={() => setIntent("book")}
+              >
+                {loading && intent === "book" ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Submitting…</>
+                ) : (
+                  "Request booking"
+                )}
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
                 Your request will be reviewed by our team. We&apos;ll be in touch to confirm availability and arrange payment.
               </p>
+
+              {/* Not ready to commit: the same details go to the club as a
+                  question, not a request — and nothing is held. */}
+              <div className="rounded-lg border border-dashed p-4 text-center">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  className="w-full"
+                  disabled={loading}
+                  onClick={() => setIntent("enquiry")}
+                >
+                  {loading && intent === "enquiry" ? (
+                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sending…</>
+                  ) : (
+                    "Just send an enquiry instead"
+                  )}
+                </Button>
+                <p className="mt-2 text-xs text-amber-700">
+                  An enquiry does <strong>not</strong> hold the room — the date stays open to other
+                  bookings until you confirm one with us.
+                </p>
+              </div>
             </form>
           </CardContent>
         </Card>

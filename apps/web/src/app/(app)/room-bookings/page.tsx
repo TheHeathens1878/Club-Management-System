@@ -131,6 +131,7 @@ export default async function RoomBookingsPage({
   }).filter((b) => !roomFilter || b.resource_id === roomFilter);
   const counts = {
     all: base.length,
+    enquiry: base.filter((b) => b.status === "enquiry").length,
     pending: base.filter((b) => b.status === "pending").length,
     confirmed: base.filter((b) => b.status === "confirmed").length,
     cancelled: base.filter((b) => b.status === "cancelled").length,
@@ -234,7 +235,7 @@ export default async function RoomBookingsPage({
 
               {/* Status */}
               <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
-                {(["all", "pending", "confirmed", "cancelled"] as const).map((s) => (
+                {(["all", "enquiry", "pending", "confirmed", "cancelled"] as const).map((s) => (
                   <Link
                     key={s}
                     href={filterHref({ status: s === "all" ? undefined : s })}
