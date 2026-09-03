@@ -20,6 +20,15 @@ export default async function BookPage() {
     .eq("active", true)
     .order("sort_order");
 
+  // For the club-family discount claim: the child's team, picked from the
+  // club's real team names (they are public — the recruitment page lists
+  // them), but free text is still allowed.
+  const { data: teamRows } = await admin
+    .from("teams")
+    .select("name")
+    .eq("active", true)
+    .order("name");
+
   const { data: faqRows } = await admin
     .from("faqs")
     .select("id, question, answer")
@@ -177,7 +186,7 @@ export default async function BookPage() {
                 No rooms are currently available. Please contact us directly.
               </p>
             ) : (
-              <BookClient rooms={roomList} bookedSlots={bookedSlots} />
+              <BookClient rooms={roomList} bookedSlots={bookedSlots} teamNames={(teamRows ?? []).map((t) => t.name)} />
             )}
           </div>
         </div>

@@ -33,6 +33,7 @@ export function StatusForm({
   const [depositPounds, setDepositPounds] = useState(
     String((currentDepositPence ?? defaultDepositPence) / 100 || ""),
   );
+  const [discountPounds, setDiscountPounds] = useState("");
 
   const [quotePounds, setQuotePounds] = useState(
     currentTotalPence ? String(currentTotalPence / 100) : "",
@@ -55,6 +56,7 @@ export function StatusForm({
     const result = await confirmBooking(bookingId, {
       totalPence: totalPounds ? Math.round(Number(totalPounds) * 100) : null,
       depositPence: depositPounds ? Math.round(Number(depositPounds) * 100) : 0,
+      memberDiscountPence: discountPounds ? Math.round(Number(discountPounds) * 100) : null,
     });
     setLoading(null);
     if (result.error) setError(result.error);
@@ -144,6 +146,19 @@ export function StatusForm({
                     placeholder="0.00"
                   />
                 </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground uppercase">Member discount applied (£, optional)</label>
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={discountPounds}
+                  onChange={(e) => setDiscountPounds(e.target.value)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Check any claimed club child on the booking first; the total above should already
+                  include the discount — this records how much of it there was.
+                </p>
               </div>
               <p className="text-xs text-muted-foreground">
                 The booker is emailed a confirmation with the total and deposit terms, plus a portal link to pay.

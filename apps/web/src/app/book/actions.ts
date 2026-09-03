@@ -125,6 +125,12 @@ export async function submitBooking(
   const estimatedGuests = estimatedGuestsRaw ? Number(estimatedGuestsRaw) : null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
+  // The club-family discount claim: recorded on the booking for the desk to
+  // verify against the members list — never priced automatically.
+  const clubFamily = String(formData.get("club_family") ?? "") === "yes";
+  const childName = clubFamily ? String(formData.get("child_name") ?? "").trim() || null : null;
+  const childTeam = clubFamily ? String(formData.get("child_team") ?? "").trim() || null : null;
+
   // The club's party rule (Adam, 2026-09-03): no under-18 parties; an 18th
   // carries a £200 security deposit, said again in the acknowledgement email.
   // Checked here as well as in the form, because a form is only a suggestion.
@@ -222,6 +228,9 @@ export async function submitBooking(
       // The 18th-birthday rule: £200, refundable, and on the record from the
       // first moment rather than remembered at confirmation time.
       security_deposit_pence: eighteenth ? 20000 : undefined,
+      is_member: clubFamily,
+      child_name: childName,
+      child_team: childTeam,
       payment_status: "unpaid",
     })
     .select("id")
@@ -321,11 +330,17 @@ ${accessLine}
           occasion,
           estimatedGuests,
           notes:
-            chosenExtras.length > 0
-              ? [`Extras: ${chosenExtras.map((e) => `${extraLabel(e)} — ${poundsLabel(e.price_pence)}`).join("; ")}`, notes]
-                  .filter(Boolean)
-                  .join("\n")
-              : notes,
+            [
+              clubFamily
+                ? `Club-family discount claimed: ${childName ?? "?"} (${childTeam ?? "team not given"}) — check before quoting.`
+                : null,
+              chosenExtras.length > 0
+                ? `Extras: ${chosenExtras.map((e) => `${extraLabel(e)} — ${poundsLabel(e.price_pence)}`).join("; ")}`
+                : null,
+              notes,
+            ]
+              .filter(Boolean)
+              .join("\n") || null,
           bookingUrl,
           brandColor,
           enquiry: isEnquiry,
