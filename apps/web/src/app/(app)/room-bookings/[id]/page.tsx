@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { extrasSummary } from "@/lib/booking-extras";
 import Link from "next/link";
 import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth";
 import { DeleteBookingButton } from "../delete-booking-button";
@@ -109,6 +110,15 @@ export default async function RoomBookingDetailPage({
               <Detail label="Time" value={`${window.startTime} – ${window.endTime}`} />
               {booking.occasion && <Detail label="Occasion" value={booking.occasion} />}
               {booking.estimated_guests !== null && <Detail label="Estimated guests" value={String(booking.estimated_guests)} />}
+              {extrasSummary(booking.selected_extras) && (
+                <Detail label="Extras" value={extrasSummary(booking.selected_extras)} />
+              )}
+              {booking.security_deposit_pence !== null && booking.security_deposit_pence > 0 && (
+                <Detail
+                  label="Security deposit"
+                  value={`${formatCurrency(booking.security_deposit_pence)} (refundable — 18th birthday)`}
+                />
+              )}
               {booking.total_pence !== null && <Detail label="Quoted price" value={formatCurrency(booking.total_pence)} />}
             </CardContent>
           </Card>

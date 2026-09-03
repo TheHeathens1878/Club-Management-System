@@ -1,6 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
 import { BookClient } from "./book-client";
+import { parseExtrasConfig } from "@/lib/booking-extras";
 import { formatCurrency } from "@/lib/utils";
 import { Users, Clock, Info } from "lucide-react";
 import { addDays, instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
@@ -14,7 +15,7 @@ export default async function BookPage() {
 
   const { data: rooms } = await admin
     .from("resources")
-    .select("id, name, description, capacity, price_pence_per_hour, price_pence_half_day, price_pence_full_day, price_pence_fixed, price_note")
+    .select("id, name, description, capacity, price_pence_per_hour, price_pence_half_day, price_pence_full_day, price_pence_fixed, price_note, extras_config")
     .eq("type", FUNCTION_ROOM)
     .eq("active", true)
     .order("sort_order");
@@ -55,6 +56,7 @@ export default async function BookPage() {
     price_pence_full_day: r.price_pence_full_day ?? null,
     price_pence_fixed: r.price_pence_fixed,
     price_note: r.price_note,
+    extras: parseExtrasConfig(r.extras_config).filter((extra) => extra.active),
   }));
 
   const faqs = (faqRows ?? []).map((f) => ({

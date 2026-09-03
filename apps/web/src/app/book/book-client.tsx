@@ -8,6 +8,7 @@ import { Input, Label } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { submitBooking } from "./actions";
 import { formatCurrency } from "@/lib/utils";
+import { poundsLabel, type ExtraConfig } from "@/lib/booking-extras";
 
 type Room = {
   id: string;
@@ -17,6 +18,8 @@ type Room = {
   price_pence_per_hour: number | null;
   price_pence_half_day: number | null;
   price_pence_full_day: number | null;
+  /** The room's optional extras (Adam, 2026-09-03, reinstated). */
+  extras: ExtraConfig[];
 };
 
 type BookedSlot = {
@@ -72,6 +75,10 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
   const [occasionOther, setOccasionOther] = useState("");
   const [birthdayAge, setBirthdayAge] = useState("");
   const [estimatedGuests, setEstimatedGuests] = useState("");
+  // Chosen extras, keyed by the extra's id: an option label for a choice,
+  // true for a binary yes. Prices shown here are the menu's; the server
+  // re-prices from the room's own config either way.
+  const [extras, setExtras] = useState<Record<string, string | boolean>>({});
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -95,6 +102,12 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
 
   const selectedRoom = rooms.find((r) => r.id === selectedRoomId);
   const estimate = selectedRoom ? calcEstimate(selectedRoom, startTime, endTime) : null;
+  const extrasTotal = (selectedRoom?.extras ?? []).reduce((sum, extra) => {
+    const value = extras[extra.id];
+    if (extra.type === "binary") return value === true ? sum + extra.price_pence : sum;
+    const option = extra.options.find((o) => o.label === value);
+    return option ? sum + option.price_pence : sum;
+  }, 0);
 
   const todayStr = dateStr(today);
 
@@ -117,6 +130,19 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
     fd.set("booker_last_name", bookerLastName);
     fd.set("booker_email", bookerEmail);
     fd.set("booker_phone", bookerPhone);
+    // The club's party rule (Adam, 2026-09-03, reinstated): no under-18
+    // parties at all; an 18th is welcome and carries a £200 security deposit,
+    // which the page has already said. The server refuses under-18s again —
+    // this just saves the round trip.
+    if (occasionType === "Birthday") {
+      const age = Number(birthdayAge);
+      if (Number.isFinite(age) && age > 0 && age < 18) {
+        setError("Sorry — we don't take bookings for under-18 birthday parties.");
+        setLoading(false);
+        return;
+      }
+      if (birthdayAge.trim()) fd.set("birthday_age", birthdayAge.trim());
+    }
     const occasionFinal = occasionType === "Other"
       ? occasionOther.trim()
       : occasionType === "Birthday" && birthdayAge.trim()
@@ -125,6 +151,7 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
     fd.set("occasion", occasionFinal);
     if (estimatedGuests) fd.set("estimated_guests", estimatedGuests);
     fd.set("notes", notes);
+    if (Object.keys(extras).length > 0) fd.set("extras_selected", JSON.stringify(extras));
 
     try {
       const result = await submitBooking(fd);
@@ -152,7 +179,7 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
           {rooms.map((r) => (
             <button
               key={r.id}
-              onClick={() => setSelectedRoomId(r.id)}
+              onClick={() => { setSelectedRoomId(r.id); setExtras({}); }}
               className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${
                 selectedRoomId === r.id
                   ? "bg-primary text-primary-foreground border-primary"
@@ -362,6 +389,17 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
                       placeholder="e.g. 50"
                       required
                     />
+                    {Number(birthdayAge) > 0 && Number(birthdayAge) < 18 ? (
+                      <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                        Sorry — we don&apos;t take bookings for under-18 birthday parties.
+                      </p>
+                    ) : Number(birthdayAge) === 18 ? (
+                      <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                        18th birthday parties are welcome — please note they carry a{" "}
+                        <strong>£200 refundable security deposit</strong>, payable before the
+                        event and returned after it if all is well.
+                      </p>
+                    ) : null}
                   </div>
                 )}
                 {occasionType === "Other" && (
@@ -400,48 +438,156 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
                 </div>
               </div>
 
+              {selectedRoom && selectedRoom.extras.length > 0 && (
+                <fieldset className="space-y-3">
+                  <legend className="text-sm font-medium">Optional extras</legend>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {selectedRoom.extras.map((extra) =>
+                      extra.type === "binary" ? (
+                        <label
+                          key={extra.id}
+                          className="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-lg border bg-card px-4 py-3 text-sm"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={extras[extra.id] === true}
+                            onChange={(e) =>
+                              setExtras((current) => ({ ...current, [extra.id]: e.target.checked }))
+                            }
+                            className="h-4 w-4"
+                          />
+                          <span className="flex-1">{extra.name}</span>
+                          <span className="text-muted-foreground">{poundsLabel(extra.price_pence)}</span>
+                        </label>
+                      ) : (
+                        <div key={extra.id} className="space-y-1.5">
+                          <Label htmlFor={`extra-${extra.id}`}>{extra.name}</Label>
+                          <select
+                            id={`extra-${extra.id}`}
+                            value={typeof extras[extra.id] === "string" ? (extras[extra.id] as string) : ""}
+                            onChange={(e) =>
+                              setExtras((current) => ({ ...current, [extra.id]: e.target.value }))
+                            }
+                            className="h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {extra.options.map((option) => (
+                              <option key={option.label} value={option.label}>
+                                {option.label}
+                                {option.price_pence > 0 ? ` — ${poundsLabel(option.price_pence)}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  {extrasTotal > 0 && (
+                    <p className="text-sm text-muted-foreground">
+                      Extras: <span className="font-medium text-foreground">{formatCurrency(extrasTotal)}</span>
+                      {estimate !== null && (
+                        <> · Estimated total:{" "}
+                          <span className="font-medium text-foreground">{formatCurrency(estimate + extrasTotal)}</span>
+                        </>
+                      )}
+                    </p>
+                  )}
+                </fieldset>
+              )}
+
               {error && (
                 <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</p>
               )}
 
+              {/* The choice comes BEFORE the button, as two equal cards
+                  (Adam, 2026-09-03: an orange button with a white afterthought
+                  underneath "is not clear enough"). Radio semantics so a
+                  keyboard and a screen reader get a real either/or, and the
+                  one submit button says exactly which of the two it is about
+                  to do. */}
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-medium">
+                  What would you like to send?
+                </legend>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label
+                    className={
+                      "flex cursor-pointer flex-col gap-1 rounded-lg border-2 p-4 transition " +
+                      (intent === "book"
+                        ? "border-primary bg-primary/5"
+                        : "border-input bg-card hover:border-muted-foreground/40")
+                    }
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="send_as"
+                        checked={intent === "book"}
+                        onChange={() => setIntent("book")}
+                        className="h-4 w-4 accent-current"
+                      />
+                      <span className="text-sm font-semibold">Booking request</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      We&apos;ll confirm availability and the total with you — the date is reserved
+                      for you once it&apos;s confirmed.
+                    </span>
+                  </label>
+
+                  <label
+                    className={
+                      "flex cursor-pointer flex-col gap-1 rounded-lg border-2 p-4 transition " +
+                      (intent === "enquiry"
+                        ? "border-amber-500 bg-amber-50"
+                        : "border-input bg-card hover:border-muted-foreground/40")
+                    }
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="send_as"
+                        checked={intent === "enquiry"}
+                        onChange={() => setIntent("enquiry")}
+                        className="h-4 w-4 accent-amber-600"
+                      />
+                      <span className="text-sm font-semibold">Enquiry only</span>
+                    </span>
+                    <span
+                      className={
+                        "text-xs " +
+                        (intent === "enquiry" ? "text-amber-900" : "text-muted-foreground")
+                      }
+                    >
+                      Just a question about this date — the room is{" "}
+                      <strong>not held for you</strong>, and the date stays open to other bookings
+                      until you confirm one with us.
+                    </span>
+                  </label>
+                </div>
+              </fieldset>
+
               <Button
                 type="submit"
-                className="w-full"
+                className={
+                  "w-full " +
+                  (intent === "enquiry" ? "bg-amber-600 text-white hover:bg-amber-600/90" : "")
+                }
                 disabled={loading}
-                onClick={() => setIntent("book")}
               >
-                {loading && intent === "book" ? (
-                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />Submitting…</>
+                {loading ? (
+                  <><Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    {intent === "enquiry" ? "Sending enquiry…" : "Submitting request…"}</>
+                ) : intent === "enquiry" ? (
+                  "Send enquiry — room not held"
                 ) : (
-                  "Request booking"
+                  "Send booking request"
                 )}
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                Your request will be reviewed by our team. We&apos;ll be in touch to confirm availability and arrange payment.
+                {intent === "enquiry"
+                  ? "We'll reply with availability and prices. Nothing is booked and nothing is held."
+                  : "Your request will be reviewed by our team. We'll be in touch to confirm availability and arrange payment."}
               </p>
-
-              {/* Not ready to commit: the same details go to the club as a
-                  question, not a request — and nothing is held. */}
-              <div className="rounded-lg border border-dashed p-4 text-center">
-                <Button
-                  type="submit"
-                  variant="outline"
-                  className="w-full"
-                  disabled={loading}
-                  onClick={() => setIntent("enquiry")}
-                >
-                  {loading && intent === "enquiry" ? (
-                    <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sending…</>
-                  ) : (
-                    "Just send an enquiry instead"
-                  )}
-                </Button>
-                <p className="mt-2 text-xs text-amber-700">
-                  An enquiry does <strong>not</strong> hold the room — the date stays open to other
-                  bookings until you confirm one with us.
-                </p>
-              </div>
             </form>
           </CardContent>
         </Card>

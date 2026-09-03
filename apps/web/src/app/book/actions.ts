@@ -14,6 +14,7 @@ import {
 } from "@/lib/booking-time";
 import { bookingPeriod, FUNCTION_ROOM } from "@/lib/booking-types";
 import { upsertBookingContact } from "@/lib/booking-contacts";
+import { extraLabel, parseExtrasConfig, poundsLabel, priceExtras } from "@/lib/booking-extras";
 import { conflictOrMessage, slotHasConflict, SLOT_TAKEN_MESSAGE } from "@/lib/booking-conflict";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -124,6 +125,17 @@ export async function submitBooking(
   const estimatedGuests = estimatedGuestsRaw ? Number(estimatedGuestsRaw) : null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
+  // The club's party rule (Adam, 2026-09-03): no under-18 parties; an 18th
+  // carries a £200 security deposit, said again in the acknowledgement email.
+  // Checked here as well as in the form, because a form is only a suggestion.
+  const birthdayAgeRaw = String(formData.get("birthday_age") ?? "").trim();
+  const birthdayAge = birthdayAgeRaw ? Number(birthdayAgeRaw) : null;
+  const isBirthday = (occasion ?? "").toLowerCase().startsWith("birthday");
+  if (isBirthday && birthdayAge !== null && Number.isFinite(birthdayAge) && birthdayAge < 18) {
+    return { error: "Sorry — we don't take bookings for under-18 birthday parties." };
+  }
+  const eighteenth = isBirthday && birthdayAge === 18;
+
   if (!roomId) return { error: "Please select a room." };
   if (!date) return { error: "Please select a date." };
   if (!startTime) return { error: "Please enter a start time." };
@@ -144,7 +156,7 @@ export async function submitBooking(
 
   const { data: room, error: roomErr } = await admin
     .from("resources")
-    .select("id, name, price_pence_per_hour, price_pence_half_day, price_pence_full_day")
+    .select("id, name, price_pence_per_hour, price_pence_half_day, price_pence_full_day, extras_config")
     .eq("id", roomId)
     .eq("type", FUNCTION_ROOM)
     .eq("active", true)
@@ -163,6 +175,21 @@ export async function submitBooking(
   }
 
   const amountPence = calcAmount(room, startTime, endTime);
+
+  // Extras (Adam, 2026-09-03, reinstated): the browser sends labels, the
+  // server looks every price up in the room's own menu — a tampered form can
+  // rename nothing and discount nothing.
+  let extrasSelections: Record<string, string | boolean> = {};
+  try {
+    const raw = String(formData.get("extras_selected") ?? "");
+    if (raw) extrasSelections = JSON.parse(raw) as Record<string, string | boolean>;
+  } catch {
+    extrasSelections = {};
+  }
+  const { chosen: chosenExtras, totalPence: extrasTotal } = priceExtras(
+    parseExtrasConfig(room.extras_config),
+    extrasSelections,
+  );
 
   // The room's own contacts book — NOT the members database. The snapshot
   // columns below stay the record of who booked; this only groups their hires.
@@ -189,7 +216,12 @@ export async function submitBooking(
       estimated_guests: estimatedGuests,
       notes,
       status: isEnquiry ? "enquiry" : "pending",
-      total_pence: amountPence > 0 ? amountPence : null,
+      selected_extras: chosenExtras.length > 0 ? chosenExtras : [],
+      extras_total_pence: extrasTotal,
+      total_pence: amountPence + extrasTotal > 0 ? amountPence + extrasTotal : null,
+      // The 18th-birthday rule: £200, refundable, and on the record from the
+      // first moment rather than remembered at confirmation time.
+      security_deposit_pence: eighteenth ? 20000 : undefined,
       payment_status: "unpaid",
     })
     .select("id")
@@ -217,6 +249,10 @@ export async function submitBooking(
       ]);
       const siteUrl = getSiteUrl();
       const dateFormatted = formatBookingDate(date);
+      const extrasLine =
+        chosenExtras.length > 0
+          ? `<p>Extras: ${chosenExtras.map((e) => `${extraLabel(e)} — ${poundsLabel(e.price_pence)}`).join("; ")}</p>`
+          : "";
 
       let accessLine = `<p>You can track your booking and pay online any time in your portal.</p>
 <p><a href="${siteUrl}/portal" style="color:${brandColor};font-weight:600;">Open your booking portal →</a></p>`;
@@ -237,12 +273,16 @@ export async function submitBooking(
         ? `<p>Dear ${bookerFirstName},</p>
 <p>Thank you for your enquiry at ${club_name}. We've received it and will be in touch with availability and prices.</p>
 <p><strong>${room.name}</strong> · ${dateFormatted} · ${startTime}–${endTime}</p>
+${extrasLine}
 <p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>Please note: this is an enquiry only — the room is not held for you.</strong> The date stays open to other bookings until you confirm one with us.</p>
+${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, payable before the event and returned after it if all is well.</p>' : ''}
 ${accessLine}
 <p style="font-size:13px;color:#6b7280;">If you didn't send this enquiry, please contact us.</p>`
         : `<p>Dear ${bookerFirstName},</p>
 <p>Thank you for your booking request at ${club_name}. We've received it and will be in touch to confirm availability and the total cost.</p>
 <p><strong>${room.name}</strong> · ${dateFormatted} · ${startTime}–${endTime}</p>
+${extrasLine}
+${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, payable before the event and returned after it if all is well.</p>' : ''}
 ${accessLine}
 <p style="font-size:13px;color:#6b7280;">If you didn't make this request, please contact us.</p>`;
 
@@ -280,7 +320,12 @@ ${accessLine}
           endTime,
           occasion,
           estimatedGuests,
-          notes,
+          notes:
+            chosenExtras.length > 0
+              ? [`Extras: ${chosenExtras.map((e) => `${extraLabel(e)} — ${poundsLabel(e.price_pence)}`).join("; ")}`, notes]
+                  .filter(Boolean)
+                  .join("\n")
+              : notes,
           bookingUrl,
           brandColor,
           enquiry: isEnquiry,
