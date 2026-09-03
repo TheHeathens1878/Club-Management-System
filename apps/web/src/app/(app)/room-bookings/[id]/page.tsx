@@ -152,6 +152,13 @@ export default async function RoomBookingDetailPage({
               {(booking.member_discount_pence ?? 0) > 0 && (
                 <Detail label="Member discount" value={`−${formatCurrency(booking.member_discount_pence ?? 0)}`} />
               )}
+              {booking.team_name && <Detail label="Plays for" value={booking.team_name} />}
+              {booking.child_name && (
+                <Detail
+                  label="Club child"
+                  value={[booking.child_name, booking.child_team].filter(Boolean).join(' — ')}
+                />
+              )}
               {booking.is_member && (
                 <Detail
                   label="Club member"

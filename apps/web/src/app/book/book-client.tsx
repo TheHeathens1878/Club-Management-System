@@ -88,12 +88,16 @@ export function BookClient({
   // re-prices from the room's own config either way.
   const [extras, setExtras] = useState<Record<string, string | boolean>>({});
   const [notes, setNotes] = useState("");
-  // The club-family discount claim (Adam, 2026-09-03: "the child and child's
-  // team was for member discount"). A claim, not a price: the desk checks the
-  // child against the members list and applies the discount to the quote.
-  const [clubFamily, setClubFamily] = useState(false);
+  // The member-discount claim (Adam, 2026-09-03: "the child and child's team
+  // was for member discount" … "Players and social members also get member
+  // discount"). Three ways in, all claims, none priced automatically: the
+  // desk checks them against the club's records and records the discount at
+  // confirmation.
+  const [connection, setConnection] = useState<"none" | "family" | "player" | "social">("none");
   const [childName, setChildName] = useState("");
   const [childTeam, setChildTeam] = useState("");
+  const [playerTeam, setPlayerTeam] = useState("");
+  const [memberNumber, setMemberNumber] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -166,10 +170,14 @@ export function BookClient({
     if (estimatedGuests) fd.set("estimated_guests", estimatedGuests);
     fd.set("notes", notes);
     if (Object.keys(extras).length > 0) fd.set("extras_selected", JSON.stringify(extras));
-    if (clubFamily) {
-      fd.set("club_family", "yes");
-      fd.set("child_name", childName);
-      fd.set("child_team", childTeam);
+    if (connection !== "none") {
+      fd.set("club_connection", connection);
+      if (connection === "family") {
+        fd.set("child_name", childName);
+        fd.set("child_team", childTeam);
+      }
+      if (connection === "player") fd.set("player_team", playerTeam);
+      if (connection === "social") fd.set("member_number", memberNumber);
     }
 
     try {
@@ -523,23 +531,40 @@ export function BookClient({
                   keyboard and a screen reader get a real either/or, and the
                   one submit button says exactly which of the two it is about
                   to do. */}
-              <div className="space-y-3 rounded-lg border p-4">
-                <label className="flex items-start gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={clubFamily}
-                    onChange={(e) => setClubFamily(e.target.checked)}
-                    className="mt-0.5 h-4 w-4"
-                  />
-                  <span>
-                    <span className="font-medium">A child in my family plays for the club</span>
-                    <span className="block text-xs text-muted-foreground">
-                      Club families get a member discount — tell us who and we&apos;ll check and
-                      apply it to your price.
-                    </span>
-                  </span>
-                </label>
-                {clubFamily && (
+              <fieldset className="space-y-3 rounded-lg border p-4">
+                <legend className="px-1 text-sm font-medium">Club connection — member discount</legend>
+                <p className="text-xs text-muted-foreground">
+                  Players, parents of club players and social members all get a member discount.
+                  Tell us your connection and we&apos;ll check it and apply the discount to your
+                  price.
+                </p>
+                <select
+                  value={connection}
+                  onChange={(e) => setConnection(e.target.value as typeof connection)}
+                  aria-label="Club connection"
+                  className="h-10 w-full rounded-md border border-input bg-card px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="none">No club connection</option>
+                  <option value="player">I play for the club</option>
+                  <option value="family">A child in my family plays for the club</option>
+                  <option value="social">I&apos;m a social member</option>
+                </select>
+
+                {connection === "player" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="player_team">Your team *</Label>
+                    <Input
+                      id="player_team"
+                      value={playerTeam}
+                      onChange={(e) => setPlayerTeam(e.target.value)}
+                      placeholder="e.g. Vets"
+                      list="club-team-names"
+                      required
+                    />
+                  </div>
+                )}
+
+                {connection === "family" && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="child_name">Child&apos;s name *</Label>
@@ -561,15 +586,58 @@ export function BookClient({
                         list="club-team-names"
                         required
                       />
-                      <datalist id="club-team-names">
-                        {teamNames.map((name) => (
-                          <option key={name} value={name} />
-                        ))}
-                      </datalist>
                     </div>
                   </div>
                 )}
-              </div>
+
+                {connection === "social" && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="member_number">Membership number (if you have it)</Label>
+                    <Input
+                      id="member_number"
+                      value={memberNumber}
+                      onChange={(e) => setMemberNumber(e.target.value)}
+                      placeholder="Optional"
+                    />
+                  </div>
+                )}
+
+                <datalist id="club-team-names">
+                  {teamNames.map((name) => (
+                    <option key={name} value={name} />
+                  ))}
+                </datalist>
+              </fieldset>
+
+              {/* The estimated cost, always on show (Adam, 2026-09-03:
+                  "Build in the estimated costs") — the same tier maths the
+                  server re-runs, plus the extras, minus nothing: the member
+                  discount is applied by a person after the claim is checked,
+                  and the note says so. */}
+              {estimate !== null && estimate > 0 && (
+                <div className="rounded-lg border bg-muted/30 p-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Room hire ({startTime}–{endTime})</span>
+                    <span>{formatCurrency(estimate)}</span>
+                  </div>
+                  {extrasTotal > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Extras</span>
+                      <span>{formatCurrency(extrasTotal)}</span>
+                    </div>
+                  )}
+                  <div className="mt-1 flex justify-between border-t pt-1 font-semibold">
+                    <span>Estimated total</span>
+                    <span>{formatCurrency(estimate + extrasTotal)}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    An estimate, confirmed with your booking.
+                    {connection !== "none"
+                      ? " Your member discount is applied once we've checked your club connection."
+                      : ""}
+                  </p>
+                </div>
+              )}
 
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">
