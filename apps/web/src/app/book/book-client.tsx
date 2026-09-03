@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { submitBooking } from "./actions";
 import { formatCurrency } from "@/lib/utils";
 import { poundsLabel, type ExtraConfig } from "@/lib/booking-extras";
+import { roomHirePence } from "@/lib/room-pricing";
 
 type Room = {
   id: string;
@@ -18,6 +19,9 @@ type Room = {
   price_pence_per_hour: number | null;
   price_pence_half_day: number | null;
   price_pence_full_day: number | null;
+  standard_price_pence: number | null;
+  standard_hours: number | null;
+  extra_hour_pence: number | null;
   /** The room's optional extras (Adam, 2026-09-03, reinstated). */
   extras: ExtraConfig[];
 };
@@ -39,14 +43,9 @@ function toMin(t: string): number {
 
 function calcEstimate(room: Room, startTime: string, endTime: string): number | null {
   if (!startTime || !endTime) return null;
-  const startMin = toMin(startTime);
-  const endMin = toMin(endTime);
-  if (endMin <= startMin) return null;
-  const hours = (endMin - startMin) / 60;
-  if (hours >= 7 && room.price_pence_full_day) return room.price_pence_full_day;
-  if (hours >= 3.5 && room.price_pence_half_day) return room.price_pence_half_day;
-  if (room.price_pence_per_hour) return Math.ceil(hours * room.price_pence_per_hour);
-  return null;
+  // One set of maths for the estimate, the stored amount and the card
+  // (lib/room-pricing): £150 to 4½ hours, £25 per started half hour after.
+  return roomHirePence(room, startTime, endTime);
 }
 
 function getDayStatus(slots: BookedSlot[], roomId: string, dateStr: string): "free" | "partial" | "full" {

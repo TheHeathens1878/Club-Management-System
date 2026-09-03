@@ -15,6 +15,7 @@ import {
 import { bookingPeriod, FUNCTION_ROOM } from "@/lib/booking-types";
 import { upsertBookingContact } from "@/lib/booking-contacts";
 import { extraLabel, parseExtrasConfig, poundsLabel, priceExtras } from "@/lib/booking-extras";
+import { roomHirePence, type RoomPricingFields } from "@/lib/room-pricing";
 import { conflictOrMessage, slotHasConflict, SLOT_TAKEN_MESSAGE } from "@/lib/booking-conflict";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
@@ -71,31 +72,11 @@ function parseTime(t: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
-function calcAmount(
-  room: {
-    price_pence_per_hour: number | null;
-    price_pence_half_day: number | null;
-    price_pence_full_day: number | null;
-  },
-  startTime: string,
-  endTime: string
-): number {
-  const startMin = parseTime(startTime);
-  const endMin = parseTime(endTime);
-  const durationMins = endMin - startMin;
-  if (durationMins <= 0) return 0;
-  const durationHours = durationMins / 60;
-
-  if (durationHours >= 7 && room.price_pence_full_day) {
-    return room.price_pence_full_day;
-  }
-  if (durationHours >= 3.5 && room.price_pence_half_day) {
-    return room.price_pence_half_day;
-  }
-  if (room.price_pence_per_hour) {
-    return Math.ceil(durationHours * room.price_pence_per_hour);
-  }
-  return 0;
+function calcAmount(room: RoomPricingFields, startTime: string, endTime: string): number {
+  // The same maths the form's estimate uses (lib/room-pricing): the standard
+  // hire rule first — £150 to 4½ hours, £25 per started half hour after —
+  // then the per-hour tiers for a room priced that way.
+  return roomHirePence(room, startTime, endTime) ?? 0;
 }
 
 export async function submitBooking(
@@ -168,7 +149,7 @@ export async function submitBooking(
 
   const { data: room, error: roomErr } = await admin
     .from("resources")
-    .select("id, name, price_pence_per_hour, price_pence_half_day, price_pence_full_day, extras_config")
+    .select("id, name, price_pence_per_hour, price_pence_half_day, price_pence_full_day, standard_price_pence, standard_hours, extra_hour_pence, extras_config")
     .eq("id", roomId)
     .eq("type", FUNCTION_ROOM)
     .eq("active", true)
