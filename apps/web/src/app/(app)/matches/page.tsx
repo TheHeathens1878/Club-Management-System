@@ -1,18 +1,18 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarPlus, LandPlot, Wrench } from "lucide-react";
+import { CalendarPlus, LandPlot } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { LinkRow } from "@/components/link-row";
 import { Card, CardContent } from "@/components/ui/card";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
 import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
+import { instantToLocal } from "@/lib/booking-time";
 import { createClient } from "@/lib/supabase/server";
 
-import { ManageMatchesPanel } from "./manage-matches-panel";
+import { MatchesDesk, type DeskRow } from "./matches-desk";
 
 /**
  * Matches — the Matchday desk (spec §2). A coach sees their teams, an admin
@@ -83,6 +83,32 @@ export default async function MatchesPage({
     (row) => period !== "results" && row.squad > 0 && row.accepted * 2 < row.squad,
   ).length;
 
+  // The desk's rows, formatted once on the server: London wall clock for the
+  // display strings, the ISO day for the date-range filter, and one honest
+  // word for the pitch column.
+  const deskRows: DeskRow[] = fixtures.map((row) => {
+    const local = instantToLocal(row.kickoff_at);
+    return {
+      id: row.fixture_id,
+      eventId: row.event_id,
+      teamId: row.team_id,
+      teamName: row.team_name,
+      opponent: row.opponent,
+      isHome: row.is_home,
+      competition: row.competition ?? "League",
+      status: row.status,
+      date: formatEventDate(row.kickoff_at),
+      time: formatEventTime(row.kickoff_at),
+      dateIso: local.date,
+      pitch: !row.is_home ? "Away" : row.pitch_name ?? "Unallocated",
+      allocated: row.allocated === true,
+      venueText: row.venue_text ?? null,
+      accepted: row.accepted,
+      declined: row.declined,
+      squad: row.squad,
+    };
+  });
+
   const tabs: { key: Period; label: string }[] = [
     { key: "weekend", label: "This weekend" },
     { key: "month", label: "Next 4 weeks" },
@@ -148,37 +174,6 @@ export default async function MatchesPage({
           </span>
         </div>
 
-        {/* Bulk cancel, delete and kick-off (Adam, 2026-09-02). Shut until an
-            administrator opens it — the desk's ordinary job is reading, and a
-            page of checkboxes is a different page. Admin only, and only under
-            the admin hat: an administrator reading the desk as a coach sees
-            what a coach sees, the rule every other screen here follows. */}
-        {capabilities.isClubAdmin && (view === "admin" || view === null) && fixtures.length > 0 && (
-          <details className="rounded-xl border bg-card">
-            <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
-              <Wrench className="h-4 w-4 text-muted-foreground" />
-              Manage these matches
-              <span className="text-xs font-normal text-muted-foreground">
-                cancel, delete or set a kick-off for several at once
-              </span>
-            </summary>
-            <div className="border-t p-4">
-              <ManageMatchesPanel
-                heading={`${fixtures.length} ${fixtures.length === 1 ? "match" : "matches"} in this window`}
-                matches={fixtures.map((row) => ({
-                  id: row.fixture_id,
-                  kickoffAt: row.kickoff_at,
-                  isHome: row.is_home,
-                  opponent: row.opponent,
-                  status: row.status,
-                  teamName: row.team_name,
-                  hasPitch: row.allocated === true,
-                }))}
-              />
-            </div>
-          </details>
-        )}
-
         {error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             Could not load the fixtures: {error.message}
@@ -196,137 +191,11 @@ export default async function MatchesPage({
             </CardContent>
           </Card>
         ) : (
-          <>
-            {/* Phone: the fixture table as a stack of cards (mobile design —
-                kick-off and fixture on the card, pitch and replies as pills).
-                The soonest fixture keeps the accent border the artboards give
-                the next match. */}
-            <div className="space-y-3 lg:hidden">
-              {fixtures.map((row, index) => {
-                const short = row.squad > 0 && row.accepted * 2 < row.squad;
-                const focus = period !== "results" && index === 0;
-                return (
-                  <Link
-                    key={row.fixture_id}
-                    href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
-                    className={
-                      "block rounded-xl border bg-card p-4 " + (focus ? "border-primary/40" : "")
-                    }
-                  >
-                    <p
-                      className={
-                        "font-display text-[9px] font-medium uppercase tracking-[0.16em] " +
-                        (focus ? "text-primary" : "text-muted-foreground")
-                      }
-                    >
-                      {focus ? "Next up · " : ""}
-                      {formatEventDate(row.kickoff_at)} · {formatEventTime(row.kickoff_at)}
-                    </p>
-                    <p className="mt-2 text-[15px] font-semibold leading-tight">
-                      {row.team_name} v {row.opponent}
-                    </p>
-                    <p className="mt-1 text-[12.5px] leading-tight text-muted-foreground">
-                      {row.is_home ? "Home" : `Away${row.venue_text ? ` · ${row.venue_text}` : ""}`}
-                      {" · "}
-                      {row.competition ?? "League"}
-                      {row.status !== "scheduled" ? ` · ${row.status}` : ""}
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-1.5">
-                      {!row.is_home ? (
-                        <Badge variant="muted">Away</Badge>
-                      ) : row.pitch_name ? (
-                        <Badge variant={row.allocated ? "outline" : "warning"}>
-                          {row.pitch_name}
-                          {!row.allocated ? " · not booked" : ""}
-                        </Badge>
-                      ) : (
-                        <Badge variant="warning">Unallocated</Badge>
-                      )}
-                      <Badge variant={short ? "destructive" : row.accepted > 0 ? "success" : "muted"}>
-                        {row.accepted} of {row.squad} in
-                      </Badge>
-                      {row.declined > 0 ? (
-                        <Badge variant="muted">{row.declined} out</Badge>
-                      ) : null}
-                    </div>
-                  </Link>
-                );
-              })}
-            </div>
-
-            <Card className="hidden lg:block">
-              <CardContent className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="border-b bg-secondary/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                        <th className="px-4 py-2 font-medium">Kick-off</th>
-                        <th className="px-4 py-2 font-medium">Fixture</th>
-                        <th className="px-4 py-2 font-medium">Competition</th>
-                        <th className="px-4 py-2 font-medium">Pitch</th>
-                        <th className="px-4 py-2 font-medium">Replies</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {fixtures.map((row) => {
-                        const short = row.squad > 0 && row.accepted * 2 < row.squad;
-                        return (
-                          <LinkRow
-                            key={row.fixture_id}
-                            href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
-                            className="border-b last:border-b-0 hover:bg-secondary/40"
-                          >
-                            <td className="px-4 py-3 align-top text-muted-foreground">
-                              <span className="font-semibold">{formatEventDate(row.kickoff_at)}</span>
-                              <br />
-                              {formatEventTime(row.kickoff_at)}
-                            </td>
-                            <td className="px-4 py-3 align-top">
-                              <Link
-                                href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
-                                className="font-semibold hover:underline"
-                              >
-                                {row.team_name} v {row.opponent}
-                              </Link>
-                              <span className="block text-xs text-muted-foreground">
-                                {row.is_home ? "Home" : `Away${row.venue_text ? ` · ${row.venue_text}` : ""}`}
-                                {row.status !== "scheduled" ? ` · ${row.status}` : ""}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 align-top">{row.competition ?? "League"}</td>
-                            <td className="px-4 py-3 align-top">
-                              {!row.is_home ? (
-                                <span className="text-muted-foreground">Away</span>
-                              ) : row.pitch_name ? (
-                                <span>
-                                  {row.pitch_name}
-                                  {!row.allocated ? (
-                                    <span className="block text-xs text-amber-700">not booked</span>
-                                  ) : null}
-                                </span>
-                              ) : (
-                                <span className="text-amber-700">Unallocated</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 align-top">
-                              <Badge variant={short ? "destructive" : row.accepted > 0 ? "success" : "muted"}>
-                                {row.accepted} of {row.squad}
-                              </Badge>
-                              {row.declined > 0 ? (
-                                <span className="ml-2 text-xs text-muted-foreground">
-                                  {row.declined} out
-                                </span>
-                              ) : null}
-                            </td>
-                          </LinkRow>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
-          </>
+          <MatchesDesk
+            rows={deskRows}
+            canManage={capabilities.isClubAdmin && (view === "admin" || view === null)}
+            focusFirst={period !== "results"}
+          />
         )}
 
         <p className="text-xs text-muted-foreground">
