@@ -2,6 +2,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
 import { BookClient } from "./book-client";
 import { parseExtrasConfig } from "@/lib/booking-extras";
+import { standardHireSentence } from "@/lib/room-pricing";
 import { formatCurrency } from "@/lib/utils";
 import { Users, Clock, Info } from "lucide-react";
 import { addDays, instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
@@ -15,7 +16,7 @@ export default async function BookPage() {
 
   const { data: rooms } = await admin
     .from("resources")
-    .select("id, name, description, capacity, price_pence_per_hour, price_pence_half_day, price_pence_full_day, price_pence_fixed, price_note, extras_config")
+    .select("id, name, description, capacity, price_pence_per_hour, price_pence_half_day, price_pence_full_day, price_pence_fixed, price_note, extras_config, standard_price_pence, standard_hours, extra_hour_pence")
     .eq("type", FUNCTION_ROOM)
     .eq("active", true)
     .order("sort_order");
@@ -65,6 +66,9 @@ export default async function BookPage() {
     price_pence_full_day: r.price_pence_full_day ?? null,
     price_pence_fixed: r.price_pence_fixed,
     price_note: r.price_note,
+    standard_price_pence: r.standard_price_pence ?? null,
+    standard_hours: r.standard_hours ?? null,
+    extra_hour_pence: r.extra_hour_pence ?? null,
     extras: parseExtrasConfig(r.extras_config).filter((extra) => extra.active),
   }));
 
@@ -131,11 +135,17 @@ export default async function BookPage() {
                   </span>
                 )}
               </div>
-              {(room.price_pence_fixed || room.price_pence_per_hour || room.price_pence_half_day || room.price_pence_full_day) && (
+              {(standardHireSentence(room) || room.price_pence_fixed || room.price_pence_per_hour || room.price_pence_half_day || room.price_pence_full_day) && (
                 <div className="mt-4 space-y-1 border-t pt-4">
                   <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Pricing</p>
+                  {standardHireSentence(room) && (
+                    <p className="flex items-start gap-1.5 text-sm font-medium">
+                      <Clock className="h-3.5 w-3.5 shrink-0 mt-1 text-muted-foreground" />
+                      {standardHireSentence(room)}
+                    </p>
+                  )}
                   <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                    {room.price_pence_fixed && (
+                    {!standardHireSentence(room) && room.price_pence_fixed && (
                       <span className="flex items-center gap-1.5 font-medium">
                         <Clock className="h-3.5 w-3.5 text-muted-foreground" />
                         {formatCurrency(room.price_pence_fixed)}
