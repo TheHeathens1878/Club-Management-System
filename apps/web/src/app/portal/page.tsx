@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { extrasSummary } from "@/lib/booking-extras";
 import { getSessionProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
@@ -40,7 +41,7 @@ export default async function PortalPage({
   // — they live on /pitches/mine, not in the hirer portal.
   const { data: bookings } = await admin
     .from("bookings")
-    .select("id,starts_at,ends_at,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources!inner(name,type)")
+    .select("id,starts_at,ends_at,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,selected_extras,security_deposit_pence,resources!inner(name,type)")
     .eq("booker_profile_id", session.userId)
     .eq("resources.type", "function_room")
     .order("starts_at", { ascending: true });
@@ -124,6 +125,17 @@ export default async function PortalPage({
                   </span>
                 </div>
 
+                {extrasSummary(b.selected_extras) && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Extras: {extrasSummary(b.selected_extras)}
+                  </p>
+                )}
+                {(b.security_deposit_pence ?? 0) > 0 && (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    A refundable £{((b.security_deposit_pence ?? 0) / 100).toFixed(0)} security
+                    deposit applies (18th birthday), payable before the event.
+                  </p>
+                )}
                 {status === "enquiry" && (
                   <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
                     This is an enquiry only — the room is <strong>not held</strong> for you, and
