@@ -59,7 +59,15 @@ function getDayStatus(slots: BookedSlot[], roomId: string, dateStr: string): "fr
 function pad2(n: number) { return String(n).padStart(2, "0"); }
 function dateStr(d: Date) { return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`; }
 
-export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots: BookedSlot[] }) {
+export function BookClient({
+  rooms,
+  bookedSlots,
+  teamNames = [],
+}: {
+  rooms: Room[];
+  bookedSlots: BookedSlot[];
+  teamNames?: string[];
+}) {
   const router = useRouter();
   const today = new Date();
   const [viewDate, setViewDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
@@ -80,6 +88,12 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
   // re-prices from the room's own config either way.
   const [extras, setExtras] = useState<Record<string, string | boolean>>({});
   const [notes, setNotes] = useState("");
+  // The club-family discount claim (Adam, 2026-09-03: "the child and child's
+  // team was for member discount"). A claim, not a price: the desk checks the
+  // child against the members list and applies the discount to the quote.
+  const [clubFamily, setClubFamily] = useState(false);
+  const [childName, setChildName] = useState("");
+  const [childTeam, setChildTeam] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -114,7 +128,7 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
   // "book" secures a slot (pending, conflict-checked); "enquiry" holds
   // NOTHING and says so everywhere (Adam, 2026-09-03, reinstated from the
   // old room app). Set by whichever button submits the form.
-  const [intent, setIntent] = useState<"book" | "enquiry">("book");
+  const [intent, setIntent] = useState<"book" | "enquiry">("enquiry");
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -152,6 +166,11 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
     if (estimatedGuests) fd.set("estimated_guests", estimatedGuests);
     fd.set("notes", notes);
     if (Object.keys(extras).length > 0) fd.set("extras_selected", JSON.stringify(extras));
+    if (clubFamily) {
+      fd.set("club_family", "yes");
+      fd.set("child_name", childName);
+      fd.set("child_team", childTeam);
+    }
 
     try {
       const result = await submitBooking(fd);
@@ -504,34 +523,59 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
                   keyboard and a screen reader get a real either/or, and the
                   one submit button says exactly which of the two it is about
                   to do. */}
+              <div className="space-y-3 rounded-lg border p-4">
+                <label className="flex items-start gap-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={clubFamily}
+                    onChange={(e) => setClubFamily(e.target.checked)}
+                    className="mt-0.5 h-4 w-4"
+                  />
+                  <span>
+                    <span className="font-medium">A child in my family plays for the club</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Club families get a member discount — tell us who and we&apos;ll check and
+                      apply it to your price.
+                    </span>
+                  </span>
+                </label>
+                {clubFamily && (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="child_name">Child&apos;s name *</Label>
+                      <Input
+                        id="child_name"
+                        value={childName}
+                        onChange={(e) => setChildName(e.target.value)}
+                        placeholder="e.g. Alex Smith"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="child_team">Their team *</Label>
+                      <Input
+                        id="child_team"
+                        value={childTeam}
+                        onChange={(e) => setChildTeam(e.target.value)}
+                        placeholder="e.g. U12 Lions"
+                        list="club-team-names"
+                        required
+                      />
+                      <datalist id="club-team-names">
+                        {teamNames.map((name) => (
+                          <option key={name} value={name} />
+                        ))}
+                      </datalist>
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">
                   What would you like to send?
                 </legend>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <label
-                    className={
-                      "flex cursor-pointer flex-col gap-1 rounded-lg border-2 p-4 transition " +
-                      (intent === "book"
-                        ? "border-primary bg-primary/5"
-                        : "border-input bg-card hover:border-muted-foreground/40")
-                    }
-                  >
-                    <span className="flex items-center gap-2">
-                      <input
-                        type="radio"
-                        name="send_as"
-                        checked={intent === "book"}
-                        onChange={() => setIntent("book")}
-                        className="h-4 w-4 accent-current"
-                      />
-                      <span className="text-sm font-semibold">Booking request</span>
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      We&apos;ll confirm availability and the total with you — the date is reserved
-                      for you once it&apos;s confirmed.
-                    </span>
-                  </label>
 
                   <label
                     className={
@@ -560,6 +604,29 @@ export function BookClient({ rooms, bookedSlots }: { rooms: Room[]; bookedSlots:
                       Just a question about this date — the room is{" "}
                       <strong>not held for you</strong>, and the date stays open to other bookings
                       until you confirm one with us.
+                    </span>
+                  </label>
+                  <label
+                    className={
+                      "flex cursor-pointer flex-col gap-1 rounded-lg border-2 p-4 transition " +
+                      (intent === "book"
+                        ? "border-primary bg-primary/5"
+                        : "border-input bg-card hover:border-muted-foreground/40")
+                    }
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="send_as"
+                        checked={intent === "book"}
+                        onChange={() => setIntent("book")}
+                        className="h-4 w-4 accent-current"
+                      />
+                      <span className="text-sm font-semibold">Booking request</span>
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      We&apos;ll confirm availability and the total with you — the date is reserved
+                      for you once it&apos;s confirmed and the deposit is paid.
                     </span>
                   </label>
                 </div>

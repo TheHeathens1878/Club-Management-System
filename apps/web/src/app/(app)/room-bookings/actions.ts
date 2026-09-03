@@ -50,7 +50,7 @@ async function requireCommittee() {
 
 export async function confirmBooking(
   bookingId: string,
-  opts?: { totalPence?: number | null; depositPence?: number | null },
+  opts?: { totalPence?: number | null; depositPence?: number | null; memberDiscountPence?: number | null },
 ): Promise<{ error?: string }> {
   const session = await requireStaff();
   const admin = createAdminClient();
@@ -100,6 +100,11 @@ export async function confirmBooking(
       status: "confirmed",
       total_pence: totalPence,
       deposit_pence: depositPence,
+      // The club-family discount, once the desk has checked the claimed
+      // child against the members list (Adam, 2026-09-03: "the child and
+      // child's team was for member discount"). Informational beside the
+      // total the staff typed, which is already the discounted price.
+      ...(opts?.memberDiscountPence != null ? { member_discount_pence: opts.memberDiscountPence } : {}),
       deposit_due_date: depositDueStr,
       balance_due_date: balanceDueStr,
       ...(calEventId ? { calendar_event_id: calEventId } : {}),
