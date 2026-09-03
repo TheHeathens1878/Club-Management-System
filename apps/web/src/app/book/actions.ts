@@ -125,11 +125,17 @@ export async function submitBooking(
   const estimatedGuests = estimatedGuestsRaw ? Number(estimatedGuestsRaw) : null;
   const notes = String(formData.get("notes") ?? "").trim() || null;
 
-  // The club-family discount claim: recorded on the booking for the desk to
-  // verify against the members list — never priced automatically.
-  const clubFamily = String(formData.get("club_family") ?? "") === "yes";
-  const childName = clubFamily ? String(formData.get("child_name") ?? "").trim() || null : null;
-  const childTeam = clubFamily ? String(formData.get("child_team") ?? "").trim() || null : null;
+  // The member-discount claim — three kinds (Adam: players, club families
+  // and social members all qualify). Recorded on the booking for the desk to
+  // verify against the club's records — never priced automatically.
+  const connectionRaw = String(formData.get("club_connection") ?? "");
+  const connection = ["family", "player", "social"].includes(connectionRaw) ? connectionRaw : null;
+  const childName = connection === "family" ? String(formData.get("child_name") ?? "").trim() || null : null;
+  const childTeam = connection === "family" ? String(formData.get("child_team") ?? "").trim() || null : null;
+  const playerTeam = connection === "player" ? String(formData.get("player_team") ?? "").trim() || null : null;
+  const memberNumber = connection === "social" ? String(formData.get("member_number") ?? "").trim() || null : null;
+  const membershipType =
+    connection === "player" ? "player" : connection === "family" ? "club family" : connection === "social" ? "social member" : null;
 
   // The club's party rule (Adam, 2026-09-03): no under-18 parties; an 18th
   // carries a £200 security deposit, said again in the acknowledgement email.
@@ -228,9 +234,15 @@ export async function submitBooking(
       // The 18th-birthday rule: £200, refundable, and on the record from the
       // first moment rather than remembered at confirmation time.
       security_deposit_pence: eighteenth ? 20000 : undefined,
-      is_member: clubFamily,
+      is_member: connection !== null,
+      membership_type: membershipType,
+      member_number: memberNumber,
+      team_name: playerTeam,
       child_name: childName,
       child_team: childTeam,
+      // The split behind total_pence, for the desk (Adam: "Build in the
+      // estimated costs"): the tiered room hire and the extras, separately.
+      base_hire_pence: amountPence,
       payment_status: "unpaid",
     })
     .select("id")
@@ -258,6 +270,10 @@ export async function submitBooking(
       ]);
       const siteUrl = getSiteUrl();
       const dateFormatted = formatBookingDate(date);
+      const estimateLine =
+        amountPence + extrasTotal > 0
+          ? `<p>Estimated total: <strong>${poundsLabel(amountPence + extrasTotal)}</strong>${extrasTotal > 0 ? ` (room hire ${poundsLabel(amountPence)} + extras ${poundsLabel(extrasTotal)})` : ""} — confirmed with your booking${connection ? ", and your member discount is applied once we have checked your club connection" : ""}.</p>`
+          : "";
       const extrasLine =
         chosenExtras.length > 0
           ? `<p>Extras: ${chosenExtras.map((e) => `${extraLabel(e)} — ${poundsLabel(e.price_pence)}`).join("; ")}</p>`
@@ -283,6 +299,7 @@ export async function submitBooking(
 <p>Thank you for your enquiry at ${club_name}. We've received it and will be in touch with availability and prices.</p>
 <p><strong>${room.name}</strong> · ${dateFormatted} · ${startTime}–${endTime}</p>
 ${extrasLine}
+${estimateLine}
 <p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>Please note: this is an enquiry only — the room is not held for you.</strong> The date stays open to other bookings until you confirm one with us.</p>
 ${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, payable before the event and returned after it if all is well.</p>' : ''}
 ${accessLine}
@@ -291,6 +308,7 @@ ${accessLine}
 <p>Thank you for your booking request at ${club_name}. We've received it and will be in touch to confirm availability and the total cost.</p>
 <p><strong>${room.name}</strong> · ${dateFormatted} · ${startTime}–${endTime}</p>
 ${extrasLine}
+${estimateLine}
 ${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, payable before the event and returned after it if all is well.</p>' : ''}
 ${accessLine}
 <p style="font-size:13px;color:#6b7280;">If you didn't make this request, please contact us.</p>`;
@@ -331,9 +349,13 @@ ${accessLine}
           estimatedGuests,
           notes:
             [
-              clubFamily
-                ? `Club-family discount claimed: ${childName ?? "?"} (${childTeam ?? "team not given"}) — check before quoting.`
-                : null,
+              connection === "family"
+                ? `Member discount claimed (club family): ${childName ?? "?"} (${childTeam ?? "team not given"}) — check before quoting.`
+                : connection === "player"
+                  ? `Member discount claimed (plays for the club: ${playerTeam ?? "team not given"}) — check before quoting.`
+                  : connection === "social"
+                    ? `Member discount claimed (social member${memberNumber ? `, no. ${memberNumber}` : ""}) — check before quoting.`
+                    : null,
               chosenExtras.length > 0
                 ? `Extras: ${chosenExtras.map((e) => `${extraLabel(e)} — ${poundsLabel(e.price_pence)}`).join("; ")}`
                 : null,
