@@ -102,6 +102,14 @@ export async function submitBooking(
 ): Promise<{ id: string } | { url: string } | { error: string }> {
   const admin = createAdminClient();
 
+  // "Just send an enquiry" (Adam, 2026-09-03: reinstated from the old room
+  // app): the same details, but the row is written as status 'enquiry' —
+  // which `bookings_no_overlap` and `booking_has_conflict()` both ignore, so
+  // it HOLDS NOTHING, and every word to the booker says so. It follows that
+  // an enquiry is allowed about a date somebody else has taken: asking is
+  // free, and the club answers.
+  const isEnquiry = String(formData.get("intent") ?? "") === "enquiry";
+
   const roomId = String(formData.get("room_id") ?? "").trim();
   const date = String(formData.get("date") ?? "").trim();
   const startTime = String(formData.get("start_time") ?? "").trim();
@@ -148,8 +156,9 @@ export async function submitBooking(
 
   // `booking_has_conflict()` applies exactly the rule `bookings_no_overlap`
   // enforces, so the answer here and the constraint below cannot disagree
-  // about an edge; the constraint still guards against a race.
-  if (await slotHasConflict(admin, { resourceId: roomId, startsAt, endsAt })) {
+  // about an edge; the constraint still guards against a race. An enquiry
+  // skips it: it takes no slot, so there is nothing to conflict with.
+  if (!isEnquiry && (await slotHasConflict(admin, { resourceId: roomId, startsAt, endsAt }))) {
     return { error: SLOT_TAKEN_MESSAGE };
   }
 
@@ -179,7 +188,7 @@ export async function submitBooking(
       occasion,
       estimated_guests: estimatedGuests,
       notes,
-      status: "pending",
+      status: isEnquiry ? "enquiry" : "pending",
       total_pence: amountPence > 0 ? amountPence : null,
       payment_status: "unpaid",
     })
@@ -224,7 +233,14 @@ export async function submitBooking(
         }
       }
 
-      const intro = `<p>Dear ${bookerFirstName},</p>
+      const intro = isEnquiry
+        ? `<p>Dear ${bookerFirstName},</p>
+<p>Thank you for your enquiry at ${club_name}. We've received it and will be in touch with availability and prices.</p>
+<p><strong>${room.name}</strong> · ${dateFormatted} · ${startTime}–${endTime}</p>
+<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>Please note: this is an enquiry only — the room is not held for you.</strong> The date stays open to other bookings until you confirm one with us.</p>
+${accessLine}
+<p style="font-size:13px;color:#6b7280;">If you didn't send this enquiry, please contact us.</p>`
+        : `<p>Dear ${bookerFirstName},</p>
 <p>Thank you for your booking request at ${club_name}. We've received it and will be in touch to confirm availability and the total cost.</p>
 <p><strong>${room.name}</strong> · ${dateFormatted} · ${startTime}–${endTime}</p>
 ${accessLine}
@@ -232,9 +248,13 @@ ${accessLine}
 
       await sendEmail({
         to: bookerEmail,
-        subject: `${club_name} — booking request received`,
+        subject: isEnquiry
+          ? `${club_name} — enquiry received (room not held)`
+          : `${club_name} — booking request received`,
         html: bookerEmailHtml(intro, brandColor, club_name),
-        text: `Thank you for your booking request at ${club_name}. ${room.name} on ${dateFormatted}, ${startTime}-${endTime}. Access your portal: ${siteUrl}/portal`,
+        text: isEnquiry
+          ? `Thank you for your enquiry at ${club_name}. ${room.name} on ${dateFormatted}, ${startTime}-${endTime}. Please note: this is an enquiry only - the room is NOT held for you until a booking is confirmed. Your portal: ${siteUrl}/portal`
+          : `Thank you for your booking request at ${club_name}. ${room.name} on ${dateFormatted}, ${startTime}-${endTime}. Access your portal: ${siteUrl}/portal`,
       });
     } catch (e) {
       console.error("[room-booking] Booker email failed:", e);
@@ -263,6 +283,7 @@ ${accessLine}
           notes,
           bookingUrl,
           brandColor,
+          enquiry: isEnquiry,
         });
         await sendEmail({ to: staffEmails, ...tpl });
       }

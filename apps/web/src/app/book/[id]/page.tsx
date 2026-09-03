@@ -32,18 +32,30 @@ export default async function BookingConfirmationPage({
     .maybeSingle();
 
   const shortRef = booking.id.slice(0, 8).toUpperCase();
+  const isEnquiry = booking.status === "enquiry";
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10 py-12 px-4">
       <div className="mx-auto max-w-lg">
         <div className="rounded-xl border bg-card p-8 shadow-sm text-center">
           <div className="mb-4 flex justify-center">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
-              <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+            <div
+              className={
+                "flex h-16 w-16 items-center justify-center rounded-full " +
+                (isEnquiry ? "bg-amber-100" : "bg-emerald-100")
+              }
+            >
+              {isEnquiry ? (
+                <Clock className="h-8 w-8 text-amber-600" />
+              ) : (
+                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+              )}
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold tracking-tight">Booking Request Received</h1>
+          <h1 className="text-2xl font-bold tracking-tight">
+            {isEnquiry ? "Enquiry Sent" : "Booking Request Received"}
+          </h1>
           <p className="mt-2 text-sm text-muted-foreground">
             Reference: <span className="font-mono font-semibold text-foreground">#{shortRef}</span>
           </p>
@@ -92,12 +104,26 @@ export default async function BookingConfirmationPage({
             )}
           </div>
 
-          <div className="mt-6 rounded-lg bg-primary/5 border border-primary/20 p-4">
-            <p className="text-sm text-foreground">
-              Your booking request has been received. We&apos;ll be in touch at{" "}
-              <span className="font-semibold">{booking.booker_email}</span> to confirm availability and next steps.
-            </p>
-          </div>
+          {isEnquiry ? (
+            <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-left">
+              <p className="text-sm font-semibold text-amber-900">
+                The room is not held for you.
+              </p>
+              <p className="mt-1 text-sm text-amber-900">
+                This is an enquiry only — the date stays open to other bookings until you confirm
+                one with us. We&apos;ll reply at{" "}
+                <span className="font-semibold">{booking.booker_email}</span> with availability
+                and prices.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-lg bg-primary/5 border border-primary/20 p-4">
+              <p className="text-sm text-foreground">
+                Your booking request has been received. We&apos;ll be in touch at{" "}
+                <span className="font-semibold">{booking.booker_email}</span> to confirm availability and next steps.
+              </p>
+            </div>
+          )}
 
           <div className="mt-8 flex flex-col gap-2">
             <Link

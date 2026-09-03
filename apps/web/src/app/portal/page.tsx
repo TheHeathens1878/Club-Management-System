@@ -116,9 +116,20 @@ export default async function PortalPage({
                       : confirmed ? "bg-green-100 text-green-700"
                       : "bg-amber-100 text-amber-700"
                   }`}>
-                    {status === "pending" ? "Awaiting confirmation" : status}
+                    {status === "pending"
+                      ? "Awaiting confirmation"
+                      : status === "enquiry"
+                        ? "Enquiry — room not held"
+                        : status}
                   </span>
                 </div>
+
+                {status === "enquiry" && (
+                  <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                    This is an enquiry only — the room is <strong>not held</strong> for you, and
+                    the date stays open to other bookings until the club confirms one with you.
+                  </p>
+                )}
 
                 {confirmed && total > 0 && (
                   <>

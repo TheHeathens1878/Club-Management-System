@@ -160,9 +160,12 @@ export async function roomBookingNotificationEmail(params: {
   notes: string | null;
   bookingUrl: string;
   brandColor?: string;
+  /** An enquiry only — the slot is not held, and the subject line says so. */
+  enquiry?: boolean;
 }) {
   const color = params.brandColor ?? DEFAULT_COLOR;
   const { club_name } = await getSettings();
+  const kind = params.enquiry ? "enquiry" : "booking request";
 
   const rows = [
     { label: "Booker", value: params.bookerName },
@@ -182,7 +185,7 @@ export async function roomBookingNotificationEmail(params: {
   </table>`;
 
   const html = await layout(`
-    <p style="margin:0 0 16px;font-size:15px;color:#374151;">A new room booking request has been received.</p>
+    <p style="margin:0 0 16px;font-size:15px;color:#374151;">A new room ${kind} has been received.${params.enquiry ? " It does not hold the slot — the date stays open until someone confirms a booking." : ""}</p>
     ${table}
     <table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 16px;">
       <tr><td style="background:${color};border-radius:8px;padding:12px 28px;">
@@ -194,8 +197,8 @@ export async function roomBookingNotificationEmail(params: {
   const textRows = rows.map((r) => `  ${r.label}: ${r.value}`).join("\n");
 
   return {
-    subject: `New room booking request — ${params.bookerName} (${params.date})`,
+    subject: `New room ${kind} — ${params.bookerName} (${params.date})`,
     html,
-    text: `New room booking request\n\n${textRows}\n\nView: ${params.bookingUrl}`,
+    text: `New room ${kind}\n\n${textRows}\n\nView: ${params.bookingUrl}`,
   };
 }
