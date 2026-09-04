@@ -13,6 +13,7 @@ export type TemplateKey =
   | "room_booking_quote"
   | "quote_followup"
   | "room_booking_thank_you"
+  | "fixture_reallocated"
   | "password_set";
 
 export type TemplateVariable = {
@@ -233,6 +234,26 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
 <p>Please settle the remaining balance:</p>
 <p><a href="{{portal_url}}">Pay your balance</a></p>
 <p>If you have already paid in full, please disregard this message.</p>`,
+  },
+
+  fixture_reallocated: {
+    name: "Fixture Reallocated",
+    description:
+      "Sent to a team's coaches when a game they already had a pitch for is moved — a different pitch, kick-off, or both.",
+    variables: [
+      { key: "team_name", label: "Team name", example: "U12 Titans" },
+      {
+        key: "changes",
+        label: "The moved games, one per line",
+        example:
+          "Sat 6 Sep, 09:30 v Timperley FC — Ashton Park – Pitch 1 → Dainewell Park – Pitch 2",
+      },
+    ],
+    defaultSubject: (c) => `${c} — {{team_name}}: a game has moved`,
+    defaultBody: (c) => `<p>Hello,</p>
+<p>The following {{team_name}} home game(s) have been moved on the ${c} pitch calendar:</p>
+<p>{{changes}}</p>
+<p>The team's diary and everyone's notifications follow automatically — this is just so it never catches you out on the day.</p>`,
   },
 
   password_set: {
