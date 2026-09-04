@@ -105,8 +105,8 @@ select has_table('public', 'person_roles', 'public.person_roles exists');
 select enum_has_labels(
   'public', 'app_role',
   array['club_admin', 'safeguarding_lead', 'coach', 'staff', 'member',
-        'parent', 'hirer', 'referee'],
-  'app_role carries the seven §1.3 roles plus the 2026-08-25 referee hat'
+        'parent', 'hirer', 'referee', 'finance'],
+  'app_role carries the seven §1.3 roles plus the 2026-08-25 referee hat and the 2026-09-04 finance hat'
 );
 
 -- 3 — a SEPARATE type from the baseline's user_role, which is untouched.

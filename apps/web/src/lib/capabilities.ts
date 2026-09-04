@@ -106,6 +106,7 @@ export const getCapabilities = cache(async function getCapabilities(): Promise<C
     isTeamStaff: flag(row, "is_team_staff"),
     hasPlayerMembership: flag(row, "has_player_membership"),
     isGuardian: flag(row, "is_guardian"),
+    hasFinanceRole: flag(row, "has_finance_role"),
     hasWaitingListAccess: flag(row, "has_waiting_list_access"),
     staffTeams: teams(row, "staff_teams"),
     playerTeams: teams(row, "player_teams"),

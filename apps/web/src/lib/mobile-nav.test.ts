@@ -21,6 +21,7 @@ function guardian(overrides: Partial<Capabilities> = {}): Capabilities {
     isTeamStaff: false,
     hasPlayerMembership: false,
     isGuardian: true,
+    hasFinanceRole: false,
     hasWaitingListAccess: false,
     staffTeams: [],
     playerTeams: [],

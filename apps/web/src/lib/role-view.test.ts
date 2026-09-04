@@ -27,6 +27,7 @@ function manyHats(overrides: Partial<Capabilities> = {}): Capabilities {
     isTeamStaff: true,
     hasPlayerMembership: true,
     isGuardian: true,
+    hasFinanceRole: false,
     hasWaitingListAccess: true,
     staffTeams: [{ id: "t-mav", name: "U14 Mavericks" }],
     playerTeams: [{ id: "t-vets", name: "Vets" }],
