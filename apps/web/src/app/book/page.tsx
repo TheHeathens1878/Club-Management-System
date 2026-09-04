@@ -196,7 +196,12 @@ export default async function BookPage() {
                 No rooms are currently available. Please contact us directly.
               </p>
             ) : (
-              <BookClient rooms={roomList} bookedSlots={bookedSlots} teamNames={(teamRows ?? []).map((t) => t.name)} />
+              <BookClient
+                rooms={roomList}
+                bookedSlots={bookedSlots}
+                teamNames={(teamRows ?? []).map((t) => t.name)}
+                memberDiscountPence={Number(settings.room_member_discount_pence) || 0}
+              />
             )}
           </div>
         </div>

@@ -14,6 +14,7 @@ export function StatusForm({
   defaultDepositPence = 0,
   currentTotalPence = null,
   currentDepositPence = null,
+  defaultMemberDiscountPence = null,
 }: {
   bookingId: string;
   currentStatus: string;
@@ -21,6 +22,8 @@ export function StatusForm({
   defaultDepositPence?: number;
   currentTotalPence?: number | null;
   currentDepositPence?: number | null;
+  /** The club's configured discount — prefilled when a claim is on the booking. */
+  defaultMemberDiscountPence?: number | null;
 }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +36,9 @@ export function StatusForm({
   const [depositPounds, setDepositPounds] = useState(
     String((currentDepositPence ?? defaultDepositPence) / 100 || ""),
   );
-  const [discountPounds, setDiscountPounds] = useState("");
+  const [discountPounds, setDiscountPounds] = useState(
+    defaultMemberDiscountPence ? (defaultMemberDiscountPence / 100).toFixed(2) : "",
+  );
 
   const [quotePounds, setQuotePounds] = useState(
     currentTotalPence ? String(currentTotalPence / 100) : "",

@@ -22,6 +22,8 @@ export type SiteSettings = {
   home_benefit_3_title: string;
   home_benefit_3_desc: string;
   deposit_default_pence: string;
+  /** £ off room hire for players, club families and social members. */
+  room_member_discount_pence: string;
   deposit_window_days: string;
   balance_reminder_days: string;
   auto_cancel_unpaid: string;            // "true" | "false"
@@ -51,6 +53,7 @@ const DEFAULTS: SiteSettings = {
   home_benefit_3_title: "How to join",
   home_benefit_3_desc: "Membership is by proposal from an existing member. Apply online and we'll guide you through the process step by step.",
   deposit_default_pence: "10000",
+  room_member_discount_pence: "0",
   deposit_window_days: "7",
   balance_reminder_days: "14",
   auto_cancel_unpaid: "true",

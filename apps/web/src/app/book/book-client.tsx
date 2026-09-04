@@ -62,10 +62,12 @@ export function BookClient({
   rooms,
   bookedSlots,
   teamNames = [],
+  memberDiscountPence = 0,
 }: {
   rooms: Room[];
   bookedSlots: BookedSlot[];
   teamNames?: string[];
+  memberDiscountPence?: number;
 }) {
   const router = useRouter();
   const today = new Date();
@@ -533,9 +535,11 @@ export function BookClient({
               <fieldset className="space-y-3 rounded-lg border p-4">
                 <legend className="px-1 text-sm font-medium">Club connection — member discount</legend>
                 <p className="text-xs text-muted-foreground">
-                  Players, parents of club players and social members all get a member discount.
-                  Tell us your connection and we&apos;ll check it and apply the discount to your
-                  price.
+                  Players, parents of club players and social members all get{" "}
+                  {memberDiscountPence > 0
+                    ? `£${(memberDiscountPence / 100).toFixed(memberDiscountPence % 100 === 0 ? 0 : 2)} off room hire`
+                    : "a member discount"}
+                  . Tell us your connection and we&apos;ll check it and apply it to your price.
                 </p>
                 <select
                   value={connection}
