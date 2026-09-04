@@ -10,16 +10,25 @@
  * opened on demand: a button that says how many people are in the room, and a
  * panel that names them.
  *
- * Rendering only — the names arrive already resolved by `loadThread()`, which
- * reads them as the caller. A name a link would bounce them from is not made a
- * link: only the committee, who may open /people/[id], get one.
+ * Only the people actually IN the room are listed (Adam, 2026-09-04: "I don't
+ * need to see left members 'In this conversation' so hide these") — their
+ * history stays, their row here goes. A group's manager gets a remove button
+ * beside each name ("Admin needs to be able to remove people from this view
+ * though"): the same `removeGroupMember` the settings page uses, so SG-1's
+ * refusals and the kept history are identical from either door.
+ *
+ * Names arrive already resolved by `loadThread()`, which reads them as the
+ * caller. A name a link would bounce them from is not made a link: only the
+ * committee, who may open /people/[id], get one.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Users, X } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { UserMinus, Users, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { removeGroupMember, type GroupActionState } from "../../groups/actions";
 
 export type ThreadParticipant = {
   personId: string;
@@ -28,11 +37,51 @@ export type ThreadParticipant = {
   left: boolean;
 };
 
+const EMPTY: GroupActionState = {};
+
+function RemoveButton({
+  conversationId,
+  personId,
+  name,
+}: {
+  conversationId: string;
+  personId: string;
+  name: string;
+}) {
+  const router = useRouter();
+  const [state, action, pending] = useActionState(removeGroupMember, EMPTY);
+
+  useEffect(() => {
+    if (state.notice) router.refresh();
+  }, [state.notice, router]);
+
+  return (
+    <form action={action} className="flex items-center">
+      <input type="hidden" name="conversation_id" value={conversationId} />
+      <input type="hidden" name="person_id" value={personId} />
+      <button
+        type="submit"
+        disabled={pending}
+        aria-label={`Remove ${name} from this group`}
+        title={state.error ?? `Remove ${name}`}
+        className={
+          "flex h-8 w-8 items-center justify-center rounded-full transition-colors hover:bg-destructive/10 " +
+          (state.error ? "text-destructive" : "text-muted-foreground hover:text-destructive")
+        }
+      >
+        <UserMinus className="h-4 w-4" />
+      </button>
+    </form>
+  );
+}
+
 export function ParticipantsButton({
   participants,
   canOpenContacts,
   compact = false,
   footer,
+  conversationId,
+  canRemove = false,
 }: {
   participants: ThreadParticipant[];
   canOpenContacts: boolean;
@@ -45,6 +94,10 @@ export function ParticipantsButton({
    * where it cost a full row of the screen (Adam, 2026-09-01).
    */
   footer?: React.ReactNode;
+  /** Needed only when `canRemove` — the group the remove buttons act on. */
+  conversationId?: string;
+  /** The group's manager: a remove button beside every other member. */
+  canRemove?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -67,6 +120,7 @@ export function ParticipantsButton({
     };
   }, [open]);
 
+  // Somebody who has left is not "in this conversation" (Adam, 2026-09-04).
   const live = participants.filter((person) => !person.left);
 
   return (
@@ -105,13 +159,13 @@ export function ParticipantsButton({
             </button>
           </div>
 
-          {participants.length === 0 ? (
+          {live.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nobody else is in here yet.</p>
           ) : (
             <ul className="max-h-[50dvh] space-y-1 overflow-y-auto">
-              {participants.map((person) => (
+              {live.map((person) => (
                 <li
-                  key={`${person.personId}-${person.left ? "left" : "live"}`}
+                  key={person.personId}
                   className="flex min-h-[36px] items-center justify-between gap-2 text-sm"
                 >
                   {canOpenContacts ? (
@@ -124,8 +178,16 @@ export function ParticipantsButton({
                   ) : (
                     <span className="truncate">{person.name}</span>
                   )}
-                  {person.isSelf && <Badge variant="outline">You</Badge>}
-                  {person.left && <Badge variant="muted">Left</Badge>}
+                  <span className="flex shrink-0 items-center gap-1">
+                    {person.isSelf && <Badge variant="outline">You</Badge>}
+                    {canRemove && conversationId && !person.isSelf && (
+                      <RemoveButton
+                        conversationId={conversationId}
+                        personId={person.personId}
+                        name={person.name}
+                      />
+                    )}
+                  </span>
                 </li>
               ))}
             </ul>

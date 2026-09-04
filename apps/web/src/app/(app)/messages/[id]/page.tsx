@@ -193,6 +193,8 @@ export default async function ThreadPage({
                 isSelf: p.person_id === data.personId,
                 left: p.left_at !== null,
               }))}
+              conversationId={data.conversation.id}
+              canRemove={data.canManageGroup}
               canOpenContacts={!memberHat && isCommittee(session.profile?.role)}
               footer={
                 data.myLive && !data.conversation.closed_at ? (
