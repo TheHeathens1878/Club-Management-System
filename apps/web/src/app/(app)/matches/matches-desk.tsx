@@ -31,6 +31,7 @@ import { useActionState, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { compareAgeGroups } from "@/lib/age-group";
 
 import {
   bulkAllocatePitch,
@@ -45,6 +46,8 @@ export type DeskRow = {
   eventId: string | null;
   teamId: string;
   teamName: string;
+  /** `teams.age_group` — the desk's age-order sort. */
+  ageGroup: string | null;
   opponent: string;
   isHome: boolean;
   competition: string;
@@ -223,6 +226,7 @@ export function MatchesDesk({
 }) {
   const router = useRouter();
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
+  const [sort, setSort] = useState<"kickoff" | "age" | "venue">("kickoff");
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [confirmCount, setConfirmCount] = useState("");
 
@@ -233,6 +237,24 @@ export function MatchesDesk({
 
   const filtered = useMemo(() => applyFilters(rows, filters), [rows, filters]);
   const filtering = filters !== NO_FILTERS && filtered.length !== rows.length;
+
+  // The rows arrive kickoff-ordered from the server, and Array.sort is
+  // stable, so ordering by age group or venue keeps kick-off order inside
+  // each group (Adam, 2026-09-04: "order by Age group from U07 up to Vets"
+  // … "And order by venue"). The club's own grounds sort before Away and
+  // Unallocated, so the round-the-grounds read starts at home.
+  const ordered = useMemo(() => {
+    if (sort === "age") {
+      return [...filtered].sort((a, b) => compareAgeGroups(a.ageGroup, b.ageGroup));
+    }
+    if (sort === "venue") {
+      const rank = (v: string) => (v === "Unallocated" ? 2 : v === "Away" ? 1 : 0);
+      return [...filtered].sort(
+        (a, b) => rank(a.venue) - rank(b.venue) || a.venue.localeCompare(b.venue, "en-GB"),
+      );
+    }
+    return filtered;
+  }, [filtered, sort]);
 
   const teamOptions = useMemo(() => distinct(rows.map((r) => r.teamName)), [rows]);
   const competitionOptions = useMemo(() => distinct(rows.map((r) => r.competition)), [rows]);
@@ -350,13 +372,26 @@ export function MatchesDesk({
             Clear filters
           </Button>
         ) : null}
-        <span className="ml-auto flex gap-2">
+        <span className="ml-auto flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            Order by
+            <select
+              value={sort}
+              onChange={(event) => setSort(event.target.value as typeof sort)}
+              aria-label="Order the matches by"
+              className="h-8 rounded-md border bg-background px-1.5 text-xs"
+            >
+              <option value="kickoff">Kick-off</option>
+              <option value="age">Age group (U7 → Vets)</option>
+              <option value="venue">Venue</option>
+            </select>
+          </label>
           <Button
             type="button"
             variant="outline"
             size="sm"
-            disabled={filtered.length === 0}
-            onClick={() => exportCsv(filtered)}
+            disabled={ordered.length === 0}
+            onClick={() => exportCsv(ordered)}
           >
             Export CSV
           </Button>
@@ -364,8 +399,8 @@ export function MatchesDesk({
             type="button"
             variant="outline"
             size="sm"
-            disabled={filtered.length === 0}
-            onClick={() => void exportPdf(filtered)}
+            disabled={ordered.length === 0}
+            onClick={() => void exportPdf(ordered)}
           >
             Export PDF
           </Button>
@@ -492,8 +527,9 @@ export function MatchesDesk({
           </div>
         </details>
 
-        {filtered.map((row, index) => {
-          const focus = focusFirst && !filtering && index === 0;
+        {ordered.map((row, index) => {
+          // "Next up" only means anything in kick-off order.
+          const focus = focusFirst && !filtering && sort === "kickoff" && index === 0;
           return (
             <div
               key={row.id}
@@ -644,7 +680,7 @@ export function MatchesDesk({
               </tr>
             </thead>
             <tbody>
-              {filtered.map((row) => {
+              {ordered.map((row) => {
                 const short = shortOfReplies(row);
                 return (
                   <tr key={row.id} className="border-b last:border-b-0 hover:bg-secondary/40">

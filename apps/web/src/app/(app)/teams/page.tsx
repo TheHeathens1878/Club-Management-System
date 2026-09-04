@@ -25,6 +25,7 @@ import { widgetUrl } from "@club/fulltime";
 
 import { faFormatDetail, faFormatFor } from "@/lib/fa-formats";
 
+import { compareAgeGroups } from "@/lib/age-group";
 import { splitVenue } from "@/lib/pitch-venue";
 
 import { createSeason, createTeam, setCurrentSeason } from "./actions";
@@ -217,22 +218,9 @@ function fullTimeState(
   };
 }
 
-/**
- * "Under 12s" before "Under 14s" before "Open age" — the order a club reads
- * its teams in, which plain alphabetical sorting gets wrong.
- */
-function ageGroupKey(ageGroup: string | null): [number, string] {
-  if (!ageGroup) return [3, ""];
-  const digits = ageGroup.match(/\d+/);
-  if (digits) return [1, digits[0].padStart(4, "0")];
-  return [2, ageGroup.toLocaleLowerCase("en-GB")];
-}
-
 function compareTeams(a: TeamCard, b: TeamCard): number {
-  const [aRank, aKey] = ageGroupKey(a.ageGroup);
-  const [bRank, bKey] = ageGroupKey(b.ageGroup);
-  if (aRank !== bRank) return aRank - bRank;
-  if (aKey !== bKey) return aKey < bKey ? -1 : 1;
+  const byAge = compareAgeGroups(a.ageGroup, b.ageGroup);
+  if (byAge !== 0) return byAge;
   return a.name.localeCompare(b.name, "en-GB");
 }
 
