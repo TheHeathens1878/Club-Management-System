@@ -123,7 +123,10 @@ export async function revokeMyMandate(): Promise<{ error?: string }> {
   return {};
 }
 
-export async function startMyAgreement(planId: string): Promise<{ error?: string }> {
+// The member's one decision: up front, or monthly. Everything else — the
+// individual/family rate, the instalment count, the 1 May end — is the
+// database's arithmetic, and only the lead member passes its gate.
+export async function startMyEnrolment(mode: "upfront" | "monthly"): Promise<{ error?: string }> {
   const session = await getSessionProfile();
   if (!session) return { error: "Not signed in." };
   const supabase = await createClient();
@@ -134,9 +137,9 @@ export async function startMyAgreement(planId: string): Promise<{ error?: string
     .limit(1)
     .maybeSingle();
   if (!myRow) return { error: "You have no membership number yet — the club will issue one." };
-  const { error } = await supabase.rpc("start_agreement", {
+  const { error } = await supabase.rpc("enroll_household", {
     p_account_id: myRow.account_id,
-    p_plan_id: planId,
+    p_mode: mode,
   });
   if (error) return { error: error.message };
   revalidatePath("/my-payments");

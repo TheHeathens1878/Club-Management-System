@@ -11,7 +11,7 @@ import {
   createCheckoutForCharge,
   finalizeChargeCheckout,
   revokeMyMandate,
-  startMyAgreement,
+  startMyEnrolment,
 } from "./actions";
 
 type WidgetGlobal = { SumUpCard?: { mount: (o: Record<string, unknown>) => void } };
@@ -58,7 +58,16 @@ export type MyAgreement = {
 
 export type MyMandate = { id: string; status: string; card: string | null; covers_fines: boolean };
 
-export type MyPlanOption = { id: string; name: string; amount_pence: number; schedule: string };
+export type MyQuote = {
+  scope: string;
+  season_name: string;
+  membership_pence: number;
+  monthly_pence: number;
+  instalments: number;
+  first_on: string | null;
+  last_on: string | null;
+  total_pence: number;
+};
 
 function money(pence: number): string {
   return `£${(pence / 100).toFixed(2)}`;
@@ -76,7 +85,7 @@ export function MyPaymentsClient({
   charges,
   agreements,
   mandate,
-  plans,
+  quote,
   isLead,
   sumupEnabled,
 }: {
@@ -84,7 +93,7 @@ export function MyPaymentsClient({
   charges: MyCharge[];
   agreements: MyAgreement[];
   mandate: MyMandate | null;
-  plans: MyPlanOption[];
+  quote: MyQuote | null;
   isLead: boolean;
   sumupEnabled: boolean;
 }) {
@@ -94,8 +103,6 @@ export function MyPaymentsClient({
   const [paying, setPaying] = useState<string | null>(null);
   const [stage, setStage] = useState<"idle" | "loading" | "widget">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [saveCard, setSaveCard] = useState(false);
-  const [coverFines, setCoverFines] = useState(false);
   const [isPending, startTransition] = useTransition();
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -127,7 +134,7 @@ export function MyPaymentsClient({
     setError(null);
     setPaying(charge.id);
     setStage("loading");
-    const res = await createCheckoutForCharge(charge.id, saveCard, saveCard && coverFines);
+    const res = await createCheckoutForCharge(charge.id, true, true);
     if (res.error || !res.checkoutId) {
       setError(res.error ?? "Could not start payment.");
       setPaying(null);
@@ -247,23 +254,73 @@ export function MyPaymentsClient({
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           {sumupEnabled && totalOwing >= 100 && stage === "idle" && (
-            <div className="space-y-1 rounded-md border border-dashed p-3 text-xs text-muted-foreground">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="h-4 w-4" checked={saveCard} onChange={(e) => setSaveCard(e.target.checked)} />
-                Keep my card on file for future collections (monthly subs)
-              </label>
-              {saveCard && (
-                <label className="flex items-center gap-2 pl-6">
-                  <input type="checkbox" className="h-4 w-4" checked={coverFines} onChange={(e) => setCoverFines(e.target.checked)} />
-                  I also pre-authorise one-off charges (e.g. card fines) to this card
-                </label>
-              )}
-            </div>
+            <p className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">
+              Paying online keeps your card on file: monthly subs and any club charges (including
+              match fines) are collected from it automatically, with an email each time. You can
+              remove the card below at any time.
+            </p>
           )}
         </CardContent>
       </Card>
 
-      {(agreements.length > 0 || plans.length > 0 || mandate) && (
+      {isLead && quote && (
+        <Card>
+          <CardHeader className="p-4 lg:p-6">
+            <CardTitle className="text-base">Set up your {quote.season_name} membership</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Your household counts as <span className="font-medium">{quote.scope}</span> (worked
+              out from who is playing).
+            </p>
+          </CardHeader>
+          <CardContent className="space-y-3 p-4 pt-0 lg:p-6 lg:pt-0">
+            <div className="rounded-lg border p-3 text-sm">
+              <p>
+                {money(quote.membership_pence)} membership
+                {quote.instalments > 0
+                  ? ` + ${money(quote.monthly_pence)} a month × ${quote.instalments} (1st of each month${quote.last_on ? `, last payment ${new Date(quote.last_on).toLocaleDateString("en-GB", { day: "numeric", month: "long" })}` : ""})`
+                  : " — no subs instalments remain this season"}
+              </p>
+              <p className="mt-1 text-base font-semibold tabular-nums">Total {money(quote.total_pence)}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await startMyEnrolment("monthly");
+                    if (res.error) setError(res.error);
+                    else router.refresh();
+                  })
+                }
+                className="min-h-[44px] rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              >
+                Pay monthly
+              </button>
+              <button
+                type="button"
+                disabled={isPending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await startMyEnrolment("upfront");
+                    if (res.error) setError(res.error);
+                    else router.refresh();
+                  })
+                }
+                className="min-h-[44px] rounded-md border px-4 text-sm font-medium hover:bg-secondary disabled:opacity-50"
+              >
+                Pay {money(quote.total_pence)} up front
+              </button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Both come to the same total. Choosing puts the membership fee on your account to pay
+              now{quote.instalments > 0 ? "; monthly subs then collect on the 1st of each month" : ""}.
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {(agreements.length > 0 || mandate) && (
         <Card>
           <CardHeader className="p-4 lg:p-6">
             <CardTitle className="text-base">Membership & subs</CardTitle>
@@ -279,43 +336,6 @@ export function MyPaymentsClient({
                 </p>
               </div>
             ))}
-
-            {isLead && plans.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-sm font-medium">Sign up</p>
-                <p className="text-xs text-muted-foreground">
-                  Pay up-front with a one-off plan, or spread it monthly — your choice.
-                </p>
-                <ul className="space-y-1">
-                  {plans.map((plan) => (
-                    <li key={plan.id} className="flex items-center justify-between gap-2 rounded-md border p-2 text-sm">
-                      <span>
-                        {plan.name}
-                        <span className="text-xs text-muted-foreground">
-                          {" "}
-                          — {money(plan.amount_pence)}
-                          {plan.schedule === "monthly" ? " a month" : plan.schedule === "annual" ? " a year" : " one-off"}
-                        </span>
-                      </span>
-                      <button
-                        type="button"
-                        disabled={isPending}
-                        onClick={() =>
-                          startTransition(async () => {
-                            const res = await startMyAgreement(plan.id);
-                            if (res.error) setError(res.error);
-                            else router.refresh();
-                          })
-                        }
-                        className="rounded-md border px-3 py-1 text-xs font-medium hover:bg-secondary disabled:opacity-50"
-                      >
-                        Choose
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
 
             {mandate && (
               <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3 text-sm">

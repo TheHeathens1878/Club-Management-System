@@ -199,6 +199,49 @@ export async function setFeePlanActive(_prev: ActionState, formData: FormData): 
   return { notice: active ? "Plan activated." : "Plan deactivated." };
 }
 
+// The six boxes: reprice the system plans and activate them. Saving is what
+// switches enrolment on — subs_quote() refuses while a needed plan is inactive.
+export async function saveFees(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const gate = await financeSession();
+  if (gate.error) return gate;
+  const keys = [
+    "membership_individual", "membership_family",
+    "subs_monthly_individual", "subs_monthly_family",
+    "fine_yellow", "fine_red",
+  ];
+  const supabase = await createClient();
+  for (const key of keys) {
+    const raw = formData.get(key);
+    if (raw == null || String(raw).trim() === "") continue;
+    const amountPence = poundsToPence(raw);
+    if (!amountPence) return { error: `"${key.replace(/_/g, " ")}" needs an amount in pounds, greater than zero.` };
+    const { error } = await supabase
+      .from("fee_plans")
+      .update({ amount_pence: amountPence, active: true })
+      .eq("system_key", key);
+    if (error) return { error: error.message };
+  }
+  revalidatePath("/finance/fees");
+  revalidatePath("/finance/plans");
+  revalidatePath("/my-payments");
+  return { notice: "Fees saved and active. Households can now enrol." };
+}
+
+// The treasurer's enrolment door — same DB function the member's button calls.
+export async function enrollHouseholdAction(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const gate = await financeSession();
+  if (gate.error) return gate;
+  const accountId = String(formData.get("account_id") ?? "");
+  const mode = String(formData.get("mode") ?? "");
+  if (!accountId) return { error: "Pick a membership." };
+  if (!["upfront", "monthly"].includes(mode)) return { error: "Pick up-front or monthly." };
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("enroll_household", { p_account_id: accountId, p_mode: mode });
+  if (error) return { error: error.message };
+  refreshFinance();
+  return { notice: mode === "upfront" ? "Enrolled — the season total is now owed." : "Enrolled — membership owed now, subs on the 1st of each month to 1 May." };
+}
+
 // --- charges -----------------------------------------------------------------
 
 export async function raiseChargeAction(_prev: ActionState, formData: FormData): Promise<ActionState> {

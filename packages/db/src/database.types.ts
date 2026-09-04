@@ -293,6 +293,7 @@ export type Database = {
           months_total: number | null
           next_charge_on: string | null
           plan_id: string
+          season_id: string | null
           start_on: string
           status: Database["public"]["Enums"]["agreement_status"]
           updated_at: string
@@ -309,6 +310,7 @@ export type Database = {
           months_total?: number | null
           next_charge_on?: string | null
           plan_id: string
+          season_id?: string | null
           start_on?: string
           status?: Database["public"]["Enums"]["agreement_status"]
           updated_at?: string
@@ -325,11 +327,19 @@ export type Database = {
           months_total?: number | null
           next_charge_on?: string | null
           plan_id?: string
+          season_id?: string | null
           start_on?: string
           status?: Database["public"]["Enums"]["agreement_status"]
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "billing_agreements_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "billing_agreements_account_id_fkey"
             columns: ["account_id"]
@@ -2119,6 +2129,7 @@ export type Database = {
           schedule: Database["public"]["Enums"]["fee_schedule"]
           scope: Database["public"]["Enums"]["fee_plan_scope"] | null
           sort: number
+          system_key: string | null
           updated_at: string
         }
         Insert: {
@@ -2135,6 +2146,7 @@ export type Database = {
           schedule?: Database["public"]["Enums"]["fee_schedule"]
           scope?: Database["public"]["Enums"]["fee_plan_scope"] | null
           sort?: number
+          system_key?: string | null
           updated_at?: string
         }
         Update: {
@@ -2151,6 +2163,7 @@ export type Database = {
           schedule?: Database["public"]["Enums"]["fee_schedule"]
           scope?: Database["public"]["Enums"]["fee_plan_scope"] | null
           sort?: number
+          system_key?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -6272,6 +6285,10 @@ export type Database = {
         }
         Returns: string
       }
+      enroll_household: {
+        Args: { p_account_id: string; p_mode: string }
+        Returns: string
+      }
       fa_age_band: { Args: { p_dob: string; p_on: string }; Returns: number }
       fa_age_band_today: { Args: { p_dob: string }; Returns: number }
       current_person_id: { Args: never; Returns: string }
@@ -6503,6 +6520,10 @@ export type Database = {
           unchanged: number
           updated: number
         }[]
+      }
+      household_fee_kind: {
+        Args: { p_account_id: string }
+        Returns: Database["public"]["Enums"]["fee_plan_scope"]
       }
       invoke_edge_function: {
         Args: { p_body?: Json; p_name: string }
@@ -7240,6 +7261,22 @@ export type Database = {
           p_plan_id: string
         }
         Returns: string
+      }
+      subs_quote: {
+        Args: { p_account_id: string }
+        Returns: {
+          scope: Database["public"]["Enums"]["fee_plan_scope"]
+          season_id: string
+          season_name: string
+          membership_plan_id: string
+          membership_pence: number
+          subs_plan_id: string
+          monthly_pence: number
+          instalments: number
+          first_on: string | null
+          last_on: string | null
+          total_pence: number
+        }[]
       }
       submit_waiting_list_entry: {
         Args: {
