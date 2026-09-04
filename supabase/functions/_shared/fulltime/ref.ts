@@ -36,10 +36,21 @@ export function fnv1a64Hex(input: string): string {
   return a.toString(16).padStart(8, "0") + b.toString(16).padStart(8, "0");
 }
 
-/** The `id` from a `displayFixture.html?id=…` href, if that is what it is. */
+/**
+ * The `id` from a `displayFixture.html?id=…` href, if that is what it is.
+ *
+ * A County Cup row links to `displayCountyFixture.html?league=…&id=…`
+ * instead — a DIFFERENT id space on the FA's side, so that id comes back
+ * prefixed (`county-…`) rather than gambling that it never collides with a
+ * league fixture id. Before 2026-09-04 those hrefs matched nothing, the row
+ * was mistaken for a heading, and every County Cup game silently vanished
+ * from the import (Adam: "the snippet isn't importing County Cup games").
+ */
 export function fixtureIdFromHref(href: string): string | undefined {
-  const m = /displayFixture\.html\?(?:[^#]*&)?id=(\d+)/i.exec(href);
-  return m?.[1];
+  const league = /displayFixture\.html\?(?:[^#]*&)?id=(\d+)/i.exec(href);
+  if (league) return league[1];
+  const county = /displayCountyFixture\.html\?(?:[^#]*&)?id=(\d+)/i.exec(href);
+  return county ? `county-${county[1]}` : undefined;
 }
 
 /** The minimum a fixture needs before it can be given a reference. */

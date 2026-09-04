@@ -284,6 +284,29 @@ export function classifyFixtureRow(cellTexts: readonly string[]): ClassifiedRow 
   };
 }
 
+/**
+ * The widget's type column, read as a competition where the code is known.
+ * "CC" is what the FA prints on a County Cup row (2026-09-04, the U13 Mambas
+ * widget); the rest are the letters its own key lists. An unknown code stays
+ * type-only and the fixture keeps its default competition.
+ */
+function competitionFromType(type: string): string | undefined {
+  switch (type) {
+    case "CC":
+      return "County Cup";
+    case "LC":
+      return "League Cup";
+    case "C":
+    case "CUP":
+      return "Cup";
+    case "F":
+    case "FR":
+      return "Friendly";
+    default:
+      return undefined;
+  }
+}
+
 /** The pre-2026-09-02 reading, kept for rows with no separator at all. */
 function classifyByOrder(cellTexts: readonly string[]): ClassifiedRow {
   let type = "";
@@ -414,6 +437,7 @@ export function parseWidgetHtml(payload: string): ParsedPage {
     const played = homeScore !== undefined && awayScore !== undefined;
     const status: FixtureStatus = cellStatus ?? current.status ?? (played ? "played" : "scheduled");
     const { date, time } = current;
+    const competition = competitionFromType(type);
 
     fixtures.push({
       externalRef: stableExternalRef({
@@ -431,6 +455,7 @@ export function parseWidgetHtml(payload: string): ParsedPage {
       ...(played ? { homeScore, awayScore } : {}),
       status,
       ...(venue ? { venue } : {}),
+      ...(competition === undefined ? {} : { competition }),
       raw: textOf(row.html).replace(/\s+/g, " ").trim(),
     });
   }

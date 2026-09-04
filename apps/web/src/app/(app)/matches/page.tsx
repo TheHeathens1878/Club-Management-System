@@ -13,6 +13,7 @@ import { instantToLocal } from "@/lib/booking-time";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+import { AddFixtureForm } from "./add-fixture-form";
 import { MatchesDesk, type DeskRow } from "./matches-desk";
 
 /**
@@ -105,9 +106,10 @@ export default async function MatchesPage({
       ...(wholeClub ? { p_scope: "club" } : {}),
     }),
     // Which teams play at a central venue (their "home" needs no pitch),
-    // each team's age group (the desk's age-order sort), and which venue
-    // each pitch belongs to for honest Pitch/Venue columns.
-    adminDb.from("teams").select("id,central_venue_name,age_group"),
+    // each team's age group (the desk's age-order sort), names for the
+    // Add-a-fixture picker, and which venue each pitch belongs to for
+    // honest Pitch/Venue columns.
+    adminDb.from("teams").select("id,name,active,central_venue_name,age_group"),
     adminDb
       .from("resources")
       .select("id,name,venues(name)")
@@ -129,6 +131,19 @@ export default async function MatchesPage({
   );
   const pitchRows = pitchesResult.data ?? [];
   const venueByPitch = new Map(pitchRows.map((row) => [row.name, row.venues?.name ?? null]));
+
+  // Who the caller may add a fixture FOR (Adam, 2026-09-04: "I need to be
+  // able to add it directly from there"): an admin hat gets every active
+  // team, a coach their own — the same people `fixtures_staff_insert` will
+  // say yes to. Anyone else keeps the old door to the team pages.
+  const addableTeams = canManage
+    ? (teamVenuesResult.data ?? [])
+        .filter((team) => team.active)
+        .map(({ id, name }) => ({ id, name }))
+        .sort((a, b) => a.name.localeCompare(b.name, "en-GB"))
+    : view === "coach" || capabilities.isTeamStaff
+      ? capabilities.staffTeams.map(({ id, name }) => ({ id, name }))
+      : [];
 
   const needPitch = fixtures.filter(
     (row) =>
@@ -209,9 +224,13 @@ export default async function MatchesPage({
                 <LandPlot className="h-4 w-4" /> Allocate pitches
               </Link>
             ) : null}
-            <Link href="/teams" className={buttonVariants({ size: "sm" })}>
-              <CalendarPlus className="h-4 w-4" /> Add a fixture
-            </Link>
+            {addableTeams.length > 0 ? (
+              <AddFixtureForm teams={addableTeams} />
+            ) : (
+              <Link href="/teams" className={buttonVariants({ size: "sm" })}>
+                <CalendarPlus className="h-4 w-4" /> Add a fixture
+              </Link>
+            )}
           </span>
         }
       />

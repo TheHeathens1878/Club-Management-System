@@ -434,3 +434,34 @@ describe("resolveClubTeams — two squads, one club record", () => {
     expect(warnings).toHaveLength(0);
   });
 });
+
+describe("parseWidgetHtml on the recorded U13 Mambas widget (167003499)", () => {
+  // Adam, 2026-09-04: "the snippet isn't importing County Cup games." The
+  // County Cup row links to displayCountyFixture.html — a different page than
+  // displayFixture.html — so before the fix its row had no recognised fixture
+  // id, was mistaken for a heading, and vanished without even a warning.
+  const page = parseWidgetHtml(fixture("widget-team-167003499.html"));
+
+  it("keeps every game, the County Cup one included", () => {
+    expect(page.warnings).toHaveLength(0);
+    expect(page.fixtures).toHaveLength(13);
+  });
+
+  it("reads the County Cup game in full, on its own id space", () => {
+    const cup = page.fixtures.find((f) => f.type === "CC");
+    expect(cup).toBeDefined();
+    expect(cup?.externalRef).toBe("county-30313824");
+    expect(cup?.competition).toBe("County Cup");
+    expect(cup?.date).toBe("2026-09-06");
+    expect(cup?.time).toBe("10:00");
+    expect(cup?.homeTeam).toBe("Ashton On Mersey FC U13 Mambas");
+    expect(cup?.awayTeam).toBe("JFC Phoenix U13 Inferno");
+    expect(cup?.status).toBe("scheduled");
+  });
+
+  it("leaves the league games' refs exactly as they were", () => {
+    const league = page.fixtures.find((f) => f.date === "2026-09-05");
+    expect(league?.externalRef).toBe("30717447");
+    expect(league?.competition).toBeUndefined();
+  });
+});
