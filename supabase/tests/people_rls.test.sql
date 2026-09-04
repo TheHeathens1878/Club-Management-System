@@ -79,8 +79,9 @@ select policies_are(
   'public',
   'people',
   array['people_admin_read', 'people_admin_insert', 'people_admin_update',
-        'people_self_read', 'people_guardian_read', 'people_staff_read'],
-  'public.people has exactly the three P1.4 admin-role policies, the P1.2 self-read, the P1.3 guardian read and the team-staff read (20260825280000), and no others'
+        'people_self_read', 'people_guardian_read', 'people_staff_read',
+        'people_finance_read'],
+  'public.people has exactly the three P1.4 admin-role policies, the P1.2 self-read, the P1.3 guardian read, the team-staff read (20260825280000) and the finance read (20260904180000), and no others'
 );
 
 select is_empty(

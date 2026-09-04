@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "regions": ["lhr1"],
   "crons": [
-    { "path": "/api/cron/payment-reminders", "schedule": "0 9 * * *" }
+    { "path": "/api/cron/payment-reminders", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/finance-billing", "schedule": "30 7 * * *" }
   ]
 }

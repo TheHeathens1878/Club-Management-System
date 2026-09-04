@@ -190,6 +190,169 @@ export type Database = {
         }
         Relationships: []
       }
+      billing_account_people: {
+        Row: {
+          account_id: string
+          added_at: string
+          added_by: string | null
+          letter: string
+          person_id: string
+          removed_at: string | null
+        }
+        Insert: {
+          account_id: string
+          added_at?: string
+          added_by?: string | null
+          letter: string
+          person_id: string
+          removed_at?: string | null
+        }
+        Update: {
+          account_id?: string
+          added_at?: string
+          added_by?: string | null
+          letter?: string
+          person_id?: string
+          removed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_account_people_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "billing_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_account_people_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_account_summary"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "billing_account_people_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_accounts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          lead_person_id: string
+          member_no: number
+          notes: string | null
+          status: Database["public"]["Enums"]["billing_account_status"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_person_id: string
+          member_no: number
+          notes?: string | null
+          status?: Database["public"]["Enums"]["billing_account_status"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          lead_person_id?: string
+          member_no?: number
+          notes?: string | null
+          status?: Database["public"]["Enums"]["billing_account_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_accounts_lead_person_id_fkey"
+            columns: ["lead_person_id"]
+            isOneToOne: true
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      billing_agreements: {
+        Row: {
+          account_id: string
+          auto_collect: boolean
+          cancel_reason: string | null
+          cancelled_at: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          months_charged: number
+          months_total: number | null
+          next_charge_on: string | null
+          plan_id: string
+          start_on: string
+          status: Database["public"]["Enums"]["agreement_status"]
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          auto_collect?: boolean
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          months_charged?: number
+          months_total?: number | null
+          next_charge_on?: string | null
+          plan_id: string
+          start_on?: string
+          status?: Database["public"]["Enums"]["agreement_status"]
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          auto_collect?: boolean
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          months_charged?: number
+          months_total?: number | null
+          next_charge_on?: string | null
+          plan_id?: string
+          start_on?: string
+          status?: Database["public"]["Enums"]["agreement_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_agreements_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "billing_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "billing_agreements_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_account_summary"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "billing_agreements_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "fee_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       board_post_teams: {
         Row: {
           post_id: string
@@ -1088,6 +1251,102 @@ export type Database = {
           },
         ]
       }
+      charges: {
+        Row: {
+          account_id: string
+          agreement_id: string | null
+          amount_pence: number
+          charge_no: number
+          created_at: string
+          created_by: string | null
+          description: string
+          due_on: string
+          id: string
+          kind: Database["public"]["Enums"]["charge_kind"]
+          person_id: string | null
+          plan_id: string | null
+          status: Database["public"]["Enums"]["charge_status"]
+          updated_at: string
+          waived_at: string | null
+          waived_by: string | null
+          waived_reason: string | null
+        }
+        Insert: {
+          account_id: string
+          agreement_id?: string | null
+          amount_pence: number
+          charge_no?: never
+          created_at?: string
+          created_by?: string | null
+          description: string
+          due_on?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["charge_kind"]
+          person_id?: string | null
+          plan_id?: string | null
+          status?: Database["public"]["Enums"]["charge_status"]
+          updated_at?: string
+          waived_at?: string | null
+          waived_by?: string | null
+          waived_reason?: string | null
+        }
+        Update: {
+          account_id?: string
+          agreement_id?: string | null
+          amount_pence?: number
+          charge_no?: never
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          due_on?: string
+          id?: string
+          kind?: Database["public"]["Enums"]["charge_kind"]
+          person_id?: string | null
+          plan_id?: string | null
+          status?: Database["public"]["Enums"]["charge_status"]
+          updated_at?: string
+          waived_at?: string | null
+          waived_by?: string | null
+          waived_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "charges_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "billing_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "charges_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_account_summary"
+            referencedColumns: ["account_id"]
+          },
+          {
+            foreignKeyName: "charges_agreement_id_fkey"
+            columns: ["agreement_id"]
+            isOneToOne: false
+            referencedRelation: "billing_agreements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "charges_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "charges_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "fee_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       child_facing_roles: {
         Row: {
           child_facing: boolean
@@ -1731,6 +1990,7 @@ export type Database = {
         }
         Insert: {
           booking_id?: string | null
+          charge_id?: string | null
           change_note?: string | null
           created_at?: string
           created_by?: string | null
@@ -1752,6 +2012,7 @@ export type Database = {
         }
         Update: {
           booking_id?: string | null
+          charge_id?: string | null
           change_note?: string | null
           created_at?: string
           created_by?: string | null
@@ -1840,6 +2101,57 @@ export type Database = {
           id?: string
           question?: string
           sort_order?: number
+        }
+        Relationships: []
+      }
+      fee_plans: {
+        Row: {
+          active: boolean
+          amount_pence: number
+          cohort: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          kind: Database["public"]["Enums"]["charge_kind"]
+          months_total: number | null
+          name: string
+          schedule: Database["public"]["Enums"]["fee_schedule"]
+          scope: Database["public"]["Enums"]["fee_plan_scope"] | null
+          sort: number
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          amount_pence: number
+          cohort?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["charge_kind"]
+          months_total?: number | null
+          name: string
+          schedule?: Database["public"]["Enums"]["fee_schedule"]
+          scope?: Database["public"]["Enums"]["fee_plan_scope"] | null
+          sort?: number
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          amount_pence?: number
+          cohort?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["charge_kind"]
+          months_total?: number | null
+          name?: string
+          schedule?: Database["public"]["Enums"]["fee_schedule"]
+          scope?: Database["public"]["Enums"]["fee_plan_scope"] | null
+          sort?: number
+          updated_at?: string
         }
         Relationships: []
       }
@@ -2090,6 +2402,7 @@ export type Database = {
           allocation_conflict?: boolean
           away_score?: number | null
           booking_id?: string | null
+          charge_id?: string | null
           coach_away_score?: number | null
           coach_home_score?: number | null
           competition?: string | null
@@ -2119,6 +2432,7 @@ export type Database = {
           allocation_conflict?: boolean
           away_score?: number | null
           booking_id?: string | null
+          charge_id?: string | null
           coach_away_score?: number | null
           coach_home_score?: number | null
           competition?: string | null
@@ -3115,6 +3429,69 @@ export type Database = {
           },
         ]
       }
+      payment_mandates: {
+        Row: {
+          account_id: string
+          card_last4: string | null
+          card_type: string | null
+          consented_at: string | null
+          consented_by: string | null
+          covers_fines: boolean
+          created_at: string
+          id: string
+          revoked_at: string | null
+          status: Database["public"]["Enums"]["mandate_status"]
+          sumup_checkout_id: string | null
+          sumup_customer_id: string
+          updated_at: string
+        }
+        Insert: {
+          account_id: string
+          card_last4?: string | null
+          card_type?: string | null
+          consented_at?: string | null
+          consented_by?: string | null
+          covers_fines?: boolean
+          created_at?: string
+          id?: string
+          revoked_at?: string | null
+          status?: Database["public"]["Enums"]["mandate_status"]
+          sumup_checkout_id?: string | null
+          sumup_customer_id: string
+          updated_at?: string
+        }
+        Update: {
+          account_id?: string
+          card_last4?: string | null
+          card_type?: string | null
+          consented_at?: string | null
+          consented_by?: string | null
+          covers_fines?: boolean
+          created_at?: string
+          id?: string
+          revoked_at?: string | null
+          status?: Database["public"]["Enums"]["mandate_status"]
+          sumup_checkout_id?: string | null
+          sumup_customer_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_mandates_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "billing_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_mandates_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_account_summary"
+            referencedColumns: ["account_id"]
+          },
+        ]
+      }
       payments: {
         Row: {
           amount_pence: number
@@ -3122,6 +3499,7 @@ export type Database = {
           authorised_by_name: string | null
           authorised_by_profile: string | null
           booking_id: string | null
+          charge_id: string | null
           created_at: string
           id: string
           kind: Database["public"]["Enums"]["payment_kind"]
@@ -3146,6 +3524,7 @@ export type Database = {
           authorised_by_name?: string | null
           authorised_by_profile?: string | null
           booking_id?: string | null
+          charge_id?: string | null
           created_at?: string
           id?: string
           kind?: Database["public"]["Enums"]["payment_kind"]
@@ -3170,6 +3549,7 @@ export type Database = {
           authorised_by_name?: string | null
           authorised_by_profile?: string | null
           booking_id?: string | null
+          charge_id?: string | null
           created_at?: string
           id?: string
           kind?: Database["public"]["Enums"]["payment_kind"]
@@ -3189,6 +3569,13 @@ export type Database = {
           sumup_txn_code?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "charges"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_authorised_by_profile_fkey"
             columns: ["authorised_by_profile"]
@@ -5147,6 +5534,79 @@ export type Database = {
           },
         ]
       }
+      finance_account_summary: {
+        Row: {
+          account_id: string | null
+          balance_pence: number | null
+          charged_pence: number | null
+          lead_name: string | null
+          lead_person_id: string | null
+          member_no: number | null
+          member_no_display: string | null
+          oldest_due_on: string | null
+          overdue_pence: number | null
+          paid_pence: number | null
+          people_count: number | null
+          status: Database["public"]["Enums"]["billing_account_status"] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "billing_accounts_lead_person_id_fkey"
+            columns: ["lead_person_id"]
+            isOneToOne: true
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      finance_aging: {
+        Row: {
+          account_id: string | null
+          d30_pence: number | null
+          d60_pence: number | null
+          d90_pence: number | null
+          d90_plus_pence: number | null
+          lead_name: string | null
+          member_no: number | null
+          not_due_pence: number | null
+          outstanding_pence: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "charges_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "billing_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "charges_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "finance_account_summary"
+            referencedColumns: ["account_id"]
+          },
+        ]
+      }
+      finance_income_by_month: {
+        Row: {
+          kind: Database["public"]["Enums"]["payment_kind"] | null
+          month: string | null
+          net_pence: number | null
+          payment_count: number | null
+          plan_id: string | null
+          plan_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "charges_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "fee_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       function_rooms: {
         Row: {
           active: boolean | null
@@ -5420,6 +5880,17 @@ export type Database = {
           p_phone?: string
         }
         Returns: string
+      }
+      add_person_to_billing_account: {
+        Args: { p_account_id: string; p_person_id: string }
+        Returns: string
+      }
+      billing_household_for: {
+        Args: { p_lead_person_id: string }
+        Returns: {
+          ord: number
+          person_id: string
+        }[]
       }
       contact_name_first: {
         Args: { p_name: string }
@@ -5731,6 +6202,11 @@ export type Database = {
       conversation_referees: {
         Args: { p_conversation_id: string }
         Returns: string[]
+      }
+      counts_as_club_member: { Args: { p_person_id: string }; Returns: string }
+      create_billing_account: {
+        Args: { p_lead_person_id: string; p_member_no?: number }
+        Returns: string
       }
       create_board_post: {
         Args: {
@@ -6060,6 +6536,7 @@ export type Database = {
       is_club_person: { Args: { p_person_id: string }; Returns: boolean }
       is_club_admin: { Args: never; Returns: boolean }
       is_committee: { Args: never; Returns: boolean }
+      is_finance: { Args: never; Returns: boolean }
       is_household_member_of: {
         Args: { p_person_id: string }
         Returns: boolean
@@ -6085,6 +6562,13 @@ export type Database = {
       is_team_guardian: { Args: { p_team_id: string }; Returns: boolean }
       is_team_member: { Args: { p_team_id: string }; Returns: boolean }
       is_team_staff: { Args: { p_team_id: string }; Returns: boolean }
+      issue_membership_numbers: {
+        Args: { p_lead_person_ids: string[] }
+        Returns: {
+          lead_person_id: string
+          member_no: number
+        }[]
+      }
       lineup_team_id: { Args: { p_lineup_id: string }; Returns: string }
       map_user_role_to_app_role: {
         Args: { p_role: Database["public"]["Enums"]["user_role"] }
@@ -6116,6 +6600,7 @@ export type Database = {
         Returns: number
       }
       mark_notification_read: { Args: { p_id: string }; Returns: undefined }
+      member_card_ref: { Args: { p_person_id: string }; Returns: string }
       mention_people: {
         Args: { p_message_id: string; p_person_ids: string[] }
         Returns: number
@@ -6309,6 +6794,7 @@ export type Database = {
           person_id: string
         }[]
       }
+      next_member_no: { Args: never; Returns: number }
       notify: {
         Args: {
           p_body: string
@@ -6328,6 +6814,7 @@ export type Database = {
         Args: { p_event_ids: string[]; p_team_id: string }
         Returns: undefined
       }
+      on_billing_account: { Args: { p_account_id: string }; Returns: boolean }
       person_compliance_status: {
         Args: {
           p_person_id: string
@@ -6380,6 +6867,15 @@ export type Database = {
           team_id: string
         }[]
       }
+      preview_membership_numbering: {
+        Args: never
+        Returns: {
+          basis: string
+          household: Json
+          lead_name: string
+          lead_person_id: string
+        }[]
+      }
       purge_message: {
         Args: { p_message_id: string; p_reason: string }
         Returns: undefined
@@ -6421,6 +6917,16 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      raise_charge: {
+        Args: {
+          p_amount_pence?: number
+          p_description?: string
+          p_due_on?: string
+          p_person_id: string
+          p_plan_id?: string
+        }
+        Returns: string
       }
       read_concern_notes: {
         Args: { p_ref: string }
@@ -6567,6 +7073,10 @@ export type Database = {
         Args: { p_event_id: string }
         Returns: number
       }
+      remove_person_from_billing_account: {
+        Args: { p_account_id: string; p_person_id: string }
+        Returns: undefined
+      }
       reply_board_post: {
         Args: { p_body: string; p_post_id: string }
         Returns: string
@@ -6628,6 +7138,7 @@ export type Database = {
           redacted: number
         }[]
       }
+      run_billing_cycle: { Args: never; Returns: number }
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       set_board_post_pinned: {
         Args: { p_pinned: boolean; p_post_id: string }
@@ -6670,6 +7181,7 @@ export type Database = {
         }
         Returns: undefined
       }
+      settle_charge: { Args: { p_charge_id: string }; Returns: undefined }
       sg1_nightly_check: {
         Args: never
         Returns: {
@@ -6720,6 +7232,14 @@ export type Database = {
           first_name: string
           last_name: string
         }[]
+      }
+      start_agreement: {
+        Args: {
+          p_account_id: string
+          p_auto_collect?: boolean
+          p_plan_id: string
+        }
+        Returns: string
       }
       submit_waiting_list_entry: {
         Args: {
@@ -6934,6 +7454,7 @@ export type Database = {
     }
     Enums: {
       account_request_status: "pending" | "approved" | "rejected" | "withdrawn"
+      agreement_status: "active" | "paused" | "completed" | "cancelled"
       album_visibility: "team" | "club" | "public" | "social" | "press"
       app_role:
         | "club_admin"
@@ -6944,8 +7465,10 @@ export type Database = {
         | "parent"
         | "hirer"
         | "referee"
+        | "finance"
       attendance_status: "present" | "absent" | "late"
       availability_status: "available" | "unavailable" | "maybe"
+      billing_account_status: "active" | "lapsed" | "closed"
       billing_kind: "one_off" | "monthly" | "annual"
       board_audience: "club" | "teams"
       booking_kind: "hire" | "block" | "fixture" | "maintenance" | "training"
@@ -6960,7 +7483,9 @@ export type Database = {
         | "safeguarding_children"
         | "first_aid"
         | "coaching_badge"
+      charge_kind: "membership" | "subs" | "fine" | "other"
       comms_category: "transactional" | "reminder" | "marketing"
+      charge_status: "pending" | "paid" | "waived" | "void"
       comms_channel: "email" | "sms" | "push" | "in_app"
       concern_severity: "low" | "medium" | "high" | "critical"
       concern_status: "received" | "under_review" | "closed"
@@ -6980,6 +7505,7 @@ export type Database = {
         | "friendly"
         | "practice"
         | "social"
+      fee_plan_scope: "individual" | "family"
       fixture_source: "fulltime" | "manual"
       fixture_status:
         | "scheduled"
@@ -6994,6 +7520,7 @@ export type Database = {
         | "foster_carer"
         | "legal_guardian"
         | "other"
+      fee_schedule: "one_off" | "monthly" | "annual"
       membership_kind: "individual" | "family"
       outbound_status:
         | "queued"
@@ -7008,7 +7535,8 @@ export type Database = {
         | "staff"
         | "creator"
         | "oversight"
-      payment_kind: "hire" | "subscription" | "other"
+      mandate_status: "pending" | "active" | "revoked" | "failed"
+      payment_kind: "hire" | "subscription" | "other" | "charge"
       payment_status: "unpaid" | "deposit_paid" | "paid"
       registration_status: "pending" | "approved" | "rejected" | "withdrawn"
       resource_type: "function_room" | "pitch"
@@ -7163,6 +7691,7 @@ export const Constants = {
   public: {
     Enums: {
       account_request_status: ["pending", "approved", "rejected", "withdrawn"],
+      agreement_status: ["active", "paused", "completed", "cancelled"],
       album_visibility: ["team", "club", "public", "social", "press"],
       app_role: [
         "club_admin",
@@ -7176,6 +7705,7 @@ export const Constants = {
       ],
       attendance_status: ["present", "absent", "late"],
       availability_status: ["available", "unavailable", "maybe"],
+      billing_account_status: ["active", "lapsed", "closed"],
       billing_kind: ["one_off", "monthly", "annual"],
       board_audience: ["club", "teams"],
       booking_kind: ["hire", "block", "fixture", "maintenance", "training"],
@@ -7192,6 +7722,8 @@ export const Constants = {
         "first_aid",
         "coaching_badge",
       ],
+      charge_kind: ["membership", "subs", "fine", "other"],
+      charge_status: ["pending", "paid", "waived", "void"],
       comms_category: ["transactional", "reminder", "marketing"],
       comms_channel: ["email", "sms", "push", "in_app"],
       concern_severity: ["low", "medium", "high", "critical"],
@@ -7214,6 +7746,8 @@ export const Constants = {
         "practice",
         "social",
       ],
+      fee_plan_scope: ["individual", "family"],
+      fee_schedule: ["one_off", "monthly", "annual"],
       fixture_source: ["fulltime", "manual"],
       fixture_status: [
         "scheduled",
@@ -7230,6 +7764,7 @@ export const Constants = {
         "legal_guardian",
         "other",
       ],
+      mandate_status: ["pending", "active", "revoked", "failed"],
       membership_kind: ["individual", "family"],
       outbound_status: [
         "queued",
@@ -7246,7 +7781,7 @@ export const Constants = {
         "creator",
         "oversight",
       ],
-      payment_kind: ["hire", "subscription", "other"],
+      payment_kind: ["hire", "subscription", "other", "charge"],
       payment_status: ["unpaid", "deposit_paid", "paid"],
       registration_status: ["pending", "approved", "rejected", "withdrawn"],
       resource_type: ["function_room", "pitch"],

@@ -43,12 +43,32 @@ async function authHeader(): Promise<string> {
   return `Bearer ${await getToken()}`;
 }
 
+// Authenticated fetch against the SumUp API — the one door for every module
+// that talks to SumUp (bookings here, finance in sumup-finance.ts).
+export async function sumupApi(path: string, init?: RequestInit): Promise<Response> {
+  const auth = await authHeader();
+  return fetch(`${BASE}${path}`, {
+    ...init,
+    headers: {
+      Authorization: auth,
+      "Content-Type": "application/json",
+      ...(init?.headers ?? {}),
+    },
+  });
+}
+
+export function sumupMerchantCode(): string {
+  return MERCHANT_CODE;
+}
+
 export type SumUpCheckout = {
   id: string;
   status: string; // PENDING | PAID | FAILED | EXPIRED
   amount: number;
   currency: string;
   checkout_reference: string;
+  purpose?: string;
+  customer_id?: string;
   transaction_code?: string;
   transactions?: { transaction_code?: string; status?: string }[];
 };

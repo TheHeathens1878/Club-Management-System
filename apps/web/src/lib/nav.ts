@@ -50,7 +50,9 @@ import {
   ClipboardList,
   Clock,
   Contact,
+  CreditCard,
   Images,
+  Landmark,
   LandPlot,
   LayoutDashboard,
   Mail,
@@ -541,6 +543,17 @@ export const NAV: readonly NavEntry[] = [
 
   // --- Money ---------------------------------------------------------------
   {
+    // The finance section (Adam, 2026-09-04): membership numbers, plans,
+    // charges, the ledger, reports, Xero. Gated on the dedicated finance
+    // role (club_admin holds it implicitly — is_finance() in the DB).
+    href: "/finance",
+    label: "Finance",
+    icon: Landmark,
+    group: "Money",
+    allowed: (c) => c.hasFinanceRole,
+    views: ["admin"],
+  },
+  {
     href: "/subs",
     label: "Subs",
     icon: Receipt,
@@ -560,6 +573,24 @@ export const NAV: readonly NavEntry[] = [
   },
 
   // --- Finance (the Me view's name for their own money) --------------------
+  {
+    // The household's charges and payments, live, with Pay now (SumUp).
+    href: "/my-payments",
+    label: "My payments",
+    icon: Receipt,
+    group: "Finance",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    // The electronic membership card — 00002A and the household under it.
+    href: "/membership-card",
+    label: "Membership card",
+    icon: CreditCard,
+    group: "Finance",
+    allowed: () => true,
+    views: ["me"],
+  },
   {
     href: "/my-subs",
     label: "My Subs",

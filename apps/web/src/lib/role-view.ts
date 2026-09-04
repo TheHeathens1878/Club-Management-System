@@ -129,6 +129,8 @@ export type Capabilities = {
   hasPlayerMembership: boolean;
   /** A live guardianship over at least one child. */
   isGuardian: boolean;
+  /** `person_roles.finance` (or club_admin) — the dedicated finance user. */
+  hasFinanceRole: boolean;
   hasWaitingListAccess: boolean;
   /** The teams behind each hat, for the role-switcher's team-scoped options. */
   staffTeams: TeamRef[];
@@ -157,7 +159,9 @@ export function qualifiesForView(view: RoleView, c: Capabilities): boolean {
     case "referee":
       return c.hasRefereeRole;
     case "admin":
-      return c.isClubAdmin || c.isCommittee;
+      // The dedicated finance user works in the admin view too: their menu is
+      // only what allowed() passes, which for them is the Finance section.
+      return c.isClubAdmin || c.isCommittee || c.hasFinanceRole;
     case "function_room":
       return c.isStaff || c.isBarManager;
   }

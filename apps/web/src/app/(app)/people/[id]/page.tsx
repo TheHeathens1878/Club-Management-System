@@ -216,6 +216,24 @@ export default async function PersonPage({
   );
   const familyNames = await resolveNames(familyOthers.map((row) => row.person_id));
 
+  // The membership NUMBER (billing account, 20260904170000): the household
+  // this person is billed under. Read under the caller's RLS — club_admin
+  // holds the finance gate; a reader without it simply sees no number card.
+  const { data: billingRow } = await supabase
+    .from("billing_account_people")
+    .select("account_id,letter,billing_accounts(member_no,lead_person_id,status)")
+    .eq("person_id", id)
+    .is("removed_at", null)
+    .maybeSingle();
+  const { data: billingHousehold } = billingRow
+    ? await supabase
+        .from("billing_account_people")
+        .select("person_id,letter,people(first_name,last_name)")
+        .eq("account_id", billingRow.account_id)
+        .is("removed_at", null)
+        .order("letter")
+    : { data: [] as never[] };
+
   // The Membership and payments tab. Only loaded when it is the tab being
   // shown — a record opened to read a phone number should not pay for a family
   // tree and two money reads.
@@ -614,6 +632,70 @@ export default async function PersonPage({
 
         {tab === "membership" && (
           <>
+        {billingRow?.billing_accounts && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Membership number</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                The household number this person is billed under. Every charge lands on the lead
+                member (the bill-payer); each person keeps their own card letter.
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-mono text-2xl font-bold tabular-nums">
+                  {String(billingRow.billing_accounts.member_no).padStart(5, "0")}
+                  {billingRow.letter}
+                </span>
+                {billingRow.billing_accounts.status !== "active" && (
+                  <Badge variant="muted">{billingRow.billing_accounts.status}</Badge>
+                )}
+                {billingRow.billing_accounts.lead_person_id === id ? (
+                  <Badge>Lead member · bill-payer</Badge>
+                ) : (
+                  <Link
+                    href={`/people/${billingRow.billing_accounts.lead_person_id}?tab=membership`}
+                    className="text-sm font-medium underline underline-offset-2"
+                  >
+                    Billed to the lead member →
+                  </Link>
+                )}
+              </div>
+              <ul className="space-y-1 text-sm">
+                {(billingHousehold ?? []).map((member) => (
+                  <li key={member.person_id} className="flex items-center gap-2">
+                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
+                      {String(billingRow.billing_accounts!.member_no).padStart(5, "0")}
+                      {member.letter}
+                    </span>
+                    {member.person_id === id ? (
+                      <span className="font-medium">
+                        {member.people ? `${member.people.first_name} ${member.people.last_name}` : "(unknown)"}
+                      </span>
+                    ) : (
+                      <Link
+                        href={`/people/${member.person_id}?tab=membership`}
+                        className="font-medium underline underline-offset-2"
+                      >
+                        {member.people ? `${member.people.first_name} ${member.people.last_name}` : "(unknown)"}
+                      </Link>
+                    )}
+                    {member.person_id === billingRow.billing_accounts!.lead_person_id && (
+                      <Badge variant="muted">lead</Badge>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <Link
+                href={`/finance/charges?account=${billingRow.account_id}`}
+                className="text-xs text-muted-foreground underline"
+              >
+                Charges &amp; payments for this membership (Finance)
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Club membership</CardTitle>
