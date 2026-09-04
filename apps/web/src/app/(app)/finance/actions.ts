@@ -157,6 +157,36 @@ export async function saveFeePlan(_prev: ActionState, formData: FormData): Promi
   return { notice: id ? "Plan updated." : "Plan created." };
 }
 
+export async function deleteFeePlan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const gate = await financeSession();
+  if (gate.error) return gate;
+  const id = String(formData.get("plan_id") ?? "");
+  const supabase = await createClient();
+  const { error } = await supabase.from("fee_plans").delete().eq("id", id);
+  if (error) {
+    if (error.code === "23503")
+      return { error: "This plan is in use — agreements or charges reference it. Deactivate it instead." };
+    return { error: error.message };
+  }
+  revalidatePath("/finance/plans");
+  return { notice: "Plan deleted." };
+}
+
+// Super user only — the DB's charges_delete_guard() is the real door: unpaid
+// only, audited before the row goes. RLS filters silently for anyone else, so
+// the zero-rows case gets its own message.
+export async function deleteCharge(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  const gate = await financeSession();
+  if (gate.error) return gate;
+  const chargeId = String(formData.get("charge_id") ?? "");
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("charges").delete().eq("id", chargeId).select("id");
+  if (error) return { error: error.message };
+  if (!data || data.length === 0) return { error: "Only a super user can delete a charge." };
+  refreshFinance();
+  return { notice: "Charge deleted. The deletion is on the audit log." };
+}
+
 export async function setFeePlanActive(_prev: ActionState, formData: FormData): Promise<ActionState> {
   const gate = await financeSession();
   if (gate.error) return gate;

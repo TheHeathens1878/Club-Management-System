@@ -20,7 +20,7 @@ export default async function FinanceChargesPage({
 }: {
   searchParams: Promise<{ account?: string; status?: string }>;
 }) {
-  await requireFinance();
+  const { capabilities } = await requireFinance();
   const params = await searchParams;
   const supabase = await createClient();
 
@@ -137,6 +137,7 @@ export default async function FinanceChargesPage({
               accounts={accountPicker}
               plans={planPicker}
               filterStatus={params.status ?? ""}
+              isSuperUser={capabilities.isSuperUser}
             />
           </CardContent>
         </Card>
