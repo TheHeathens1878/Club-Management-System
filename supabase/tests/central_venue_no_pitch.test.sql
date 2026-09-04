@@ -4,8 +4,9 @@
 --   A team whose home ground is a central venue the club does not manage gets
 --   no pitch booking, so its home fixtures belong in neither the /pitches
 --   work list (`unallocated_home_fixtures`) nor the lobby's counter
---   (`club_overview()`). A central venue that is only whitespace is no
---   central venue at all.
+--   (`club_overview()`). A whitespace-only central venue cannot exist at all
+--   — `teams_central_venue_name_check` refuses it — so the view's btrim guard
+--   is belt-and-braces, and the CHECK is what this file pins.
 --
 -- Run with: npx supabase test db
 -- =============================================================================
@@ -23,19 +24,15 @@ insert into public.person_roles (person_id, role, granted_by)
 insert into public.seasons (id, name, starts_on, ends_on, is_current)
   values ('5c5c5c5c-aaaa-4111-8111-000000000001', 'CV 2050/51', current_date - 30, current_date + 300, true);
 
--- Three teams: one at home, one at a central venue, one whose "central venue"
--- is just whitespace (the form never saves that, but the database must not
--- care either way).
+-- Two teams: one at home, one at a central venue.
 insert into public.teams (id, name, central_venue_name) values
   ('9c9c9c9c-aaaa-4111-8111-000000000001', 'CV Home',    null),
-  ('9c9c9c9c-aaaa-4111-8111-000000000002', 'CV Central', 'Partington Sports Village'),
-  ('9c9c9c9c-aaaa-4111-8111-000000000003', 'CV Blank',   '   ');
+  ('9c9c9c9c-aaaa-4111-8111-000000000002', 'CV Central', 'Partington Sports Village');
 
 -- One upcoming home fixture each, none with a booking.
 insert into public.fixtures (id, team_id, season_id, opponent, is_home, kickoff_at) values
   ('fc0c0c0c-aaaa-4111-8111-000000000001', '9c9c9c9c-aaaa-4111-8111-000000000001', '5c5c5c5c-aaaa-4111-8111-000000000001', 'Foe A', true, now() + interval '5 days'),
-  ('fc0c0c0c-aaaa-4111-8111-000000000002', '9c9c9c9c-aaaa-4111-8111-000000000002', '5c5c5c5c-aaaa-4111-8111-000000000001', 'Foe B', true, now() + interval '5 days'),
-  ('fc0c0c0c-aaaa-4111-8111-000000000003', '9c9c9c9c-aaaa-4111-8111-000000000003', '5c5c5c5c-aaaa-4111-8111-000000000001', 'Foe C', true, now() + interval '5 days');
+  ('fc0c0c0c-aaaa-4111-8111-000000000002', '9c9c9c9c-aaaa-4111-8111-000000000002', '5c5c5c5c-aaaa-4111-8111-000000000001', 'Foe B', true, now() + interval '5 days');
 
 -- The view --------------------------------------------------------------------
 select is((select count(*) from public.unallocated_home_fixtures
@@ -44,9 +41,11 @@ select is((select count(*) from public.unallocated_home_fixtures
 select is((select count(*) from public.unallocated_home_fixtures
            where team_id = '9c9c9c9c-aaaa-4111-8111-000000000002'), 0::bigint,
   'a central-venue team''s fixture never appears in the work list');
-select is((select count(*) from public.unallocated_home_fixtures
-           where team_id = '9c9c9c9c-aaaa-4111-8111-000000000003'), 1::bigint,
-  'a whitespace-only central venue is no central venue');
+select throws_ok(
+  $$update public.teams set central_venue_name = '   '
+     where id = '9c9c9c9c-aaaa-4111-8111-000000000001'$$,
+  '23514', null,
+  'a whitespace-only central venue cannot exist — the CHECK refuses it');
 
 -- Clearing the central venue puts the team back on the list ------------------
 update public.teams set central_venue_name = null
@@ -60,8 +59,8 @@ update public.teams set central_venue_name = 'Partington Sports Village'
 -- The lobby counter -----------------------------------------------------------
 set local request.jwt.claims to '{"sub":"c7c7c7c7-aaaa-4111-8111-000000000001","role":"authenticated"}';
 set local role authenticated;
-select is((select (public.club_overview() ->> 'unallocated_home_fixtures')::integer), 2,
-  'the overview counts the home team and the blank-venue team, not the central-venue team');
+select is((select (public.club_overview() ->> 'unallocated_home_fixtures')::integer), 1,
+  'the overview counts the home team, not the central-venue team');
 reset role;
 
 -- The view kept security_invoker through the replace --------------------------
