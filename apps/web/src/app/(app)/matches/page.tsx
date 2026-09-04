@@ -28,11 +28,14 @@ export const metadata = { title: "Matches" };
 
 const DAY_MS = 86_400_000;
 
-type Period = "weekend" | "month" | "results";
+type Period = "weekend" | "month" | "all" | "results";
 
 function periodWindow(period: Period): { from: Date; to: Date } {
   const now = new Date();
   if (period === "results") return { from: new Date(now.getTime() - 28 * DAY_MS), to: now };
+  // "All" is every upcoming fixture (Adam, 2026-09-04) — a year forward
+  // covers the season however early the imports run ahead.
+  if (period === "all") return { from: now, to: new Date(now.getTime() + 365 * DAY_MS) };
   if (period === "weekend") {
     // Through the coming Sunday night — the desk's default question.
     const day = now.getDay();
@@ -54,7 +57,13 @@ export default async function MatchesPage({
 
   const params = await searchParams;
   const period: Period =
-    params.period === "month" ? "month" : params.period === "results" ? "results" : "weekend";
+    params.period === "month"
+      ? "month"
+      : params.period === "all"
+        ? "all"
+        : params.period === "results"
+          ? "results"
+          : "weekend";
   const { from, to } = periodWindow(period);
 
   // The chosen hat scopes the desk (Adam, 2026-08-25: "I should just be able
@@ -177,6 +186,7 @@ export default async function MatchesPage({
   const tabs: { key: Period; label: string }[] = [
     { key: "weekend", label: "This weekend" },
     { key: "month", label: "Next 4 weeks" },
+    { key: "all", label: "All" },
     { key: "results", label: "Results" },
   ];
 
