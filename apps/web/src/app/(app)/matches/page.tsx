@@ -45,7 +45,7 @@ function periodWindow(period: Period): { from: Date; to: Date } {
 export default async function MatchesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ period?: string }>;
+  searchParams: Promise<{ period?: string; scope?: string }>;
 }) {
   const capabilities = await getCapabilities();
   if (!capabilities.isTeamStaff && !capabilities.isClubAdmin && !capabilities.isCommittee) {
@@ -65,8 +65,23 @@ export default async function MatchesPage({
   const scope = await getTeamScope(view, capabilities);
   const coachTeamIds =
     view === "coach" ? new Set(capabilities.staffTeams.map((team) => team.id)) : null;
+
+  // The desk defaults to the caller's own teams, and anyone who holds a desk
+  // at all may widen it to the whole club (Adam, 2026-09-04: "the view should
+  // default to the coach's team's matches but they should also be able to
+  // view the whole club"). The database enforces the same rule — p_scope
+  // 'club' only widens for live team staff, committee and admins — so this
+  // flag is presentation, not permission.
+  const narrowedByDefault = scope !== null || coachTeamIds !== null;
+  const wholeClub = params.scope === "club" && narrowedByDefault;
   const inView = (teamId: string): boolean =>
-    scope ? teamId === scope.id : coachTeamIds ? coachTeamIds.has(teamId) : true;
+    wholeClub
+      ? true
+      : scope
+        ? teamId === scope.id
+        : coachTeamIds
+          ? coachTeamIds.has(teamId)
+          : true;
 
   // The desk's whole management strip is one gate, page-wide (the teams-page
   // lesson): the admin capability, worn as the admin hat.
@@ -78,6 +93,7 @@ export default async function MatchesPage({
     supabase.rpc("matchday_fixtures", {
       p_from: from.toISOString(),
       p_to: to.toISOString(),
+      ...(wholeClub ? { p_scope: "club" } : {}),
     }),
     // Which teams play at a central venue (their "home" needs no pitch),
     // each team's age group (the desk's age-order sort), and which venue
@@ -199,7 +215,7 @@ export default async function MatchesPage({
             {tabs.map((tab) => (
               <Link
                 key={tab.key}
-                href={`/matches?period=${tab.key}`}
+                href={`/matches?period=${tab.key}${wholeClub ? "&scope=club" : ""}`}
                 className={
                   "inline-flex min-h-[44px] flex-none items-center rounded-full px-4 py-1.5 text-xs font-semibold transition lg:min-h-0 lg:px-3 " +
                   (period === tab.key
@@ -210,6 +226,35 @@ export default async function MatchesPage({
                 {tab.label}
               </Link>
             ))}
+            {/* A narrowed desk (a coach's, or a team pick) can widen to the
+                whole club and back (Adam, 2026-09-04). An admin hat already
+                sees everything, so it gets no switch. */}
+            {narrowedByDefault && (
+              <>
+                <Link
+                  href={`/matches?period=${period}`}
+                  className={
+                    "inline-flex min-h-[44px] flex-none items-center rounded-full border px-4 py-1.5 text-xs font-semibold transition lg:min-h-0 lg:px-3 " +
+                    (!wholeClub
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-input text-muted-foreground hover:bg-secondary")
+                  }
+                >
+                  My teams
+                </Link>
+                <Link
+                  href={`/matches?period=${period}&scope=club`}
+                  className={
+                    "inline-flex min-h-[44px] flex-none items-center rounded-full border px-4 py-1.5 text-xs font-semibold transition lg:min-h-0 lg:px-3 " +
+                    (wholeClub
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-input text-muted-foreground hover:bg-secondary")
+                  }
+                >
+                  Whole club
+                </Link>
+              </>
+            )}
           </div>
           <span className="flex flex-wrap gap-2 lg:ml-auto">
             {needPitch > 0 ? (
