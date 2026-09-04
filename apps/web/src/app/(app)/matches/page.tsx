@@ -79,9 +79,10 @@ export default async function MatchesPage({
       p_from: from.toISOString(),
       p_to: to.toISOString(),
     }),
-    // Which teams play at a central venue (their "home" needs no pitch), and
-    // which venue each pitch belongs to — both for honest Pitch/Venue columns.
-    adminDb.from("teams").select("id,central_venue_name"),
+    // Which teams play at a central venue (their "home" needs no pitch),
+    // each team's age group (the desk's age-order sort), and which venue
+    // each pitch belongs to for honest Pitch/Venue columns.
+    adminDb.from("teams").select("id,central_venue_name,age_group"),
     adminDb
       .from("resources")
       .select("id,name,venues(name)")
@@ -98,6 +99,9 @@ export default async function MatchesPage({
     (teamVenuesResult.data ?? []).map((team) => [team.id, (team.central_venue_name ?? "").trim()]),
   );
   const playsCentrally = (teamId: string): string => centralVenue.get(teamId) ?? "";
+  const ageGroupByTeam = new Map(
+    (teamVenuesResult.data ?? []).map((team) => [team.id, team.age_group]),
+  );
   const pitchRows = pitchesResult.data ?? [];
   const venueByPitch = new Map(pitchRows.map((row) => [row.name, row.venues?.name ?? null]));
 
@@ -130,6 +134,7 @@ export default async function MatchesPage({
       eventId: row.event_id,
       teamId: row.team_id,
       teamName: row.team_name,
+      ageGroup: ageGroupByTeam.get(row.team_id) ?? null,
       opponent: row.opponent,
       isHome: row.is_home,
       competition: row.competition ?? "League",
