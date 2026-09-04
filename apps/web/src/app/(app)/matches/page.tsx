@@ -115,11 +115,16 @@ export default async function MatchesPage({
   const deskRows: DeskRow[] = fixtures.map((row) => {
     const local = instantToLocal(row.kickoff_at);
     // A central-venue team's home game is not waiting for a pitch: it shows
-    // the venue's name, calmly, instead of an amber "Unallocated" (Adam,
-    // 2026-09-04 — the same rule that keeps them off /pitches).
+    // where it is actually played — the fixture's own venue text first
+    // ("…PLATT LANE… Pitch 1"), the standing central venue otherwise — never
+    // an amber "Unallocated" (Adam, 2026-09-04: "put the venue from the
+    // fixtures in all relevant places").
     const central = row.is_home ? playsCentrally(row.team_id) : "";
-    const pitch =
-      !row.is_home ? "Away" : central !== "" ? central : row.pitch_name ?? "Unallocated";
+    const pitch = !row.is_home
+      ? "Away"
+      : central !== ""
+        ? row.venue_text?.trim() || central
+        : row.pitch_name ?? "Unallocated";
     return {
       id: row.fixture_id,
       eventId: row.event_id,

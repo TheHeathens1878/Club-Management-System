@@ -370,7 +370,7 @@ export default async function TeamsPage({
     teamIds.length > 0
       ? supabase
           .from("fixtures")
-          .select("team_id,kickoff_at,opponent,is_home,booking_id,resources!fixtures_venue_resource_id_fkey(name)")
+          .select("team_id,kickoff_at,opponent,is_home,booking_id,venue_text,resources!fixtures_venue_resource_id_fkey(name)")
           .in("team_id", teamIds)
           .eq("status", "scheduled")
           .gte("kickoff_at", nowIso)
@@ -520,8 +520,19 @@ export default async function TeamsPage({
               when: kickoffShort(fixture.kickoff_at),
               opponent: fixture.opponent,
               home: fixture.is_home,
-              pitch: fixture.resources?.name ?? null,
-              unallocated: fixture.is_home && fixture.booking_id === null,
+              // A central-venue team's home game is at that venue — the
+              // fixture's own venue text first, never "no pitch yet" (Adam,
+              // 2026-09-04: "put the venue from the fixtures in all relevant
+              // places").
+              pitch:
+                fixture.resources?.name ??
+                (fixture.is_home && (team.central_venue_name ?? "").trim() !== ""
+                  ? fixture.venue_text?.trim() || (team.central_venue_name ?? "").trim()
+                  : null),
+              unallocated:
+                fixture.is_home &&
+                fixture.booking_id === null &&
+                (team.central_venue_name ?? "").trim() === "",
             }
           : null,
         subsOwing: squadSubscribed

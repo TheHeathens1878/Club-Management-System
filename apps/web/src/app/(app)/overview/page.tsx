@@ -38,17 +38,31 @@ export default async function OverviewPage() {
 
   const supabase = await createClient();
   const now = Date.now();
-  const [overviewResult, weekendResult, socialResult] = await Promise.all([
+  const [overviewResult, weekendResult, socialResult, teamVenuesResult] = await Promise.all([
     supabase.rpc("club_overview"),
     supabase.rpc("matchday_fixtures", {
       p_from: new Date(now).toISOString(),
       p_to: new Date(now + 7 * DAY_MS).toISOString(),
     }),
     supabase.rpc("social_events", { p_limit: 1 }),
+    // A central-venue team's home game is at that venue, not "Unallocated"
+    // (Adam, 2026-09-04) — the weekend list names the ground instead.
+    supabase.from("teams").select("id,central_venue_name"),
   ]);
 
   const o = (overviewResult.data ?? null) as Record<string, unknown> | null;
   const weekend = (weekendResult.data ?? []).filter((row) => row.status === "scheduled").slice(0, 6);
+  const centralVenue = new Map(
+    (teamVenuesResult.data ?? []).map((team) => [team.id, (team.central_venue_name ?? "").trim()]),
+  );
+  const weekendPitch = (row: (typeof weekend)[number]): { label: string; settled: boolean } => {
+    if (!row.is_home) return { label: "Away", settled: true };
+    if (row.pitch_name) return { label: row.pitch_name, settled: true };
+    const central = centralVenue.get(row.team_id) ?? "";
+    // The fixture's own venue text first — it names the actual pitch there.
+    if (central !== "") return { label: row.venue_text?.trim() || central, settled: true };
+    return { label: "Unallocated", settled: false };
+  };
   const social = socialResult.data?.[0];
 
   const due = num(o, "subs_due_pence");
@@ -232,8 +246,7 @@ export default async function OverviewPage() {
                           </span>
                           <span className="mt-0.5 block truncate text-xs text-muted-foreground">
                             {formatEventDate(row.kickoff_at).slice(0, 6)} ·{" "}
-                            {formatEventTime(row.kickoff_at)} ·{" "}
-                            {!row.is_home ? "Away" : (row.pitch_name ?? "Unallocated")}
+                            {formatEventTime(row.kickoff_at)} · {weekendPitch(row).label}
                           </span>
                         </span>
                         <Badge
@@ -269,13 +282,16 @@ export default async function OverviewPage() {
                           </span>
                         </span>
                         <span className="flex-none text-xs">
-                          {!row.is_home ? (
-                            <span className="text-muted-foreground">Away</span>
-                          ) : row.pitch_name ? (
-                            row.pitch_name
-                          ) : (
-                            <span className="text-amber-700">Unallocated</span>
-                          )}
+                          {(() => {
+                            const pitch = weekendPitch(row);
+                            if (!row.is_home)
+                              return <span className="text-muted-foreground">Away</span>;
+                            return pitch.settled ? (
+                              pitch.label
+                            ) : (
+                              <span className="text-amber-700">Unallocated</span>
+                            );
+                          })()}
                         </span>
                         <Badge
                           variant={

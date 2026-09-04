@@ -27,7 +27,7 @@ function fixtureRow(overrides: Partial<FixtureRow> = {}): FixtureRow {
     status: "scheduled",
     venue_resource_id: null,
     venue_text: null,
-    teams: { id: "team-1", name: "Sale AoM U12" },
+    teams: { id: "team-1", name: "Sale AoM U12", central_venue_name: null },
     resources: null,
     ...overrides,
   };
@@ -81,6 +81,41 @@ describe("fixtureVenue", () => {
   it("does not claim a pitch for an away fixture with no venue", () => {
     const { venue, allocated } = fixtureVenue(fixtureRow({ is_home: false }));
     expect(venue).not.toBe(PITCH_TBC);
+    expect(allocated).toBe(false);
+  });
+
+  // Adam, 2026-09-04: "Even though U8 Sparrows Black are at a central venue,
+  // it keeps saying pitch unallocated." No allocation ever comes for these
+  // teams, so TBC would nag forever.
+  it("names a central-venue team's venue instead of Pitch TBC, settled", () => {
+    const { venue, allocated } = fixtureVenue(
+      fixtureRow({
+        teams: { id: "team-1", name: "U8 Sparrows Black", central_venue_name: "Platt Lane Sports Complex" },
+      }),
+    );
+    expect(venue).toBe("Platt Lane Sports Complex");
+    expect(allocated).toBe(true);
+  });
+
+  it("lets the fixture's own venue text refine the central venue, still settled", () => {
+    const { venue, allocated } = fixtureVenue(
+      fixtureRow({
+        venue_text: "Platt Lane 3G, Pitch 4",
+        teams: { id: "team-1", name: "U8 Sparrows Black", central_venue_name: "Platt Lane Sports Complex" },
+      }),
+    );
+    expect(venue).toBe("Platt Lane 3G, Pitch 4");
+    expect(allocated).toBe(true);
+  });
+
+  it("keeps an away fixture away even for a central-venue team", () => {
+    const { venue, allocated } = fixtureVenue(
+      fixtureRow({
+        is_home: false,
+        teams: { id: "team-1", name: "U8 Sparrows Black", central_venue_name: "Platt Lane Sports Complex" },
+      }),
+    );
+    expect(venue).not.toBe("Platt Lane Sports Complex");
     expect(allocated).toBe(false);
   });
 });

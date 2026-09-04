@@ -201,8 +201,11 @@ export default async function FixtureAttendancePage({
   const pitchName = venueResource?.name ?? null;
   const pitchAddress = venueResource?.address ?? null;
 
+  // A home fixture with no allocated pitch still names its ground when the
+  // import gave one — a central-venue team's games are played there (Adam,
+  // 2026-09-04: "put the venue from the fixtures in all relevant places").
   const whereLine = `${formatBookingDateShort(local.date)} · ${local.time} · ${
-    fixture.is_home ? (pitchName ?? "Home") : (fixture.venue_text ?? "Away")
+    fixture.is_home ? (pitchName ?? fixture.venue_text ?? "Home") : (fixture.venue_text ?? "Away")
   }`;
 
   return (

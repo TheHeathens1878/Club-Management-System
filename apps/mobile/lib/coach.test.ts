@@ -85,6 +85,16 @@ describe("whereLine", () => {
     expect(whereLine(row({ allocated: false, pitch_name: null }))).toBe("Pitch TBC");
   });
 
+  // A central-venue team's home games never get an allocation; Full-Time's
+  // venue text is where they are actually played (Adam, 2026-09-04).
+  it("falls back to the imported venue text for an unallocated home game", () => {
+    expect(
+      whereLine(
+        row({ allocated: false, pitch_name: null, venue_text: "Platt Lane Sports Complex" }),
+      ),
+    ).toBe("Platt Lane Sports Complex");
+  });
+
   it("names the away ground when Full-Time gave one", () => {
     expect(whereLine(row({ is_home: false, venue_text: "Crossford Bridge" }))).toBe(
       "Crossford Bridge",
