@@ -22,6 +22,7 @@ import { redirect } from "next/navigation";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { writeAudit } from "@/lib/audit";
+import { emailCoachesAboutReallocation } from "@/lib/fixture-reallocation-email";
 
 /** SQLSTATE for `exclusion_violation` — the named-conflict case. */
 const CONFLICT_SQLSTATE = "23P01";
@@ -76,7 +77,7 @@ export async function allocateFixture(input: AllocateInput): Promise<AllocationR
 
   const { data: before } = await admin
     .from("fixtures")
-    .select("id,venue_resource_id,booking_id")
+    .select("id,venue_resource_id,booking_id,kickoff_at,team_id,opponent")
     .eq("id", input.fixtureId)
     .maybeSingle();
 
@@ -114,6 +115,41 @@ export async function allocateFixture(input: AllocateInput): Promise<AllocationR
       kickoff_time: kickoff ?? null,
     },
   });
+
+  // A game that already held a slot and has just been put somewhere else is
+  // a REALLOCATION — the team's coaches are emailed (Adam, 2026-09-04). A
+  // first allocation sends nothing.
+  if (before?.booking_id && before.team_id) {
+    const { data: after } = await admin
+      .from("fixtures")
+      .select("kickoff_at,venue_resource_id")
+      .eq("id", input.fixtureId)
+      .maybeSingle();
+    const pitchChanged = !!after && after.venue_resource_id !== before.venue_resource_id;
+    const kickoffChanged =
+      !!after && new Date(after.kickoff_at).getTime() !== new Date(before.kickoff_at).getTime();
+    if (after && (pitchChanged || kickoffChanged)) {
+      const ids = [before.venue_resource_id, after.venue_resource_id].filter(
+        (id): id is string => !!id,
+      );
+      const { data: pitchRows } = await admin.from("resources").select("id,name").in("id", ids);
+      const names = new Map((pitchRows ?? []).map((row) => [row.id, row.name]));
+      await emailCoachesAboutReallocation(before.team_id, [
+        {
+          fixtureId: input.fixtureId,
+          opponent: before.opponent,
+          kickoffAt: after.kickoff_at,
+          fromPitch: before.venue_resource_id
+            ? names.get(before.venue_resource_id) ?? null
+            : null,
+          toPitch: after.venue_resource_id
+            ? names.get(after.venue_resource_id) ?? "another pitch"
+            : "another pitch",
+          kickoffChanged,
+        },
+      ]);
+    }
+  }
 
   revalidateAllocation();
   return {};

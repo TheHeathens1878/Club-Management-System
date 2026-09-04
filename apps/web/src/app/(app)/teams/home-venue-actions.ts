@@ -28,6 +28,10 @@ import { revalidatePath } from "next/cache";
 
 import { writeAudit } from "@/lib/audit";
 import { getSessionProfile } from "@/lib/auth";
+import {
+  emailCoachesAboutTeamMoves,
+  snapshotTeamAllocations,
+} from "@/lib/fixture-reallocation-email";
 import { createClient } from "@/lib/supabase/server";
 
 import type { BulkAllocationState, BulkConflict } from "./[id]/matchday-actions";
@@ -100,11 +104,16 @@ export async function allocateTeamHomeGames(
   if (!teamId) return { error: "Missing team." };
 
   const supabase = await createClient();
+  // The sweep re-books every future home fixture, moved and fresh alike, so
+  // the coaches' "your game moved" email needs a before-picture to diff
+  // against (Adam, 2026-09-04).
+  const snapshot = await snapshotTeamAllocations(teamId);
   const { data, error } = await supabase.rpc("allocate_team_fixtures", { p_team_id: teamId });
   if (error) {
     if (error.code === "42501") return { error: "Only a club administrator can allocate fixtures." };
     return { error: error.message };
   }
+  await emailCoachesAboutTeamMoves(teamId, snapshot);
 
   revalidatePath("/teams");
   revalidatePath(`/teams/${teamId}`);
@@ -206,6 +215,7 @@ export async function bulkSetHomeVenue(
     saved += 1;
 
     if (allocateGames) {
+      const snapshot = await snapshotTeamAllocations(team.id);
       const { data: result, error: allocError } = await supabase.rpc("allocate_team_fixtures", {
         p_team_id: team.id,
       });
@@ -213,6 +223,8 @@ export async function bulkSetHomeVenue(
         warnings.push(`${team.name} — home pitch set, but not allocated: ${allocError.message}`);
         continue;
       }
+      // Any game that already held a slot and just moved → its coaches hear.
+      await emailCoachesAboutTeamMoves(team.id, snapshot);
       const summary = result as { total: number; allocated: number; conflicts: BulkConflict[] };
       placed += summary.allocated;
       placeable += summary.total;

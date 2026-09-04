@@ -25,6 +25,10 @@
 
 import { revalidatePath } from "next/cache";
 
+import {
+  emailCoachesAboutTeamMoves,
+  snapshotTeamAllocations,
+} from "@/lib/fixture-reallocation-email";
 import { createClient } from "@/lib/supabase/server";
 
 export type MatchDayState = { error?: string; notice?: string };
@@ -253,6 +257,10 @@ export async function allocateAllTeamFixtures(
   }
 
   const supabase = await createClient();
+  // Before-picture for the coaches' "your game moved" email (Adam,
+  // 2026-09-04): the sweep re-books everything, and only a diff can tell a
+  // moved game from a freshly placed one.
+  const snapshot = await snapshotTeamAllocations(teamId);
   const { data, error } = await supabase.rpc("allocate_team_fixtures", {
     p_team_id: teamId,
     ...(resourceId ? { p_resource_id: resourceId } : {}),
@@ -262,6 +270,7 @@ export async function allocateAllTeamFixtures(
     if (error.code === "42501") return { error: "Only a club administrator can allocate fixtures." };
     return { error: error.message };
   }
+  await emailCoachesAboutTeamMoves(teamId, snapshot);
 
   const result = data as { total: number; allocated: number; conflicts: BulkConflict[] };
   revalidateAllocation(teamId);

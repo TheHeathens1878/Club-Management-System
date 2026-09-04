@@ -56,6 +56,10 @@ import {
   localToInstant,
   normaliseTime,
 } from "@/lib/booking-time";
+import {
+  emailCoachesAboutReallocation,
+  type ReallocationMove,
+} from "@/lib/fixture-reallocation-email";
 import { friendlyDbError } from "@/lib/people-display";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
@@ -106,6 +110,7 @@ type FixtureRow = {
   kickoff_at: string;
   status: string;
   booking_id: string | null;
+  venue_resource_id: string | null;
   mirror_fixture_id: string | null;
   source: string | null;
   external_ref: string | null;
@@ -115,7 +120,7 @@ type FixtureRow = {
 };
 
 const FIXTURE_COLUMNS =
-  "id,team_id,opponent,is_home,kickoff_at,status,booking_id,mirror_fixture_id,source,external_ref,season_id,competition,venue_text";
+  "id,team_id,opponent,is_home,kickoff_at,status,booking_id,venue_resource_id,mirror_fixture_id,source,external_ref,season_id,competition,venue_text";
 
 /** "Sat 5 Sep, 14:00 v Boothstown" — what a warning has to name to be useful. */
 function describe(fixture: FixtureRow): string {
@@ -423,6 +428,10 @@ export async function bulkAllocatePitch(
 
   const warnings: string[] = [];
   let allocated = 0;
+  // Games that already held a slot and have just been moved — their coaches
+  // are emailed, one message per team (Adam, 2026-09-04). A first allocation
+  // is not a move.
+  const movesByTeam = new Map<string, ReallocationMove[]>();
 
   for (const fixture of fixtures) {
     if (!fixture.is_home) {
@@ -448,6 +457,43 @@ export async function bulkAllocatePitch(
       continue;
     }
     allocated += 1;
+
+    const kickoffChanged =
+      time !== null && instantToLocal(fixture.kickoff_at).time !== time;
+    const pitchChanged = fixture.venue_resource_id !== resourceId;
+    if (fixture.booking_id !== null && fixture.team_id && (pitchChanged || kickoffChanged)) {
+      const moves = movesByTeam.get(fixture.team_id) ?? [];
+      moves.push({
+        fixtureId: fixture.id,
+        opponent: fixture.opponent,
+        kickoffAt: time ? atLocalTime(fixture.kickoff_at, time) : fixture.kickoff_at,
+        // Resolved to a name below, once, after the loop.
+        fromPitch: fixture.venue_resource_id,
+        toPitch: pitch.name,
+        kickoffChanged,
+      });
+      movesByTeam.set(fixture.team_id, moves);
+    }
+  }
+
+  if (movesByTeam.size > 0) {
+    const previousIds = new Set<string>();
+    for (const moves of movesByTeam.values()) {
+      for (const move of moves) if (move.fromPitch) previousIds.add(move.fromPitch);
+    }
+    const { data: previousPitches } = previousIds.size
+      ? await supabase.from("resources").select("id,name").in("id", [...previousIds])
+      : { data: [] as { id: string; name: string }[] };
+    const previousNames = new Map((previousPitches ?? []).map((row) => [row.id, row.name]));
+    for (const [teamId, moves] of movesByTeam) {
+      await emailCoachesAboutReallocation(
+        teamId,
+        moves.map((move) => ({
+          ...move,
+          fromPitch: move.fromPitch ? previousNames.get(move.fromPitch) ?? null : null,
+        })),
+      );
+    }
   }
 
   if (allocated === 0) {
