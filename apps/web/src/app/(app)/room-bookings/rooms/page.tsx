@@ -7,8 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { ChevronLeft, CheckCircle2, AlertCircle, Plus } from "lucide-react";
-import { updateRoom, createRoom } from "../actions";
+import { updateRoom, createRoom, updateRoomMemberDiscount } from "../actions";
 import { DeleteRoomButton } from "./delete-room-button";
+import { ExtrasEditor } from "./extras-editor";
+import { parseExtrasConfig } from "@/lib/booking-extras";
+import { getSettings } from "@/lib/settings";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 export default async function RoomsSettingsPage({
@@ -23,6 +26,8 @@ export default async function RoomsSettingsPage({
   const { saved, error: errorParam } = await searchParams;
 
   const admin = createAdminClient();
+  const settings = await getSettings();
+  const memberDiscountPounds = (Number(settings.room_member_discount_pence) || 0) / 100;
   const { data: rooms, error } = await admin
     .from("resources")
     .select("*")
@@ -49,6 +54,48 @@ export default async function RoomsSettingsPage({
         }
       />
       <div className="max-w-3xl space-y-4 p-4 lg:space-y-6 lg:p-6">
+        {saved === "discount" && (
+          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            Member discount saved.
+          </div>
+        )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Member discount</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <form action={updateRoomMemberDiscount} className="flex flex-wrap items-end gap-3">
+              <div className="w-36 space-y-1.5">
+                <Label htmlFor="member-discount">Amount (£)</Label>
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">£</span>
+                  <Input
+                    id="member-discount"
+                    name="member_discount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    defaultValue={memberDiscountPounds ? memberDiscountPounds.toFixed(2) : ""}
+                    placeholder="e.g. 25.00"
+                    className="pl-7"
+                  />
+                </div>
+              </div>
+              <button
+                type="submit"
+                className="min-h-[44px] rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 lg:min-h-0"
+              >
+                Save
+              </button>
+              <p className="basis-full text-xs text-muted-foreground">
+                Taken off room hire for players, club families and social members once their claim
+                is checked. The booking form quotes it; Confirm on a booking prefills it.
+              </p>
+            </form>
+          </CardContent>
+        </Card>
+
         {saved === "new" && (
           <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -192,7 +239,26 @@ export default async function RoomsSettingsPage({
                     </div>
 
                     <div className="space-y-1.5">
-                      <Label htmlFor={`hr-${room.id}`}>Hourly rate (£)</Label>
+                      <Label htmlFor={`sp-${room.id}`}>Standard hire (£)</Label>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">£</span>
+                        <Input id={`sp-${room.id}`} name="standard_price_pence" type="number" min="0" step="0.01" defaultValue={penceToPounds(room.standard_price_pence)} placeholder="e.g. 150.00" className="pl-7" />
+                      </div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`sh-${room.id}`}>Standard hours <span className="text-muted-foreground text-xs font-normal">covered by the standard hire</span></Label>
+                      <Input id={`sh-${room.id}`} name="standard_hours" type="number" min="0.5" step="0.5" defaultValue={room.standard_hours ?? ""} placeholder="e.g. 4.5" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`eh-${room.id}`}>Each extra half hour (£) <span className="text-muted-foreground text-xs font-normal">any started half hour counts</span></Label>
+                      <div className="relative">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">£</span>
+                        <Input id={`eh-${room.id}`} name="extra_hour_pence" type="number" min="0" step="0.01" defaultValue={penceToPounds(room.extra_hour_pence)} placeholder="e.g. 25.00" className="pl-7" />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor={`hr-${room.id}`}>Hourly rate (£) <span className="text-muted-foreground text-xs font-normal">fallback if no standard hire</span></Label>
                       <div className="relative">
                         <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">£</span>
                         <Input id={`hr-${room.id}`} name="price_pence_per_hour" type="number" min="0" step="0.01" defaultValue={penceToPounds(room.price_pence_per_hour)} placeholder="e.g. 25.00" className="pl-7" />
@@ -236,6 +302,11 @@ export default async function RoomsSettingsPage({
                     Save changes
                   </button>
                 </form>
+
+                <div className="mt-6 border-t pt-4">
+                  <p className="mb-3 text-sm font-medium">Optional extras</p>
+                  <ExtrasEditor roomId={room.id} config={parseExtrasConfig(room.extras_config)} />
+                </div>
               </CardContent>
             </Card>
           );

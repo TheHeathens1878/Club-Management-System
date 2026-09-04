@@ -523,6 +523,12 @@ export async function updateRoom(formData: FormData): Promise<void> {
   const priceHalfDay = toP("price_pence_half_day");
   const priceFullDay = toP("price_pence_full_day");
   const priceFixed = toP("price_pence_fixed");
+  // The standard-hire model the card advertises and the estimate charges:
+  // £150 to 4½ hours, £25 per additional half hour. extra_hour_pence holds
+  // the HALF-hour price despite its name (see lib/room-pricing).
+  const standardPrice = toP("standard_price_pence");
+  const standardHours = formData.get("standard_hours") ? Number(formData.get("standard_hours")) : null;
+  const extraHalfHour = toP("extra_hour_pence");
   const priceNote = String(formData.get("price_note") ?? "").trim() || null;
   const active = formData.get("active") === "true";
   // Was function_rooms.resources; `resources` is the table name now, so the
@@ -543,6 +549,9 @@ export async function updateRoom(formData: FormData): Promise<void> {
       price_pence_half_day: priceHalfDay,
       price_pence_full_day: priceFullDay,
       price_pence_fixed: priceFixed,
+      standard_price_pence: standardPrice,
+      standard_hours: standardHours,
+      extra_hour_pence: extraHalfHour,
       price_note: priceNote,
     })
     .eq("id", id)
@@ -1175,4 +1184,112 @@ export async function markSecurityDepositReturned(
 
   revalidatePath(`/room-bookings/${bookingId}`);
   return {};
+}
+
+
+/**
+ * The extras menu, editable again (Adam, 2026-09-04: "We seem to have lost
+ * the ability to set what the additional extras cost"). The whole menu is
+ * validated and written in one call; prices are pounds in the form, pence in
+ * the config, and the shape is the one lib/booking-extras prices against.
+ */
+export async function updateRoomExtras(
+  roomId: string,
+  extras: {
+    id: string | null;
+    name: string;
+    type: "choice" | "binary";
+    active: boolean;
+    pricePounds: string;
+    /** One option per line: "Black = 70". Ignored for binary extras. */
+    optionsText: string;
+  }[],
+): Promise<{ error?: string }> {
+  await requireCommittee();
+  const admin = createAdminClient();
+
+  type StoredExtra = { id: string; name: string; type: string; active: boolean; options: { label: string; price_pence: number }[]; price_pence: number };
+  const config: StoredExtra[] = [];
+  for (const extra of extras) {
+    const name = extra.name.trim();
+    if (!name) continue;
+    if (extra.type === "binary") {
+      const pence = Math.round(Number(extra.pricePounds || "0") * 100);
+      if (!Number.isFinite(pence) || pence < 0) {
+        return { error: `"${name}": give it a price in pounds.` };
+      }
+      config.push({
+        id: extra.id ?? crypto.randomUUID(),
+        name,
+        type: "binary",
+        active: extra.active,
+        options: [],
+        price_pence: pence,
+      });
+      continue;
+    }
+    const options: { label: string; price_pence: number }[] = [];
+    for (const line of extra.optionsText.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      const match = /^(.*?)[=–—-]\s*£?\s*([\d.]+)\s*$/.exec(trimmed);
+      if (!match) {
+        return { error: `"${name}": each option is a line like "Black = 70".` };
+      }
+      const label = (match[1] ?? "").trim().replace(/[=–—-]\s*$/, "").trim();
+      const pence = Math.round(Number(match[2]) * 100);
+      if (!label || !Number.isFinite(pence) || pence < 0) {
+        return { error: `"${name}": each option is a line like "Black = 70".` };
+      }
+      options.push({ label, price_pence: pence });
+    }
+    if (options.length === 0) {
+      return { error: `"${name}": a choice extra needs at least one option.` };
+    }
+    // A free "None" first, so the form always has a way to decline.
+    if (!options.some((o) => o.price_pence === 0)) {
+      options.unshift({ label: "None", price_pence: 0 });
+    }
+    config.push({
+      id: extra.id ?? crypto.randomUUID(),
+      name,
+      type: "choice",
+      active: extra.active,
+      options,
+      price_pence: 0,
+    });
+  }
+
+  const { error } = await admin
+    .from("resources")
+    .update({ extras_config: config })
+    .eq("id", roomId)
+    .eq("type", FUNCTION_ROOM);
+  if (error) return { error: conflictOrMessage(error, "Failed to save the extras.") };
+
+  revalidatePath("/room-bookings/rooms");
+  revalidatePath("/book");
+  return {};
+}
+
+/**
+ * The member discount, settable again (Adam, 2026-09-04): one club-wide
+ * amount off room hire for players, club families and social members. The
+ * desk's Confirm prefills from it once a claim has been checked; the public
+ * form quotes it beside the claim.
+ */
+export async function updateRoomMemberDiscount(formData: FormData): Promise<void> {
+  await requireCommittee();
+  const admin = createAdminClient();
+  const pounds = String(formData.get("member_discount") ?? "").trim();
+  const pence = pounds ? Math.round(Number(pounds) * 100) : 0;
+  if (!Number.isFinite(pence) || pence < 0) {
+    redirect(`/room-bookings/rooms?error=${encodeURIComponent("Give the discount in pounds.")}`);
+  }
+  await admin
+    .from("site_settings")
+    .upsert({ key: "room_member_discount_pence", value: String(pence) }, { onConflict: "key" });
+  revalidatePath("/room-bookings/rooms");
+  revalidatePath("/book");
+  redirect("/room-bookings/rooms?saved=discount");
 }

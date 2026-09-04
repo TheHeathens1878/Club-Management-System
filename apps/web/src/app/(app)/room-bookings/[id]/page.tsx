@@ -100,6 +100,7 @@ export default async function RoomBookingDetailPage({
   const totalPence = booking.total_pence ?? 0;
   const depositPence = booking.deposit_pence ?? 0;
   const settings = await getSettings();
+  const memberDiscountDefault = Number(settings.room_member_discount_pence) || 0;
   const defaultDepositPence = Number(settings.deposit_default_pence) || 0;
 
   const roomName = (rooms ?? []).find((r) => r.id === booking.resource_id)?.name ?? "Unknown room";
@@ -260,6 +261,7 @@ export default async function RoomBookingDetailPage({
               <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
               <CardContent>
                 <StatusForm
+                  defaultMemberDiscountPence={booking.is_member ? memberDiscountDefault : null}
                   bookingId={id}
                   currentStatus={booking.status}
                   isStaff={canEdit}
