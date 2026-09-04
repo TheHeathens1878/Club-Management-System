@@ -33,6 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 import {
+  bulkAllocatePitch,
   bulkCancelFixtures,
   bulkDeleteFixtures,
   bulkSetKickoffTime,
@@ -53,9 +54,12 @@ export type DeskRow = {
   time: string;
   /** "2026-09-06", for the date-range filter. */
   dateIso: string;
-  /** "Banky Lane 1" | "Unallocated" | "Away". */
+  /** "Banky Lane 1" | "Unallocated" | "Away" — or the central venue's name. */
   pitch: string;
+  /** Booking exists — or the team plays at a central venue, which is just as settled. */
   allocated: boolean;
+  /** The ground: "Ashton Park" | "Unallocated" | "Away" | a central venue. */
+  venue: string;
   venueText: string | null;
   accepted: number;
   declined: number;
@@ -71,6 +75,7 @@ type Filters = {
   opponent: string;
   homeAway: "all" | "home" | "away";
   competition: string;
+  venue: string;
   pitch: string;
   status: string;
   replies: "all" | "short" | "quiet";
@@ -83,6 +88,7 @@ const NO_FILTERS: Filters = {
   opponent: "",
   homeAway: "all",
   competition: "",
+  venue: "",
   pitch: "",
   status: "",
   replies: "all",
@@ -102,6 +108,7 @@ function applyFilters(rows: DeskRow[], f: Filters): DeskRow[] {
     if (f.homeAway === "home" && !row.isHome) return false;
     if (f.homeAway === "away" && row.isHome) return false;
     if (f.competition && row.competition !== f.competition) return false;
+    if (f.venue && row.venue !== f.venue) return false;
     if (f.pitch && row.pitch !== f.pitch) return false;
     if (f.status && row.status !== f.status) return false;
     if (f.replies === "short" && !shortOfReplies(row)) return false;
@@ -124,6 +131,7 @@ const EXPORT_HEAD = [
   "Opponent",
   "H/A",
   "Competition",
+  "Venue",
   "Pitch / venue",
   "Status",
   "In",
@@ -139,6 +147,7 @@ function exportLine(row: DeskRow): string[] {
     row.opponent,
     row.isHome ? "H" : "A",
     row.competition,
+    row.venue,
     row.isHome ? row.pitch : row.venueText || "Away",
     row.status,
     String(row.accepted),
@@ -201,11 +210,14 @@ async function exportPdf(rows: DeskRow[]): Promise<void> {
 export function MatchesDesk({
   rows,
   canManage,
+  pitches,
   focusFirst,
 }: {
   rows: DeskRow[];
   /** Ticks and the action bar — the server actions re-check club admin. */
   canManage: boolean;
+  /** Active pitches for the action bar's "Allocate pitch"; empty hides it. */
+  pitches: { id: string; name: string }[];
   /** Accent the first row as "next up" (not on Results). */
   focusFirst: boolean;
 }) {
@@ -217,22 +229,24 @@ export function MatchesDesk({
   const [timeState, timeAction, settingTime] = useActionState(bulkSetKickoffTime, EMPTY);
   const [cancelState, cancelAction, cancelling] = useActionState(bulkCancelFixtures, EMPTY);
   const [deleteState, deleteAction, deleting] = useActionState(bulkDeleteFixtures, EMPTY);
+  const [allocState, allocAction, allocating] = useActionState(bulkAllocatePitch, EMPTY);
 
   const filtered = useMemo(() => applyFilters(rows, filters), [rows, filters]);
   const filtering = filters !== NO_FILTERS && filtered.length !== rows.length;
 
   const teamOptions = useMemo(() => distinct(rows.map((r) => r.teamName)), [rows]);
   const competitionOptions = useMemo(() => distinct(rows.map((r) => r.competition)), [rows]);
+  const venueOptions = useMemo(() => distinct(rows.map((r) => r.venue)), [rows]);
   const pitchOptions = useMemo(() => distinct(rows.map((r) => r.pitch)), [rows]);
   const statusOptions = useMemo(() => distinct(rows.map((r) => r.status)), [rows]);
 
   const chosen = useMemo(() => rows.filter((row) => selected.has(row.id)), [rows, selected]);
   const armed = confirmCount.trim() === String(chosen.length) && chosen.length > 0;
-  const busy = settingTime || cancelling || deleting;
+  const busy = settingTime || cancelling || deleting || allocating;
 
   // A finished action means the rows on screen are stale: refetch them, and
   // put the ticks down — the work they described is done.
-  const doneStamp = [timeState.notice, cancelState.notice, deleteState.notice]
+  const doneStamp = [timeState.notice, cancelState.notice, deleteState.notice, allocState.notice]
     .filter(Boolean)
     .join("|");
   useEffect(() => {
@@ -295,7 +309,7 @@ export function MatchesDesk({
 
   const messages = (
     <>
-      {[timeState, cancelState, deleteState].map((state, index) =>
+      {[timeState, cancelState, deleteState, allocState].map((state, index) =>
         state.error ? (
           <p key={index} className="text-sm text-destructive">
             {state.error}
@@ -306,7 +320,7 @@ export function MatchesDesk({
           </p>
         ) : null,
       )}
-      {[timeState, cancelState, deleteState].flatMap((state, index) =>
+      {[timeState, cancelState, deleteState, allocState].flatMap((state, index) =>
         (state.warnings ?? []).map((warning, i) => (
           <p key={`${index}-${i}`} className="text-sm text-amber-700">
             {warning}
@@ -368,6 +382,40 @@ export function MatchesDesk({
             </span>
           </p>
           <div className="flex flex-wrap items-end gap-x-4 gap-y-3">
+            {pitches.length > 0 && (
+              <form action={allocAction} className="flex flex-wrap items-end gap-2">
+                {hiddenIds}
+                <label className="space-y-1 text-xs text-muted-foreground">
+                  Pitch
+                  {/* min-w-0: WebKit will not shrink a select below its longest
+                      option without it, and pitch names run long. */}
+                  <select
+                    name="resource_id"
+                    required
+                    defaultValue=""
+                    aria-label="Pitch to allocate"
+                    className="block h-9 w-full min-w-0 max-w-60 rounded-md border bg-background px-2 text-sm"
+                  >
+                    <option value="" disabled>
+                      Choose a pitch…
+                    </option>
+                    {pitches.map((pitch) => (
+                      <option key={pitch.id} value={pitch.id}>
+                        {pitch.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="space-y-1 text-xs text-muted-foreground">
+                  KO (optional)
+                  <Input name="kickoff_time" type="time" className="block h-9 w-28" />
+                </label>
+                <Button type="submit" size="sm" variant="outline" disabled={busy}>
+                  {allocating ? "Allocating…" : "Allocate pitch"}
+                </Button>
+              </form>
+            )}
+
             <form action={timeAction} className="flex items-end gap-2">
               {hiddenIds}
               <label className="space-y-1 text-xs text-muted-foreground">
@@ -403,8 +451,10 @@ export function MatchesDesk({
             </form>
           </div>
           <p className="text-xs text-muted-foreground">
-            Cancelling frees each match&apos;s pitch and keeps the record; deleting removes the
-            match, its diary event and everyone&apos;s answers, and gives the pitch back first.
+            Allocating books (or moves) each ticked home match onto the chosen pitch with the same
+            clash check as any hire — a blank KO keeps each match&apos;s own time. Cancelling frees
+            each match&apos;s pitch and keeps the record; deleting removes the match, its diary
+            event and everyone&apos;s answers, and gives the pitch back first.
           </p>
           {messages}
         </div>
@@ -431,6 +481,8 @@ export function MatchesDesk({
               <option value="home">Home</option>
               <option value="away">Away</option>
             </select>
+            {filterSelect(filters.venue, (v) => set("venue", v), venueOptions, "All venues", "Venue")}
+            {filterSelect(filters.pitch, (v) => set("pitch", v), pitchOptions, "All pitches", "Pitch")}
             <Input
               value={filters.opponent}
               onChange={(e) => set("opponent", e.target.value)}
@@ -526,7 +578,7 @@ export function MatchesDesk({
                 <th className="px-4 py-2 font-medium">Kick-off</th>
                 <th className="px-4 py-2 font-medium">Fixture</th>
                 <th className="px-4 py-2 font-medium">Competition</th>
-                <th className="px-4 py-2 font-medium">Pitch</th>
+                <th className="px-4 py-2 font-medium">Pitch / venue</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Replies</th>
               </tr>
@@ -565,7 +617,12 @@ export function MatchesDesk({
                   {filterSelect(filters.competition, (v) => set("competition", v), competitionOptions, "All", "Competition")}
                 </td>
                 <td className="px-4 py-2">
-                  {filterSelect(filters.pitch, (v) => set("pitch", v), pitchOptions, "All", "Pitch")}
+                  {/* Two filters on one column: the ground, then the pitch on
+                      it (Adam, 2026-09-04: "filter by venue … not just pitch"). */}
+                  <span className="flex flex-col gap-1">
+                    {filterSelect(filters.venue, (v) => set("venue", v), venueOptions, "All venues", "Venue")}
+                    {filterSelect(filters.pitch, (v) => set("pitch", v), pitchOptions, "All pitches", "Pitch")}
+                  </span>
                 </td>
                 <td className="px-4 py-2">
                   {filterSelect(filters.status, (v) => set("status", v), statusOptions, "All", "Status")}
