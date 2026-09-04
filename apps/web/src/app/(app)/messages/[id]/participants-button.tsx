@@ -35,6 +35,9 @@ export type ThreadParticipant = {
   name: string;
   isSelf: boolean;
   left: boolean;
+  /** The hats beside the name — "Admin", "Coach U14 Mavericks" (Adam,
+      2026-09-04). Resolved by the database, participant-gated. */
+  labels?: string[];
 };
 
 const EMPTY: GroupActionState = {};
@@ -168,16 +171,23 @@ export function ParticipantsButton({
                   key={person.personId}
                   className="flex min-h-[36px] items-center justify-between gap-2 text-sm"
                 >
-                  {canOpenContacts ? (
-                    <Link
-                      href={`/people/${person.personId}`}
-                      className="truncate underline-offset-2 hover:underline"
-                    >
-                      {person.name}
-                    </Link>
-                  ) : (
-                    <span className="truncate">{person.name}</span>
-                  )}
+                  <span className="min-w-0">
+                    {canOpenContacts ? (
+                      <Link
+                        href={`/people/${person.personId}`}
+                        className="block truncate underline-offset-2 hover:underline"
+                      >
+                        {person.name}
+                      </Link>
+                    ) : (
+                      <span className="block truncate">{person.name}</span>
+                    )}
+                    {(person.labels ?? []).length > 0 && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {(person.labels ?? []).join(" · ")}
+                      </span>
+                    )}
+                  </span>
                   <span className="flex shrink-0 items-center gap-1">
                     {person.isSelf && <Badge variant="outline">You</Badge>}
                     {canRemove && conversationId && !person.isSelf && (
