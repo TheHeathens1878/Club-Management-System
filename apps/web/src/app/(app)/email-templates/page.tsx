@@ -9,6 +9,8 @@ import { formatDistanceToNow } from "date-fns";
 import { Mail, ChevronRight, CheckCircle2, RotateCcw } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 
+export const metadata = { title: "Email Templates" };
+
 export default async function EmailTemplatesPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
@@ -25,6 +27,7 @@ export default async function EmailTemplatesPage() {
       <PageHeader
         title="Email Templates"
         subtitle="Customise the emails sent automatically by the system."
+        back={{ href: "/settings?tab=email-templates", label: "Settings" }}
       />
       <div className="p-4 max-w-2xl space-y-3 lg:p-6">
         {keys.map((key) => {

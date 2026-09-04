@@ -5,6 +5,8 @@ import { isSumUpConfigured, listSumUpTransactions } from "@/lib/sumup-finance";
 import { formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Reports" };
+
 /**
  * The reconciliation reports: arrears aging by membership, income by month
  * and plan, and the two-sided SumUp check — what SumUp settled versus what

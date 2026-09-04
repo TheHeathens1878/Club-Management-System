@@ -14,6 +14,8 @@ import {
   type PlanRow,
 } from "./subs-client";
 
+export const metadata = { title: "Subs" };
+
 /**
  * Subs and arrears for the club (PLAN.md P4.1, P4.2).
  *

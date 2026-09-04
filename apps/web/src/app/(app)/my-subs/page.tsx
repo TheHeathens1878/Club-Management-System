@@ -13,6 +13,8 @@ import { formatDate } from "@/lib/utils";
 
 import { PayNowButton } from "./pay-now-button";
 
+export const metadata = { title: "My subs" };
+
 /**
  * A member's own subs, and their children's (PLAN.md P4.1).
  *

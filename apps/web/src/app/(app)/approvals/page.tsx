@@ -21,6 +21,8 @@ import { createClient } from "@/lib/supabase/server";
 import { DecisionPanel } from "./decision-forms";
 import { LeaveDecisionForms } from "./leave-request-forms";
 
+export const metadata = { title: "Approvals" };
+
 /**
  * The approvals queue (gap 4) — the Neon app's /admin/approvals, rebuilt.
  *
@@ -200,7 +202,7 @@ export default async function ApprovalsPage({
                   </span>
                 ) : null}
                 <span className="block text-xs text-muted-foreground">
-                  Applications to join a team are decided on the registrations desk — approving one
+                  Applications to join a team are decided on the Registrations page — approving one
                   writes the player&apos;s team membership for the season.
                 </span>
               </p>

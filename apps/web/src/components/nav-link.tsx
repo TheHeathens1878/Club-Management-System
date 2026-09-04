@@ -12,7 +12,7 @@
  */
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 import { Lock } from "lucide-react";
 
 export function NavLink({
@@ -40,12 +40,29 @@ export function NavLink({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const matches = (candidate: string): boolean =>
-    pathname === candidate || (candidate !== "/" && pathname.startsWith(`${candidate}/`));
+  const searchParams = useSearchParams();
+
+  // A menu row may carry a query ("/messages?filter=groups", "/room-bookings
+  // ?status=pending"): it matches only when every one of its params is in the
+  // current URL, and it then BEATS its query-less twin — so "My groups" lights
+  // up on the groups filter and "Messaging" does not, instead of the reverse
+  // being permanently true (2026-09-04 audit: the three query rows could never
+  // highlight at all).
+  const matches = (candidate: string): boolean => {
+    const [path, query] = candidate.split("?");
+    const base = path ?? candidate;
+    if (!(pathname === base || (base !== "/" && pathname.startsWith(`${base}/`)))) return false;
+    if (!query) return true;
+    return [...new URLSearchParams(query)].every(([key, value]) => searchParams.get(key) === value);
+  };
+  const specificity = (candidate: string): number => {
+    const [path, query] = candidate.split("?");
+    return (path ?? candidate).length + (query ? new URLSearchParams(query).size * 1000 : 0);
+  };
   const active =
     matches(href) &&
     !(hrefs ?? []).some(
-      (other) => other !== href && other.length > href.length && matches(other),
+      (other) => other !== href && specificity(other) > specificity(href) && matches(other),
     );
 
   return (

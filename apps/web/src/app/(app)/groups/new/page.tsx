@@ -10,6 +10,8 @@ import { getCurrentPersonId, isClubAdmin } from "@/lib/person";
 import { loadAttachmentOptions } from "../attachment-options";
 import { NewGroupForm } from "./new-group-form";
 
+export const metadata = { title: "New group" };
+
 /**
  * `/groups/new` — set up a group chat.
  *

@@ -15,6 +15,8 @@ import {
   type MyQuote,
 } from "./my-payments-client";
 
+export const metadata = { title: "My payments" };
+
 /**
  * The household's money, live (Adam, 2026-09-04: "members should be able to
  * see their payments in real time"). Everything reads through the caller's

@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, KeyRound } from "lucide-react";
+import { KeyRound } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
@@ -13,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 import { ageGroupSortKey } from "@/lib/waiting-list";
 
 import { GrantForm, RevokeForm } from "./access-forms";
+
+export const metadata = { title: "Waiting list access" };
 
 /**
  * Waiting list access (gap 10) — who, besides a club administrator, may read
@@ -69,16 +69,7 @@ export default async function WaitingListAccessPage() {
       <PageHeader
         title="Waiting list access"
         subtitle="Coaches who can see the children waiting for a place, age group by age group"
-        action={
-          <Link
-            href="/waiting-list/manage"
-            className={
-              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
-            }
-          >
-            <ChevronLeft className="h-4 w-4" /> Back to the desk
-          </Link>
-        }
+        back={{ href: "/waiting-list/manage", label: "Waiting list" }}
       />
 
       <div className="max-w-3xl space-y-6 p-4 lg:p-6">

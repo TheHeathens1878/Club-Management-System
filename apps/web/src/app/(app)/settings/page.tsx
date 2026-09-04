@@ -113,17 +113,51 @@ export default async function SettingsPage({
         <div className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:overflow-x-visible lg:px-0">
           <div className="inline-flex flex-nowrap rounded-lg bg-secondary p-1 lg:flex-wrap lg:gap-y-1">
             {tabs.map((t) => (
-              <a
+              <Link
                 key={t.key}
                 href={`/settings?tab=${t.key}`}
                 className={`flex min-h-[44px] items-center rounded-md px-4 py-1.5 text-sm font-medium transition whitespace-nowrap lg:block lg:min-h-0
                   ${tab === t.key ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
               >
                 {t.label}
-              </a>
+              </Link>
             ))}
           </div>
         </div>
+
+        {/* Every other configuration screen in the app, from the one place an
+            administrator will look for it (2026-09-04 audit: eight scattered
+            surfaces and nothing joining them). */}
+        {tab === "general" && (
+          <Card className="max-w-2xl">
+            <CardHeader className="p-4 lg:p-6">
+              <CardTitle className="text-base">Configuration elsewhere</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                These live inside their own sections; this is the index.
+              </p>
+            </CardHeader>
+            <CardContent className="grid gap-2 p-4 pt-0 sm:grid-cols-2 lg:p-6 lg:pt-0">
+              {[
+                { href: "/finance/fees", label: "Fees", detail: "Membership, subs and fines" },
+                { href: "/finance/settings", label: "Finance settings", detail: "Xero codes, cards on file" },
+                { href: "/registrations/form", label: "Registration form", detail: "The questions /join asks" },
+                { href: "/pitches/manage", label: "Pitches", detail: "The pitches themselves" },
+                { href: "/venues", label: "Venues", detail: "Grounds and arrival notes" },
+                { href: "/room-bookings/rooms", label: "Rooms", detail: "Function-room setup" },
+                { href: "/waiting-list/manage/access", label: "Waiting list access", detail: "Who works the list" },
+              ].map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  className="rounded-lg border p-3 transition-colors hover:bg-secondary/40"
+                >
+                  <span className="block text-sm font-medium">{item.label}</span>
+                  <span className="block text-xs text-muted-foreground">{item.detail}</span>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {tab === "general" && (
           <Card className="max-w-2xl">

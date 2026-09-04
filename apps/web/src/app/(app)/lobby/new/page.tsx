@@ -1,9 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
@@ -46,16 +43,7 @@ export default async function NewLobbyPostPage() {
       <PageHeader
         title="Post to the lobby"
         subtitle="The whole club, every team's board, or just the teams it concerns"
-        action={
-          <Link
-            href="/lobby"
-            className={
-              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
-            }
-          >
-            <ArrowLeft className="h-4 w-4" /> Club lobby
-          </Link>
-        }
+        back={{ href: "/lobby", label: "Club lobby" }}
       />
       <div className="p-4 lg:p-6">
         <PostForm teams={teams} ageGroups={ageGroups} isAdmin={capabilities.isClubAdmin} />

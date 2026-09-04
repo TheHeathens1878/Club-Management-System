@@ -13,6 +13,8 @@ import { ChevronLeft } from "lucide-react";
 
 import { BookForm } from "./book-form";
 
+export const metadata = { title: "Book a pitch" };
+
 /**
  * `/pitches/book` — the screen the cutover was missing (gap 3, deliverable 1).
  *

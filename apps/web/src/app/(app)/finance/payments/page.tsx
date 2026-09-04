@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { PaymentsClient, type PaymentRow } from "./payments-client";
 
+export const metadata = { title: "Payments ledger" };
+
 /**
  * The one ledger, whole: function-room hire, subs, membership fees, fines —
  * every payment the club has recorded, with refunds netted where they belong.

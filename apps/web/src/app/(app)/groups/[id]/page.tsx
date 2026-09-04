@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Eye, MessageSquare } from "lucide-react";
+import { Eye, MessageSquare } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -17,6 +17,10 @@ import { createClient } from "@/lib/supabase/server";
 import { loadAttachmentOptions } from "../attachment-options";
 import { GroupMembersPanel, type GroupMemberRow } from "./group-members-panel";
 import { CloseGroupForm, GroupSettingsForm } from "./group-settings-form";
+
+// The group's own name would cost a second read of the conversation in
+// `generateMetadata`; the section names the tab instead.
+export const metadata = { title: "Group" };
 
 /**
  * `/groups/[id]` — manage one group.
@@ -192,14 +196,9 @@ export default async function ManageGroupPage({
             >
               <MessageSquare className="h-3.5 w-3.5" /> Open chat
             </Link>
-            <Link
-              href="/groups"
-              className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
-            >
-              <ChevronLeft className="h-4 w-4" /> All groups
-            </Link>
           </div>
         }
+        back={{ href: "/groups", label: "Groups" }}
       />
 
       <div className="max-w-3xl space-y-4 p-4 lg:p-6">

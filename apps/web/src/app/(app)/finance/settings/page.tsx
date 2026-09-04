@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { SettingsClient, type MandateRow } from "./settings-client";
 
+export const metadata = { title: "Finance settings" };
+
 export default async function FinanceSettingsPage() {
   await requireFinance();
   const supabase = await createClient();

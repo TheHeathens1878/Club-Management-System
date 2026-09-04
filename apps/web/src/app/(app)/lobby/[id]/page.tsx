@@ -1,10 +1,8 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft, Pin } from "lucide-react";
+import { Pin } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { formatEventDate } from "@/app/(app)/events/shared";
@@ -43,16 +41,7 @@ export default async function LobbyPostPage({ params }: { params: Promise<{ id: 
       <PageHeader
         title={post.title}
         subtitle={`${post.author_name} · ${formatEventDate(post.created_at)}`}
-        action={
-          <Link
-            href="/lobby"
-            className={
-              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
-            }
-          >
-            <ArrowLeft className="h-4 w-4" /> Club lobby
-          </Link>
-        }
+        back={{ href: "/lobby", label: "Club lobby" }}
       />
 
       {/* A thread is prose: a comfortable measure on a phone, the same 3xl

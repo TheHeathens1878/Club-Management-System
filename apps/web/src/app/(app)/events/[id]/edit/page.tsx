@@ -1,9 +1,6 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile } from "@/lib/auth";
 import { instantToLocal } from "@/lib/booking-time";
 import { getCapabilities } from "@/lib/capabilities";
@@ -104,14 +101,7 @@ export default async function EditEventPage({ params }: { params: Promise<{ id: 
       <PageHeader
         title="Edit event"
         subtitle={event.title}
-        action={
-          <Link
-            href={`/events/${id}`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <ArrowLeft className="h-4 w-4" /> Back to the event
-          </Link>
-        }
+        back={{ href: `/events/${id}`, label: "Event" }}
       />
       <div className="p-4 lg:p-6">
         <EditEventForm initial={initial} venues={venues} />

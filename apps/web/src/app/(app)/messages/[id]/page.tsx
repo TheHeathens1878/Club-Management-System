@@ -18,6 +18,10 @@ import { ParticipantsButton } from "./participants-button";
 import { loadThread } from "./thread-data";
 import { ThreadPanel } from "./thread-panel";
 
+// A thread's own name in a browser tab announces the conversation to whoever
+// is looking over the reader's shoulder. The section names itself instead.
+export const metadata = { title: "Messages" };
+
 /** One header action on a phone: a 44px icon target; the labelled link at lg. */
 const HEADER_LINK =
   "inline-flex h-11 w-11 items-center justify-center gap-1 rounded-full text-sm text-muted-foreground hover:bg-secondary lg:h-auto lg:min-h-0 lg:w-auto lg:rounded-none lg:hover:bg-transparent lg:hover:underline";

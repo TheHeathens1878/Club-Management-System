@@ -1,6 +1,4 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
@@ -8,6 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { EndOfSeasonForm, type EosSeasonOption, type EosTeamRow } from "./eos-form";
+
+export const metadata = { title: "End of season" };
 
 /**
  * End of season (P2 follow-on; Adam, 2026-08-25).
@@ -82,15 +82,9 @@ export default async function EndOfSeasonPage() {
             ? `Close ${current.name}: every team a year older, squads carried over, the new season made current`
             : "Set a current season first — the rollover closes one season into the next"
         }
+        back={{ href: "/teams", label: "Teams" }}
       />
       <div className="space-y-6 p-4 lg:p-6">
-        <Link
-          href="/teams"
-          className="inline-flex min-h-[44px] items-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:underline lg:min-h-0"
-        >
-          <ArrowLeft className="h-4 w-4" /> Back to Teams
-        </Link>
-
         <Card>
           <CardHeader>
             <CardTitle>The rollover, in one run</CardTitle>

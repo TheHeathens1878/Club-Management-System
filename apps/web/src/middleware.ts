@@ -47,6 +47,9 @@ export async function middleware(request: NextRequest) {
     // SG-10 decides in the database whether the account may exist at all.
     path.startsWith("/register") ||
     path.startsWith("/privacy") ||
+    // Linked from the public front door and the login page — a contact page
+    // that bounces to /login is a door painted on a wall (2026-09-04 audit).
+    path.startsWith("/contact") ||
     path.startsWith("/auth") ||
     path.startsWith("/_next") ||
     path.startsWith("/favicon") ||

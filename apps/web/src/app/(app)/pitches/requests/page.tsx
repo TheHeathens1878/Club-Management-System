@@ -12,6 +12,8 @@ import { CalendarPlus } from "lucide-react";
 
 import { PendingRequests, UpcomingBookings } from "./requests-panel";
 
+export const metadata = { title: "Pitch requests" };
+
 /**
  * `/pitches/requests` — the club administrator's desk (gap 3, deliverable 2).
  *

@@ -8,6 +8,8 @@ import { PayButton } from "./pay-button";
 import { PaymentPendingBanner } from "./payment-pending-banner";
 import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
 
+export const metadata = { title: "Your bookings" };
+
 export const dynamic = "force-dynamic";
 
 export default async function PortalPage({

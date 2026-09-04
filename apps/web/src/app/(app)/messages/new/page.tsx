@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { NewMessageForm, type PersonOption } from "./new-message-form";
 
+export const metadata = { title: "New message" };
+
 /** Long enough for a club roster, short enough not to be a data dump. */
 const PEOPLE_LIMIT = 300;
 

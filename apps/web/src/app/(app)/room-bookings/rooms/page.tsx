@@ -1,18 +1,18 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { buttonVariants } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
-import { ChevronLeft, CheckCircle2, AlertCircle, Plus } from "lucide-react";
+import { CheckCircle2, AlertCircle, Plus } from "lucide-react";
 import { updateRoom, createRoom, updateRoomMemberDiscount } from "../actions";
 import { DeleteRoomButton } from "./delete-room-button";
 import { ExtrasEditor } from "./extras-editor";
 import { parseExtrasConfig } from "@/lib/booking-extras";
 import { getSettings } from "@/lib/settings";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
+
+export const metadata = { title: "Manage Rooms" };
 
 export default async function RoomsSettingsPage({
   searchParams,
@@ -44,14 +44,6 @@ export default async function RoomsSettingsPage({
       <PageHeader
         title="Manage Rooms"
         subtitle="Update room details, capacity and pricing"
-        action={
-          <Link
-            href="/room-bookings"
-            className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"}
-          >
-            <ChevronLeft className="h-4 w-4" /> Back to bookings
-          </Link>
-        }
       />
       <div className="max-w-3xl space-y-4 p-4 lg:space-y-6 lg:p-6">
         {saved === "discount" && (

@@ -15,6 +15,8 @@ import { safeRelativePath } from "@/lib/auth-email-hook";
 
 import { ProfileForm, type ContactDetails } from "./profile-form";
 
+export const metadata = { title: "My profile" };
+
 /**
  * My Profile (Adam's parent menu, 2026-08-25) — the caller's own record.
  *

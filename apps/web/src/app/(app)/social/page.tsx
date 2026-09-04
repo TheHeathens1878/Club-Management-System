@@ -84,7 +84,7 @@ export default async function SocialPage() {
                 ) : null}
                 <div className="mt-5 flex flex-wrap gap-2">
                   <Link
-                    href={`/events/${hero.event_id}`}
+                    href={`/events/${hero.event_id}?from=/social`}
                     className={
                       buttonVariants({ size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
                     }
@@ -93,7 +93,7 @@ export default async function SocialPage() {
                   </Link>
                   {hero.can_manage ? (
                     <Link
-                      href={`/events/${hero.event_id}`}
+                      href={`/events/${hero.event_id}?from=/social`}
                       className={
                         buttonVariants({ variant: "outline", size: "sm" }) +
                         " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
@@ -147,7 +147,7 @@ export default async function SocialPage() {
             {rest.map((event) => (
               <Link
                 key={event.event_id}
-                href={`/events/${event.event_id}`}
+                href={`/events/${event.event_id}?from=/social`}
                 className="group block min-h-[44px]"
               >
                 <Card className="h-full transition group-hover:border-primary/40">

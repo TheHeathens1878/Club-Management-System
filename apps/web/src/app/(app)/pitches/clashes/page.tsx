@@ -12,6 +12,8 @@ import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import { createClient } from "@/lib/supabase/server";
 import { CalendarRange, LandPlot, ShieldAlert } from "lucide-react";
 
+export const metadata = { title: "Clashes" };
+
 /**
  * `/pitches/clashes` — the clashes report (Adam, 2026-08-25).
  *

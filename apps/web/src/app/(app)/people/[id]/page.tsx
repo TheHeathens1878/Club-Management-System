@@ -1,13 +1,12 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Clock } from "lucide-react";
+import { Clock } from "lucide-react";
 
 import type { Json } from "@club/db";
 
 import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
 import { signPeoplePhotos, signPersonPhotoPath } from "@/lib/avatars";
@@ -77,6 +76,11 @@ import {
  * membership in that season, and the card lists the other people on it so an
  * administrator can click straight through to the rest of the family.
  */
+
+// The person's own name would be the obvious tab title and is exactly what
+// must not go there: a browser tab, a screen share and a history entry are all
+// places a member's name would travel further than the page itself.
+export const metadata = { title: "Member record" };
 
 const TEAM_ROLE_LABELS: Record<string, string> = {
   player: "Player",
@@ -325,16 +329,7 @@ export default async function PersonPage({
       <PageHeader
         title={name}
         subtitle={person.email ?? "No email on file"}
-        action={
-          <Link
-            href={backHref(from)}
-            className={
-              buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"
-            }
-          >
-            <ChevronLeft className="h-4 w-4" /> Back to people
-          </Link>
-        }
+        back={{ href: backHref(from), label: "People" }}
       />
       <div className="space-y-6 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-3">

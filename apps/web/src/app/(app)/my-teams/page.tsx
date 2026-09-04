@@ -20,6 +20,8 @@ import {
 } from "@/lib/pitch-calendar";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "My teams" };
+
 /**
  * "My teams" — the player's own screen, and the parent's shortcut to the same
  * thing for a child.

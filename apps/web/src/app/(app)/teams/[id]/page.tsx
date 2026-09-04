@@ -43,6 +43,10 @@ import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
 import { formatBookingDateShort } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
 import { fixtureDayLabel, fixtureWhenLabel, type AvailabilityStatus } from "@/lib/squad-cards";
+
+// The team's name would mean re-reading `teams` in `generateMetadata`, a query
+// this page already makes for itself; a tab is not worth a second one.
+export const metadata = { title: "Team" };
 import { setTeamActive } from "../actions";
 import { loadThread } from "../../messages/[id]/thread-data";
 import { ThreadPanel } from "../../messages/[id]/thread-panel";
@@ -831,11 +835,7 @@ export default async function TeamPage({
         <PageHeader
           title={team.name}
           subtitle={team.age_group ?? "No age group"}
-          action={
-            <Link href="/teams" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <ChevronLeft className="h-4 w-4" /> Back to teams
-            </Link>
-          }
+          back={{ href: "/teams", label: "Teams" }}
         />
       </div>
 

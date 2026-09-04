@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { getCurrentPersonId } from "@/lib/person";
 
+export const metadata = { title: "Messages" };
+
 /**
  * /messages — the right pane when nothing is open yet. The conversation rail
  * beside it comes from the layout; on a phone the rail IS this page, so the

@@ -34,7 +34,12 @@ function num(record: Record<string, unknown> | null, key: string): number {
 
 export default async function OverviewPage() {
   const capabilities = await getCapabilities();
-  if (!capabilities.isClubAdmin && !capabilities.isCommittee) redirect("/lobby");
+  // The dedicated finance user qualifies for the admin view but not for this
+  // dashboard — their home is the finance section, not the member lobby
+  // (2026-09-04 audit: they were bounced to /lobby wearing the admin sidebar).
+  if (!capabilities.isClubAdmin && !capabilities.isCommittee) {
+    redirect(capabilities.hasFinanceRole ? "/finance" : "/lobby");
+  }
 
   const supabase = await createClient();
   const now = Date.now();
@@ -99,7 +104,7 @@ export default async function OverviewPage() {
     needs.push({
       title: `${social.title} — ${social.accepted} repl${social.accepted === 1 ? "y" : "ies"}`,
       detail: `${formatEventDate(social.starts_at)} · ${social.venue ?? social.team_name}`,
-      href: `/events/${social.event_id}`,
+      href: `/events/${social.event_id}?from=/overview`,
       tone: "bg-muted-foreground/40",
     });
   }
@@ -237,7 +242,7 @@ export default async function OverviewPage() {
                     {weekend.map((row) => (
                       <Link
                         key={row.fixture_id}
-                        href={row.event_id ? `/events/${row.event_id}` : "/matches"}
+                        href={row.event_id ? `/events/${row.event_id}?from=/overview` : "/matches"}
                         className="flex min-h-[44px] items-center gap-3 px-4 py-3"
                       >
                         <span className="min-w-0 flex-1">
@@ -265,7 +270,7 @@ export default async function OverviewPage() {
                     {weekend.map((row) => (
                       <Link
                         key={row.fixture_id}
-                        href={row.event_id ? `/events/${row.event_id}` : "/matches"}
+                        href={row.event_id ? `/events/${row.event_id}?from=/overview` : "/matches"}
                         className="flex items-center gap-4 px-5 py-3 text-sm transition hover:bg-secondary/40"
                       >
                         <span className="w-16 flex-none text-xs font-semibold text-muted-foreground">

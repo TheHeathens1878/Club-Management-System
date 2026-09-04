@@ -11,6 +11,8 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { MarkAllReadButton, NotificationsList } from "./notifications-list";
 
+export const metadata = { title: "Notifications" };
+
 /**
  * `/notifications` — the in-app feed (gap 5).
  *

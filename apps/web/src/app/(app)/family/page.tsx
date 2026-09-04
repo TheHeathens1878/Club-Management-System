@@ -42,6 +42,8 @@ import {
   type TeamOption,
 } from "./family-forms";
 
+export const metadata = { title: "Children" };
+
 /**
  * Children (gap 9) — the first screen a parent has ever had on this platform.
  *

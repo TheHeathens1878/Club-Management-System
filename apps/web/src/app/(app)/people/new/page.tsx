@@ -10,6 +10,8 @@ import { addressToFields } from "@/lib/people-display";
 
 import { PersonForm } from "../person-form";
 
+export const metadata = { title: "Add a person" };
+
 export default async function NewPersonPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");

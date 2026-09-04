@@ -1,9 +1,7 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, ListOrdered } from "lucide-react";
+import { ListOrdered } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
@@ -11,6 +9,8 @@ import { questionFromRow, type RegistrationQuestion } from "@/lib/registration-q
 import { createClient } from "@/lib/supabase/server";
 
 import { FormBuilder } from "./builder";
+
+export const metadata = { title: "Registration form" };
 
 /**
  * The registration form, editable (Adam, 2026-08-25).
@@ -44,17 +44,7 @@ export default async function RegistrationFormBuilderPage() {
       <PageHeader
         title="Registration form"
         subtitle="What families are asked when they register, and in what order"
-        action={
-          <Link
-            href="/registrations"
-            className={
-              buttonVariants({ variant: "outline", size: "sm" }) +
-              " min-h-[44px] w-full lg:min-h-0 lg:w-auto"
-            }
-          >
-            <ChevronLeft className="h-4 w-4" /> Back to the queue
-          </Link>
-        }
+        back={{ href: "/registrations", label: "Registrations" }}
       />
 
       <div className="space-y-6 p-4 lg:p-6">

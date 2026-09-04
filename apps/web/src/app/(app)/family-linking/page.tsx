@@ -16,6 +16,8 @@ import {
 } from "@/lib/family-tree";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "My family" };
+
 /**
  * Family linking (Adam, 2026-08-26) — "show you the family group you are
  * connected to in a hierarchical family tree. If an ex-spouse is also
@@ -90,8 +92,24 @@ export default async function FamilyLinkingPage() {
   return (
     <>
       <PageHeader
-        title="Family linking"
-        subtitle="The family group the club connects to your account"
+        title="My family"
+        subtitle="Everyone the club connects to your account"
+        action={
+          <span className="flex flex-wrap gap-2">
+            <Link
+              href="/family"
+              className="inline-flex min-h-[44px] items-center rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground hover:bg-primary/90 lg:min-h-0 lg:py-1.5"
+            >
+              Add a child
+            </Link>
+            <Link
+              href="/connected-adults"
+              className="inline-flex min-h-[44px] items-center rounded-md border px-3 text-sm font-medium hover:bg-secondary lg:min-h-0 lg:py-1.5"
+            >
+              Add an adult
+            </Link>
+          </span>
+        }
       />
 
       <div className="space-y-6 p-4 lg:p-6">

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, MessageSquare } from "lucide-react";
+import { MessageSquare } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -86,11 +86,9 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
                 <MessageSquare className="h-3.5 w-3.5" /> Coaches group
               </Link>
             )}
-            <Link href="/venues" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <ChevronLeft className="h-4 w-4" /> Venues
-            </Link>
           </div>
         }
+        back={{ href: "/venues", label: "Venues" }}
       />
 
       <div className="max-w-3xl space-y-4 p-4 lg:space-y-6 lg:p-6">

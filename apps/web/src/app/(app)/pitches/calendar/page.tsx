@@ -54,6 +54,8 @@ import { CalendarDatePicker, CalendarFilterSelect, PrintButton } from "./calenda
 import { WeekCalendar } from "./calendar-views";
 import { ClosePitchForm } from "./closure-form";
 
+export const metadata = { title: "Pitch calendar" };
+
 /**
  * `/pitches/calendar` — the club's pitch diary (gap 6, legacy-app parity).
  *

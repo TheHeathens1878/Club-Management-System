@@ -25,6 +25,8 @@ import { AlertCircle, CalendarRange, ChevronLeft, ChevronRight, Settings2, Shiel
 import { AllocateControl, type PitchOption } from "./allocate-control";
 import { WeekendPitchGrid, type GridDay } from "./weekend-grid";
 
+export const metadata = { title: "Pitches" };
+
 /**
  * Pitch allocation (PLAN.md P2.5) — committee only.
  *

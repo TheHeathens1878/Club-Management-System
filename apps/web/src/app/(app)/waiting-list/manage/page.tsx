@@ -36,6 +36,8 @@ import { AgeGroupsPanel, type AgeGroupSetting } from "./age-groups-panel";
 import { NoteForm, StatusForm } from "./entry-actions";
 import { PrioritiesPanel, type PriorityGroup } from "./priorities-panel";
 
+export const metadata = { title: "Waiting list" };
+
 /**
  * The waiting list desk (PLAN.md P3.4) — the pitch-booking app's admin waiting
  * list screens, rebuilt on this platform's RLS.

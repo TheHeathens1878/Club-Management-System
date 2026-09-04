@@ -178,15 +178,15 @@ export default async function LobbyPage() {
             <div className="min-w-0">
               <p className="text-sm font-semibold">New to the club?</p>
               <p className="mt-0.5 text-sm text-muted-foreground">
-                Add your children and any connected adults, then register whoever plays — yourself
-                included.
+                A short checklist walks you through it — your details, your family, registering
+                whoever plays, and membership.
               </p>
             </div>
             <Link
-              href="/my-registrations"
+              href="/getting-started"
               className={buttonVariants({ size: "sm" }) + " min-h-[44px] shrink-0 lg:min-h-0"}
             >
-              Register a player
+              Get set up
             </Link>
           </div>
         </div>

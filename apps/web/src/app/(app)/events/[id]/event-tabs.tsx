@@ -26,6 +26,7 @@ export function EventTabs({
   eventId,
   active,
   tabs = EVENT_TABS,
+  from,
 }: {
   eventId: string;
   active: EventTabKey;
@@ -34,7 +35,13 @@ export function EventTabs({
    * nothing else — the event page says why — and the whole bar afterwards.
    */
   tabs?: readonly EventTabKey[];
+  /**
+   * The route that sent the reader here, carried across every tab so the way
+   * back still names the list they came from after they read the scoreline.
+   */
+  from?: string;
 }) {
+  const suffix = from ? `&from=${from}` : "";
   return (
     <div className="-mx-1 overflow-x-auto px-1 pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
       <nav
@@ -44,7 +51,7 @@ export function EventTabs({
         {tabs.map((tab) => (
           <Link
             key={tab}
-            href={`/events/${eventId}?tab=${tab}`}
+            href={`/events/${eventId}?tab=${tab}${suffix}`}
             aria-current={tab === active ? "page" : undefined}
             className={
               "flex min-h-[44px] items-center whitespace-nowrap rounded-md px-4 text-sm font-medium transition-colors sm:min-h-[34px] " +

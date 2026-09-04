@@ -13,6 +13,8 @@ import type { StaffMember, AwayEntry } from "./staff-away-panel";
 import { BOOKING_LIST_SELECT, FUNCTION_ROOM, toBookingListItem } from "@/lib/booking-types";
 import { londonToday } from "@/lib/booking-time";
 
+export const metadata = { title: "Room Bookings" };
+
 type SearchParams = { status?: string; room?: string; period?: string; view?: string };
 
 export default async function RoomBookingsPage({

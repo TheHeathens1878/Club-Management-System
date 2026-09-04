@@ -11,6 +11,8 @@ import { loadNavCounts, NO_NAV_COUNTS } from "@/lib/nav-counts";
 import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
 import { RoleSwitcherSheet } from "@/components/role-switcher-sheet";
 
+export const metadata = { title: "More" };
+
 /**
  * The More screen (Club CRM mobile design): the rest of the sidebar, scoped to
  * the role, with the switcher. A real route rather than a sheet so the back
