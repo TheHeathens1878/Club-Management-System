@@ -53,7 +53,9 @@ export async function markNotificationRead(
 
   revalidatePath("/notifications");
   revalidatePath("/", "layout");
-  return {};
+  // A notice, not {}: the list's refresh effect keys on it, and the badge in
+  // the shell only moves when the layout actually re-renders.
+  return { notice: "Marked as read." };
 }
 
 /**

@@ -12,7 +12,8 @@
  * change survive both themes and do not rely on colour alone.
  */
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Bell, CheckCheck, ChevronRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -51,10 +52,18 @@ function Feedback({ state }: { state: NotificationActionState }) {
 }
 
 export function MarkAllReadButton({ unread }: { unread: number }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState(
     markAllNotificationsRead,
     EMPTY_NOTIFICATION_STATE,
   );
+  // The badge in the shell is server-rendered; revalidatePath alone left it
+  // showing the old count on the page the button was pressed from (Adam,
+  // 2026-09-04: "when I click on 'Read All' they don't disappear"). A refresh
+  // re-renders the layout with the database's answer.
+  useEffect(() => {
+    if (state.notice) router.refresh();
+  }, [state.notice, router]);
   return (
     <div className="space-y-2">
       <form action={action}>
@@ -74,10 +83,15 @@ export function MarkAllReadButton({ unread }: { unread: number }) {
 }
 
 function NotificationRow({ item }: { item: NotificationItem }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState(
     markNotificationRead,
     EMPTY_NOTIFICATION_STATE,
   );
+  // Same as Mark all read: the shell's badge only moves with a refresh.
+  useEffect(() => {
+    if (state.notice) router.refresh();
+  }, [state.notice, router]);
   const unread = item.readAt === null;
 
   const summary = (
