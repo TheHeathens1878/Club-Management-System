@@ -6,7 +6,6 @@ import type { Database } from "@club/db";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
@@ -214,14 +213,7 @@ export default async function FixtureAttendancePage({
         <PageHeader
           title={title}
           subtitle={whereLine}
-          action={
-            <Link
-              href={`/teams/${teamId}?tab=matchday`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              <ChevronLeft className="h-4 w-4" /> Back to fixtures
-            </Link>
-          }
+          back={{ href: `/teams/${teamId}?tab=matchday`, label: "Team page" }}
         />
       </div>
 
@@ -231,7 +223,7 @@ export default async function FixtureAttendancePage({
         <div className="flex items-center gap-2">
           <Link
             href={`/teams/${teamId}?tab=matchday`}
-            aria-label="Back to fixtures"
+            aria-label="Team page"
             className="-ml-2 flex h-11 w-9 shrink-0 items-center justify-center text-accent"
           >
             <ChevronLeft className="h-[22px] w-[22px]" />

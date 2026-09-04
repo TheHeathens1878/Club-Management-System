@@ -547,7 +547,7 @@ export function MatchesDesk({
                 />
               )}
               <Link
-                href={row.eventId ? `/events/${row.eventId}` : `/teams/${row.teamId}`}
+                href={row.eventId ? `/events/${row.eventId}?from=/matches` : `/teams/${row.teamId}`}
                 className="block"
               >
                 <p
@@ -702,7 +702,7 @@ export function MatchesDesk({
                     </td>
                     <td className="px-4 py-3 align-top">
                       <Link
-                        href={row.eventId ? `/events/${row.eventId}` : `/teams/${row.teamId}`}
+                        href={row.eventId ? `/events/${row.eventId}?from=/matches` : `/teams/${row.teamId}`}
                         className="font-semibold hover:underline"
                       >
                         {row.teamName} v {row.opponent}

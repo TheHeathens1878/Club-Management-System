@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NonUserStaffClient } from "./non-user-staff-client";
 import { FaqsClient } from "@/app/(app)/settings/faqs-client";
 
+export const metadata = { title: "Bar" };
+
 export default async function BarPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");

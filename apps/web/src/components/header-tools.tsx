@@ -5,8 +5,8 @@ import { buttonVariants } from "@/components/ui/button";
 import { loadUnreadNotificationCount } from "@/lib/notifications-data";
 
 /**
- * The two things the app chrome carries that are not a section of the nav:
- * the notifications bell (gap 5) and the pitch calendar link (gap 6).
+ * What the app chrome carries that is not a section of the nav: the
+ * notifications bell (gap 5).
  *
  * They live in one component so the `(app)` layout gains a single import and a
  * single element — the nav lists themselves are being reorganised elsewhere,

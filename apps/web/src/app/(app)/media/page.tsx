@@ -11,6 +11,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { AlbumForm, type Option } from "./album-form";
 
+export const metadata = { title: "Media" };
+
 /**
  * Albums (PLAN.md P4.5).
  *

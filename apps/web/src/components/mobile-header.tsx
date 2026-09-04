@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Bell } from "lucide-react";
 
+import { SearchTrigger } from "@/components/command-palette";
 import { RoleSwitcherSheet } from "@/components/role-switcher-sheet";
 import type { RoleSwitcherOption } from "@/components/role-switcher";
 
@@ -56,6 +57,7 @@ export function MobileHeader({
           <p className="truncate text-[11.5px] leading-tight text-foreground/55">{name}</p>
         )}
       </div>
+      <SearchTrigger variant="icon" />
       <Link
         href="/notifications"
         aria-label={unread > 0 ? `Notifications, ${unread} unread` : "Notifications, none unread"}

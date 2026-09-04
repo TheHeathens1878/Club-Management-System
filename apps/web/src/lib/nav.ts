@@ -62,13 +62,11 @@ import {
   Settings,
   Settings2,
   ShieldAlert,
-  ShieldCheck,
   Shirt,
   UserCheck,
   UserCircle,
   Users,
   UsersRound,
-  Wallet,
   type LucideIcon,
 } from "lucide-react";
 
@@ -79,12 +77,13 @@ const ALL_VIEWS = [
   "player",
   "parent",
   "coach",
+  "referee",
   "admin",
   "function_room",
 ] as const satisfies readonly RoleView[];
 
-/** The five views that belong to the football club rather than the room. */
-const CLUB_VIEWS = ["me", "player", "parent", "coach", "admin"] as const satisfies readonly RoleView[];
+/** The views that belong to the football club rather than the room. */
+const CLUB_VIEWS = ["me", "player", "parent", "coach", "referee", "admin"] as const satisfies readonly RoleView[];
 
 /** The Club section the default ME view and the parent view share. */
 const ME_VIEWS = ["me", "parent"] as const satisfies readonly RoleView[];
@@ -118,72 +117,56 @@ export type NavEntry = {
 export type NavBadge = "approvals" | "registrations";
 
 export const NAV: readonly NavEntry[] = [
-  // --- Membership Flow (Adam, 2026-08-26) ----------------------------------
-  // The ME view leads with the order a new member does things in, numbered so
-  // it reads as a sequence rather than three unrelated screens: your own
-  // details first, then the adults the club should know about, then the
-  // children. It sits ABOVE the Club section because it is what somebody who
-  // has just signed up came here to finish. The parent view does not carry
-  // these — the switcher's Me is the way to them.
+  // --- You (2026-09-04 audit; supersedes the numbered "Membership Flow") ---
+  // The five numbered labels — "My Profile (1)" … "Register Players (5)" —
+  // are replaced by a real checklist page: /getting-started reads what is
+  // actually done (profile, children, adults, registrations, membership) and
+  // points at the next step, which is what the baked-in numbers never could.
+  // The step pages themselves stay routable; the ones a member returns to
+  // (profile, family, registering) keep menu rows under plain names, and the
+  // add-adults / add-children screens are reached from the checklist and the
+  // family page rather than clogging the menu.
+  {
+    href: "/getting-started",
+    label: "Getting started",
+    icon: ClipboardCheck,
+    group: "You",
+    allowed: () => true,
+    views: ["me"],
+  },
   {
     href: "/profile",
-    label: "My Profile (1)",
+    label: "My profile",
     icon: UserCircle,
-    group: "Membership Flow",
+    group: "You",
     allowed: () => true,
     views: ["me"],
   },
   {
-    // The adults in the caller's household without a login of their own —
-    // added at /join or on this page, read back through my_household().
-    href: "/connected-adults",
-    label: "Connect Adults (2)",
-    icon: Contact,
-    group: "Membership Flow",
-    allowed: () => true,
-    views: ["me"],
-  },
-  {
-    // Shown to everybody in the ME view, like every other step of the flow.
-    //
-    // It used to be `c.isGuardian || c.hasParentRole`, which is the one gate
-    // that cannot work here: this is the page where you connect your FIRST
-    // child, and until you have, you are neither. Adam, 2026-08-26: Mark Law
-    // — a manager with a login, no guardianships and no parent role — had no
-    // way to reach it at all. The page itself already handles having nobody
-    // connected (it shows the Add a child form and says the club has none on
-    // record), so there is nothing to protect by hiding it, and nothing is
-    // read here that /family's own RLS does not already scope to the caller.
-    href: "/family",
-    label: "Connect Children (3)",
-    icon: Baby,
-    group: "Membership Flow",
-    allowed: () => true,
-    views: ["me"],
-  },
-  {
-    // Who the club has you connected to, drawn as a family tree (Adam,
-    // 2026-08-26). Read-only, and scoped to the caller's OWN links: an
-    // ex-spouse who shares the children sees the children and the people who
-    // guard them, never the other household's adults or their children.
-    //
-    // The entry was held back once because it reached the menu ahead of its
-    // route and gave Adam a 404; it returns here in the same change as the
-    // page, which is the order these two have to land in.
+    // The family tree, with the add-a-child and add-an-adult doors on it.
     href: "/family-linking",
-    label: "Family Linking (4)",
+    label: "My family",
     icon: UsersRound,
-    group: "Membership Flow",
+    group: "You",
     allowed: () => true,
     views: ["me"],
   },
   {
-    // The end of the flow: register whoever plays — yourself, a connected
-    // adult or a child (Adam, 2026-08-26).
+    // Register whoever plays — yourself, a connected adult or a child.
     href: "/my-registrations",
-    label: "Register Players (5)",
+    label: "Register a player",
     icon: ClipboardCheck,
-    group: "Membership Flow",
+    group: "You",
+    allowed: () => true,
+    views: ["me"],
+  },
+  {
+    // The me view's copy of "My role" lives in its You group at the top; the
+    // bottom entry carries every other view (group() only merges neighbours).
+    href: "/welcome",
+    label: "My role",
+    icon: UserCircle,
+    group: "You",
     allowed: () => true,
     views: ["me"],
   },
@@ -271,19 +254,6 @@ export const NAV: readonly NavEntry[] = [
     views: ["referee"],
   },
 
-  // --- Team (the parent and coach views' second section, Adam 2026-08-25) --
-  {
-    // One link: the team page. /my-team is a redirect that already knows the
-    // answer — the switcher's team-scoped pick, or the only team the hat
-    // covers — and otherwise sends a parent to /family and a coach to /teams
-    // to choose. The gate is the union of the two views' own qualifiers.
-    href: "/my-team",
-    label: "Team page",
-    icon: Shirt,
-    group: "Team",
-    allowed: (c) => c.isGuardian || c.hasParentRole || c.isTeamStaff || c.hasCoachRole,
-    views: ["parent", "coach"],
-  },
   {
     href: "/groups",
     label: "Groups",
@@ -351,6 +321,22 @@ export const NAV: readonly NavEntry[] = [
     allowed: (c) => c.isClubAdmin || c.hasWaitingListAccess,
     views: ["coach", "admin"],
   },
+
+  // --- Team (the parent and coach views' second section, Adam 2026-08-25).
+  // Placed AFTER the coach's Club entries so the coach sidebar prints one
+  // CLUB heading, not two — group() only merges consecutive rows.
+  {
+    // One link: the team page. /my-team is a redirect that already knows the
+    // answer — the switcher's team-scoped pick, or the only team the hat
+    // covers — and otherwise sends a parent to /family and a coach to /teams
+    // to choose. The gate is the union of the two views' own qualifiers.
+    href: "/my-team",
+    label: "Team page",
+    icon: Shirt,
+    group: "Team",
+    allowed: (c) => c.isGuardian || c.hasParentRole || c.isTeamStaff || c.hasCoachRole,
+    views: ["parent", "coach"],
+  },
   {
     href: "/approvals",
     label: "Approvals",
@@ -400,8 +386,10 @@ export const NAV: readonly NavEntry[] = [
     allowed: (c) =>
       c.hasPlayerMembership || c.isGuardian || c.hasParentRole || c.isTeamStaff || c.isCommittee || c.isClubAdmin,
     // Adam's parent menu has no Events entry — a parent's diary lives on the
-    // child's team page and the lobby.
-    views: ["player", "coach", "admin"],
+    // child's team page and the lobby. The referee carries it because their
+    // phone tab bar always did (mobile-nav.ts), and a menu should not know
+    // less than the tab bar.
+    views: ["player", "coach", "referee", "admin"],
   },
   {
     href: "/training",
@@ -542,8 +530,13 @@ export const NAV: readonly NavEntry[] = [
   },
 
   // --- Money ---------------------------------------------------------------
+  // One money door per hat (the 2026-09-04 navigation audit): the admin gets
+  // the finance section, a member gets their own payments and card. The
+  // Stripe-era /subs and /my-subs screens are superseded by /finance and
+  // /my-payments and no longer earn menu rows — the routes still answer for
+  // anyone with an old bookmark.
   {
-    // The finance section (Adam, 2026-09-04): membership numbers, plans,
+    // The finance section (Adam, 2026-09-04): membership numbers, fees,
     // charges, the ledger, reports, Xero. Gated on the dedicated finance
     // role (club_admin holds it implicitly — is_finance() in the DB).
     href: "/finance",
@@ -553,26 +546,8 @@ export const NAV: readonly NavEntry[] = [
     allowed: (c) => c.hasFinanceRole,
     views: ["admin"],
   },
-  {
-    href: "/subs",
-    label: "Subs",
-    icon: Receipt,
-    group: "Money",
-    allowed: (c) => c.isCommittee,
-    views: ["admin"],
-  },
-  {
-    // Not in the coach view (Adam, 2026-08-25 evening: "remove Money - My
-    // subs and Comms preference as they sit under Me").
-    href: "/my-subs",
-    label: "My subs",
-    icon: Wallet,
-    group: "Money",
-    allowed: () => true,
-    views: ["player", "admin"],
-  },
 
-  // --- Finance (the Me view's name for their own money) --------------------
+  // --- Finance (a member's own money) --------------------------------------
   {
     // The household's charges and payments, live, with Pay now (SumUp).
     href: "/my-payments",
@@ -580,7 +555,7 @@ export const NAV: readonly NavEntry[] = [
     icon: Receipt,
     group: "Finance",
     allowed: () => true,
-    views: ["me"],
+    views: ["me", "player"],
   },
   {
     // The electronic membership card — 00002A and the household under it.
@@ -591,15 +566,7 @@ export const NAV: readonly NavEntry[] = [
     icon: CreditCard,
     group: "Finance",
     allowed: () => true,
-    views: ["me", "parent", "coach"],
-  },
-  {
-    href: "/my-subs",
-    label: "My Subs",
-    icon: Wallet,
-    group: "Finance",
-    allowed: () => true,
-    views: ["me"],
+    views: ["me", "player", "parent", "coach"],
   },
 
   // --- Safeguarding --------------------------------------------------------
@@ -644,14 +611,6 @@ export const NAV: readonly NavEntry[] = [
     views: ["admin", "function_room"],
   },
   {
-    href: "/settings?tab=users",
-    label: "Super users",
-    icon: ShieldCheck,
-    group: "Settings",
-    allowed: (c) => c.isSuperUser,
-    views: ["admin"],
-  },
-  {
     // Not in the parent or coach views (Adam, 2026-08-25 evening) — a
     // person-level setting, so the Me view carries it.
     href: "/settings/comms",
@@ -664,15 +623,16 @@ export const NAV: readonly NavEntry[] = [
 
   // --- You -----------------------------------------------------------------
   {
-    // The me and parent views switch hats in the sidebar dropdown; the tiles
-    // page stays for everyone else. SG-3's "Report a concern" above remains in
-    // EVERY view, me and parent included — that entry never thins.
+    // Every view carries it (2026-09-04 audit): /welcome is the only page
+    // where a member can ask to become a coach or a referee, and the me and
+    // parent views — the default for every sign-in — had no way to reach it.
+    // The me view's copy sits in its You group at the top of the menu.
     href: "/welcome",
     label: "My role",
     icon: UserCircle,
     group: "You",
     allowed: () => true,
-    views: ["player", "coach", "admin", "function_room"],
+    views: ["player", "parent", "coach", "referee", "admin", "function_room"],
   },
 ];
 

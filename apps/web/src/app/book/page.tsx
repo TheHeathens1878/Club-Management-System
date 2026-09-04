@@ -8,6 +8,8 @@ import { Users, Clock, Info } from "lucide-react";
 import { addDays, instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
 
+export const metadata = { title: "Function room hire" };
+
 export const dynamic = "force-dynamic";
 
 export default async function BookPage() {

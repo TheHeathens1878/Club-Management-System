@@ -22,6 +22,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { RegisterForm, WithdrawForm, type TeamOption } from "../family/family-forms";
 
+export const metadata = { title: "Register a player" };
+
 /**
  * Register a player (Adam, 2026-08-25: "change the name of registrations to
  * register a player. Should be able to register themselves, connected adults

@@ -1,12 +1,9 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
 import type { Database } from "@club/db";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
@@ -248,7 +245,11 @@ export default async function BookingDetailPage({
       )
     : null;
 
-  const backHref = canMarkAttendance ? "/pitches/mine" : "/pitches/calendar";
+  // The way back names where it goes: the register-taker came from their own
+  // bookings, everyone else from the calendar.
+  const back = canMarkAttendance
+    ? { href: "/pitches/mine", label: "Pitch bookings" }
+    : { href: "/pitches/calendar", label: "Pitch calendar" };
   const title = fixture
     ? `${booking.teamName ?? "Team"} v ${fixture.opponent}`
     : (booking.label ?? booking.teamName ?? "Pitch booking");
@@ -258,11 +259,7 @@ export default async function BookingDetailPage({
       <PageHeader
         title={title}
         subtitle={`${formatSlot(booking)} · ${booking.resourceName}`}
-        action={
-          <Link href={backHref} className={buttonVariants({ variant: "outline", size: "sm" })}>
-            <ChevronLeft className="h-4 w-4" /> Back
-          </Link>
-        }
+        back={back}
       />
       <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">

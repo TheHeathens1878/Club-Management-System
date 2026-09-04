@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import {
-  ArrowLeft,
   CalendarDays,
   CircleCheck,
   ClipboardList,
@@ -73,6 +72,10 @@ import { RemindButton } from "./remind-button";
  */
 
 export const dynamic = "force-dynamic";
+
+// The event's own title would need a second read of `event_detail` in
+// `generateMetadata` — a whole extra round trip to name a tab.
+export const metadata = { title: "Event" };
 
 type Detail = {
   id: string;
@@ -165,17 +168,42 @@ function asResponse(value: string | null): "accepted" | "declined" | null {
   return value === "accepted" || value === "declined" ? value : null;
 }
 
+/**
+ * An event is reached from half a dozen screens — Matches, the lobby, Social,
+ * the overview, Training and the Events list itself — so the way back is
+ * whichever of them sent the reader here. The linking page appends `?from=`,
+ * and only these six routes are honoured: an unknown value falls back to
+ * /events, so the parameter cannot be used to bounce anyone off-site.
+ */
+const EVENT_BACK_LABELS: Record<string, string> = {
+  "/matches": "Matches",
+  "/lobby": "Lobby",
+  "/social": "Social",
+  "/overview": "Overview",
+  "/training": "Training",
+  "/events": "Events",
+};
+
+const EVENTS_BACK = { href: "/events", label: "Events" };
+
+function eventBack(from: string | string[] | undefined): { href: string; label: string } {
+  const key = Array.isArray(from) ? from[0] : from;
+  const label = key ? EVENT_BACK_LABELS[key] : undefined;
+  return key && label ? { href: key, label } : EVENTS_BACK;
+}
+
 export default async function EventPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string | string[] }>;
+  searchParams: Promise<{ tab?: string | string[]; from?: string | string[] }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   const { id } = await params;
-  const { tab: rawTab } = await searchParams;
+  const { tab: rawTab, from: rawFrom } = await searchParams;
+  const back = eventBack(rawFrom);
 
   const supabase = await createClient();
   // The four opening questions are independent of one another — the detail,
@@ -406,18 +434,16 @@ export default async function EventPage({
                 <Pencil className="h-4 w-4" /> Edit
               </Link>
             ) : null}
-            <Link href="/events" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <ArrowLeft className="h-4 w-4" /> All events
-            </Link>
           </div>
         }
+        back={back}
       />
 
       {/* One tab is not a tab bar: a family before kick-off gets the page,
           not a bar with Details sitting alone in it. */}
       {detail.fixtureId && eventTabs.length > 1 ? (
         <div className="border-b bg-card px-4 pb-3 lg:px-8">
-          <EventTabs eventId={detail.id} active={tab} tabs={eventTabs} />
+          <EventTabs eventId={detail.id} active={tab} tabs={eventTabs} from={back.href} />
         </div>
       ) : null}
 

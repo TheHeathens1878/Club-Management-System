@@ -90,12 +90,26 @@ const MY_TEAMS: MobileTabEntry = {
   allowed: (c) => c.hasPlayerMembership,
 };
 
-const CHILDREN: MobileTabEntry = {
-  href: "/family",
-  label: "Children",
+// The me view's slot 3: the family tree, with the add-a-child and
+// add-an-adult doors on it (2026-09-04 audit — supersedes the Children tab
+// so the phone and the sidebar name the same screen "My family"). Open to
+// everyone: the page itself welcomes a member with nobody connected yet.
+const FAMILY: MobileTabEntry = {
+  href: "/family-linking",
+  label: "Family",
   icon: Baby,
-  match: ["/family", "/teams"],
-  allowed: (c) => c.isGuardian || c.hasParentRole,
+  match: ["/family-linking", "/family", "/connected-adults", "/teams"],
+  allowed: () => true,
+};
+
+/** The coach's slot 3: their own team page, as the coach sidebar has it —
+ * the /teams directory is deliberately not in the coach menu. */
+const COACH_TEAM: MobileTabEntry = {
+  href: "/my-team",
+  label: "Team",
+  icon: Shirt,
+  match: ["/my-team", "/teams"],
+  allowed: (c) => c.isTeamStaff || c.hasCoachRole,
 };
 
 /** The parent view's slot 3: the sidebar's "Team page", via the same redirect. */
@@ -168,8 +182,12 @@ export function mobileTabsFor(view: RoleView | null, c: Capabilities): MobileTab
   const slots = (() => {
     switch (view) {
       case "admin":
-      case "coach":
         return [LOBBY, MESSAGES, TEAMS, DIARY];
+      case "coach":
+        // The coach's tab is their own team, matching the coach sidebar —
+        // the /teams directory tab was the one page that menu hides
+        // (2026-09-04 audit).
+        return [LOBBY, MESSAGES, COACH_TEAM, DIARY];
       case "player":
         return [LOBBY, MESSAGES, MY_TEAMS, EVENTS];
       case "parent":
@@ -178,7 +196,7 @@ export function mobileTabsFor(view: RoleView | null, c: Capabilities): MobileTab
         // The referee's phone: the games board first (Adam, 2026-08-25).
         return [REFEREE_GROUP, MESSAGES, LOBBY, EVENTS];
       case "me":
-        return [LOBBY, MESSAGES, CHILDREN, EVENTS];
+        return [LOBBY, MESSAGES, FAMILY, EVENTS];
       case "function_room":
         return [ROOM_DIARY, HIRE_CONTACTS, BAR];
       case null:
@@ -196,31 +214,18 @@ export function mobileTabsFor(view: RoleView | null, c: Capabilities): MobileTab
 export const MORE_REPORT_HREF = "/safeguarding/report";
 
 /**
- * Menu groups the More screen keeps WHOLE, tab bar or no tab bar.
- *
- * Adam, 2026-09-01: "on mobile in the 'Me' view, the membership flow should
- * include children even though it's also in the menu bar." The Membership Flow
- * is a numbered sequence — My Profile (1), Connect Adults (2), Connect
- * Children (3), Family Linking (4), Register Players (5) — and step 3 is
- * `/family`, which is also the Me view's Children tab. The plain de-duplication
- * below was therefore deleting a step out of the MIDDLE of the flow and leaving
- * a phone showing 1, 2, 4, 5: the one place that tells a new member what to do
- * next was silently skipping the children.
- *
- * A step of a numbered flow is not a duplicate of a tab. The tab is a shortcut
- * to a screen; the step is the flow saying where the children come in — and
- * the screens themselves already cover them (`/family` is the guardianships,
- * "Register Players" registers a child through `registrations_guardian_insert`,
- * "My Subs" shows a child's subs under `subscriptions_self_read`). Nothing here
- * widens what a guardian may read or write; it only stops the menu hiding it.
- */
-const WHOLE_GROUPS: readonly string[] = ["Membership Flow"];
-
-/**
  * The More screen's cards: the view's own menu, minus whatever the tab bar
- * already carries and minus the entries the screen draws elsewhere. Query-string
- * variants of a tab's route go too — "My groups" (`/messages?filter=groups`) is
- * the Messages tab's surface with a filter on it, not a second destination.
+ * already carries and minus the entries the screen draws elsewhere.
+ *
+ * A row is a duplicate of a tab only when it opens the SAME destination: an
+ * exact href match, or the query-less twin of a tab's base. A row that adds a
+ * query — "My groups" (`/messages?filter=groups`), "Pending requests"
+ * (`/room-bookings?status=…`) — is a different destination wearing the tab's
+ * path, and the 2026-09-04 audit found the old base-only rule silently
+ * deleting those from the phone entirely. (The numbered "Membership Flow"
+ * WHOLE_GROUPS exemption this function once carried went with the numbers:
+ * /getting-started is a page, not a menu shape, so nothing needs keeping
+ * whole any more.)
  */
 export function moreScreenGroups(
   groups: readonly NavGroup[],
@@ -231,9 +236,10 @@ export function moreScreenGroups(
       group: group.group,
       items: group.items.filter((item) => {
         if (item.href === MORE_REPORT_HREF) return false;
-        if (WHOLE_GROUPS.includes(group.group)) return true;
+        if (tabHrefs.has(item.href)) return false;
         const base = item.href.split("?", 1)[0] ?? item.href;
-        return !tabHrefs.has(base);
+        const hasQuery = item.href.includes("?");
+        return hasQuery || !tabHrefs.has(base);
       }),
     }))
     .filter((group) => group.items.length > 0);

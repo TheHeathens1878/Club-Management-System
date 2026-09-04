@@ -35,26 +35,26 @@ function hrefsIn(groups: ReturnType<typeof moreScreenGroups>, group: string): st
 }
 
 describe("moreScreenGroups", () => {
-  it("keeps the whole Membership Flow even where a step is also a tab", () => {
-    // Adam, 2026-09-01. The Me view's Children tab is /family, which is also
-    // step 3 of the flow; thinning it left the phone showing 1, 2, 4, 5.
+  it("lists the You group minus what the tab bar already carries", () => {
+    // 2026-09-04 audit: the numbered flow became /getting-started plus plain
+    // rows. The Family tab is /family-linking, so that row thins from More;
+    // the rest of the You group survives.
     const capabilities = guardian();
     const tabs = mobileTabsFor("me", capabilities);
-    expect(tabs.map((tab) => tab.href)).toContain("/family");
+    expect(tabs.map((tab) => tab.href)).toContain("/family-linking");
 
     const tabHrefs = new Set(tabs.map((tab) => tab.href));
     const listed = moreScreenGroups(navFor("me", capabilities), tabHrefs);
 
-    expect(hrefsIn(listed, "Membership Flow")).toEqual([
+    expect(hrefsIn(listed, "You")).toEqual([
+      "/getting-started",
       "/profile",
-      "/connected-adults",
-      "/family",
-      "/family-linking",
       "/my-registrations",
+      "/welcome",
     ]);
   });
 
-  it("still drops entries the tab bar carries, query string or not", () => {
+  it("drops a tab's own row but keeps its query-filter siblings", () => {
     const capabilities = guardian();
     const tabHrefs = new Set(mobileTabsFor("me", capabilities).map((tab) => tab.href));
     const listed = moreScreenGroups(navFor("me", capabilities), tabHrefs);
@@ -62,35 +62,34 @@ describe("moreScreenGroups", () => {
     const everything = listed.flatMap((group) => group.items.map((item) => item.href));
     expect(everything).not.toContain("/lobby");
     expect(everything).not.toContain("/messages");
-    // "My groups" is the Messages tab with a filter on it, not a destination.
-    expect(everything).not.toContain("/messages?filter=groups");
+    // "My groups" adds a filter, so it is a DIFFERENT destination and stays —
+    // the old base-only rule deleted it from the phone entirely (2026-09-04).
+    expect(everything).toContain("/messages?filter=groups");
     expect(everything).not.toContain("/events");
     // The concern report is drawn as its own accent card instead.
     expect(everything).not.toContain(MORE_REPORT_HREF);
   });
 
-  it("leaves a child's money where a guardian can reach it", () => {
-    // /my-subs is "mine, the ones I pay for, and my children's" under
-    // subscriptions_self_read — the Me view's one money screen must survive.
+  it("leaves a household's money where a guardian can reach it", () => {
+    // /my-payments is the household's charges and payments (charges_read is
+    // household-scoped) — the Me view's one money screen must survive on the
+    // phone. It superseded /my-subs in the 2026-09-04 navigation audit.
     const capabilities = guardian();
     const tabHrefs = new Set(mobileTabsFor("me", capabilities).map((tab) => tab.href));
     const listed = moreScreenGroups(navFor("me", capabilities), tabHrefs);
 
-    expect(listed.flatMap((group) => group.items.map((item) => item.href))).toContain("/my-subs");
+    expect(listed.flatMap((group) => group.items.map((item) => item.href))).toContain("/my-payments");
   });
 
   it("does not invent groups for a view whose menu is thinned to nothing", () => {
     expect(moreScreenGroups([{ group: "Club", items: [] }], new Set())).toEqual([]);
   });
 
-  it("keeps the flow whole for an adult with no children yet", () => {
-    // Without a guardianship the Children tab collapses, so the plain rule and
-    // the exemption have to agree that step 3 is still listed.
+  it("keeps the family door open for an adult with no children yet", () => {
+    // The Family tab is open to everyone now — the page itself welcomes a
+    // member with nobody connected — so the phone always carries the door.
     const capabilities = guardian({ isGuardian: false, parentTeams: [] });
     const tabHrefs = new Set(mobileTabsFor("me", capabilities).map((tab) => tab.href));
-    expect(tabHrefs.has("/family")).toBe(false);
-
-    const listed = moreScreenGroups(navFor("me", capabilities), tabHrefs);
-    expect(hrefsIn(listed, "Membership Flow")).toContain("/family");
+    expect(tabHrefs.has("/family-linking")).toBe(true);
   });
 });

@@ -8,6 +8,8 @@ import { cardColourway, cardValidity, formatCardRef } from "@/lib/finance";
 import { resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Membership card" };
+
 type CardView = {
   personId: string;
   name: string;

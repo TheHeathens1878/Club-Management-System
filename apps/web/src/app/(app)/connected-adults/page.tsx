@@ -12,6 +12,8 @@ import { createClient } from "@/lib/supabase/server";
 import { AddAdultForm } from "./household-forms";
 import { EditAdultForm } from "./edit-adult-form";
 
+export const metadata = { title: "Connected adults" };
+
 /**
  * Connected Adults (Adam's parent menu, 2026-08-25) — the adults the club
  * connects to this account.

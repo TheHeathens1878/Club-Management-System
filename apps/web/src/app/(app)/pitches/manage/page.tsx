@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
@@ -10,6 +10,8 @@ import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
 import { ManagePitchesPanel, type PitchAdminRow } from "./manage-panel";
+
+export const metadata = { title: "Manage pitches" };
 
 /**
  * `/pitches/manage` — the club's pitches as records, not as a diary (gap 7).
@@ -76,9 +78,6 @@ export default async function ManagePitchesPage() {
         subtitle="The pitches the club books — their names, their changeover buffers and the order they appear in"
         action={
           <div className="flex flex-wrap items-center gap-2">
-            <Link href="/pitches" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <ChevronLeft className="h-4 w-4" /> Pitches
-            </Link>
             {/* The ground a pitch is on is edited there, not here: a venue
                 carries an address, arrival notes and a coaches' group, and
                 none of that belongs to one pitch. */}

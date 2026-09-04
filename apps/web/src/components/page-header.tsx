@@ -1,12 +1,23 @@
+import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+
 export function PageHeader({
   title,
   subtitle,
   action,
+  back,
   compact = false,
 }: {
   title: string;
   subtitle?: string;
   action?: React.ReactNode;
+  /**
+   * The way up. A detail page names its list ("Teams", "People") and the
+   * header draws the chevron link above the title — one consistent back
+   * affordance everywhere, instead of each page inventing its own or, worse,
+   * being a dead end that only the sidebar rescues.
+   */
+  back?: { href: string; label: string };
   /**
    * For a page whose real content has to fill the phone screen — a
    * conversation, above all. The full header spends about a third of a phone
@@ -26,6 +37,15 @@ export function PageHeader({
       }
     >
       <div className="min-w-0">
+        {back && (
+          <Link
+            href={back.href}
+            className="mb-0.5 inline-flex min-h-[32px] items-center gap-0.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft className="h-4 w-4" aria-hidden />
+            {back.label}
+          </Link>
+        )}
         {/* Crest display type: Oswald condensed caps, as the design's page titles. */}
         <h1
           className={

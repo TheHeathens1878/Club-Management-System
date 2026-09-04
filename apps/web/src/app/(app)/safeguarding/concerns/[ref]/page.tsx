@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -74,14 +72,7 @@ export default async function ConcernPage({ params }: { params: Promise<{ ref: s
       <PageHeader
         title={concern.ref}
         subtitle="Safeguarding concern"
-        action={
-          <Link
-            href="/safeguarding"
-            className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
-          >
-            <ChevronLeft className="h-4 w-4" /> All concerns
-          </Link>
-        }
+        back={{ href: "/safeguarding", label: "Safeguarding" }}
       />
 
       <div className="max-w-3xl space-y-6 p-4 lg:p-6">

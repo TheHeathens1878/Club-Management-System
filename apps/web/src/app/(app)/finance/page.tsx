@@ -6,6 +6,8 @@ import { requireFinance } from "@/lib/finance";
 import { formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Finance" };
+
 /**
  * The finance section (Adam, 2026-09-04): everything the club charges and
  * collects, at the bill-payer. User-scoped client throughout — the views are

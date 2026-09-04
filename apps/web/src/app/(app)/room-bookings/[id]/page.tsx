@@ -1,7 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { extrasSummary } from "@/lib/booking-extras";
 import { SecurityDepositCard } from "../security-deposit-card";
-import Link from "next/link";
 import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth";
 import { DeleteBookingButton } from "../delete-booking-button";
 import { EditBookingForm } from "../edit-booking-form";
@@ -11,9 +10,7 @@ import { getSettings } from "@/lib/settings";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { ChevronLeft } from "lucide-react";
 import { StatusForm } from "../status-form";
 import { PaymentsPanel } from "../payments-panel";
 import { addInternalNote } from "../actions";
@@ -119,14 +116,6 @@ export default async function RoomBookingDetailPage({
       <PageHeader
         title={`Booking #${shortRef}`}
         subtitle={`${roomName} · ${formatBookingDate(window.date)}`}
-        action={
-          <Link
-            href="/room-bookings"
-            className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] w-full lg:min-h-0 lg:w-auto"}
-          >
-            <ChevronLeft className="h-4 w-4" /> All bookings
-          </Link>
-        }
       />
 
       <div className="grid gap-4 p-4 lg:grid-cols-3 lg:gap-6 lg:p-6">

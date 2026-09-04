@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { LogOut, Menu } from "lucide-react";
 
+import { CommandPalette, SearchTrigger, type PaletteEntry } from "@/components/command-palette";
 import { HeaderTools } from "@/components/header-tools";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile, isBooker } from "@/lib/auth";
@@ -91,6 +92,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     moreFallback: true,
   });
 
+  // Everything the caller's own menu offers, flattened for the ⌘K palette —
+  // the palette can never offer a page the sidebar would not.
+  const palettePages: PaletteEntry[] = groups.flatMap((group) =>
+    group.items.map((item) => ({ label: item.label, href: item.href, group: group.group })),
+  );
+
   // `min-h-[100dvh]`, not `min-h-screen`: `vh` is the viewport with the URL bar
   // hidden, so on a phone a `min-h-screen` shell is taller than the screen
   // actually showing, and every page inherits a stray scroll of exactly the
@@ -103,6 +110,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           when this browser is already subscribed, or when it has been
           dismissed recently. */}
       <NotificationPrompt personId={personId} />
+
+      {/* Global search — ⌘K anywhere, plus the sidebar and phone triggers. */}
+      <CommandPalette pages={palettePages} />
 
       {/* The ink rail (crest design): dark sidebar against paper content.
           `.theme-ink` remaps the semantic tokens, so everything inside — the
@@ -137,6 +147,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <RoleSwitcher options={switcher.options} current={switcher.current} />
             </div>
           ) : null}
+
+          {/* Global search (⌘K) — one field for pages, people and teams. */}
+          <SearchTrigger variant="sidebar" />
 
           {/* Notifications bell — the notifications entry in every view. */}
           <HeaderTools />

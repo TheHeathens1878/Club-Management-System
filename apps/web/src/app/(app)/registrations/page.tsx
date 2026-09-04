@@ -35,6 +35,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { DecisionPanel, IdVerifiedForm, type TeamChoice } from "./decision-forms";
 
+export const metadata = { title: "Registrations" };
+
 /**
  * The registrations queue (gap 9) — a club administrator's screen.
  *

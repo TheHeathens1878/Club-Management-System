@@ -10,6 +10,8 @@ import { isClubAdmin } from "@/lib/person";
 
 import { NewPitchForm } from "./new-pitch-form";
 
+export const metadata = { title: "Add a pitch" };
+
 /**
  * `/pitches/manage/new` — a new pitch.
  *

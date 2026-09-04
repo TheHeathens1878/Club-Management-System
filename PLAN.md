@@ -153,3 +153,11 @@ Design against `SAFEGUARDING.md` first. P5.1 is a written spec, human-reviewed b
 - PR description must state: migrations included (y/n), RLS changes (y/n), data touched, rollback step.
 - Rollback: every migration has a down path or a documented restore procedure; cutover tasks (P3.4) have a written go/no-go checklist and abort procedure.
 - When blocked on an open question (§3), stop and ask — do not assume.
+
+---
+
+## 12. Phase 7 — App-wide navigation (Adam, 2026-09-04: "as easy to navigate as Apple")
+
+| Task | Description | Acceptance criteria | Status |
+|---|---|---|---|
+| P7.1 | Navigation audit + overhaul, waves A–D: (A) the menu tells the truth — one money door per hat, referee/parent menus completed, coach double-heading fixed, dead routes and duplicate rows removed, /contact + /privacy created, query-href rows highlight; (B) one way up — PageHeader `back` everywhere, section home layouts (Finance pattern generalised to Pitches/Room bookings), origin-aware event back links, page titles on every route via a root template; (C) journeys — /getting-started state-aware checklist replaces the numbered Membership Flow, "My family" naming, phone tab bars agree with the sidebars, settings index; (D) global ⌘K search (pages + people + teams under the caller's own RLS). | Every detail page has a chevron up; every section a home; no menu row 404s or bounces; a name typed anywhere finds its record (per RLS); phone and desktop name the same screens the same | ◑ 2026-09-04 — audit complete (top-15 findings in PR body); waves A, C, D implemented; wave B (mechanical sweep) landing in the same PR. |

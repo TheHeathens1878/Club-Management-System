@@ -34,6 +34,8 @@ import { FormatsPanel } from "./formats-panel";
 import { HomeVenueCell } from "./home-venue-cell";
 import { TeamFilterGrid, type TeamFilterColumn, type TeamFilterItem } from "./team-filter";
 
+export const metadata = { title: "Teams" };
+
 /** The Full-Time link columns this list condenses into one dot and one label. */
 type FullTimeLinkSummary = {
   team_id: string;

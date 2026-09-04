@@ -19,7 +19,9 @@ const oswald = Oswald({
 });
 
 export const metadata: Metadata = {
-  title: "AoM Sports Club",
+  // A tab that says only "AoM Sports Club" is no use to somebody with six of
+  // them open. Each page names itself and the template adds the club.
+  title: { template: "%s · AoM Sports Club", default: "AoM Sports Club" },
   description:
     "Ashton-on-Mersey Sports Club — teams, fixtures, availability, messages, subs and bookings.",
   appleWebApp: {

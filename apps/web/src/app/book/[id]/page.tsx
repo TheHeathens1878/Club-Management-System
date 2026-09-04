@@ -5,6 +5,8 @@ import { formatCurrency } from "@/lib/utils";
 import { CheckCircle2, Clock, CalendarDays, Building2 } from "lucide-react";
 import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
 
+export const metadata = { title: "Booking" };
+
 export const dynamic = "force-dynamic";
 
 export default async function BookingConfirmationPage({

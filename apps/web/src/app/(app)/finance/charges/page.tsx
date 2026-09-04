@@ -10,6 +10,8 @@ import {
   type PickerOption,
 } from "./charges-client";
 
+export const metadata = { title: "Charges & enrolments" };
+
 /**
  * The book of charges: what every membership owes and why, with the tools —
  * raise a one-off (yellow/red card fines from their plans), waive with a
@@ -118,7 +120,7 @@ export default async function FinanceChargesPage({
 
   return (
     <>
-      <PageHeader title="Charges & agreements" subtitle="What every membership owes, and why" />
+      <PageHeader title="Charges & enrolments" subtitle="What every membership owes, and why" />
       <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
         <Card>
           <CardHeader className="p-4 lg:p-6">

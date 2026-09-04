@@ -15,6 +15,8 @@ import { createClient } from "@/lib/supabase/server";
 import { LeadPanel, type LeadPerson } from "./lead-panel";
 import { OversightForm } from "./oversight-form";
 
+export const metadata = { title: "Safeguarding" };
+
 /**
  * The safeguarding desk (PLAN.md P4.3, P5.6).
  *

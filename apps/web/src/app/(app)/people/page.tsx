@@ -30,6 +30,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { PeopleControls } from "./people-controls";
 
+export const metadata = { title: "People" };
+
 /**
  * The club's contacts database (gap 2).
  *

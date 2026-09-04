@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { ChevronLeft, Download, EyeOff } from "lucide-react";
+import { Download, EyeOff } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -99,14 +98,9 @@ export default async function AlbumPage({ params }: { params: Promise<{ id: stri
                 <Download className="h-4 w-4" /> Export
               </a>
             )}
-            <Link
-              href="/media"
-              className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0"
-            >
-              <ChevronLeft className="h-4 w-4" /> Albums
-            </Link>
           </div>
         }
+        back={{ href: "/media", label: "Media" }}
       />
 
       <div className="p-4 space-y-6 lg:p-6">

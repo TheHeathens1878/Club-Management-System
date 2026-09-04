@@ -10,6 +10,8 @@ import { isClubAdmin } from "@/lib/person";
 
 import { NewVenueForm } from "../venue-forms";
 
+export const metadata = { title: "Add a venue" };
+
 /**
  * `/venues/new` — a new ground.
  *

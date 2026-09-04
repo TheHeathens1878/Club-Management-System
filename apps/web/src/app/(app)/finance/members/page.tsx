@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { MembersClient, type AccountRow, type PreviewRow, type PersonOption } from "./members-client";
 
+export const metadata = { title: "Members & numbers" };
+
 /**
  * Membership numbers and the households under them.
  *

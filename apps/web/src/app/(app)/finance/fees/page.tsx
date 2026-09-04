@@ -7,6 +7,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { FeesClient, type SystemPlan } from "./fees-client";
 
+export const metadata = { title: "Fees" };
+
 /**
  * The six boxes (Adam, 2026-09-04: "the subs setup is WAY too complicated").
  * Everything the club ordinarily charges, on one page: individual/family

@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { requireFinance } from "@/lib/finance";
 
+export const metadata = { title: "Xero export" };
+
 /**
  * Xero exports. Plain GET forms straight at the CSV route — the browser
  * downloads the file, nothing to keep in state.

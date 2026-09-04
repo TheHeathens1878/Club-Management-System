@@ -12,6 +12,8 @@ import { formatStamp } from "@/lib/people-display";
 import { getCurrentPersonId, isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Groups" };
+
 /**
  * `/groups` — the club's group chats, for a club administrator.
  *

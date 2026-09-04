@@ -1,6 +1,4 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ChevronLeft } from "lucide-react";
 
 import { DeviceNotifications } from "@/components/notification-prompt";
 import { PageHeader } from "@/components/page-header";
@@ -17,6 +15,8 @@ import {
   type PreferenceSet,
   type SuppressionRow,
 } from "./comms-forms";
+
+export const metadata = { title: "Communication preferences" };
 
 /**
  * Communication preferences (PLAN.md P4.4).
@@ -87,13 +87,7 @@ export default async function CommsSettingsPage() {
       <PageHeader
         title="Communication preferences"
         subtitle="How the club contacts you, and who it must not contact"
-        action={
-          committee ? (
-            <Link href="/settings" className="inline-flex min-h-[44px] items-center gap-1 text-sm text-muted-foreground hover:underline lg:min-h-0">
-              <ChevronLeft className="h-4 w-4" /> Settings
-            </Link>
-          ) : undefined
-        }
+        back={committee ? { href: "/settings", label: "Settings" } : undefined}
       />
 
       <div className="p-4 space-y-4 max-w-3xl lg:p-6 lg:space-y-6">

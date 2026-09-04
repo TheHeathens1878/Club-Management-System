@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile } from "@/lib/auth";
 
 import { LineupSection, loadLineupSection } from "./lineup-section";
@@ -40,22 +39,15 @@ export default async function FixtureLineupPage({
         <PageHeader
           title={`Lineup — ${data.title}`}
           subtitle={`${data.whereLine} · ${data.format}`}
-          action={
-            <Link
-              href={`/teams/${teamId}/fixtures/${fixtureId}`}
-              className={buttonVariants({ variant: "outline", size: "sm" })}
-            >
-              <ChevronLeft className="h-4 w-4" /> Back to the fixture
-            </Link>
-          }
+          back={{ href: `/teams/${teamId}?tab=matchday`, label: "Team page" }}
         />
       </div>
 
       <div className="theme-ink bg-background px-4 pb-4 pt-3 text-foreground lg:hidden">
         <div className="flex items-center gap-2">
           <Link
-            href={`/teams/${teamId}/fixtures/${fixtureId}`}
-            aria-label="Back to the fixture"
+            href={`/teams/${teamId}?tab=matchday`}
+            aria-label="Team page"
             className="-ml-2 flex h-11 w-9 shrink-0 items-center justify-center text-accent"
           >
             <ChevronLeft className="h-[22px] w-[22px]" />

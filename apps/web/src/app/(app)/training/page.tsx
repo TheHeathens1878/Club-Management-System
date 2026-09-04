@@ -95,7 +95,7 @@ export default async function TrainingPage() {
                       {formatEventDate(row.starts_at)} · {formatEventTime(row.starts_at)}
                     </p>
                     <Link
-                      href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                      href={row.event_id ? `/events/${row.event_id}?from=/training` : `/teams/${row.team_id}`}
                       className="mt-2 block text-[15px] font-semibold leading-tight"
                     >
                       {row.team_name}
@@ -137,7 +137,7 @@ export default async function TrainingPage() {
                     {sessions.map((row) => (
                       <LinkRow
                         key={row.booking_id}
-                        href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                        href={row.event_id ? `/events/${row.event_id}?from=/training` : `/teams/${row.team_id}`}
                         className="border-b last:border-b-0 hover:bg-secondary/40"
                       >
                         <td className="px-4 py-3 align-top text-muted-foreground">
@@ -147,7 +147,7 @@ export default async function TrainingPage() {
                         </td>
                         <td className="px-4 py-3 align-top">
                           <Link
-                            href={row.event_id ? `/events/${row.event_id}` : `/teams/${row.team_id}`}
+                            href={row.event_id ? `/events/${row.event_id}?from=/training` : `/teams/${row.team_id}`}
                             className="font-semibold hover:underline"
                           >
                             {row.team_name}

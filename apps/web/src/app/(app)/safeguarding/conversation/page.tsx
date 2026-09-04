@@ -10,6 +10,8 @@ import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isSafeguardingLead } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Conversation (oversight)" };
+
 /**
  * SG-9 oversight read.
  *

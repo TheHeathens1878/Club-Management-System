@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { ReportForm, type PersonOption } from "./report-form";
 
+export const metadata = { title: "Report a safeguarding concern" };
+
 /** Any signed-in user may report (SG-3) and may see their own receipts (D3). */
 export default async function ReportConcernPage() {
   const session = await getSessionProfile();

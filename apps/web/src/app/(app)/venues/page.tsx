@@ -10,6 +10,8 @@ import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
+export const metadata = { title: "Venues" };
+
 /**
  * `/venues` — the grounds the club plays at (20260901180000).
  *

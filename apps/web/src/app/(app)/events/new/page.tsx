@@ -1,9 +1,6 @@
-import Link from "next/link";
 import { redirect } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { buttonVariants } from "@/components/ui/button";
 import { getCapabilities } from "@/lib/capabilities";
 import { getCurrentPersonId } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
@@ -70,11 +67,7 @@ export default async function NewEventPage() {
       <PageHeader
         title="New event"
         subtitle="A one-off, or a weekly series — the team is asked to accept or decline"
-        action={
-          <Link href="/events" className={buttonVariants({ variant: "outline", size: "sm" })}>
-            <ArrowLeft className="h-4 w-4" /> All events
-          </Link>
-        }
+        back={{ href: "/events", label: "Events" }}
       />
       <div className="p-4 lg:p-6">
         {teams.length === 0 ? (

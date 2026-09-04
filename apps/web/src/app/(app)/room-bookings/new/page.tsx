@@ -12,6 +12,8 @@ import { ContactPicker } from "./contact-picker";
 import { DateTimingFields } from "./recurrence-fields";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
 
+export const metadata = { title: "New internal booking" };
+
 async function submitAction(formData: FormData): Promise<void> {
   "use server";
   const result = await createInternalBooking(formData);

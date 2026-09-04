@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase/server";
 
 import { PlansClient, type FeePlanRow } from "./plans-client";
 
+export const metadata = { title: "Plans" };
+
 /**
  * The catalogue: bespoke membership options per cohort, subs, one-off fines.
  * The six minimum plans are seeded inactive with placeholder prices — the

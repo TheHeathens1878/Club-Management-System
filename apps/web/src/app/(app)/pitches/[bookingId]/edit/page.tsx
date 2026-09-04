@@ -12,6 +12,8 @@ import { ChevronLeft } from "lucide-react";
 
 import { EditBookingForm } from "./edit-form";
 
+export const metadata = { title: "Edit pitch booking" };
+
 /**
  * `/pitches/[bookingId]/edit` — moving a pending pitch booking.
  *
