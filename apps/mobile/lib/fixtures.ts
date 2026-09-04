@@ -26,7 +26,7 @@ export interface FixtureRow {
   status: Enums<"fixture_status">;
   venue_resource_id: string | null;
   venue_text: string | null;
-  teams: { id: string; name: string } | null;
+  teams: { id: string; name: string; central_venue_name: string | null } | null;
   resources: { id: string; name: string } | null;
 }
 
@@ -90,6 +90,13 @@ export function venueSide(isHome: boolean): string {
  * Where the fixture is played. A home fixture shows the allocated pitch, or
  * `PITCH_TBC` until P2.5 has allocated one; an away fixture shows whatever
  * Full-Time gave us, and otherwise just says it is away.
+ *
+ * A team with a central venue is the exception (Adam, 2026-09-04: "Even
+ * though U8 Sparrows Black are at a central venue, it keeps saying pitch
+ * unallocated"): its home games are played there, no allocation ever comes,
+ * and "Pitch TBC" would nag parents forever. The fixture's own venue text
+ * wins where Full-Time gave one; the standing venue answers otherwise —
+ * settled either way.
  */
 export function fixtureVenue(row: FixtureRow): {
   venue: string;
@@ -98,7 +105,9 @@ export function fixtureVenue(row: FixtureRow): {
   const pitch = row.resources?.name?.trim();
   if (pitch) return { venue: pitch, allocated: true };
 
+  const central = row.teams?.central_venue_name?.trim();
   const text = row.venue_text?.trim();
+  if (row.is_home && central) return { venue: text || central, allocated: true };
   if (text) return { venue: text, allocated: !row.is_home };
 
   return row.is_home

@@ -589,7 +589,17 @@ export default async function TeamPage({
       venueText: row.venue_text,
       allocationConflict: row.allocation_conflict,
       seasonName: row.seasons?.name ?? null,
-      pitchName: row.resources?.name ?? null,
+      // A central-venue team's home games are played at that venue, not
+      // waiting for a pitch — say where the fixture is actually played (its
+      // own venue text first, the standing central venue otherwise) rather
+      // than "no pitch yet" (Adam, 2026-09-04: "Even though U8 Sparrows
+      // Black are at a central venue, it keeps saying pitch unallocated";
+      // "put the venue from the fixtures in all relevant places").
+      pitchName:
+        row.resources?.name ??
+        (row.is_home && (team.central_venue_name ?? "").trim() !== ""
+          ? row.venue_text?.trim() || (team.central_venue_name ?? "").trim()
+          : null),
       pitchAddress: row.resources?.address ?? null,
       headcount: fixtureCounts.get(row.id) ?? null,
       eventId: eventByFixture.get(row.id) ?? null,

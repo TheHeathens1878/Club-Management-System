@@ -84,7 +84,13 @@ export function fixtureTitle(row: Pick<MatchdayRow, "opponent" | "is_home">): st
 export function whereLine(
   row: Pick<MatchdayRow, "is_home" | "allocated" | "pitch_name" | "venue_text">,
 ): string {
-  if (row.is_home) return row.allocated && row.pitch_name ? row.pitch_name : "Pitch TBC";
+  if (row.is_home) {
+    if (row.allocated && row.pitch_name) return row.pitch_name;
+    // Full-Time's venue text is real information — above all for a
+    // central-venue team, whose home games are played off our pitches and
+    // would otherwise say "Pitch TBC" forever (Adam, 2026-09-04).
+    return row.venue_text || "Pitch TBC";
+  }
   return row.venue_text || "Away — ground TBC";
 }
 

@@ -21,7 +21,7 @@ import { getSupabase } from "./supabase";
  */
 
 const FIXTURE_SELECT =
-  "id, team_id, season_id, opponent, is_home, kickoff_at, competition, status, venue_resource_id, venue_text, teams:team_id (id, name), resources:venue_resource_id (id, name)";
+  "id, team_id, season_id, opponent, is_home, kickoff_at, competition, status, venue_resource_id, venue_text, teams:team_id (id, name, central_venue_name), resources:venue_resource_id (id, name)";
 
 /** How far back to look, so a fixture that kicked off an hour ago still shows. */
 const GRACE_HOURS = 3;

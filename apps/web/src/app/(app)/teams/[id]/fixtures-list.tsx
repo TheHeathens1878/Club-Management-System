@@ -155,7 +155,9 @@ export function FixturesTable({
                       : ""}
                   {fixture.competition ? ` · ${fixture.competition}` : ""}
                 </p>
-                {fixture.venueText && (
+                {/* Skip the venue line when it IS the pitch line — a
+                    central-venue fixture's pitchName is its venue text. */}
+                {fixture.venueText && fixture.venueText !== fixture.pitchName && (
                   <p className="mt-0.5 truncate text-xs text-muted-foreground">
                     {fixture.venueText}
                   </p>
@@ -214,7 +216,7 @@ export function FixturesTable({
                 <td className="py-2 pr-3">{fixture.isHome ? "Home" : "Away"}</td>
                 <td className="py-2 pr-3">
                   {fixture.opponent}
-                  {fixture.venueText && (
+                  {fixture.venueText && fixture.venueText !== fixture.pitchName && (
                     <span className="block text-xs text-muted-foreground">{fixture.venueText}</span>
                   )}
                   <MapsLink fixture={fixture} />

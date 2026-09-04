@@ -371,6 +371,115 @@ export async function bulkDeleteFixtures(
 }
 
 /**
+ * Put every ticked match on one pitch, straight from the desk (Adam,
+ * 2026-09-04: "give me the ability on the matches screen to allocate to a
+ * different pitch" and "allocate the pitch directly from the matches tab as
+ * well as change the KO time").
+ *
+ * The allocation itself is `allocate_fixture()` — the same SECURITY DEFINER
+ * function the /pitches screen calls, run here through the CALLER'S client so
+ * the database's own club-admin gate decides, with the `bookings_no_overlap`
+ * constraint still the single arbiter of whether a pitch is free. A clash is
+ * reported per fixture with the database's message verbatim (it names the
+ * bookings in the way); the rest of the ticked matches still land.
+ *
+ * Left alone, and named: away matches (nothing to allocate), and matches of a
+ * team that plays at a central venue — the club books no pitch for those, the
+ * same rule that keeps them off the /pitches work list.
+ */
+export async function bulkAllocatePitch(
+  _prev: MatchAdminState,
+  formData: FormData,
+): Promise<MatchAdminState> {
+  const resourceId = text(formData, "resource_id", 40);
+  if (!resourceId) return { error: "Choose a pitch first." };
+  const rawTime = text(formData, "kickoff_time", 5);
+  const time = rawTime === "" ? null : normaliseTime(rawTime);
+  if (time !== null && !isValidTimeString(time)) {
+    return { error: "Give the kick-off as a time like 10:30, or leave it blank to keep each match's own." };
+  }
+
+  const ids = fixtureIds(formData);
+  const loaded = await adminAnd(ids);
+  if ("error" in loaded) return { error: loaded.error };
+  const { fixtures, session } = loaded;
+
+  const supabase = await createClient();
+  const { data: pitch } = await supabase
+    .from("resources")
+    .select("id,name")
+    .eq("id", resourceId)
+    .maybeSingle();
+  if (!pitch) return { error: "That pitch no longer exists." };
+
+  const teamIds = [...new Set(fixtures.map((f) => f.team_id).filter((id): id is string => !!id))];
+  const { data: teamRows } = await supabase
+    .from("teams")
+    .select("id,central_venue_name")
+    .in("id", teamIds);
+  const centralVenue = new Map(
+    (teamRows ?? []).map((t) => [t.id, (t.central_venue_name ?? "").trim()]),
+  );
+
+  const warnings: string[] = [];
+  let allocated = 0;
+
+  for (const fixture of fixtures) {
+    if (!fixture.is_home) {
+      warnings.push(`${describe(fixture)} — an away match; there is no pitch to allocate.`);
+      continue;
+    }
+    const central = fixture.team_id ? centralVenue.get(fixture.team_id) ?? "" : "";
+    if (central !== "") {
+      warnings.push(
+        `${describe(fixture)} — left alone: the team plays at ${central}, a central venue, so the club books no pitch.`,
+      );
+      continue;
+    }
+    const { error } = await supabase.rpc("allocate_fixture", {
+      p_fixture_id: fixture.id,
+      p_resource_id: resourceId,
+      ...(time ? { p_kickoff_time: time } : {}),
+    });
+    if (error) {
+      // Verbatim — a 23P01 names the clashing bookings, which is exactly what
+      // the admin needs to pick another pitch or another time.
+      warnings.push(`${describe(fixture)} — not allocated: ${error.message}`);
+      continue;
+    }
+    allocated += 1;
+  }
+
+  if (allocated === 0) {
+    return { error: "No pitches were allocated.", warnings };
+  }
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "fixtures.bulk_allocated",
+    entity: "fixtures",
+    entityId: null,
+    detail: {
+      resource_id: resourceId,
+      pitch: pitch.name,
+      kickoff_time: time,
+      allocated,
+      skipped: warnings.length,
+      fixture_ids: fixtures.map((f) => f.id),
+    },
+  });
+
+  revalidateMatches(new Set(fixtures.map((f) => f.team_id)));
+  return {
+    notice: `${allocated} ${allocated === 1 ? "match" : "matches"} now on ${pitch.name}${
+      time ? `, kicking off at ${time}` : ""
+    }. The bookings, the diary and the notifications follow.`,
+    warnings,
+  };
+}
+
+/**
  * Put every ticked match at the same time of day, each on its own date.
  *
  * The date is deliberately not touched: "all the Under-12s kick off at 10:00"

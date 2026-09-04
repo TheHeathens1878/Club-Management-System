@@ -137,11 +137,16 @@ export function AllocateControl({
       <div className="flex flex-wrap items-end gap-2">
         <label className="w-full min-w-[10rem] flex-1 lg:w-auto">
           {!compact && <span className="mb-1 block text-xs text-muted-foreground">Pitch</span>}
+          {/* min-w-0 matters: without it, WebKit refuses to shrink a select
+              below its longest option — and the pitch names run to sixty
+              characters — so on an iPhone this one control shoved the whole
+              card off the page (Adam, 2026-09-04). Chromium truncates either
+              way; this makes Safari do the same. */}
           <select
             aria-label="Pitch"
             value={resourceId}
             onChange={(e) => setResourceId(e.target.value)}
-            className="h-11 w-full rounded-md border border-input bg-card px-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-9"
+            className="h-11 w-full min-w-0 rounded-md border border-input bg-card px-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:h-9"
           >
             {pitches.map((option) => (
               <option key={option.id} value={option.id}>

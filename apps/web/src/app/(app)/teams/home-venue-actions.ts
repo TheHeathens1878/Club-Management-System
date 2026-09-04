@@ -26,6 +26,8 @@
 
 import { revalidatePath } from "next/cache";
 
+import { writeAudit } from "@/lib/audit";
+import { getSessionProfile } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 
 import type { BulkAllocationState, BulkConflict } from "./[id]/matchday-actions";
@@ -109,4 +111,147 @@ export async function allocateTeamHomeGames(
   revalidatePath("/pitches");
   revalidatePath("/pitches/calendar");
   return { allocated: data as { total: number; allocated: number; conflicts: BulkConflict[] } };
+}
+
+// ---------------------------------------------------------------------------
+// Many teams at once
+// ---------------------------------------------------------------------------
+
+export type BulkHomeVenueState = {
+  error?: string;
+  notice?: string;
+  /** Per-team trouble that did not stop the rest — shown as a list. */
+  warnings?: string[];
+};
+
+/** How many teams one post may name. The whole club is ~30. */
+const MAX_TEAMS = 100;
+
+/**
+ * One home pitch for every ticked team (Adam, 2026-09-04: "allocate home
+ * venues from here by ticking a box alongside the team and then allocate to a
+ * pitch & venue"), optionally allocating each team's future home games too.
+ *
+ * The same two doors as the single-team acts, walked one team at a time:
+ * the `teams` update goes through the caller's own client so
+ * `teams_admin_write` and `trg_teams_home_resource_guard` still answer, and
+ * the season is `allocate_team_fixtures()`, club-admin-only in the database
+ * with one sub-transaction per fixture. A central-venue team is skipped and
+ * named rather than fed to the guard, and a blank kick-off leaves each team's
+ * standing kick-off alone — in bulk, silence must not clear thirty columns.
+ */
+export async function bulkSetHomeVenue(
+  _prev: BulkHomeVenueState,
+  formData: FormData,
+): Promise<BulkHomeVenueState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in again first." };
+
+  const resourceId = String(formData.get("home_resource_id") ?? "").trim();
+  if (!resourceId) return { error: "Choose a pitch first." };
+  const kickoff = String(formData.get("home_kickoff_time") ?? "").trim();
+  if (kickoff !== "" && !TIME_RE.test(kickoff)) {
+    return { error: "The kick-off must be a time like 10:30, or blank to leave each team's alone." };
+  }
+  const allocateGames = formData.get("allocate_games") === "on";
+
+  const teamIds = [
+    ...new Set(
+      formData
+        .getAll("team_id")
+        .map((value) => String(value).trim())
+        .filter((id) => id !== ""),
+    ),
+  ].slice(0, MAX_TEAMS);
+  if (teamIds.length === 0) return { error: "Tick the teams first." };
+
+  const supabase = await createClient();
+  const [{ data: pitch }, { data: teams, error: teamsError }] = await Promise.all([
+    supabase.from("resources").select("id,name").eq("id", resourceId).maybeSingle(),
+    supabase.from("teams").select("id,name,central_venue_name").in("id", teamIds),
+  ]);
+  if (!pitch) return { error: "That pitch no longer exists." };
+  if (teamsError) return { error: "Those teams could not be read." };
+  if ((teams ?? []).length === 0) return { error: "None of those teams exist any more." };
+
+  const warnings: string[] = [];
+  let saved = 0;
+  let placed = 0;
+  let placeable = 0;
+
+  for (const team of teams ?? []) {
+    if ((team.central_venue_name ?? "").trim() !== "") {
+      warnings.push(
+        `${team.name} — left alone: it plays at ${team.central_venue_name}, a central venue, so the club books no pitch.`,
+      );
+      continue;
+    }
+    const { data, error } = await supabase
+      .from("teams")
+      .update({
+        home_resource_id: resourceId,
+        ...(kickoff !== "" ? { home_kickoff_time: kickoff } : {}),
+      })
+      .eq("id", team.id)
+      .select("id");
+    if (error) {
+      // The guard speaks P0001 and names what it refused — that is the
+      // answer, not an error to translate.
+      warnings.push(`${team.name} — not set: ${error.message}`);
+      continue;
+    }
+    if ((data ?? []).length === 0) {
+      return { error: "Only a club administrator can set a team's home pitch.", warnings };
+    }
+    saved += 1;
+
+    if (allocateGames) {
+      const { data: result, error: allocError } = await supabase.rpc("allocate_team_fixtures", {
+        p_team_id: team.id,
+      });
+      if (allocError) {
+        warnings.push(`${team.name} — home pitch set, but not allocated: ${allocError.message}`);
+        continue;
+      }
+      const summary = result as { total: number; allocated: number; conflicts: BulkConflict[] };
+      placed += summary.allocated;
+      placeable += summary.total;
+      for (const conflict of summary.conflicts) {
+        warnings.push(`${team.name}, ${conflict.label} — ${conflict.error}`);
+      }
+    }
+  }
+
+  if (saved === 0) {
+    return { error: "No team's home pitch was set.", warnings };
+  }
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "teams.bulk_home_venue",
+    entity: "teams",
+    entityId: null,
+    detail: {
+      resource_id: resourceId,
+      pitch: pitch.name,
+      kickoff_time: kickoff || null,
+      allocate_games: allocateGames,
+      saved,
+      fixtures_placed: allocateGames ? placed : null,
+      team_ids: teamIds,
+    },
+  });
+
+  revalidatePath("/teams");
+  revalidatePath("/pitches");
+  revalidatePath("/pitches/calendar");
+  for (const teamId of teamIds) revalidatePath(`/teams/${teamId}`);
+
+  return {
+    notice: `${saved} ${saved === 1 ? "team now calls" : "teams now call"} ${pitch.name} home${
+      kickoff !== "" ? `, kicking off at ${kickoff}` : ""
+    }.${allocateGames ? ` ${placed} of ${placeable} future home fixtures placed.` : ""}`,
+    warnings,
+  };
 }

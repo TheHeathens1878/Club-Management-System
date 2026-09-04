@@ -11,6 +11,7 @@ import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { instantToLocal } from "@/lib/booking-time";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 import { MatchesDesk, type DeskRow } from "./matches-desk";
 
@@ -67,17 +68,42 @@ export default async function MatchesPage({
   const inView = (teamId: string): boolean =>
     scope ? teamId === scope.id : coachTeamIds ? coachTeamIds.has(teamId) : true;
 
+  // The desk's whole management strip is one gate, page-wide (the teams-page
+  // lesson): the admin capability, worn as the admin hat.
+  const canManage = capabilities.isClubAdmin && (view === "admin" || view === null);
+
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("matchday_fixtures", {
-    p_from: from.toISOString(),
-    p_to: to.toISOString(),
-  });
+  const adminDb = createAdminClient();
+  const [{ data, error }, teamVenuesResult, pitchesResult] = await Promise.all([
+    supabase.rpc("matchday_fixtures", {
+      p_from: from.toISOString(),
+      p_to: to.toISOString(),
+    }),
+    // Which teams play at a central venue (their "home" needs no pitch), and
+    // which venue each pitch belongs to — both for honest Pitch/Venue columns.
+    adminDb.from("teams").select("id,central_venue_name"),
+    adminDb
+      .from("resources")
+      .select("id,name,venues(name)")
+      .neq("type", "function_room")
+      .eq("active", true)
+      .order("sort_order")
+      .order("name"),
+  ]);
   const fixtures = (data ?? []).filter(
     (row) => inView(row.team_id) && (period === "results" ? true : row.status === "scheduled"),
   );
 
+  const centralVenue = new Map(
+    (teamVenuesResult.data ?? []).map((team) => [team.id, (team.central_venue_name ?? "").trim()]),
+  );
+  const playsCentrally = (teamId: string): string => centralVenue.get(teamId) ?? "";
+  const pitchRows = pitchesResult.data ?? [];
+  const venueByPitch = new Map(pitchRows.map((row) => [row.name, row.venues?.name ?? null]));
+
   const needPitch = fixtures.filter(
-    (row) => period !== "results" && row.is_home && !row.allocated,
+    (row) =>
+      period !== "results" && row.is_home && !row.allocated && playsCentrally(row.team_id) === "",
   ).length;
   const shortOfPlayers = fixtures.filter(
     (row) => period !== "results" && row.squad > 0 && row.accepted * 2 < row.squad,
@@ -88,6 +114,17 @@ export default async function MatchesPage({
   // word for the pitch column.
   const deskRows: DeskRow[] = fixtures.map((row) => {
     const local = instantToLocal(row.kickoff_at);
+    // A central-venue team's home game is not waiting for a pitch: it shows
+    // where it is actually played — the fixture's own venue text first
+    // ("…PLATT LANE… Pitch 1"), the standing central venue otherwise — never
+    // an amber "Unallocated" (Adam, 2026-09-04: "put the venue from the
+    // fixtures in all relevant places").
+    const central = row.is_home ? playsCentrally(row.team_id) : "";
+    const pitch = !row.is_home
+      ? "Away"
+      : central !== ""
+        ? row.venue_text?.trim() || central
+        : row.pitch_name ?? "Unallocated";
     return {
       id: row.fixture_id,
       eventId: row.event_id,
@@ -100,8 +137,15 @@ export default async function MatchesPage({
       date: formatEventDate(row.kickoff_at),
       time: formatEventTime(row.kickoff_at),
       dateIso: local.date,
-      pitch: !row.is_home ? "Away" : row.pitch_name ?? "Unallocated",
-      allocated: row.allocated === true,
+      pitch,
+      allocated: row.allocated === true || central !== "",
+      venue: !row.is_home
+        ? "Away"
+        : central !== ""
+          ? central
+          : row.pitch_name
+            ? venueByPitch.get(row.pitch_name) ?? "No venue"
+            : "Unallocated",
       venueText: row.venue_text ?? null,
       accepted: row.accepted,
       declined: row.declined,
@@ -193,7 +237,8 @@ export default async function MatchesPage({
         ) : (
           <MatchesDesk
             rows={deskRows}
-            canManage={capabilities.isClubAdmin && (view === "admin" || view === null)}
+            canManage={canManage}
+            pitches={canManage ? pitchRows.map(({ id, name }) => ({ id, name })) : []}
             focusFirst={period !== "results"}
           />
         )}
