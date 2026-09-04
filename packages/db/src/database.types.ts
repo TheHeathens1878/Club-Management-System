@@ -7464,6 +7464,17 @@ export type Database = {
           name: string
         }[]
       }
+      team_player_cards: {
+        Args: never
+        Returns: {
+          person_id: string
+          first_name: string
+          last_name: string
+          card_ref: string
+          team_id: string
+          team_name: string
+        }[]
+      }
       team_admits_sex: {
         Args: { p_sex: string; p_team_gender: string }
         Returns: boolean
