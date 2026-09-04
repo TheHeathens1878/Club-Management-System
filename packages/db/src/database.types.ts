@@ -6057,7 +6057,7 @@ export type Database = {
         Returns: number
       }
       matchday_fixtures: {
-        Args: { p_from: string; p_to: string }
+        Args: { p_from: string; p_to: string; p_scope?: string }
         Returns: {
           accepted: number
           allocated: boolean
