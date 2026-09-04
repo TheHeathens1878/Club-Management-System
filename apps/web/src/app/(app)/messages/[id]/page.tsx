@@ -7,10 +7,11 @@ import { PageHeader } from "@/components/page-header";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { isMemberView, resolveRoleView } from "@/lib/role-view";
-import { instantToLocal } from "@/lib/booking-time";
+import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
 import { createClient } from "@/lib/supabase/server";
 
+import { InfoBoard, type BoardPostItem } from "./info-board";
 import { LeaveButton } from "./leave-button";
 import { type FixtureOption } from "./match-post-composer";
 import { ParticipantsButton } from "./participants-button";
@@ -34,13 +35,52 @@ const HEADER_LINK =
  * no admin path through this page — oversight lives in /safeguarding, goes
  * through `read_conversation_as_lead()`, and is audited (SG-9).
  */
-export default async function ThreadPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ThreadPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
   const { id } = await params;
+  const { tab } = await searchParams;
   const data = await loadThread(id);
   if (!data) notFound();
+
+  // The group's two tabs (Adam, 2026-09-04): the chat stays the default and
+  // the board sits beside it. Only groups — a team room's board is its team
+  // page, a DM and the announcements thread keep no board at all.
+  const hasBoard = data.conversation.type === "group";
+  const boardTab = hasBoard && tab === "info";
+  let boardPosts: BoardPostItem[] = [];
+  if (boardTab) {
+    const supabase = await createClient();
+    const { data: postRows } = await supabase
+      .from("conversation_posts")
+      .select("id,title,body,pinned,author_person_id,created_at")
+      .eq("conversation_id", id)
+      .is("deleted_at", null)
+      .order("pinned", { ascending: false })
+      .order("created_at", { ascending: false });
+    boardPosts = (postRows ?? []).map((row) => {
+      const local = instantToLocal(row.created_at);
+      return {
+        id: row.id,
+        title: row.title,
+        body: row.body,
+        pinned: row.pinned,
+        authorName:
+          row.author_person_id === data.personId
+            ? "You"
+            : (data.nameMap[row.author_person_id] ?? data.unnamedLabel),
+        postedAt: `${formatBookingDateShort(local.date)}, ${local.time}`,
+        canManage: row.author_person_id === data.personId || data.canManageGroup,
+      };
+    });
+  }
 
   // A member hat puts the committee extras away (Adam, 2026-09-02): a parent
   // reading a team room sees the names, not a link into every one of those
@@ -185,7 +225,43 @@ export default async function ThreadPage({ params }: { params: Promise<{ id: str
           only thing that scrolls and it has a real bottom to reach. Above lg
           the class is inert and this is the block it always was. */}
       <div className="app-shell-fill flex max-w-3xl flex-col px-3 pt-3 lg:px-6 lg:pb-6 lg:pt-6">
-        <ThreadPanel data={data} postFixtures={postFixtures} showLeave={false} fill />
+        {hasBoard && (
+          <div className="flex shrink-0 gap-2 pb-3">
+            <Link
+              href={`/messages/${id}`}
+              className={
+                "inline-flex min-h-[36px] items-center rounded-full px-4 text-xs font-semibold transition " +
+                (!boardTab
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/70")
+              }
+            >
+              Chat
+            </Link>
+            <Link
+              href={`/messages/${id}?tab=info`}
+              className={
+                "inline-flex min-h-[36px] items-center rounded-full px-4 text-xs font-semibold transition " +
+                (boardTab
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/70")
+              }
+            >
+              Important information
+            </Link>
+          </div>
+        )}
+        {boardTab ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <InfoBoard
+              conversationId={id}
+              posts={boardPosts}
+              canPost={Boolean(data.myLive && !data.conversation.closed_at)}
+            />
+          </div>
+        ) : (
+          <ThreadPanel data={data} postFixtures={postFixtures} showLeave={false} fill />
+        )}
       </div>
     </>
   );

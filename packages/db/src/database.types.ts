@@ -1380,6 +1380,60 @@ export type Database = {
           },
         ]
       }
+      conversation_posts: {
+        Row: {
+          author_person_id: string
+          body: string
+          conversation_id: string
+          created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
+          id: string
+          pinned: boolean
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author_person_id: string
+          body: string
+          conversation_id: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          pinned?: boolean
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author_person_id?: string
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
+          id?: string
+          pinned?: boolean
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_posts_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_posts_author_person_id_fkey"
+            columns: ["author_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conversations: {
         Row: {
           closed_at: string | null
@@ -5587,6 +5641,7 @@ export type Database = {
       booking_team_ids: { Args: { p_booking_id: string }; Returns: string[] }
       bump_age_group: { Args: { p_text: string }; Returns: string }
       can_act_for: { Args: { p_person_id: string }; Returns: boolean }
+      can_manage_conversation_post: { Args: { p_post_id: string }; Returns: boolean }
       can_read_board_post: { Args: { p_post_id: string }; Returns: boolean }
       can_view_album: { Args: { p_album_id: string }; Returns: boolean }
       can_view_pitch_calendar: { Args: never; Returns: boolean }
@@ -5684,6 +5739,10 @@ export type Database = {
         }
         Returns: string
       }
+      create_conversation_post: {
+        Args: { p_body: string; p_conversation_id: string; p_title: string }
+        Returns: string
+      }
       create_event_series: {
         Args: {
           p_book?: boolean
@@ -5744,6 +5803,7 @@ export type Database = {
         }[]
       }
       delete_board_post: { Args: { p_post_id: string }; Returns: undefined }
+      delete_conversation_post: { Args: { p_post_id: string }; Returns: undefined }
       display_name: { Args: { p_person_id: string }; Returns: string }
       due_certification_nudges: {
         Args: never
@@ -6566,6 +6626,10 @@ export type Database = {
       }
       safeguarding_setting_int: { Args: { p_key: string }; Returns: number }
       set_board_post_pinned: {
+        Args: { p_pinned: boolean; p_post_id: string }
+        Returns: undefined
+      }
+      set_conversation_post_pinned: {
         Args: { p_pinned: boolean; p_post_id: string }
         Returns: undefined
       }
