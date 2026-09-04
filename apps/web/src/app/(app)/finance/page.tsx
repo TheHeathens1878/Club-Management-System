@@ -57,8 +57,8 @@ export default async function FinanceDashboardPage() {
 
   const sections = [
     { href: "/finance/members", title: "Members & numbers", text: "Membership numbers, households under each bill-payer, issue new numbers." },
-    { href: "/finance/plans", title: "Plans", text: "Membership fees, monthly subs, fines — bespoke options per cohort." },
-    { href: "/finance/charges", title: "Charges & agreements", text: "Raise one-offs (yellow/red cards), waive, sign accounts up, collect stored cards." },
+    { href: "/finance/fees", title: "Fees", text: "The six numbers: individual/family membership and subs, yellow/red fines. Bespoke plans live behind it." },
+    { href: "/finance/charges", title: "Charges & enrolments", text: "Enrol households (monthly or up front), raise one-offs, waive, collect stored cards." },
     { href: "/finance/payments", title: "Payments ledger", text: "Everything collected — SumUp, cash, bank transfer — with refunds." },
     { href: "/finance/reports", title: "Reports", text: "Arrears aging, income by month and plan, SumUp reconciliation." },
     { href: "/finance/export", title: "Xero export", text: "Sales invoices and bank statement CSVs, ready for Xero's importer." },

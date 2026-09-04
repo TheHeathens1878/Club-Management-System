@@ -12,7 +12,7 @@ import {
   type MyAgreement,
   type MyCharge,
   type MyMandate,
-  type MyPlanOption,
+  type MyQuote,
 } from "./my-payments-client";
 
 /**
@@ -28,20 +28,12 @@ export default async function MyPaymentsPage() {
 
   const supabase = await createClient();
 
-  const [{ data: myRow }, { data: activePlans }] = await Promise.all([
-    supabase
-      .from("billing_account_people")
-      .select("account_id,letter,billing_accounts(member_no,lead_person_id,status)")
-      .is("removed_at", null)
-      .limit(1)
-      .maybeSingle(),
-    supabase
-      .from("fee_plans")
-      .select("id,name,amount_pence,schedule,scope,kind")
-      .eq("active", true)
-      .in("kind", ["membership", "subs"])
-      .order("sort"),
-  ]);
+  const { data: myRow } = await supabase
+    .from("billing_account_people")
+    .select("account_id,letter,billing_accounts(member_no,lead_person_id,status)")
+    .is("removed_at", null)
+    .limit(1)
+    .maybeSingle();
 
   if (!myRow || !myRow.billing_accounts) {
     return (
@@ -127,14 +119,36 @@ export default async function MyPaymentsPage() {
       }
     : null;
 
-  const planOptions: MyPlanOption[] = isLead
-    ? (activePlans ?? []).map((plan) => ({
-        id: plan.id,
-        name: plan.name,
-        amount_pence: plan.amount_pence,
-        schedule: plan.schedule,
-      }))
-    : [];
+  // Already enrolled this season? (Up-front enrolments are completed, so ask
+  // the season-stamped rows, not just the live ones.)
+  const { data: enrolmentRows } = await supabase
+    .from("billing_agreements")
+    .select("id,season_id,status,seasons(is_current)")
+    .eq("account_id", accountId)
+    .not("season_id", "is", null)
+    .in("status", ["active", "paused", "completed"]);
+  const enrolled = (enrolmentRows ?? []).some((row) => row.seasons?.is_current);
+
+  // The one sum, for the lead of an un-enrolled household. subs_quote raises
+  // while the fees are inactive or no season is current — both simply mean
+  // "nothing to offer yet".
+  let quote: MyQuote | null = null;
+  if (isLead && !enrolled) {
+    const { data: quoteRows } = await supabase.rpc("subs_quote", { p_account_id: accountId });
+    const q = Array.isArray(quoteRows) ? quoteRows[0] : null;
+    if (q) {
+      quote = {
+        scope: q.scope,
+        season_name: q.season_name,
+        membership_pence: q.membership_pence,
+        monthly_pence: q.monthly_pence,
+        instalments: q.instalments,
+        first_on: q.first_on,
+        last_on: q.last_on,
+        total_pence: q.total_pence,
+      };
+    }
+  }
 
   const memberNo = myRow.billing_accounts.member_no;
 
@@ -150,7 +164,7 @@ export default async function MyPaymentsPage() {
           charges={chargeRows}
           agreements={agreementRows}
           mandate={mandate}
-          plans={planOptions}
+          quote={quote}
           isLead={isLead}
           sumupEnabled={isSumUpConfigured()}
         />

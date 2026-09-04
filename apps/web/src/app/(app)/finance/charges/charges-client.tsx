@@ -11,9 +11,9 @@ import {
   cancelAgreement,
   collectFromStoredCard,
   deleteCharge,
+  enrollHouseholdAction,
   raiseChargeAction,
   recordChargePayment,
-  startAgreementAction,
   voidCharge,
   waiveCharge,
   type ActionState,
@@ -99,7 +99,7 @@ export function ChargesClient({
   const [voidState, voidAction] = useActionState(voidCharge, EMPTY);
   const [collectState, collectAction, collecting] = useActionState(collectFromStoredCard, EMPTY);
   const [payState, payAction] = useActionState(recordChargePayment, EMPTY);
-  const [agreementState, agreementAction, startingAgreement] = useActionState(startAgreementAction, EMPTY);
+  const [agreementState, agreementAction, startingAgreement] = useActionState(enrollHouseholdAction, EMPTY);
   const [cancelState, cancelAction] = useActionState(cancelAgreement, EMPTY);
   const [deleteState, deleteAction] = useActionState(deleteCharge, EMPTY);
 
@@ -326,9 +326,9 @@ export function ChargesClient({
           <Feedback state={cancelState} />
         </div>
 
-        <form action={agreementAction} className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed p-4">
+        <form action={agreementAction} className="flex flex-wrap items-end gap-3 rounded-lg border border-dashed p-4">
           <div className="min-w-0 grow space-y-1">
-            <Label className="text-xs" htmlFor="agreement-account">Sign a membership up to a plan</Label>
+            <Label className="text-xs" htmlFor="agreement-account">Enrol a membership for this season</Label>
             <select id="agreement-account" name="account_id" className={selectClass} defaultValue="" required>
               <option value="" disabled>Pick a membership…</option>
               {accounts.map((account) => (
@@ -336,26 +336,28 @@ export function ChargesClient({
               ))}
             </select>
           </div>
-          <div className="min-w-0 grow space-y-1">
-            <Label className="text-xs" htmlFor="agreement-plan">Plan</Label>
-            <select id="agreement-plan" name="plan_id" className={selectClass} defaultValue="" required>
-              <option value="" disabled>Pick a plan…</option>
-              {plans.map((plan) => (
-                <option key={plan.id} value={plan.id}>{plan.name}</option>
-              ))}
-            </select>
+          <div className="space-y-1 text-xs">
+            <p className="font-medium">How will they pay?</p>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="mode" value="monthly" defaultChecked className="h-4 w-4" />
+              Monthly — membership now, subs each 1st to 1 May
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="mode" value="upfront" className="h-4 w-4" />
+              Up front — the same total, one payment
+            </label>
           </div>
-          <label className="flex items-center gap-2 text-xs">
-            <input type="checkbox" name="auto_collect" className="h-4 w-4" />
-            Auto-collect from stored card
-          </label>
           <button
             type="submit"
             disabled={startingAgreement}
-            className="min-h-[40px] rounded-md border px-3 text-xs font-medium hover:bg-secondary disabled:opacity-50"
+            className="min-h-[40px] rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
           >
-            {startingAgreement ? "Starting…" : "Start agreement"}
+            {startingAgreement ? "Enrolling…" : "Enrol"}
           </button>
+          <p className="w-full text-xs text-muted-foreground">
+            Individual or family is decided automatically from who is playing. The fees come from{" "}
+            <a href="/finance/fees" className="underline">Finance → Fees</a>.
+          </p>
           <Feedback state={agreementState} />
         </form>
       </div>
