@@ -17,13 +17,16 @@
 --      finance) signs an account up
 --   G  one live mandate per account; the lead reads their own
 --   H  the reporting views add up
+--   I  the eraser is the super user's alone (20260904190000): finance cannot
+--      delete a charge, a super user can — unpaid only, audited — and plans
+--      delete only while nothing references them
 --
 -- Run with: npx supabase test db
 -- =============================================================================
 
 begin;
 
-select plan(43);
+select plan(51);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('abababab-3333-4333-8333-000000000001', 'fc-lead@test.invalid',
@@ -284,6 +287,63 @@ select is((select balance_pence from public.finance_account_summary
 select is((select lead_name from public.finance_account_summary
             where account_id = current_setting('fc.acc')::uuid),
   'Fay Payer', 'the treasurer sees who the account belongs to');
+reset role;
+
+
+-- ---------------------------------------------------------------------------
+-- I. The eraser is the super user's alone.
+-- ---------------------------------------------------------------------------
+set local request.jwt.claims to '{"role":"service_role"}';
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('abababab-3333-4333-8333-000000000004', 'fc-super@test.invalid',
+   '{"full_name": "Sue Super", "dob": "1975-04-04"}'::jsonb);
+update public.profiles set role = 'super_user' where id = 'abababab-3333-4333-8333-000000000004';
+select set_config('fc.unpaid',
+  (select id::text from public.charges
+    where agreement_id = current_setting('fc.ag_sub')::uuid and status = 'pending'
+    order by created_at desc limit 1), true);
+
+-- The finance role's delete bites nothing: RLS holds the row out of reach.
+set local request.jwt.claims to '{"sub":"abababab-3333-4333-8333-000000000002","role":"authenticated"}';
+set local role authenticated;
+delete from public.charges where id = current_setting('fc.unpaid')::uuid;
+reset role;
+set local request.jwt.claims to '{"role":"service_role"}';
+select is((select count(*)::int from public.charges where id = current_setting('fc.unpaid')::uuid),
+  1, 'the finance role cannot delete a charge — the row survives the attempt');
+
+set local request.jwt.claims to '{"sub":"abababab-3333-4333-8333-000000000004","role":"authenticated"}';
+set local role authenticated;
+select lives_ok(
+  $$delete from public.charges where id = current_setting('fc.unpaid')::uuid$$,
+  'a super user deletes an unpaid charge');
+reset role;
+set local request.jwt.claims to '{"role":"service_role"}';
+select is((select count(*)::int from public.charges where id = current_setting('fc.unpaid')::uuid),
+  0, '…and it is gone');
+select is((select count(*)::int from public.audit_log
+            where action = 'finance.charge_deleted' and entity_id = current_setting('fc.unpaid')),
+  1, '…with the deletion on the audit log before the row went');
+
+set local request.jwt.claims to '{"sub":"abababab-3333-4333-8333-000000000004","role":"authenticated"}';
+set local role authenticated;
+select throws_like(
+  $$delete from public.charges where id = current_setting('fc.paidcharge')::uuid$$,
+  '%money has moved%',
+  'a charge with payments is never deleted, super user or not — refund first');
+
+-- Plans: finance deletes an unused one; a referenced one is a database no.
+set local request.jwt.claims to '{"sub":"abababab-3333-4333-8333-000000000002","role":"authenticated"}';
+set local role authenticated;
+select lives_ok(
+  $$delete from public.fee_plans where id = 'dededede-3333-4333-8333-000000000004'$$,
+  'finance deletes an unused plan');
+select is((select count(*)::int from public.fee_plans where id = 'dededede-3333-4333-8333-000000000004'),
+  0, '…and it is gone');
+select throws_ok(
+  $$delete from public.fee_plans where id = 'dededede-3333-4333-8333-000000000003'$$,
+  '23503', null,
+  'a plan referenced by charges or agreements is refused by the foreign keys');
 reset role;
 
 select * from finish();

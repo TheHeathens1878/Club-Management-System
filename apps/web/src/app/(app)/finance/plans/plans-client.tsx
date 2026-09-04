@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input, Label } from "@/components/ui/input";
 import { CHARGE_KIND_LABELS } from "@/lib/finance-format";
 
-import { saveFeePlan, setFeePlanActive, type ActionState } from "../actions";
+import { deleteFeePlan, saveFeePlan, setFeePlanActive, type ActionState } from "../actions";
 
 const EMPTY: ActionState = {};
 const selectClass = "flex h-10 w-full min-w-0 rounded-md border border-input bg-card px-3 py-2 text-sm";
@@ -124,6 +124,7 @@ function PlanForm({ plan, onDone }: { plan?: FeePlanRow; onDone?: () => void }) 
 export function PlansClient({ plans }: { plans: FeePlanRow[] }) {
   const [editing, setEditing] = useState<string | null>(null);
   const [activeState, activeAction] = useActionState(setFeePlanActive, EMPTY);
+  const [deleteState, deleteAction] = useActionState(deleteFeePlan, EMPTY);
 
   return (
     <div className="space-y-4">
@@ -165,6 +166,17 @@ export function PlansClient({ plans }: { plans: FeePlanRow[] }) {
                     {plan.active ? "Deactivate" : "Activate"}
                   </button>
                 </form>
+                <form
+                  action={deleteAction}
+                  onSubmit={(event) => {
+                    if (!confirm(`Delete "${plan.name}"? A plan in use is refused.`)) event.preventDefault();
+                  }}
+                >
+                  <input type="hidden" name="plan_id" value={plan.id} />
+                  <button type="submit" className="min-h-[40px] rounded-md border px-3 text-xs font-medium text-destructive hover:bg-secondary">
+                    Delete
+                  </button>
+                </form>
               </div>
             </div>
             {editing === plan.id && (
@@ -175,6 +187,7 @@ export function PlansClient({ plans }: { plans: FeePlanRow[] }) {
           </div>
         ))}
         <Feedback state={activeState} />
+        <Feedback state={deleteState} />
       </div>
 
       <PlanForm />

@@ -10,6 +10,7 @@ import { CHARGE_KIND_LABELS, CHARGE_STATUS_LABELS, chargeRef, formatMemberNo } f
 import {
   cancelAgreement,
   collectFromStoredCard,
+  deleteCharge,
   raiseChargeAction,
   recordChargePayment,
   startAgreementAction,
@@ -80,6 +81,7 @@ export function ChargesClient({
   accounts,
   plans,
   filterStatus,
+  isSuperUser,
 }: {
   charges: ChargeRow[];
   agreements: AgreementRow[];
@@ -87,6 +89,7 @@ export function ChargesClient({
   accounts: PickerOption[];
   plans: PickerOption[];
   filterStatus: string;
+  isSuperUser: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -98,6 +101,7 @@ export function ChargesClient({
   const [payState, payAction] = useActionState(recordChargePayment, EMPTY);
   const [agreementState, agreementAction, startingAgreement] = useActionState(startAgreementAction, EMPTY);
   const [cancelState, cancelAction] = useActionState(cancelAgreement, EMPTY);
+  const [deleteState, deleteAction] = useActionState(deleteCharge, EMPTY);
 
   function setStatusFilter(status: string) {
     const params = new URLSearchParams(searchParams.toString());
@@ -215,6 +219,20 @@ export function ChargesClient({
                       )}
                     </div>
                   )}
+                  {isSuperUser && charge.paid_pence === 0 && (
+                    <form
+                      action={deleteAction}
+                      onSubmit={(event) => {
+                        if (!confirm(`Delete ${chargeRef(charge.charge_no)} outright? The deletion is audited.`))
+                          event.preventDefault();
+                      }}
+                    >
+                      <input type="hidden" name="charge_id" value={charge.id} />
+                      <button type="submit" className="text-xs text-muted-foreground underline hover:text-destructive">
+                        Delete this charge (super user)
+                      </button>
+                    </form>
+                  )}
                 </div>
               )}
             </div>
@@ -224,6 +242,7 @@ export function ChargesClient({
         <Feedback state={collectState} />
         <Feedback state={waiveState} />
         <Feedback state={voidState} />
+        <Feedback state={deleteState} />
       </div>
 
       <form action={raiseAction} className="space-y-3 rounded-lg border border-dashed p-4">
