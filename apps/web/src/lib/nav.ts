@@ -584,12 +584,14 @@ export const NAV: readonly NavEntry[] = [
   },
   {
     // The electronic membership card — 00002A and the household under it.
+    // Scoped by hat on the page itself (Adam, 2026-09-04): me/parent see
+    // their own household, the coach view adds their squads' cards.
     href: "/membership-card",
     label: "Membership card",
     icon: CreditCard,
     group: "Finance",
     allowed: () => true,
-    views: ["me"],
+    views: ["me", "parent", "coach"],
   },
   {
     href: "/my-subs",
