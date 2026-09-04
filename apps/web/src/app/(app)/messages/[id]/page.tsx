@@ -89,6 +89,19 @@ export default async function ThreadPage({
     resolveRoleView(await getStoredRoleView(), await getCapabilities()),
   );
 
+  // The hats beside each name (Adam, 2026-09-04: "show role and their team
+  // name(s) in the member list"). The DATABASE answers — participant-gated,
+  // Referee only inside the Referees group — so a parent's own client could
+  // never assemble this from tables it may not read.
+  let labelsByPerson = new Map<string, string[]>();
+  if (data.conversation.type === "group" || data.conversation.type === "team") {
+    const labelsClient = await createClient();
+    const { data: labelRows } = await labelsClient.rpc("conversation_member_labels", {
+      p_conversation_id: id,
+    });
+    labelsByPerson = new Map((labelRows ?? []).map((row) => [row.person_id, row.labels]));
+  }
+
   // A team room's thread also lives on its team page — offer the way there.
   const teamHref = data.conversation.team_id ? `/teams/${data.conversation.team_id}` : null;
 
@@ -192,6 +205,7 @@ export default async function ThreadPage({
                     : (data.nameMap[p.person_id] ?? data.unnamedLabel),
                 isSelf: p.person_id === data.personId,
                 left: p.left_at !== null,
+                labels: labelsByPerson.get(p.person_id) ?? [],
               }))}
               conversationId={data.conversation.id}
               canRemove={data.canManageGroup}

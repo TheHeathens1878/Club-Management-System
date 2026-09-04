@@ -5724,6 +5724,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      conversation_member_labels: {
+        Args: { p_conversation_id: string }
+        Returns: { person_id: string; labels: string[] }[]
+      }
       conversation_referees: {
         Args: { p_conversation_id: string }
         Returns: string[]
