@@ -41,12 +41,17 @@ export function HomeVenueSummary({
   homePitch,
   homeKickoff,
   centralVenue,
+  pitchOnly = false,
 }: {
   homePitch: string | null;
   homeKickoff: string | null;
   centralVenue: string | null;
+  /** The table has a Venue column of its own (Adam, 2026-09-04: "Venue needs
+      to be a column"), so this cell says only the pitch and the kick-off. */
+  pitchOnly?: boolean;
 }) {
   if (centralVenue) {
+    if (pitchOnly) return <p className="text-muted-foreground">—</p>;
     return (
       <>
         <p>{centralVenue}</p>
@@ -55,15 +60,22 @@ export function HomeVenueSummary({
     );
   }
   if (!homePitch) {
+    if (pitchOnly) return <p className="text-muted-foreground">—</p>;
     return <p className="font-medium text-amber-700">No home pitch</p>;
   }
   const { venue, pitch } = splitVenue(homePitch);
   return (
     <>
-      <p>{venue}</p>
+      <p>{pitchOnly ? pitch : venue}</p>
       <p className="text-xs text-muted-foreground">
-        {pitch}
-        {homeKickoff ? ` · ${homeKickoff}` : " · no set kick-off"}
+        {pitchOnly ? "" : `${pitch}`}
+        {pitchOnly
+          ? homeKickoff
+            ? `KO ${homeKickoff}`
+            : "no set kick-off"
+          : homeKickoff
+            ? ` · ${homeKickoff}`
+            : " · no set kick-off"}
       </p>
     </>
   );
@@ -78,6 +90,7 @@ export function HomeVenueCell({
   centralVenue,
   pitches,
   canEdit,
+  pitchOnly = false,
 }: {
   teamId: string;
   teamName: string;
@@ -87,6 +100,8 @@ export function HomeVenueCell({
   centralVenue: string | null;
   pitches: HomeVenuePitch[];
   canEdit: boolean;
+  /** The Venue column carries the ground; this cell keeps pitch and KO. */
+  pitchOnly?: boolean;
 }) {
   const [venueState, saveVenue, savingVenue] = useActionState(setTeamHomeVenue, NO_VENUE_STATE);
   const [allocState, allocate, allocating] = useActionState(allocateTeamHomeGames, NO_ALLOCATION);
@@ -98,6 +113,7 @@ export function HomeVenueCell({
         homePitch={homePitch}
         homeKickoff={homeKickoff}
         centralVenue={centralVenue}
+        pitchOnly={pitchOnly}
       />
 
       {canEdit && !centralVenue && (

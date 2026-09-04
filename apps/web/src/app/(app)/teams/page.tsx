@@ -25,11 +25,13 @@ import { widgetUrl } from "@club/fulltime";
 
 import { faFormatDetail, faFormatFor } from "@/lib/fa-formats";
 
+import { splitVenue } from "@/lib/pitch-venue";
+
 import { createSeason, createTeam, setCurrentSeason } from "./actions";
 import { ClubWidgetsPanel } from "./club-widgets-panel";
 import { FormatsPanel } from "./formats-panel";
 import { HomeVenueCell } from "./home-venue-cell";
-import { TeamFilterGrid, type TeamFilterItem } from "./team-filter";
+import { TeamFilterGrid, type TeamFilterColumn, type TeamFilterItem } from "./team-filter";
 
 /** The Full-Time link columns this list condenses into one dot and one label. */
 type FullTimeLinkSummary = {
@@ -627,6 +629,21 @@ export default async function TeamsPage({
         <TeamFilterGrid
           initialQuery={query}
           initialShowAll={showAll}
+          canTick={canAdmin}
+          pitches={allPitches}
+          columns={
+            [
+              { label: "Team", filterKey: "age", allLabel: "All ages" },
+              { label: "Format", sub: "from age group", filterKey: "format" },
+              // Its own column since 2026-09-04 ("Venue needs to be a column").
+              { label: "Venue", filterKey: "venue", allLabel: "All venues" },
+              { label: "Home pitch", sub: "and kick-off", filterKey: "pitch", allLabel: "All pitches" },
+              { label: "Staff", filterKey: "staff" },
+              { label: "Squad", filterKey: "squad" },
+              { label: "Next out", filterKey: "next" },
+              ...(canAdmin ? [{ label: "Subs", filterKey: "subs" } satisfies TeamFilterColumn] : []),
+            ] satisfies TeamFilterColumn[]
+          }
           noTeamsMessage={
             canAdmin
               ? "No teams yet. Use “New team” to add the first one."
@@ -667,27 +684,6 @@ export default async function TeamsPage({
               </details>
             ) : null
           }
-          head={
-            <tr>
-              <th className="px-4 py-2.5 font-medium">Team</th>
-              <th className="px-4 py-2.5 font-medium">
-                Format
-                <span className="block font-normal normal-case tracking-normal text-muted-foreground/80">
-                  from age group
-                </span>
-              </th>
-              <th className="px-4 py-2.5 font-medium">
-                Home
-                <span className="block font-normal normal-case tracking-normal text-muted-foreground/80">
-                  venue and kick-off
-                </span>
-              </th>
-              <th className="px-4 py-2.5 font-medium">Staff</th>
-              <th className="px-4 py-2.5 font-medium">Squad</th>
-              <th className="px-4 py-2.5 font-medium">Next out</th>
-              {canAdmin && <th className="px-4 py-2.5 font-medium">Subs</th>}
-            </tr>
-          }
           footerNote="Format follows the age group unless the club has set one on the team"
           items={allTeams.map((team): TeamFilterItem => {
             const ft = canAdmin
@@ -699,6 +695,13 @@ export default async function TeamsPage({
               : null;
             const needsStaff = team.lead === null && team.others === 0;
             const rules = faFormatFor(team.ageGroup);
+            // The Venue column and its filter speak the same words: the
+            // central venue, the home pitch's ground, or the honest absence.
+            const venueName = team.centralVenue
+              ? team.centralVenue
+              : team.homePitch
+                ? splitVenue(team.homePitch).venue
+                : null;
             return {
               key: team.id,
               haystack: `${team.name} ${team.ageGroup ?? ""} ${team.league ?? ""} ${
@@ -706,8 +709,37 @@ export default async function TeamsPage({
               }`.toLocaleLowerCase("en-GB"),
               active: team.active,
               needsStaff,
-              row: (
-                <tr className={"transition-colors hover:bg-secondary/40" + (team.active ? "" : " opacity-60")}>
+              facets: {
+                age: team.ageGroup ?? "No age group",
+                format: team.playingFormat ?? rules?.format ?? "—",
+                venue: venueName ?? "No home pitch",
+                pitch: team.centralVenue
+                  ? "Central venue"
+                  : team.homePitch
+                    ? splitVenue(team.homePitch).pitch
+                    : "No home pitch",
+                staff: team.lead ?? (team.others > 0 ? "No manager" : "No staff"),
+                squad: team.players === 0 ? "No players yet" : "Has players",
+                next: !team.nextOut
+                  ? "Nothing coming"
+                  : team.nextOut.unallocated
+                    ? "No pitch yet"
+                    : team.nextOut.home
+                      ? "Home"
+                      : "Away",
+                ...(canAdmin
+                  ? {
+                      subs:
+                        team.subsOwing === null
+                          ? "None set"
+                          : team.subsOwing === 0
+                            ? "All paid"
+                            : "Owing",
+                    }
+                  : {}),
+              },
+              cells: (
+                <>
                   <td className="px-4 py-3 align-top">
                     <Link
                       href={`/teams/${team.id}`}
@@ -756,6 +788,18 @@ export default async function TeamsPage({
                     )}
                   </td>
                   <td className="px-4 py-3 align-top">
+                    {team.centralVenue ? (
+                      <>
+                        <p>{team.centralVenue}</p>
+                        <p className="text-xs text-muted-foreground">central venue — we book nothing</p>
+                      </>
+                    ) : venueName ? (
+                      <p>{venueName}</p>
+                    ) : (
+                      <p className="font-medium text-amber-700">No home pitch</p>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 align-top">
                     <HomeVenueCell
                       teamId={team.id}
                       teamName={team.name}
@@ -765,6 +809,7 @@ export default async function TeamsPage({
                       centralVenue={team.centralVenue}
                       pitches={allPitches}
                       canEdit={canAdmin}
+                      pitchOnly
                     />
                   </td>
                   <td className="px-4 py-3 align-top">
@@ -820,7 +865,7 @@ export default async function TeamsPage({
                       )}
                     </td>
                   )}
-                </tr>
+                </>
               ),
               // The same team on a phone: name and chevron, the format line
               // underneath, staff and squad, then next out and the pills
@@ -828,10 +873,10 @@ export default async function TeamsPage({
               card: (
                 <Link
                   href={`/teams/${team.id}`}
-                  className={
-                    "flex min-h-[44px] items-start gap-3 px-4 py-3.5" +
-                    (team.active ? "" : " opacity-60")
-                  }
+                  // The grid's <li> carries the inactive fade now, so the tick
+                  // beside the card fades with it rather than floating at full
+                  // strength next to a dimmed team.
+                  className="flex min-h-[44px] items-start gap-3 px-4 py-3.5"
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold leading-tight">{team.name}</span>

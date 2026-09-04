@@ -578,7 +578,8 @@ export function MatchesDesk({
                 <th className="px-4 py-2 font-medium">Kick-off</th>
                 <th className="px-4 py-2 font-medium">Fixture</th>
                 <th className="px-4 py-2 font-medium">Competition</th>
-                <th className="px-4 py-2 font-medium">Pitch / venue</th>
+                <th className="px-4 py-2 font-medium">Venue</th>
+                <th className="px-4 py-2 font-medium">Pitch</th>
                 <th className="px-4 py-2 font-medium">Status</th>
                 <th className="px-4 py-2 font-medium">Replies</th>
               </tr>
@@ -616,13 +617,14 @@ export function MatchesDesk({
                 <td className="px-4 py-2">
                   {filterSelect(filters.competition, (v) => set("competition", v), competitionOptions, "All", "Competition")}
                 </td>
+                {/* The ground and the pitch on it are separate columns (Adam,
+                    2026-09-04: "filter by venue … not just pitch", then
+                    "Venue needs to be a column"). */}
                 <td className="px-4 py-2">
-                  {/* Two filters on one column: the ground, then the pitch on
-                      it (Adam, 2026-09-04: "filter by venue … not just pitch"). */}
-                  <span className="flex flex-col gap-1">
-                    {filterSelect(filters.venue, (v) => set("venue", v), venueOptions, "All venues", "Venue")}
-                    {filterSelect(filters.pitch, (v) => set("pitch", v), pitchOptions, "All pitches", "Pitch")}
-                  </span>
+                  {filterSelect(filters.venue, (v) => set("venue", v), venueOptions, "All", "Venue")}
+                </td>
+                <td className="px-4 py-2">
+                  {filterSelect(filters.pitch, (v) => set("pitch", v), pitchOptions, "All", "Pitch")}
                 </td>
                 <td className="px-4 py-2">
                   {filterSelect(filters.status, (v) => set("status", v), statusOptions, "All", "Status")}
@@ -675,6 +677,11 @@ export function MatchesDesk({
                     </td>
                     <td className="px-4 py-3 align-top">{row.competition}</td>
                     <td className="px-4 py-3 align-top">
+                      <span className={row.venue === "Unallocated" ? "text-amber-700" : row.venue === "Away" ? "text-muted-foreground" : ""}>
+                        {row.venue}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 align-top">
                       {!row.isHome ? (
                         <span className="text-muted-foreground">Away</span>
                       ) : (
@@ -706,7 +713,7 @@ export function MatchesDesk({
               {filtered.length === 0 && (
                 <tr>
                   <td
-                    colSpan={canManage ? 7 : 6}
+                    colSpan={canManage ? 8 : 7}
                     className="px-4 py-8 text-center text-sm text-muted-foreground"
                   >
                     No matches fit those filters.
