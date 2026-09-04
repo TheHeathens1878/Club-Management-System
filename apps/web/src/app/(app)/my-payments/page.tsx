@@ -132,21 +132,39 @@ export default async function MyPaymentsPage() {
   // The one sum, for the lead of an un-enrolled household. subs_quote raises
   // while the fees are inactive or no season is current — both simply mean
   // "nothing to offer yet".
+  // Why there is no quote matters as much as the quote (Adam, 2026-09-04:
+  // "My payments doesn't have any options") — an empty page and a page that
+  // says "sign-up opens when the club saves its fees" are different things.
   let quote: MyQuote | null = null;
-  if (isLead && !enrolled) {
-    const { data: quoteRows } = await supabase.rpc("subs_quote", { p_account_id: accountId });
-    const q = Array.isArray(quoteRows) ? quoteRows[0] : null;
-    if (q) {
-      quote = {
-        scope: q.scope,
-        season_name: q.season_name,
-        membership_pence: q.membership_pence,
-        monthly_pence: q.monthly_pence,
-        instalments: q.instalments,
-        first_on: q.first_on,
-        last_on: q.last_on,
-        total_pence: q.total_pence,
-      };
+  let quoteNote: string | null = null;
+  if (!enrolled) {
+    if (!isLead) {
+      quoteNote = "Membership sign-up is done by your lead member — the bill-payer for your household.";
+    } else {
+      const { data: quoteRows, error: quoteError } = await supabase.rpc("subs_quote", {
+        p_account_id: accountId,
+      });
+      const q = Array.isArray(quoteRows) ? quoteRows[0] : null;
+      if (q) {
+        quote = {
+          scope: q.scope,
+          season_name: q.season_name,
+          membership_pence: q.membership_pence,
+          monthly_pence: q.monthly_pence,
+          instalments: q.instalments,
+          first_on: q.first_on,
+          last_on: q.last_on,
+          total_pence: q.total_pence,
+        };
+      } else if (quoteError?.message.includes("not active")) {
+        quoteNote = capabilities.hasFinanceRole
+          ? "Sign-up is not open yet: the fees for your household's scope are not active. Save & activate them in Finance → Fees."
+          : "Membership sign-up isn't open yet — the club is still setting this season's fees. Check back soon.";
+      } else if (quoteError?.message.includes("no current season")) {
+        quoteNote = "Membership sign-up isn't open yet — the club has not started the new season.";
+      } else if (quoteError) {
+        quoteNote = "Membership sign-up isn't available right now.";
+      }
     }
   }
 
@@ -165,6 +183,7 @@ export default async function MyPaymentsPage() {
           agreements={agreementRows}
           mandate={mandate}
           quote={quote}
+          quoteNote={quoteNote}
           isLead={isLead}
           sumupEnabled={isSumUpConfigured()}
         />

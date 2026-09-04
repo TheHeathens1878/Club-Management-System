@@ -86,6 +86,7 @@ export function MyPaymentsClient({
   agreements,
   mandate,
   quote,
+  quoteNote,
   isLead,
   sumupEnabled,
 }: {
@@ -94,6 +95,7 @@ export function MyPaymentsClient({
   agreements: MyAgreement[];
   mandate: MyMandate | null;
   quote: MyQuote | null;
+  quoteNote: string | null;
   isLead: boolean;
   sumupEnabled: boolean;
 }) {
@@ -262,6 +264,23 @@ export function MyPaymentsClient({
           )}
         </CardContent>
       </Card>
+
+      {quoteNote && (
+        <Card>
+          <CardContent className="p-4 text-sm text-muted-foreground lg:p-6">
+            {quoteNote.includes("Finance → Fees") ? (
+              <>
+                {quoteNote.replace(" Save & activate them in Finance → Fees.", "")}{" "}
+                <a href="/finance/fees" className="font-medium underline">
+                  Save &amp; activate them in Finance → Fees.
+                </a>
+              </>
+            ) : (
+              quoteNote
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {isLead && quote && (
         <Card>
