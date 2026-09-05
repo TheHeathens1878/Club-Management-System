@@ -49,28 +49,33 @@ export function ClosePitchForm({
           </Select>
         </div>
 
+        {/* From: date and time on one row; Until: date and time on the next
+            (Adam, 2026-09-05). The times are the daily window — a closure
+            that runs for a week is closed 08:00–22:00 on each of its days. */}
         <div className="space-y-1.5">
           <Label htmlFor="closure-date">From date</Label>
           <Input id="closure-date" type="date" name="date" defaultValue={defaultDate} required />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="closure-end-date">Until date</Label>
-          <Input id="closure-end-date" type="date" name="end_date" />
-          <p className="text-xs text-muted-foreground">
-            Leave blank to close for the one day. A longer closure is one closure per day, each
-            for the times below, so a single day can be re-opened on its own.
-          </p>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="closure-start">From</Label>
+          <Label htmlFor="closure-start">From time</Label>
           <Input id="closure-start" type="time" name="start_time" defaultValue="08:00" required />
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="closure-end">Until</Label>
+          <Label htmlFor="closure-end-date">Until date</Label>
+          <Input id="closure-end-date" type="date" name="end_date" />
+          <p className="text-xs text-muted-foreground">
+            Leave blank to close for the one day.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="closure-end">Until time</Label>
           <Input id="closure-end" type="time" name="end_time" defaultValue="22:00" required />
+          <p className="text-xs text-muted-foreground">
+            The times apply to every day of the closure, so a single day can be re-opened on its own.
+          </p>
         </div>
 
         <div className="space-y-1.5 sm:col-span-2">
