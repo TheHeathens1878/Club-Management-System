@@ -40,7 +40,12 @@ JWT: Stripe (proved by `stripe-signature`) and the Database Webhook (proved by
 
 The scheduled functions accept **only** the service-role key
 (`requireServiceRole`), so `verify_jwt = true` plus that check means the
-scheduler is the only possible caller.
+scheduler is the only possible caller. `requireServiceRole` also accepts a JWT
+whose `role` claim is `service_role` — sound ONLY because the gateway has
+already verified that JWT's signature, which is why it is reserved for
+`verify_jwt = true` functions. The two `verify_jwt = false` functions use
+`requireWebhookSecret` / `presentsServiceKey`, which compare secrets byte for
+byte and read no claims at all.
 
 ## Suggested schedules — for a follow-up migration
 

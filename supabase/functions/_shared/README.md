@@ -5,7 +5,7 @@
 | File | What it holds |
 |---|---|
 | `env.ts` | `optionalEnv` / `requireEnv` / `checkSecrets`, the platform constants, `siteUrl()`. Feature secrets are read lazily so a function can report "not configured" as data rather than failing to boot. |
-| `auth.ts` | `json()`, `adminClient()`, `userClient(req)`, `requireServiceRole(req)`, `requireWebhookSecret(req)`, `callerPersonId()`, `readJson()`, `settingInt()`. |
+| `auth.ts` | `json()`, `adminClient()`, `userClient(req)`, `requireServiceRole(req)` (verify_jwt = true only), `presentsServiceKey(req)`, `requireWebhookSecret(req)` (safe behind verify_jwt = false), `callerPersonId()`, `readJson()`, `settingInt()`. |
 | `comms.ts` | `enqueue()` over P4.4's `enqueue_message`, `alreadySent()` for per-template idempotency, `safeguardingLeads()`, `pounds()`. |
 
 `adminClient()` bypasses RLS; use it only for work the caller has already been
