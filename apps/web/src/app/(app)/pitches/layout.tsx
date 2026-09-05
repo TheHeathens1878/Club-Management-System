@@ -8,7 +8,7 @@ import { SectionHomeLink } from "@/components/section-home-link";
 export default function PitchesLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <SectionHomeLink href="/pitches" label="Pitches home" icon={LandPlot} />
+      <SectionHomeLink href="/pitches" label="Pitches home" icon={<LandPlot className="h-4 w-4" aria-hidden />} />
       {children}
     </>
   );
