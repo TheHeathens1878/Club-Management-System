@@ -14,6 +14,8 @@ import { resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { createClient } from "@/lib/supabase/server";
 
+import { HomeAttention } from "./home-attention";
+
 /**
  * The Club Lobby (Adam, 2026-08-25 — the Club CRM design): "Everything
  * happening across the club this week — one place everyone can see."
@@ -34,7 +36,7 @@ import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Club lobby" };
+export const metadata = { title: "Home" };
 
 const DAY_MS = 86_400_000;
 
@@ -158,8 +160,8 @@ export default async function LobbyPage() {
   return (
     <>
       <PageHeader
-        title="Club lobby"
-        subtitle="Everything happening across the club this week — one place everyone can see"
+        title="Home"
+        subtitle="What needs your attention, and everything happening across the club this week"
         action={
           canPost ? (
             <Link
@@ -171,6 +173,11 @@ export default async function LobbyPage() {
           ) : undefined
         }
       />
+
+      {/* P7.2: the first thing on Home is the short list of what is waiting
+          on the reader — a match with no reply, money owed, unread
+          messages, an administrator's queue — each row the exact task. */}
+      <HomeAttention />
 
       {showJoinPrompt && (
         <div className="px-4 pt-4 lg:px-6">

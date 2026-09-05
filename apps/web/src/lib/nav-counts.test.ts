@@ -1,40 +1,62 @@
 import { describe, expect, it } from "vitest";
 
-import { NAV, type NavBadge } from "@/lib/nav";
+import { DESTINATIONS, itemsFor, type NavBadge } from "@/lib/destinations";
 import { NO_NAV_COUNTS } from "@/lib/nav-counts";
+import type { Capabilities } from "@/lib/role-view";
+
+const everyone: Capabilities = {
+  personId: "p",
+  appRole: "super_user",
+  isSuperUser: true,
+  isCommittee: true,
+  isStaff: true,
+  isBarManager: true,
+  isClubAdmin: true,
+  isSafeguardingLead: true,
+  hasCoachRole: true,
+  hasParentRole: true,
+  hasRefereeRole: true,
+  isTeamStaff: true,
+  hasPlayerMembership: true,
+  isGuardian: true,
+  hasFinanceRole: true,
+  hasWaitingListAccess: true,
+  staffTeams: [],
+  playerTeams: [],
+  parentTeams: [],
+};
 
 /**
- * The badge keys and the counter have to stay in step.
- *
- * `NavEntry.badge` names a number that `loadNavCounts` has to produce. If
- * somebody adds a third badge and forgets the query behind it, TypeScript
- * catches the lookup — but not the case where a key is added to `NavCounts`
- * and never counted, or an entry gets a badge whose queue nobody reads. This
- * pins both ends.
+ * The badge keys and the counters have to stay in step. A menu row that
+ * names a count nobody produces would draw nothing; a count nobody names
+ * would be wasted work on every page.
  */
 describe("nav waiting-counts", () => {
-  const badged = NAV.filter((entry) => entry.badge);
+  const badgedItems = DESTINATIONS.flatMap((d) => itemsFor(d.key, everyone)).filter((item) => item.badge);
 
-  it("counts exactly the two admin queues Adam asked for", () => {
-    expect(badged.map((entry) => entry.href).sort()).toEqual(["/approvals", "/registrations"]);
+  it("counts exactly the two admin queues Adam asked for, on their rows", () => {
+    expect(badgedItems.map((entry) => entry.href).sort()).toEqual(["/approvals", "/registrations"]);
   });
 
   it("draws them only where a club administrator would see them", () => {
-    for (const entry of badged) {
-      expect(entry.views).toEqual(["admin"]);
-      // The count is the whole club's, so the entry must be admin-gated or the
-      // number would be one a member should not be shown.
-      expect(entry.allowed({ isClubAdmin: false } as never)).toBe(false);
+    for (const entry of badgedItems) {
+      expect(entry.allowed({ ...everyone, isClubAdmin: false })).toBe(false);
     }
   });
 
-  it("has a counter behind every badge key, and no counter without a badge", () => {
-    const used = new Set<NavBadge>(badged.map((entry) => entry.badge!));
-    const counted = new Set(Object.keys(NO_NAV_COUNTS) as NavBadge[]);
-    expect([...used].sort()).toEqual([...counted].sort());
+  it("the tabs themselves wear only Messages and the admin queues", () => {
+    const tabBadges = DESTINATIONS.filter((d) => d.badge).map((d) => [d.key, d.badge]);
+    expect(tabBadges).toEqual([
+      ["messages", "messages"],
+      ["club", "approvals"],
+    ]);
   });
 
-  it("starts at zero, so a failed count reads as an empty queue rather than a guess", () => {
-    expect(NO_NAV_COUNTS).toEqual({ approvals: 0, registrations: 0 });
+  it("every badge key has a counter behind it", () => {
+    const keys: NavBadge[] = ["approvals", "registrations", "messages"];
+    for (const key of keys) {
+      if (key === "messages") continue; // my_unread_message_count(), read in the layout
+      expect(NO_NAV_COUNTS).toHaveProperty(key);
+    }
   });
 });

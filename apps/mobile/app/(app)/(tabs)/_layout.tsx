@@ -2,26 +2,22 @@ import { Tabs } from "expo-router/js-tabs";
 import { StyleSheet, Text, type ColorValue } from "react-native";
 
 import { theme } from "../../../lib/theme";
-import { useStaffTeams } from "../../../lib/use-coach";
 
 /**
- * The five things a club member opens the app for. Order is deliberate: teams
- * and fixtures are the daily read, subs and messages the weekly one, profile
- * the rare one.
+ * The five places the app goes (P7.2, 2026-09-05): Home · Calendar ·
+ * Messages · Club · Me — the same five, in the same order, as the web app's
+ * sidebar and tab bar. A person who learns one has learned the other.
  *
- * Team staff get a sixth: the Coach tab (Adam, 2026-09-02: "I would want the
- * coach built in"). `href: null` keeps it out of everyone else's bar — the
- * capability comes from `my_capabilities()` under the caller's own RLS, and
- * the screens behind it hold no authority of their own, so hiding the tab is
- * navigation, not security. The same person's member tabs are untouched:
- * their parent-and-player life stays exactly what every other member sees.
+ * There is no Coach tab any more: a coach's desk is a section of Club,
+ * labelled "Coaching · <team>", beside the household's own teams — so a
+ * parent who also coaches sees both halves of their week on one screen. The
+ * screens behind it hold no authority of their own; every read is the
+ * database's answer to THIS caller, and a coach of one team sees one team.
  *
  * Icons are glyphs rather than an icon font: one fewer asset pipeline to get
  * wrong before P6.4, and they scale with the platform's text size.
  */
 export default function TabsLayout() {
-  const { teams: staffTeams } = useStaffTeams();
-
   return (
     <Tabs
       screenOptions={{
@@ -39,30 +35,15 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: "My teams",
-          tabBarIcon: ({ color }) => <Glyph glyph="👥" color={color} />,
+          title: "Home",
+          tabBarIcon: ({ color }) => <Glyph glyph="🏠" color={color} />,
         }}
       />
       <Tabs.Screen
-        name="fixtures"
+        name="calendar"
         options={{
-          title: "Fixtures",
-          tabBarIcon: ({ color }) => <Glyph glyph="⚽" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="coach"
-        options={{
-          title: "Coach",
-          href: staffTeams.length > 0 ? "/coach" : null,
-          tabBarIcon: ({ color }) => <Glyph glyph="📋" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="subs"
-        options={{
-          title: "Subs",
-          tabBarIcon: ({ color }) => <Glyph glyph="💷" color={color} />,
+          title: "Calendar",
+          tabBarIcon: ({ color }) => <Glyph glyph="📅" color={color} />,
         }}
       />
       <Tabs.Screen
@@ -73,9 +54,16 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="profile"
+        name="club"
         options={{
-          title: "Profile",
+          title: "Club",
+          tabBarIcon: ({ color }) => <Glyph glyph="👥" color={color} />,
+        }}
+      />
+      <Tabs.Screen
+        name="me"
+        options={{
+          title: "Me",
           tabBarIcon: ({ color }) => <Glyph glyph="👤" color={color} />,
         }}
       />

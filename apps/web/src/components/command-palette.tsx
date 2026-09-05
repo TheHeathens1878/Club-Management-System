@@ -2,22 +2,32 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Contact, FileText, Search, Shirt } from "lucide-react";
+import { CalendarDays, Contact, DoorOpen, FileText, Loader2, Search, Shirt } from "lucide-react";
+
+import type { PaletteEntry } from "@/lib/destinations";
+import { rankPages } from "@/lib/search-terms";
 
 /**
- * Global search (⌘K / Ctrl-K) — the 2026-09-04 audit's biggest gap: nothing
- * in the app could answer "type a name, get the thing". One field finds a
- * page from the caller's OWN menu, and people/teams through /api/search,
- * which reads under the caller's RLS and only links where their guards will
- * let them land.
+ * Global search (⌘K / Ctrl-K). One field finds a page from the caller's OWN
+ * menu — by its name, its section, or the everyday words it carries ("pay
+ * subs") — and people, teams, events and bookings through /api/search, which
+ * reads under the caller's RLS and only links where their guards will let
+ * them land.
  *
  * Any element can open it by dispatching `club:search-open` — the sidebar
  * button below and the phone header's magnifier both do.
+ *
+ * Three remote states are drawn, not swallowed (P7.2): searching, failed
+ * (with a retry), and nothing found — a search that sits blank while the
+ * network thinks looks broken, and one that fails silently IS broken.
  */
 
-export type PaletteEntry = { label: string; href: string; group: string };
-
-type RemoteHit = { type: "person" | "team"; label: string; detail: string | null; href: string };
+type RemoteHit = {
+  type: "person" | "team" | "event" | "booking";
+  label: string;
+  detail: string | null;
+  href: string;
+};
 
 export const OPEN_SEARCH_EVENT = "club:search-open";
 
@@ -29,7 +39,7 @@ export function SearchTrigger({ variant }: { variant: "sidebar" | "icon" }) {
         type="button"
         onClick={open}
         aria-label="Search"
-        className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+        className="inline-flex h-11 w-9 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
       >
         <Search className="h-5 w-5" />
       </button>
@@ -48,11 +58,21 @@ export function SearchTrigger({ variant }: { variant: "sidebar" | "icon" }) {
   );
 }
 
+const ICONS: Record<RemoteHit["type"] | "page", typeof Contact> = {
+  page: FileText,
+  person: Contact,
+  team: Shirt,
+  event: CalendarDays,
+  booking: DoorOpen,
+};
+
 export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [remote, setRemote] = useState<RemoteHit[]>([]);
+  const [remoteState, setRemoteState] = useState<"idle" | "loading" | "failed">("idle");
+  const [attempt, setAttempt] = useState(0);
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const fetchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -78,6 +98,7 @@ export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
     if (open) {
       setQuery("");
       setRemote([]);
+      setRemoteState("idle");
       setSelected(0);
       setTimeout(() => inputRef.current?.focus(), 30);
     }
@@ -88,30 +109,33 @@ export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
     if (fetchTimer.current) clearTimeout(fetchTimer.current);
     if (query.trim().length < 2) {
       setRemote([]);
+      setRemoteState("idle");
       return;
     }
+    setRemoteState("loading");
+    const controller = new AbortController();
     fetchTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
-        if (!res.ok) return;
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(String(res.status));
         const data = (await res.json()) as { hits?: RemoteHit[] };
         setRemote(data.hits ?? []);
-      } catch {
-        /* a failed search types like an empty one */
+        setRemoteState("idle");
+      } catch (error) {
+        if ((error as { name?: string }).name === "AbortError") return;
+        setRemote([]);
+        setRemoteState("failed");
       }
     }, 250);
     return () => {
+      controller.abort();
       if (fetchTimer.current) clearTimeout(fetchTimer.current);
     };
-  }, [query]);
+  }, [query, attempt]);
 
-  const pageHits = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return pages.slice(0, 7);
-    return pages
-      .filter((page) => page.label.toLowerCase().includes(q) || page.group.toLowerCase().includes(q))
-      .slice(0, 7);
-  }, [pages, query]);
+  const pageHits = useMemo(() => rankPages(pages, query).slice(0, 7), [pages, query]);
 
   const rows = useMemo(
     () => [
@@ -135,6 +159,9 @@ export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
 
   if (!open) return null;
 
+  const searching = remoteState === "loading";
+  const nothing = rows.length === 0 && !searching && remoteState !== "failed";
+
   return (
     <div
       className="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
@@ -148,7 +175,11 @@ export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="flex items-center gap-2 border-b px-3">
-          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          {searching ? (
+            <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
+          ) : (
+            <Search className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          )}
           <input
             ref={inputRef}
             value={query}
@@ -165,42 +196,61 @@ export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
                 if (row) go(row.href);
               }
             }}
-            placeholder="Search pages, people, teams…"
+            placeholder="Search — pay subs, next match, a name, a team…"
+            aria-label="Search"
+            aria-activedescendant={rows[selected] ? `search-row-${selected}` : undefined}
+            aria-controls="search-results"
             className="h-12 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
         </div>
-        <ul className="max-h-[50vh] overflow-y-auto p-1.5">
-          {rows.length === 0 && (
+        <ul id="search-results" role="listbox" className="max-h-[50vh] overflow-y-auto p-1.5">
+          {nothing && (
             <li className="px-3 py-6 text-center text-sm text-muted-foreground">
-              Nothing matches. People and teams need at least two letters.
+              {query.trim().length < 2
+                ? "Type a page, a task, a name or a team."
+                : "Nothing matches. Try another word — “subs”, “fixtures”, a surname."}
             </li>
           )}
-          {rows.map((row, index) => (
-            <li key={`${row.kind}:${row.href}`}>
+          {remoteState === "failed" && (
+            <li className="flex items-center justify-between gap-3 px-3 py-3 text-sm text-destructive">
+              <span>Search could not reach the club. Pages still work.</span>
               <button
                 type="button"
-                onClick={() => go(row.href)}
-                onMouseEnter={() => setSelected(index)}
-                className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm ${
-                  index === selected ? "bg-primary text-primary-foreground" : ""
-                }`}
+                onClick={() => setAttempt((n) => n + 1)}
+                className="rounded-md border px-2 py-1 text-xs font-medium text-foreground hover:bg-secondary"
               >
-                {row.kind === "person" ? (
-                  <Contact className="h-4 w-4 shrink-0 opacity-70" />
-                ) : row.kind === "team" ? (
-                  <Shirt className="h-4 w-4 shrink-0 opacity-70" />
-                ) : (
-                  <FileText className="h-4 w-4 shrink-0 opacity-70" />
-                )}
-                <span className="min-w-0 flex-1 truncate font-medium">{row.label}</span>
-                {row.detail && (
-                  <span className={`truncate text-xs ${index === selected ? "opacity-80" : "text-muted-foreground"}`}>
-                    {row.detail}
-                  </span>
-                )}
+                Try again
               </button>
             </li>
-          ))}
+          )}
+          {rows.map((row, index) => {
+            const Icon = ICONS[row.kind];
+            return (
+              <li key={`${row.kind}:${row.href}`} id={`search-row-${index}`} role="option" aria-selected={index === selected}>
+                <button
+                  type="button"
+                  onClick={() => go(row.href)}
+                  onMouseEnter={() => setSelected(index)}
+                  className={`flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm ${
+                    index === selected ? "bg-primary text-primary-foreground" : ""
+                  }`}
+                >
+                  <Icon className="h-4 w-4 shrink-0 opacity-70" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate font-medium">{row.label}</span>
+                  {row.detail && (
+                    <span className={`truncate text-xs ${index === selected ? "opacity-80" : "text-muted-foreground"}`}>
+                      {row.detail}
+                    </span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
+          {searching && rows.length > 0 && (
+            <li className="px-3 py-2 text-xs text-muted-foreground" aria-live="polite">
+              Searching people, teams, events and bookings…
+            </li>
+          )}
         </ul>
       </div>
     </div>

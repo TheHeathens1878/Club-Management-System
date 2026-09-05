@@ -5927,6 +5927,11 @@ export type Database = {
         /** The auth user holding this address, or null. service_role only. */
         Returns: string | null
       }
+      my_unread_message_count: {
+        Args: never
+        /** Messages the caller has not read across their live, unmuted conversations. */
+        Returns: number
+      }
       add_child: {
         Args: {
           p_dob: string

@@ -1,39 +1,43 @@
 import { redirect } from "next/navigation";
-import { LogOut, Menu } from "lucide-react";
+import { LogOut } from "lucide-react";
 
-import { CommandPalette, SearchTrigger, type PaletteEntry } from "@/components/command-palette";
+import { CommandPalette, SearchTrigger } from "@/components/command-palette";
 import { HeaderTools } from "@/components/header-tools";
-import { buttonVariants } from "@/components/ui/button";
-import { getSessionProfile, isBooker } from "@/lib/auth";
-import { navFor, navForUnlinked } from "@/lib/nav";
-import { loadNavCounts, NO_NAV_COUNTS } from "@/lib/nav-counts";
-import { NavLink } from "@/components/nav-link";
-import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { loadUnreadNotificationCount } from "@/lib/notifications-data";
-import { mobileTabsFor } from "@/lib/mobile-nav";
-import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
 import { MobileHeader } from "@/components/mobile-header";
 import { MobileTabBar, type MobileTabItem } from "@/components/mobile-tab-bar";
 import { NotificationPrompt } from "@/components/notification-prompt";
-import { getCurrentPersonId } from "@/lib/person";
 import { RoleSwitcher } from "@/components/role-switcher";
+import { SidebarNav, type SidebarDestination } from "@/components/sidebar-nav";
+import { buttonVariants } from "@/components/ui/button";
+import { getSessionProfile, isBooker } from "@/lib/auth";
+import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
+import {
+  DESTINATIONS,
+  allHrefs,
+  contextLabel,
+  itemsFor,
+  linkHref,
+  paletteEntries,
+  sectionsOf,
+  type NavBadge,
+} from "@/lib/destinations";
+import { loadNavCounts, NO_NAV_COUNTS } from "@/lib/nav-counts";
+import { loadUnreadNotificationCount } from "@/lib/notifications-data";
+import { getCurrentPersonId } from "@/lib/person";
+import { resolveRoleView, roleSwitcherProps } from "@/lib/role-view";
+import { createClient } from "@/lib/supabase/server";
 
 /**
- * The signed-in shell.
+ * The signed-in shell (P7.2): five destinations — Home · Calendar · Messages
+ * · Club · Me — as the desktop sidebar's five rows and the phone's five tabs,
+ * the same five in the same order for everybody.
  *
- * The nav is built from two things and no others:
- *
- *   · the person's CAPABILITIES, read from the database under their own RLS —
- *     an item whose capability is false is never rendered, in any view;
- *   · the chosen VIEW, one of the six kinds of user the club recognises. The
- *     scope is hard: the menu is that view's items and nothing else's, and a
- *     person with more than one hat switches between menus rather than seeing
- *     them merged.
- *
- * A cookie naming a view the person does not hold is not honoured and does not
- * produce a banner: `resolveRoleView` simply recomputes and falls back to the
- * widest view they do hold. Somebody who holds none of them gets the two links
- * that are true of any signed-in person, and /welcome explains why.
+ * The menu is built from the person's CAPABILITIES, read from the database
+ * under their own RLS: an item whose capability is false is never rendered.
+ * There is no longer a per-hat menu to switch between. The hat — the
+ * `club.role_view` cookie the pages still read to decide what they OFFER —
+ * is set by the link that opens a page (see /context) and named in the
+ * header, so the reader always knows which one is on.
  *
  * Each page keeps its own guard. This is a menu, not an authorisation layer.
  */
@@ -48,55 +52,75 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const capabilities = await getCapabilities();
   const storedView = await getStoredRoleView();
   const view = resolveRoleView(storedView, capabilities);
-  const groups = view ? navFor(view, capabilities) : navForUnlinked();
-  // Every href in this menu — NavLink gives the highlight to the best match
-  // and only that one (/pitches/calendar must not also light /pitches).
-  const navHrefs = groups.flatMap((group) => group.items.map((item) => item.href));
 
-  // Four independent questions, asked together: this shell renders on every
-  // navigation, so its cost is the app's floor — a waterfall here is a
-  // waterfall on every screen.
-  //   · counts — what is waiting behind Approvals and Registrations (Adam,
-  //     2026-09-02). Only asked for when the menu actually draws those
-  //     entries, so an ordinary member's page load costs nothing extra.
-  //   · scope — the role–team dropdown (Adam, 2026-08-25): every hat the
-  //     person holds, team by team. With one option it renders plain text.
-  //   · unread — the bell.
-  //   · personId — who the browser would be registering a device for (Adam,
-  //     2026-09-01: notifications prompt). Null for a sign-in not yet linked
-  //     to a member record — there is nobody to address a push to, so the
-  //     prompt stays away.
-  const [counts, scope, unread, personId] = await Promise.all([
-    groups.some((g) => g.items.some((i) => i.badge))
-      ? loadNavCounts(capabilities.isClubAdmin)
-      : NO_NAV_COUNTS,
+  // Five independent questions, asked together: this shell renders on every
+  // navigation, so its cost is the app's floor.
+  //   · scope — the team the current hat is narrowed to (validated cookie).
+  //   · counts — what is waiting behind Approvals and Registrations; only
+  //     asked for a club administrator, zero for everyone else.
+  //   · unread messages — the Messages tab's number (my_unread_message_count).
+  //   · unread notifications — the bell.
+  //   · personId — who the browser would be registering a device for.
+  const supabase = await createClient();
+  const [scope, counts, unreadMessages, unreadNotifications, personId] = await Promise.all([
     view ? getTeamScope(view, capabilities) : null,
+    capabilities.isClubAdmin ? loadNavCounts(true) : NO_NAV_COUNTS,
+    supabase.rpc("my_unread_message_count").then(({ data }) => data ?? 0),
     loadUnreadNotificationCount(),
     getCurrentPersonId(),
   ]);
+  const current = { view, teamId: scope?.id ?? null };
+  const badges: Record<NavBadge, number> = {
+    approvals: counts.approvals + counts.registrations,
+    registrations: counts.registrations,
+    messages: unreadMessages,
+  };
+  const badgeFor = (key: NavBadge | undefined, itemLevel = false): number | undefined => {
+    if (!key) return undefined;
+    // The Club tab wears both queues added together; the rows wear their own.
+    const n = itemLevel && key === "approvals" ? counts.approvals : badges[key];
+    return n > 0 ? n : undefined;
+  };
+
   const switcher = view ? roleSwitcherProps(capabilities, view, scope?.id ?? null) : null;
-  const tabs: MobileTabItem[] = mobileTabsFor(view, capabilities).map((tab) => {
-    const Icon = tab.icon;
+  const context = contextLabel(view, scope);
+
+  const sidebar: SidebarDestination[] = DESTINATIONS.map((d) => {
+    const Icon = d.icon;
     return {
-      href: tab.href,
-      label: tab.label,
-      icon: <Icon className="h-[21px] w-[21px]" />,
-      match: tab.match,
+      key: d.key,
+      href: d.href,
+      label: d.label,
+      icon: <Icon className="h-[18px] w-[18px]" aria-hidden />,
+      badge: badgeFor(d.badge),
+      sections: sectionsOf(itemsFor(d.key, capabilities)).map((section) => ({
+        section: section.section,
+        items: section.items.map((item) => {
+          const ItemIcon = item.icon;
+          return {
+            href: linkHref(item, current),
+            label: item.label,
+            icon: <ItemIcon className="h-4 w-4" aria-hidden />,
+            badge: badgeFor(item.badge, true),
+          };
+        }),
+      })),
     };
   });
-  tabs.push({
-    href: "/more",
-    label: "More",
-    icon: <Menu className="h-[21px] w-[21px]" />,
-    match: ["/more"],
-    moreFallback: true,
-  });
+  // Every href the menu can navigate to, so the highlight goes to the best
+  // match and only that one (/pitches/calendar must not also light /pitches).
+  const hrefs = allHrefs(capabilities);
 
-  // Everything the caller's own menu offers, flattened for the ⌘K palette —
-  // the palette can never offer a page the sidebar would not.
-  const palettePages: PaletteEntry[] = groups.flatMap((group) =>
-    group.items.map((item) => ({ label: item.label, href: item.href, group: group.group })),
-  );
+  const tabs: MobileTabItem[] = DESTINATIONS.map((d) => {
+    const Icon = d.icon;
+    return {
+      href: d.href,
+      label: d.label,
+      icon: <Icon className="h-[21px] w-[21px]" aria-hidden />,
+      match: d.match,
+      badge: badgeFor(d.badge),
+    };
+  });
 
   // `min-h-[100dvh]`, not `min-h-screen`: `vh` is the viewport with the URL bar
   // hidden, so on a phone a `min-h-screen` shell is taller than the screen
@@ -104,28 +128,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // bar's height (Adam, 2026-09-01).
   return (
     <div className="flex min-h-[100dvh] flex-col lg:flex-row">
-      {/* Install-and-notifications, for signed-in members only. It draws
-          itself fixed above the tab bar, so its place in the tree is
-          immaterial; it renders nothing at all when there is no VAPID key,
-          when this browser is already subscribed, or when it has been
-          dismissed recently. */}
       <NotificationPrompt personId={personId} />
 
       {/* Global search — ⌘K anywhere, plus the sidebar and phone triggers. */}
-      <CommandPalette pages={palettePages} />
+      <CommandPalette pages={paletteEntries(capabilities, current)} />
 
       {/* The ink rail (crest design): dark sidebar against paper content.
-          `.theme-ink` remaps the semantic tokens, so everything inside — the
-          bell, ghost buttons, badges — adapts without bespoke styling. On a
-          phone the rail does not exist at all: the MobileHeader and the tab
-          bar are the shell (mobile design §"the sidebar becomes a tab bar"). */}
-      <aside className="theme-ink hidden w-full shrink-0 border-b border-border bg-background text-foreground lg:block lg:w-[232px] lg:border-b-0 lg:border-r">
+          On a phone the rail does not exist at all: the MobileHeader and the
+          tab bar are the shell. */}
+      <aside className="theme-ink hidden w-full shrink-0 border-b border-border bg-background text-foreground lg:block lg:w-[240px] lg:border-b-0 lg:border-r">
         <div className="flex gap-2 p-3 lg:h-full lg:flex-col lg:p-4">
           <div className="hidden items-center gap-2.5 border-b border-border pb-3 lg:mb-1 lg:flex">
-            {/* The crest is a black shield on a dark rail, so its silhouette
-                gets a faint paper rim from drop-shadows on the alpha edge —
-                the badge reads without a chip behind it (Adam, 2026-08-25:
-                "this white background on the logo … doesn't work"). */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/crest.png"
@@ -140,49 +153,23 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </div>
 
-          {/* The switcher now draws its own chip and panel (Adam's screenshot:
-              two-line options, tick on the active row) — no wrapper here. */}
-          {switcher ? (
-            <div className="hidden lg:block">
-              <RoleSwitcher options={switcher.options} current={switcher.current} />
-            </div>
-          ) : null}
-
-          {/* Global search (⌘K) — one field for pages, people and teams. */}
+          {/* Global search (⌘K) — one field for pages, people, teams, events. */}
           <SearchTrigger variant="sidebar" />
 
-          {/* Notifications bell — the notifications entry in every view. */}
+          {/* Notifications bell. */}
           <HeaderTools />
 
-          {groups.map((group) => (
-            <div key={group.group} className="flex flex-col gap-0.5">
-              {/* Every group carries its eyebrow (design §1.3) — a lone item
-                  is still findable under its section name. */}
-              <p className="hidden px-3 pb-1 pt-3 font-display text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">
-                {group.group}
-              </p>
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                // Zero is not drawn: an empty queue should look empty, and a
-                // pill reading "0" is a thing to check rather than a thing to
-                // ignore.
-                const waiting = item.badge ? counts[item.badge] : 0;
-                return (
-                  <NavLink
-                    key={item.href}
-                    href={item.href}
-                    hrefs={navHrefs}
-                    child={item.child}
-                    badge={waiting > 0 ? waiting : undefined}
-                  >
-                    <Icon className={item.child ? "h-3 w-3" : "h-4 w-4"} /> {item.label}
-                  </NavLink>
-                );
-              })}
-            </div>
-          ))}
+          <SidebarNav destinations={sidebar} hrefs={hrefs} />
 
-          <div className="lg:mt-auto">
+          <div className="lg:mt-auto lg:space-y-2">
+            {/* The hat, named — and the explicit way to change it when a page
+                could mean two things. Most people never need it: the Club
+                rows put the right hat on as they open. */}
+            {switcher ? (
+              <div className="hidden lg:block">
+                <RoleSwitcher options={switcher.options} current={switcher.current} />
+              </div>
+            ) : null}
             <form action="/auth/signout" method="post">
               <button
                 type="submit"
@@ -200,14 +187,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
       <MobileHeader
         name={name}
+        context={context}
         switcher={switcher ? { options: switcher.options, current: switcher.current } : null}
-        unread={unread}
+        unread={unreadNotifications}
       />
 
       {/* Bottom padding clears the fixed tab bar (plus the home indicator's
           safe area) so nothing ends underneath it — measured from the bar
-          itself now via `--tab-bar-h`, rather than the 64px this used to
-          guess at while the bar was 55px (globals.css). */}
+          itself via `--tab-bar-h` (globals.css). */}
       <main className="flex-1 overflow-x-clip bg-background pb-[calc(var(--tab-bar-h)+env(safe-area-inset-bottom))] lg:pb-0">
         {children}
       </main>

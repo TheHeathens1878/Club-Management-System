@@ -1,14 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarPlus, ChevronRight } from "lucide-react";
+import { CalendarDays, CalendarPlus, ChevronRight, LandPlot } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
-import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { isMemberView, resolveRoleView } from "@/lib/role-view";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { isMemberView, resolveRoleView, type TeamRef } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
 
 import { RespondButtons } from "./respond-buttons";
@@ -20,12 +20,17 @@ import {
 } from "./shared";
 
 /**
- * Events — every upcoming occasion for the teams the signed-in person belongs
- * to, is staff of, or has a child on (Adam, 2026-08-24). A fixture appears
- * here automatically the moment it is created; practices and socials are
+ * Calendar (P7.2) — every upcoming occasion for the teams the signed-in
+ * person belongs to, is staff of, or has a child on. A fixture appears here
+ * automatically the moment it is created; practices and socials are
  * coach-created. Accept/decline is inline for everyone the viewer answers
- * for; the full picture (organisers, who's in, who hasn't said) is the event
- * page.
+ * for; the full picture is the event page.
+ *
+ * ALL OF THE HOUSEHOLD BY DEFAULT. The list used to be narrowed by the
+ * switcher's team cookie, so a parent who had last opened one child's team
+ * saw only that child's Saturday and no way to widen it. The whole diary is
+ * now the default — "view all children's fixtures" is one tap — and the
+ * `?team=` chips narrow it, visibly and reversibly, in the URL.
  *
  * `my_events()` is SECURITY DEFINER and does all the scoping — this page adds
  * nothing to what the database already decided the caller may see.
@@ -33,41 +38,60 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Events" };
+export const metadata = { title: "Calendar" };
 
 const HORIZON_DAYS = 90;
 
-export default async function EventsPage() {
+export default async function EventsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ team?: string }>;
+}) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
-  const [supabase, capabilities] = await Promise.all([createClient(), getCapabilities()]);
+  const [supabase, capabilities, { team: teamParam }] = await Promise.all([
+    createClient(),
+    getCapabilities(),
+    searchParams,
+  ]);
   const { data, error } = await supabase.rpc("my_events", { p_horizon_days: HORIZON_DAYS });
 
-  // "Viewing as Coach – U14 Mavericks" narrows the list to that team; the
-  // scope is the validated cookie, so a stale team silently widens back.
-  const view = resolveRoleView(await getStoredRoleView(), capabilities);
-  const scope = await getTeamScope(view, capabilities);
+  // The chips: every team any hat touches, once, alphabetically.
+  const teams = new Map<string, TeamRef>();
+  for (const team of [...capabilities.parentTeams, ...capabilities.staffTeams, ...capabilities.playerTeams]) {
+    if (!teams.has(team.id)) teams.set(team.id, team);
+  }
+  const chips = [...teams.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const filter = teamParam && teams.has(teamParam) ? teams.get(teamParam)! : null;
 
-  const events = (data ?? []).filter((event) => !scope || event.team_id === scope.id);
+  const all = data ?? [];
+  const events = filter ? all.filter((event) => event.team_id === filter.id) : all;
+
   // "New event" is a coach's or an administrator's button, and only while
   // they are wearing that hat (Adam, 2026-09-02). In a member view the list is
   // what every other parent sees: what is on, and nothing to run.
-  const canCreate =
-    (capabilities.isTeamStaff || capabilities.isClubAdmin) && !isMemberView(view);
+  const view = resolveRoleView(await getStoredRoleView(), capabilities);
+  const canCreate = (capabilities.isTeamStaff || capabilities.isClubAdmin) && !isMemberView(view);
+  const canSeePitches =
+    capabilities.isTeamStaff ||
+    capabilities.isGuardian ||
+    capabilities.hasPlayerMembership ||
+    capabilities.isCommittee ||
+    capabilities.isClubAdmin;
 
   return (
     <>
       <PageHeader
-        title="Events"
+        title="Calendar"
         subtitle={
-          scope
-            ? `Matches, practices and socials for ${scope.name} — accept or decline`
-            : "Matches, practices and socials for your teams — accept or decline"
+          filter
+            ? `Matches, practices and socials for ${filter.name} — accept or decline`
+            : "Matches, practices and socials for everyone in your household — accept or decline"
         }
         action={
           canCreate ? (
-            <Link href="/events/new" className={buttonVariants({ size: "sm" })}>
+            <Link href="/events/new" className={buttonVariants({ size: "sm" }) + " min-h-[44px] lg:min-h-0"}>
               <CalendarPlus className="h-4 w-4" /> New event
             </Link>
           ) : undefined
@@ -75,9 +99,34 @@ export default async function EventsPage() {
       />
 
       <div className="space-y-4 p-4 lg:p-6">
+        {/* Which team, and the other diaries — one strip, scrollable on a phone. */}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
+          {chips.length > 1 ? (
+            <>
+              <Chip href="/events" active={!filter}>
+                Everyone
+              </Chip>
+              {chips.map((team) => (
+                <Chip key={team.id} href={`/events?team=${team.id}`} active={filter?.id === team.id}>
+                  {team.name}
+                </Chip>
+              ))}
+              <span className="w-px flex-none self-stretch bg-border" aria-hidden />
+            </>
+          ) : null}
+          {canSeePitches ? (
+            <Chip href="/pitches/calendar">
+              <LandPlot className="h-3.5 w-3.5" aria-hidden /> Pitch calendar
+            </Chip>
+          ) : null}
+          <Chip href="/social">
+            <CalendarDays className="h-3.5 w-3.5" aria-hidden /> Socials
+          </Chip>
+        </div>
+
         {error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            Could not load your events: {error.message}
+            Could not load your calendar: {error.message}
           </p>
         ) : null}
 
@@ -88,7 +137,8 @@ export default async function EventsPage() {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                No events in the next {HORIZON_DAYS} days for your teams. Fixtures appear here
+                No events in the next {HORIZON_DAYS} days
+                {filter ? ` for ${filter.name}` : " for your teams"}. Fixtures appear here
                 automatically as soon as they are created
                 {canCreate ? ", and you can add practices and socials with “New event”" : ""}.
               </p>
@@ -135,5 +185,30 @@ export default async function EventsPage() {
         )}
       </div>
     </>
+  );
+}
+
+function Chip({
+  href,
+  active = false,
+  children,
+}: {
+  href: string;
+  active?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      aria-current={active ? "page" : undefined}
+      className={
+        "inline-flex min-h-[36px] flex-none items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-medium transition-colors " +
+        (active
+          ? "border-primary bg-primary text-primary-foreground"
+          : "bg-card text-foreground hover:bg-secondary")
+      }
+    >
+      {children}
+    </Link>
   );
 }

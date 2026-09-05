@@ -2,7 +2,6 @@ import { createServerClient, type CookieOptions } from "@supabase/ssr";
 import type { Database } from "@club/db";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { ROLE_VIEW_COOKIE, ROLE_VIEW_HOME, isRoleView } from "@/lib/role-view";
 import { isBookerRole } from "@/lib/types";
 
 type CookieToSet = { name: string; value: string; options: CookieOptions };
@@ -96,13 +95,14 @@ export async function middleware(request: NextRequest) {
       .maybeSingle();
 
     if (!isBookerRole(profile?.role)) {
-      const stored = request.cookies.get(ROLE_VIEW_COOKIE)?.value;
       const url = request.nextUrl.clone();
       url.search = "";
-      // Adam, 2026-08-25: a first sign-in defaults to the Club Lobby — the
-      // one place everyone can see — rather than being made to pick a hat.
-      // The switcher in the sidebar is where the hats live now.
-      url.pathname = isRoleView(stored) ? ROLE_VIEW_HOME[stored] : "/lobby";
+      // Home is Home for everybody (P7.2): what needs your attention, then
+      // the club's week. It used to be the last-worn hat's own screen — the
+      // overview for an admin, the teams list for a coach — which meant the
+      // front door led somewhere different depending on what you had been
+      // doing yesterday. The hat still applies to what the pages offer.
+      url.pathname = "/lobby";
       const redirectResponse = NextResponse.redirect(url);
       for (const cookie of response.cookies.getAll()) redirectResponse.cookies.set(cookie);
       return redirectResponse;

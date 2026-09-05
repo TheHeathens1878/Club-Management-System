@@ -46,9 +46,33 @@ const ONE_YEAR = 60 * 60 * 24 * 365;
  * writer of the cookie, so an unqualified value can never get into it.
  */
 export async function setRoleView(view: RoleView, teamId?: string): Promise<void> {
-  if (!isRoleView(view)) return;
+  const team = await applyRoleView(view, teamId);
+  if (team === undefined) return;
+
+  revalidatePath("/", "layout");
+  // Adam, 2026-08-25: "if I select parent from the drop down, I think it
+  // should just go to the team page for that child", and likewise "selecting
+  // the coach role … should just take you straight to the chosen team page" —
+  // any team-scoped pick lands on the team, not on a list of teams.
+  if (team && (view === "parent" || view === "player" || view === "coach")) {
+    redirect(`/teams/${team.id}`);
+  }
+  redirect(ROLE_VIEW_HOME[view]);
+}
+
+/**
+ * The cookie write on its own, for callers that choose their own landing —
+ * the /context route (P7.2) continues to the page the link named. Returns
+ * the validated team (or null for a club-wide hat), or undefined when the
+ * view was refused and nothing was written.
+ */
+export async function applyRoleView(
+  view: RoleView,
+  teamId?: string,
+): Promise<{ id: string; name: string } | null | undefined> {
+  if (!isRoleView(view)) return undefined;
   const capabilities = await getCapabilities();
-  if (!qualifiesForView(view, capabilities)) return;
+  if (!qualifiesForView(view, capabilities)) return undefined;
 
   // A team narrows the view only when that view actually holds it — a made-up
   // id is dropped rather than stored, so the scope cookie can never name a
@@ -80,15 +104,7 @@ export async function setRoleView(view: RoleView, teamId?: string): Promise<void
     httpOnly: false,
   });
 
-  revalidatePath("/", "layout");
-  // Adam, 2026-08-25: "if I select parent from the drop down, I think it
-  // should just go to the team page for that child", and likewise "selecting
-  // the coach role … should just take you straight to the chosen team page" —
-  // any team-scoped pick lands on the team, not on a list of teams.
-  if (team && (view === "parent" || view === "player" || view === "coach")) {
-    redirect(`/teams/${team.id}`);
-  }
-  redirect(ROLE_VIEW_HOME[view]);
+  return team ?? null;
 }
 
 /**
