@@ -344,7 +344,7 @@ export async function createPitchBooking(
     return {
       error:
         occurrences.length === 1
-          ? "That slot is already booked on that pitch. Choose a different time, date or pitch."
+          ? "That slot is already booked on that pitch — a pending request holds it just as a confirmed booking does, including one of your own. Check My pitch bookings, or choose a different time, date or pitch."
           : `${clashes.length} of the ${occurrences.length} sessions clash with a booking that is already on that pitch. Nothing has been saved.`,
       clashes,
     };
