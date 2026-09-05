@@ -13,9 +13,11 @@ with an HTTP header `x-webhook-secret: <the WEBHOOK_SECRET value>`. Not a cron
 job — the point is that it fires the moment the message lands.
 
 **`verify_jwt = false`** — a Database Webhook cannot present a Supabase JWT. The
-shared secret is compared timing-safely; the service-role key is also accepted so
-a delivery can be replayed by hand. If `WEBHOOK_SECRET` is not set, every request
-is 401 — the endpoint never falls open.
+shared secret is compared timing-safely; the service-role key itself is also
+accepted (byte for byte, never by reading its `role` claim — with JWT
+verification off, a claim is unproven text) so a delivery can be replayed by
+hand. If `WEBHOOK_SECRET` is not set, every request is 401 — the endpoint never
+falls open.
 
 ## What reaches the lock screen
 

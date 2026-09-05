@@ -2,13 +2,15 @@
 //
 // Three ways in, and each function states which it accepts:
 //   * `requireServiceRole(req)`  — the cron caller (pg_cron → pg_net → here
-//     with the service-role key), and nothing else.
+//     with the service-role key), and nothing else. ONLY behind
+//     `verify_jwt = true` — see the note on the function.
 //   * `userClient(req)`          — a signed-in member; the client carries the
 //     caller's JWT so RLS and every SECURITY DEFINER accessor see *them*, not
 //     the service role. This is how the consent/participant filters stay
 //     honest inside a function that also holds the service key.
 //   * `requireWebhookSecret(req)` — a Database Webhook, which cannot present a
-//     JWT; it sends a shared secret header instead.
+//     JWT; it sends a shared secret header instead. Safe behind
+//     `verify_jwt = false`, because nothing it accepts is a decoded claim.
 //
 // `adminClient()` bypasses RLS and must only ever be used for work the caller
 // has already been authorised for.
@@ -34,17 +36,37 @@ export function adminClient(): Client {
   return createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
 }
 
-/** True when the request presents the service-role key (i.e. it is the scheduler). */
+/**
+ * True when the bearer token IS the service-role key, byte for byte. This is
+ * the one test that needs nothing from the gateway: it holds whether or not
+ * the function's JWT verification is on.
+ */
+export function presentsServiceKey(req: Request): boolean {
+  const token = bearer(req);
+  return token.length > 0 && timingSafeEqual(token, SERVICE_KEY);
+}
+
+/**
+ * True when the request presents the service-role key (i.e. it is the
+ * scheduler).
+ *
+ * ONLY FOR FUNCTIONS WITH `verify_jwt = true`. The second branch reads the
+ * `role` claim out of the token WITHOUT checking its signature — it cannot,
+ * the signing secret is not available here — and is sound only because the
+ * gateway has already refused any token whose signature does not verify
+ * before this code runs. Behind `verify_jwt = false` that branch would accept
+ * a token anybody typed, so a function configured that way must use
+ * `presentsServiceKey()` or `requireWebhookSecret()` instead, never this.
+ *
+ * Why the branch exists at all: the platform injects
+ * SUPABASE_SERVICE_ROLE_KEY in the sb_secret_… format, while pg_cron /
+ * invoke_edge_function present the legacy service-role JWT, which is the only
+ * form the gateway accepts with verify_jwt = true. The two never compare equal.
+ */
 export function requireServiceRole(req: Request): boolean {
+  if (presentsServiceKey(req)) return true;
   const token = bearer(req);
   if (token.length === 0) return false;
-  if (timingSafeEqual(token, SERVICE_KEY)) return true;
-  // The platform now injects SUPABASE_SERVICE_ROLE_KEY in the sb_secret_…
-  // format, while pg_cron / invoke_edge_function present the legacy
-  // service-role JWT, which is the only form the gateway accepts with
-  // verify_jwt = true. The gateway has already verified that JWT's signature
-  // by the time we run, so trusting its role claim is sound here. Functions
-  // with verify_jwt = false must not rely on this branch.
   return jwtRole(token) === "service_role";
 }
 
@@ -91,11 +113,17 @@ export async function callerPersonId(client: Client): Promise<string | null> {
 
 /**
  * Database Webhooks cannot present a JWT, so they send `x-webhook-secret`.
- * The service-role key is also accepted so the same endpoint can be replayed
- * by hand from the scheduler.
+ * The service-role key itself is also accepted so the same endpoint can be
+ * replayed by hand from the scheduler.
+ *
+ * This runs behind `verify_jwt = false`, so NOTHING here may trust a decoded
+ * claim: both accepted credentials are compared byte for byte against a
+ * secret this function holds. A JWT whose payload merely says
+ * `"role":"service_role"` proves nothing without the gateway having checked
+ * its signature, and here the gateway has not.
  */
 export function requireWebhookSecret(req: Request): boolean {
-  if (requireServiceRole(req)) return true;
+  if (presentsServiceKey(req)) return true;
   const expected = optionalEnv("WEBHOOK_SECRET");
   if (expected === null) return false;
   const given = req.headers.get("x-webhook-secret") ?? "";

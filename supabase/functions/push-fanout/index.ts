@@ -2,9 +2,15 @@
 //
 // AUTH. `verify_jwt = false`: a Database Webhook cannot present a Supabase JWT.
 // It sends `x-webhook-secret` instead, checked against the WEBHOOK_SECRET
-// secret with a timing-safe compare (the service-role key is also accepted, so
-// a delivery can be replayed by hand). No secret configured ⇒ 401, never an
-// open endpoint.
+// secret with a timing-safe compare (the service-role key ITSELF is also
+// accepted, byte for byte, so a delivery can be replayed by hand). No secret
+// configured ⇒ 401, never an open endpoint.
+//
+// Because the gateway verifies nothing here, this function must never decide
+// on a decoded claim: a token whose payload says `role: service_role` is just
+// text until somebody checks its signature, and nobody has. `requireWebhookSecret`
+// therefore compares credentials and reads no claims — `requireServiceRole`,
+// which does read one, is for `verify_jwt = true` functions only.
 //
 // WHAT GOES ON THE LOCK SCREEN. Per P5.1 §6: the payload carries the sender's
 // name and the conversation, and the **body only when the conversation has no
