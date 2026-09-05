@@ -50,8 +50,17 @@ export function ClosePitchForm({
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="closure-date">Date</Label>
+          <Label htmlFor="closure-date">From date</Label>
           <Input id="closure-date" type="date" name="date" defaultValue={defaultDate} required />
+        </div>
+
+        <div className="space-y-1.5">
+          <Label htmlFor="closure-end-date">Until date</Label>
+          <Input id="closure-end-date" type="date" name="end_date" />
+          <p className="text-xs text-muted-foreground">
+            Leave blank to close for the one day. A longer closure is one closure per day, each
+            for the times below, so a single day can be re-opened on its own.
+          </p>
         </div>
 
         <div className="space-y-1.5">
