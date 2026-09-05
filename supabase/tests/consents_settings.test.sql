@@ -131,6 +131,14 @@ insert into public.people (id, first_name, last_name, dob) values
 update public.people set email = 'cshared@test.invalid'
  where id = 'd8d8d8d8-8888-4888-8888-000000000026';
 
+-- The two children the invite tests in §J sign up. Since 20260905100000 an
+-- invite adopts a person only at that person's RECORDED address, so the club
+-- puts the address on the record first — which is what inviting somebody is.
+update public.people set email = 'ccara@test.invalid'
+ where id = 'd8d8d8d8-8888-4888-8888-000000000011';
+update public.people set email = 'ctim@test.invalid'
+ where id = 'd8d8d8d8-8888-4888-8888-000000000012';
+
 -- Live guardianships from Gwen to her children.
 insert into public.guardianships (guardian_person_id, child_person_id, relationship)
 select current_setting('test.guardian_person')::uuid, c, 'parent'
