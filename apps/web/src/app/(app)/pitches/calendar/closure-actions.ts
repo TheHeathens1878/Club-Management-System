@@ -11,15 +11,16 @@
  *
  * Whether a pitch is free is decided in exactly one place, the GiST exclusion
  * constraint `bookings_no_overlap`. `booking_has_conflict()` is asked first so
- * a clash can be named per pitch before anything is written; the constraint is
- * what makes it safe when a coach books the same slot at the same moment, so
- * 23P01 is handled too — and re-checked, so the error can say *which* pitch
- * was taken rather than "something clashed".
+ * a clash can be named per pitch and per day before anything is written; the
+ * constraint is what makes it safe when a coach books the same slot at the
+ * same moment, so 23P01 is handled too — and re-checked, so the error can say
+ * *which* pitch and day was taken rather than "something clashed".
  *
- * "All pitches" is one multi-row INSERT. Postgres makes that atomic, so a
- * closure either lands on every pitch asked for or on none: half a closure is
- * worse than none, because the half that is missing is the one someone plays
- * on.
+ * "All pitches", and a closure that runs for more than a day (Adam,
+ * 2026-09-05), are one multi-row INSERT. Postgres makes that atomic, so a
+ * closure either lands on every pitch and every day asked for or on none:
+ * half a closure is worse than none, because the half that is missing is the
+ * one someone plays on.
  */
 
 import { revalidatePath } from "next/cache";
@@ -34,12 +35,13 @@ import {
 import { isSlotConflict, slotHasConflict } from "@/lib/booking-conflict";
 import { bookingPeriod, type BookingInsert } from "@/lib/booking-types";
 import { friendlyDbError } from "@/lib/people-display";
+import { closureDates, closureSpanLabel } from "@/lib/pitch-closure";
 import { createClient } from "@/lib/supabase/server";
 
 export type ClosureActionState = {
   error?: string;
   notice?: string;
-  /** "Pitch 1 — Sat, 1 Mar 2026 · 18:00–19:30" for each pitch already taken. */
+  /** "Pitch 1 — 2026-03-01, 18:00–19:30" for each pitch and day already taken. */
   clashes?: string[];
 };
 
@@ -60,7 +62,8 @@ function revalidateCalendar(): void {
 }
 
 /**
- * Close one pitch, or every pitch, for a window.
+ * Close one pitch, or every pitch, for a window — on one day, or the same
+ * window on every day up to an end date.
  *
  * `p_pitch = "all"` means every active pitch; anything else must be the id of
  * one. The pitch list is read as the caller, so "all" is exactly the pitches
@@ -74,12 +77,19 @@ export async function createPitchClosure(
   if (!session) return { error: "Sign in again to close a pitch." };
 
   const date = text(formData, "date", 10);
+  // Optional (Adam, 2026-09-05): the last day of a closure that runs for
+  // longer than a day. Blank means the one day, as the form always offered.
+  const endDate = text(formData, "end_date", 10);
   const startRaw = text(formData, "start_time", 8);
   const endRaw = text(formData, "end_time", 8);
   const label = text(formData, "label", 120);
   const target = text(formData, "resource_id", 40);
 
   if (!isValidDateString(date)) return { error: "Choose a date." };
+  if (endDate && !isValidDateString(endDate)) return { error: "Choose a valid end date, or leave it blank." };
+  const span = closureDates(date, endDate);
+  if ("error" in span) return { error: span.error };
+  const dates = span.dates;
   if (!isValidTimeString(startRaw) || !isValidTimeString(endRaw)) {
     return { error: "Choose a start and an end time." };
   }
@@ -89,8 +99,14 @@ export async function createPitchClosure(
   if (!label) return { error: "Say why — “Waterlogged”, “Frozen”, “Re-seeding”." };
   if (target !== "all" && !UUID_RE.test(target)) return { error: "Choose a pitch." };
 
-  const startsAt = localToInstant(date, startTime);
-  const endsAt = localToInstant(date, endTime);
+  // One window per day: a closure that runs for a fortnight is fourteen
+  // day-long bookings, so each day draws inside its own day on the calendar
+  // and re-opening one Saturday re-opens that Saturday alone.
+  const windows = dates.map((day) => ({
+    date: day,
+    startsAt: localToInstant(day, startTime),
+    endsAt: localToInstant(day, endTime),
+  }));
 
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
@@ -114,21 +130,33 @@ export async function createPitchClosure(
   if (pitches.length === 0) return { error: "That pitch is not one of the club's active pitches." };
 
   const window = `${startTime}–${endTime}`;
-  const clashLabel = (name: string): string => `${name} — ${date}, ${window}`;
+  const clashLabel = (name: string, day: string): string => `${name} — ${day}, ${window}`;
+  const slotCount = pitches.length * windows.length;
 
-  const preChecked = await Promise.all(
-    pitches.map(async (pitch) => ({
-      name: pitch.name,
-      taken: await slotHasConflict(supabase, { resourceId: pitch.id, startsAt, endsAt }),
-    })),
-  );
-  const clashes = preChecked.filter((row) => row.taken).map((row) => clashLabel(row.name));
+  /** Every (pitch, day) already taken, named — asked before and, on 23P01, after. */
+  async function takenSlots(): Promise<string[]> {
+    const checks = await Promise.all(
+      pitches.flatMap((pitch) =>
+        windows.map(async (w) => ({
+          label: clashLabel(pitch.name, w.date),
+          taken: await slotHasConflict(supabase, {
+            resourceId: pitch.id,
+            startsAt: w.startsAt,
+            endsAt: w.endsAt,
+          }),
+        })),
+      ),
+    );
+    return checks.filter((row) => row.taken).map((row) => row.label);
+  }
+
+  const clashes = await takenSlots();
   if (clashes.length > 0) {
     return {
       error:
-        clashes.length === pitches.length
+        clashes.length === slotCount
           ? "Something is already booked in that window. Cancel or move it first — a closure never overwrites a booking."
-          : `${clashes.length} of the ${pitches.length} pitches already have a booking in that window. Nothing has been closed.`,
+          : `${clashes.length} of the ${slotCount} pitch-days already have a booking in that window. Nothing has been closed.`,
       clashes,
     };
   }
@@ -139,44 +167,44 @@ export async function createPitchClosure(
     return { error: "Your sign-in has no email address, and a booking must record a contact." };
   }
 
-  const rows: BookingInsert[] = pitches.map((pitch) => ({
-    resource_id: pitch.id,
-    team_id: null,
-    kind: "maintenance",
-    status: "confirmed",
-    ...bookingPeriod(startsAt, endsAt),
-    booker_person_id: personId,
-    booker_profile_id: session.userId,
-    booker_name: bookerName,
-    booker_email: bookerEmail,
-    occasion: label,
-  }));
+  const rows: BookingInsert[] = pitches.flatMap((pitch) =>
+    windows.map((w) => ({
+      resource_id: pitch.id,
+      team_id: null,
+      kind: "maintenance" as const,
+      status: "confirmed" as const,
+      ...bookingPeriod(w.startsAt, w.endsAt),
+      booker_person_id: personId,
+      booker_profile_id: session.userId,
+      booker_name: bookerName,
+      booker_email: bookerEmail,
+      occasion: label,
+    })),
+  );
 
   const { error } = await supabase.from("bookings").insert(rows);
   if (error) {
     if (isSlotConflict(error)) {
-      const late = await Promise.all(
-        pitches.map(async (pitch) => ({
-          name: pitch.name,
-          taken: await slotHasConflict(supabase, { resourceId: pitch.id, startsAt, endsAt }),
-        })),
-      );
-      const lateClashes = late.filter((row) => row.taken).map((row) => clashLabel(row.name));
+      const lateClashes = await takenSlots();
       return {
         error:
           "Something was booked on that pitch while this form was open. Nothing has been closed.",
-        clashes: lateClashes.length > 0 ? lateClashes : pitches.map((p) => clashLabel(p.name)),
+        clashes:
+          lateClashes.length > 0
+            ? lateClashes
+            : pitches.flatMap((p) => windows.map((w) => clashLabel(p.name, w.date))),
       };
     }
     return { error: friendlyDbError(error, NOT_ALLOWED) };
   }
 
   revalidateCalendar();
+  const when = `${closureSpanLabel(dates)}, ${window}`;
   return {
     notice:
       pitches.length === 1
-        ? `${pitches[0]?.name ?? "The pitch"} is closed on ${date}, ${window} — ${label}.`
-        : `All ${pitches.length} pitches are closed on ${date}, ${window} — ${label}.`,
+        ? `${pitches[0]?.name ?? "The pitch"} is closed ${when} — ${label}.`
+        : `All ${pitches.length} pitches are closed ${when} — ${label}.`,
   };
 }
 
