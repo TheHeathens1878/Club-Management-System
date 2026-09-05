@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 import { ShieldCheck, LogIn, CalendarDays, ChevronRight } from "lucide-react";
 import { getSettings } from "@/lib/settings";
 

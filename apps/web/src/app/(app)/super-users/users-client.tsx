@@ -8,14 +8,6 @@ import { Input, Label } from "@/components/ui/input";
 import { UserCircle, Trash2, Send, RefreshCw, Pencil, Check, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
-const ROLE_LABELS: Record<string, string> = {
-  super_user: "Super User",
-  committee: "Committee",
-  bar_manager: "Bar Manager",
-  bar: "Bar Staff",
-  member: "Member",
-};
-
 type User = {
   id: string;
   email: string;

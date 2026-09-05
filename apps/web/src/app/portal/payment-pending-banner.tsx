@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
-export function PaymentPendingBanner({ checkoutId }: { checkoutId: string }) {
+export function PaymentPendingBanner(_props: { checkoutId: string }) {
   const router = useRouter();
 
   // Poll every 3 seconds — the portal page is force-dynamic so each refresh

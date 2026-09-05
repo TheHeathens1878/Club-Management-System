@@ -9,6 +9,17 @@ export const metadata = { title: "Booking" };
 
 export const dynamic = "force-dynamic";
 
+// This page is public — the hirer has just submitted the form and is not
+// signed in — and the id in the address is the whole key to it. A uuid is not
+// guessable, but the page used to print the hirer's full email address to
+// whoever held the link (Codex review, finding 8). It now shows enough for
+// the hirer to recognise their own address and no more: "a•••@example.com".
+function maskEmail(email: string): string {
+  const at = email.indexOf("@");
+  if (at <= 0) return "•••";
+  return `${email[0]}•••${email.slice(at)}`;
+}
+
 export default async function BookingConfirmationPage({
   params,
 }: {
@@ -114,7 +125,7 @@ export default async function BookingConfirmationPage({
               <p className="mt-1 text-sm text-amber-900">
                 This is an enquiry only — the date stays open to other bookings until you confirm
                 one with us. We&apos;ll reply at{" "}
-                <span className="font-semibold">{booking.booker_email}</span> with availability
+                <span className="font-semibold">{maskEmail(booking.booker_email)}</span> with availability
                 and prices.
               </p>
             </div>
@@ -122,7 +133,7 @@ export default async function BookingConfirmationPage({
             <div className="mt-6 rounded-lg bg-primary/5 border border-primary/20 p-4">
               <p className="text-sm text-foreground">
                 Your booking request has been received. We&apos;ll be in touch at{" "}
-                <span className="font-semibold">{booking.booker_email}</span> to confirm availability and next steps.
+                <span className="font-semibold">{maskEmail(booking.booker_email)}</span> to confirm availability and next steps.
               </p>
             </div>
           )}

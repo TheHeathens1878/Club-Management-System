@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
@@ -45,7 +44,6 @@ export function TemplateEditor({
   initialBody: string;
   isCustomised: boolean;
 }) {
-  const router = useRouter();
   const [subject, setSubject] = useState(initialSubject);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);

@@ -1,5 +1,4 @@
 import { getSessionProfile } from "@/lib/auth";
-import { groupAttachment } from "@/lib/group-scope";
 import { getCurrentPersonId, nameOf, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
@@ -164,14 +163,6 @@ export default async function MessagesLayout({ children }: { children: React.Rea
     const conversation = row.conversations;
     if (!conversation) return [];
     const otherNames = otherIds.map((id) => nameOf(names, id));
-    const attachment =
-      conversation.type === "group"
-        ? groupAttachment({
-            teamName: conversation.teams?.name,
-            resourceName: conversation.resources?.name,
-            scopeLabel: conversation.scope_label,
-          })
-        : null;
     const isGroupish =
       conversation.type === "team" ||
       conversation.type === "group" ||

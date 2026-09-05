@@ -164,7 +164,6 @@ export async function roomBookingNotificationEmail(params: {
   enquiry?: boolean;
 }) {
   const color = params.brandColor ?? DEFAULT_COLOR;
-  const { club_name } = await getSettings();
   const kind = params.enquiry ? "enquiry" : "booking request";
 
   const rows = [

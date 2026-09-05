@@ -112,8 +112,8 @@ select enum_has_labels(
 -- 3 — a SEPARATE type from the baseline's user_role, which is untouched.
 select enum_has_labels(
   'public', 'user_role',
-  array['committee', 'bar', 'bar_manager', 'member', 'super_user', 'staff'],
-  'the legacy public.user_role enum is unchanged — P1.4 adds a type, it does not alter one'
+  array['committee', 'bar', 'bar_manager', 'member', 'super_user', 'staff', 'booker'],
+  'the legacy public.user_role enum is P1.4''s six plus booker (20260905120000) — P1.4 adds a type, it does not alter one'
 );
 
 -- 4, 5, 6, 7
