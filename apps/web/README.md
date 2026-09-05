@@ -17,11 +17,14 @@ copied either. `package.json` referenced `scripts/import-members.ts` and
 `scripts/set-admin.ts`, but no `scripts/` directory exists in the source repo; those
 scripts and their `tsx`/`dotenv` dev dependencies were dropped.
 
-Nothing in the app was refactored onto `@club/shared` / `@club/db`. `src/lib/types.ts`
-is a set of hand-written domain interfaces, not a copy of the generated `Database` type,
-so there was no drop-in replacement to make. The Supabase clients in
-`src/lib/supabase/` are the app's own (untyped) ones. Wiring the app to `@club/db`
-types belongs with the Phase 1 schema work.
+The import was untyped; that is history now. The Supabase clients in
+`src/lib/supabase/` (`server.ts`, `admin.ts`, the browser client) are typed against
+`@club/db`'s generated `Database`, and `src/lib/types.ts` derives its role vocabulary
+from the generated enums. One untyped client survives — `legacy.ts`, a service-role
+client for a handful of imported call sites (`settings/actions.ts`, `super-users/actions.ts`,
+`login/actions.ts`, `email-templates/actions.ts`, `lib/login-history.ts`) that still address
+tables and columns the schema does not have; its header lists them. Delete each use as the
+schema and the app are reconciled.
 
 ## Layout
 
@@ -46,10 +49,15 @@ Path alias `@/*` → `./src/*`.
 | Path | Schedule | What it does |
 |---|---|---|
 | `/api/cron/payment-reminders` | `0 9 * * *` (daily 09:00 UTC) | Sends deposit and balance reminder emails and auto-cancels unpaid-deposit bookings |
+| `/api/cron/finance-billing` | `30 7 * * *` (daily 07:30 UTC) | Runs `run_billing_cycle()`, collects due charges from stored cards through `collectChargeFromStoredCard()` (claimed in `collection_attempts` before SumUp is asked), and emails each lead member a receipt or a "please pay" |
 
-The route requires `CRON_SECRET` and rejects the request unless Vercel presents it as a
-Bearer token; it returns 500 if the variable is unset. `middleware.ts` lets `/api/cron/*`
+Both routes require `CRON_SECRET` and reject the request unless Vercel presents it as a
+Bearer token; they return 500 if the variable is unset. `middleware.ts` lets `/api/cron/*`
 through without a session for exactly this reason.
+
+`/api/sumup/webhook` (public in middleware, idempotent by checkout id) records SumUp
+payments for both bookings and finance charges; it answers 5xx when a ledger write fails
+so SumUp redelivers.
 
 ## Environment
 
@@ -68,7 +76,9 @@ reads is documented there. Summary:
 
 `next build` needs none of these to hold real values — the Graph, push, SumUp and Stripe
 integrations all degrade to "not configured" no-ops, and `getSettings()` falls back to
-its built-in defaults if Supabase is unreachable. CI builds with placeholders.
+its built-in defaults if Supabase is unreachable. CI runs lint, typecheck and the vitest
+suite (`.github/workflows/ci.yml`); the build itself is Vercel's, on every PR preview and
+on `main`.
 
 ## Commands
 
@@ -77,18 +87,18 @@ pnpm --filter @club/web dev        # next dev
 pnpm --filter @club/web build      # next build
 pnpm --filter @club/web lint       # eslint src (repo flat config)
 pnpm --filter @club/web typecheck  # tsc --noEmit
+pnpm --filter @club/web test       # vitest (src/**/*.test.ts — pure library units)
 ```
 
 `lint` uses the repo's flat config (`eslint.config.mjs` extending the root one), not the
-legacy `next lint` the source repo used. Two relaxations are scoped to `src/**` for the
-imported code and are documented inline in `eslint.config.mjs`:
-`@typescript-eslint/no-unused-vars` is a warning (4 dead locals), and
-`@typescript-eslint/no-unused-expressions` allows ternary statements (1 site).
-`tsconfig.json` also turns `noUncheckedIndexedAccess` back off for this package; the
-imported code predates it.
+legacy `next lint` the source repo used. Two relaxations are scoped to `src/**` and are
+documented inline in `eslint.config.mjs`: `@typescript-eslint/no-unused-vars` is a warning
+(the count is kept at zero), and `@typescript-eslint/no-unused-expressions` allows ternary
+statements. `tsconfig.json` has `noUncheckedIndexedAccess` on, like the rest of the repo.
 
-## Not yet done
+## History
 
-Vercel still deploys this app from the old `AoM-Sports-Club-Function-Room` repo. The
-repoint (project root → `apps/web`, build command → the pnpm/Turborepo one, env vars
-carried over) is deliberately deferred — see `DECISIONS.md`.
+The Vercel project was repointed at this package on 2026-08-23 (`club-management-web`,
+`portal.aomsportsclub.co.uk`); the old `AoM-Sports-Club-Function-Room` deployment is
+retired. Earlier notes on the P0.4 import and the deferred repoint are in `DECISIONS.md`
+and PLAN.md §4.

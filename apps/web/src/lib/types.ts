@@ -3,19 +3,14 @@ import type { Enums } from "@club/db";
 export type MemberStatus = "current" | "lapsed" | "deceased" | "resigned";
 
 /**
- * Every role value this app has to cope with: the database's `user_role` enum
- * plus `booker`, which the imported P0.4 app writes and reads but which the
- * enum does not (yet) carry. Derived from the generated enum so a value added
- * in a migration cannot go unhandled here.
+ * Every role value this app has to cope with — the database's `user_role`
+ * enum, which since 20260905120000 carries `booker` itself. Derived from the
+ * generated enum so a value added in a migration cannot go unhandled here.
  */
-export type UserRole = Enums<"user_role"> | "booker";
+export type UserRole = Enums<"user_role">;
 export type PaymentMethod = "cash" | "card" | "bar" | "stripe";
 
-/**
- * `booker` belongs to the app's role vocabulary but is not a value of the
- * database's `user_role` enum, so `row.role === "booker"` on a typed row is a
- * comparison TypeScript rejects outright. Ask through here instead.
- */
+/** A function-room hirer's login: the portal, and nothing of the club's. */
 export function isBookerRole(role: UserRole | null | undefined): boolean {
   return role === "booker";
 }

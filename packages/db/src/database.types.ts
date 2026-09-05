@@ -5870,6 +5870,11 @@ export type Database = {
       }
     }
     Functions: {
+      auth_user_id_for_email: {
+        Args: { p_email: string }
+        /** The auth user holding this address, or null. service_role only. */
+        Returns: string | null
+      }
       add_child: {
         Args: {
           p_dob: string
@@ -7603,6 +7608,7 @@ export type Database = {
         | "member"
         | "super_user"
         | "staff"
+        | "booker"
       waiting_list_status:
         | "pending"
         | "contacted"
@@ -7849,6 +7855,7 @@ export const Constants = {
         "member",
         "super_user",
         "staff",
+        "booker",
       ],
       waiting_list_status: [
         "pending",

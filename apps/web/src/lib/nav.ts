@@ -40,7 +40,6 @@
 import {
   Armchair,
   Beer,
-  Baby,
   CalendarCheck,
   CalendarDays,
   CalendarPlus,

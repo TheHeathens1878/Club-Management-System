@@ -167,7 +167,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — still interested in {{booking_date}}?`,
-    defaultBody: (c) => `<p>Dear {{name}},</p>
+    defaultBody: () => `<p>Dear {{name}},</p>
 <p>A few days ago we quoted <strong>{{total_cost}}</strong> for the {{room_name}} on {{booking_date}}. The date is still open — and still not held — so if you would like to go ahead, reply to this email or contact the club and we will confirm it for you.</p>
 <p>If your plans have changed, no need to do anything.</p>
 <p><a href="{{portal_url}}">View this in your portal</a></p>`,

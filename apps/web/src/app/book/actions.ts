@@ -1,7 +1,8 @@
 "use server";
 
+import { after } from "next/server";
+
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createLegacyAdminClient } from "@/lib/supabase/legacy";
 import { getSiteUrl } from "@/lib/utils";
 import { sendEmail } from "@/lib/email";
 import { roomBookingNotificationEmail } from "@/lib/email-templates";
@@ -23,6 +24,14 @@ type AdminClient = ReturnType<typeof createAdminClient>;
 // Ensure the booker has an account so they can access the portal.
 // New accounts are created as 'booker' with a set-password flow; existing
 // accounts (staff/member/returning booker) are linked but never downgraded.
+//
+// `booker` joined the `user_role` enum on 2026-09-05 (20260905120000). Until
+// then this upsert failed on an invalid enum value, nothing looked at the
+// result, and every hirer kept the `member` role the sign-up trigger gives —
+// so none of them was ever sent to their portal (Codex review, finding 7).
+// The write is now typed and its error is logged: the booking has already
+// been saved by the time this runs, and a hirer with the wrong role is a
+// nuisance, not a lost booking.
 async function ensureBookerAccount(
   admin: AdminClient,
   email: string,
@@ -34,18 +43,20 @@ async function ensureBookerAccount(
     user_metadata: { needs_password: true, full_name: fullName },
   });
   if (created?.user) {
-    // `booker` is not a value of the `user_role` enum in the current schema —
-    // P0.4 lift-and-shift debt, untouched here. See lib/supabase/legacy.ts.
-    await createLegacyAdminClient().from("profiles").upsert(
-      { id: created.user.id, role: "booker", full_name: fullName },
-      { onConflict: "id" },
-    );
+    // The sign-up trigger has already made the profile (role member); this
+    // is the re-role, not the creation.
+    const { error } = await admin
+      .from("profiles")
+      .update({ role: "booker", full_name: fullName })
+      .eq("id", created.user.id);
+    if (error) console.error("[room-booking] booker profile role not written:", error);
     return { userId: created.user.id, isNew: true };
   }
-  // Already registered — find their id without touching their role
-  const { data: list } = await admin.auth.admin.listUsers({ perPage: 1000 });
-  const existing = list?.users.find((u) => (u.email ?? "").toLowerCase() === email.toLowerCase());
-  return { userId: existing?.id ?? null, isNew: false };
+  // Already registered — find their id without touching their role. A
+  // targeted lookup, not a page of the admin user list (finding 10).
+  const { data: existingId, error } = await admin.rpc("auth_user_id_for_email", { p_email: email });
+  if (error) console.error("[room-booking] auth_user_id_for_email failed:", error);
+  return { userId: existingId ?? null, isNew: false };
 }
 
 function bookerEmailHtml(intro: string, brandColor: string, clubName: string): string {
@@ -242,8 +253,13 @@ export async function submitBooking(
     await admin.from("bookings").update({ booker_profile_id: bookerId }).eq("id", booking.id);
   }
 
-  // Send the booker their acknowledgement + portal access (async)
-  (async () => {
+  // Send the booker their acknowledgement + portal access, and tell the desk.
+  // Both run in `after()`: the response goes back at once, and the platform
+  // keeps the function alive until the work is done. A bare unawaited
+  // promise was not that — on Vercel the instance can be frozen the moment
+  // the response is sent, and the acknowledgement (with the set-password
+  // link, for a new account) could simply never go (Codex review, finding 9).
+  after(async () => {
     try {
       const [brandColor, { club_name }] = await Promise.all([
         getEmailBrandColor().catch(() => "#1249bf"),
@@ -307,10 +323,9 @@ ${accessLine}
     } catch (e) {
       console.error("[room-booking] Booker email failed:", e);
     }
-  })();
+  });
 
-  // Notify staff asynchronously — do not await to keep booking flow fast
-  (async () => {
+  after(async () => {
     try {
       const [brandColor, staffEmails] = await Promise.all([
         getEmailBrandColor().catch(() => "#1249bf"),
@@ -353,7 +368,7 @@ ${accessLine}
     } catch (e) {
       console.error("[room-booking] Staff notification failed:", e);
     }
-  })();
+  });
 
   return { id: booking.id };
 }

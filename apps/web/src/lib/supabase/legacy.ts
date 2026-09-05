@@ -6,8 +6,9 @@ import { createClient } from "@supabase/supabase-js";
  * P0.4 imported the function-room app as-is. Parts of it still address tables
  * and columns that the current `public` schema does not have (`members`,
  * `login_history`, `push_subscriptions`, `profiles.member_id`,
- * `profiles.is_bar_staff`, `profiles.password_set`, `members.pending_role`,
- * and the `booker` value of `user_role`). Those call sites are outside P1.6's
+ * `profiles.is_bar_staff`, `profiles.password_set` and `members.pending_role`;
+ * the `booker` value of `user_role` was reconciled on 2026-09-05 and the
+ * booking flow uses the typed client again). Those call sites are outside P1.6's
  * scope — it moves the *booking* data layer onto the unified tables — and
  * "fixing" them here would change behaviour in features this task must leave
  * alone.

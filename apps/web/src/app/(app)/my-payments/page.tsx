@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities } from "@/lib/capabilities";
 import { isSumUpConfigured } from "@/lib/sumup";
