@@ -79,6 +79,8 @@ export default async function EventsPage({
     capabilities.hasPlayerMembership ||
     capabilities.isCommittee ||
     capabilities.isClubAdmin;
+  // The booking form's own gate: team staff, or an administrator.
+  const canBookPitch = capabilities.isTeamStaff || capabilities.isCommittee || capabilities.isClubAdmin;
 
   return (
     <>
@@ -99,30 +101,45 @@ export default async function EventsPage({
       />
 
       <div className="space-y-4 p-4 lg:p-6">
-        {/* Which team, and the other diaries — one strip, scrollable on a phone. */}
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
-          {chips.length > 1 ? (
-            <>
-              <Chip href="/events" active={!filter}>
-                Everyone
-              </Chip>
-              {chips.map((team) => (
-                <Chip key={team.id} href={`/events?team=${team.id}`} active={filter?.id === team.id}>
-                  {team.name}
-                </Chip>
-              ))}
-              <span className="w-px flex-none self-stretch bg-border" aria-hidden />
-            </>
-          ) : null}
+        {/* The other diaries FIRST, on their own wrapping row — a coach looks
+            here for the pitch calendar and the booking form, and a link at
+            the far end of a scrolling strip of team names is a link nobody
+            finds (Adam, 2026-09-05: "the calendar view of the pitches appears
+            to have disappeared from the menu"). */}
+        <div className="flex flex-wrap gap-2">
           {canSeePitches ? (
             <Chip href="/pitches/calendar">
               <LandPlot className="h-3.5 w-3.5" aria-hidden /> Pitch calendar
+            </Chip>
+          ) : null}
+          {canBookPitch ? (
+            <Chip href="/pitches/book">
+              <CalendarPlus className="h-3.5 w-3.5" aria-hidden /> Book a pitch
+            </Chip>
+          ) : null}
+          {canBookPitch ? (
+            <Chip href="/pitches/mine">
+              <CalendarDays className="h-3.5 w-3.5" aria-hidden /> My pitch bookings
             </Chip>
           ) : null}
           <Chip href="/social">
             <CalendarDays className="h-3.5 w-3.5" aria-hidden /> Socials
           </Chip>
         </div>
+
+        {/* Which team — one strip, scrollable on a phone. */}
+        {chips.length > 1 ? (
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
+            <Chip href="/events" active={!filter}>
+              Everyone
+            </Chip>
+            {chips.map((team) => (
+              <Chip key={team.id} href={`/events?team=${team.id}`} active={filter?.id === team.id}>
+                {team.name}
+              </Chip>
+            ))}
+          </div>
+        ) : null}
 
         {error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
