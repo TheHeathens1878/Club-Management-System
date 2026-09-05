@@ -1303,8 +1303,13 @@ consent, and the resulting signup carries that person's id.
 `handle_new_user()` therefore honours `raw_user_meta_data->>'person_id'`:
 where it names a person who has an active `app_account` consent and no profile
 yet, that person is adopted; in every other case it creates a new person exactly
-as it does today. It never matches on email — P1.2's decision is untouched and
-is doubly important here, since families share addresses.
+as it does today. Since 2026-09-05 (20260905100000) the id alone is not enough:
+the sign-up must also arrive at the address the club holds for that person,
+because the id is user-editable metadata visible to anybody who can see the
+child, and only the address is something the confirmation link proves
+possession of. (Linking by email for people with no login was added on
+2026-09-02, 20260902100000, on the terms set out there; P1.2's objection —
+families share addresses — is answered by that migration's guardianship limb.)
 
 **Unknown DOB: the one place this invariant does not fail closed, deliberately,
 and Adam should confirm it.** SG-0 treats an unknown `dob` as a minor. Read

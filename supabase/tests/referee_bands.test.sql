@@ -62,12 +62,12 @@ select set_config('rb.parent',  (select person_id::text from public.profiles whe
 insert into public.person_roles (person_id, role, granted_by)
   values (current_setting('rb.admin')::uuid, 'club_admin', '6b6b6b6b-3333-4111-8111-000000000001');
 
-insert into public.people (id, first_name, last_name, dob) values
-  ('b6b6b6b6-3333-4111-8111-000000000001', 'Yara', 'Young',
+insert into public.people (id, first_name, last_name, email, dob) values
+  ('b6b6b6b6-3333-4111-8111-000000000001', 'Yara', 'Young', 'rb-young@test.invalid',
      make_date(extract(year from (now() at time zone 'Europe/London'))::int
                - case when extract(month from (now() at time zone 'Europe/London'))::int >= 7 then 15 else 16 end,
                10, 1)),
-  ('b6b6b6b6-3333-4111-8111-000000000002', 'Ned', 'Nodob', null);
+  ('b6b6b6b6-3333-4111-8111-000000000002', 'Ned', 'Nodob', null, null);
 select set_config('rb.young', 'b6b6b6b6-3333-4111-8111-000000000001', true);
 select set_config('rb.nodob', 'b6b6b6b6-3333-4111-8111-000000000002', true);
 
