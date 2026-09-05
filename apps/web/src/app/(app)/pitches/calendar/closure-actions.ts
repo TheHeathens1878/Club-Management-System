@@ -35,7 +35,7 @@ import {
 import { isSlotConflict, slotHasConflict } from "@/lib/booking-conflict";
 import { bookingPeriod, type BookingInsert } from "@/lib/booking-types";
 import { friendlyDbError } from "@/lib/people-display";
-import { closureDates, closureSpanLabel } from "@/lib/pitch-closure";
+import { closureSpanLabel, closureWindows } from "@/lib/pitch-closure";
 import { createClient } from "@/lib/supabase/server";
 
 export type ClosureActionState = {
@@ -87,25 +87,25 @@ export async function createPitchClosure(
 
   if (!isValidDateString(date)) return { error: "Choose a date." };
   if (endDate && !isValidDateString(endDate)) return { error: "Choose a valid end date, or leave it blank." };
-  const span = closureDates(date, endDate);
-  if ("error" in span) return { error: span.error };
-  const dates = span.dates;
   if (!isValidTimeString(startRaw) || !isValidTimeString(endRaw)) {
     return { error: "Choose a start and an end time." };
   }
   const startTime = normaliseTime(startRaw);
   const endTime = normaliseTime(endRaw);
-  if (endTime <= startTime) return { error: "The end time must be after the start time." };
   if (!label) return { error: "Say why — “Waterlogged”, “Frozen”, “Re-seeding”." };
   if (target !== "all" && !UUID_RE.test(target)) return { error: "Choose a pitch." };
 
-  // One window per day: a closure that runs for a fortnight is fourteen
-  // day-long bookings, so each day draws inside its own day on the calendar
-  // and re-opening one Saturday re-opens that Saturday alone.
-  const windows = dates.map((day) => ({
-    date: day,
-    startsAt: localToInstant(day, startTime),
-    endsAt: localToInstant(day, endTime),
+  // One continuous span, sliced per day: From date+time to Until date+time,
+  // the first day to midnight, whole days between, the last day from
+  // midnight. Each day draws inside its own day on the calendar and
+  // re-opening one Saturday re-opens that Saturday alone.
+  const span = closureWindows(date, startTime, endDate, endTime);
+  if ("error" in span) return { error: span.error };
+  const windows = span.windows.map((w) => ({
+    date: w.date,
+    startsAt: localToInstant(w.start.date, w.start.time),
+    endsAt: localToInstant(w.end.date, w.end.time),
+    label: `${w.start.time}–${w.end.date === w.date ? w.end.time : "midnight"}`,
   }));
 
   const supabase = await createClient();
@@ -129,8 +129,8 @@ export async function createPitchClosure(
   const pitches = (pitchRows ?? []).filter((row) => target === "all" || row.id === target);
   if (pitches.length === 0) return { error: "That pitch is not one of the club's active pitches." };
 
-  const window = `${startTime}–${endTime}`;
-  const clashLabel = (name: string, day: string): string => `${name} — ${day}, ${window}`;
+  const clashLabel = (name: string, w: { date: string; label: string }): string =>
+    `${name} — ${w.date}, ${w.label}`;
   const slotCount = pitches.length * windows.length;
 
   /** Every (pitch, day) already taken, named — asked before and, on 23P01, after. */
@@ -138,7 +138,7 @@ export async function createPitchClosure(
     const checks = await Promise.all(
       pitches.flatMap((pitch) =>
         windows.map(async (w) => ({
-          label: clashLabel(pitch.name, w.date),
+          label: clashLabel(pitch.name, w),
           taken: await slotHasConflict(supabase, {
             resourceId: pitch.id,
             startsAt: w.startsAt,
@@ -192,14 +192,14 @@ export async function createPitchClosure(
         clashes:
           lateClashes.length > 0
             ? lateClashes
-            : pitches.flatMap((p) => windows.map((w) => clashLabel(p.name, w.date))),
+            : pitches.flatMap((p) => windows.map((w) => clashLabel(p.name, w))),
       };
     }
     return { error: friendlyDbError(error, NOT_ALLOWED) };
   }
 
   revalidateCalendar();
-  const when = `${closureSpanLabel(dates)}, ${window}`;
+  const when = closureSpanLabel(span.windows);
   return {
     notice:
       pitches.length === 1

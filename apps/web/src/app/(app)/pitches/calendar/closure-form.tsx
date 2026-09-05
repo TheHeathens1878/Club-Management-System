@@ -50,8 +50,8 @@ export function ClosePitchForm({
         </div>
 
         {/* From: date and time on one row; Until: date and time on the next
-            (Adam, 2026-09-05). The times are the daily window — a closure
-            that runs for a week is closed 08:00–22:00 on each of its days. */}
+            (Adam, 2026-09-05). One continuous span: "Saturday 14:00 until
+            Monday 10:00" closes the pitch for all of it. */}
         <div className="space-y-1.5">
           <Label htmlFor="closure-date">From date</Label>
           <Input id="closure-date" type="date" name="date" defaultValue={defaultDate} required />
@@ -74,7 +74,7 @@ export function ClosePitchForm({
           <Label htmlFor="closure-end">Until time</Label>
           <Input id="closure-end" type="time" name="end_time" defaultValue="22:00" required />
           <p className="text-xs text-muted-foreground">
-            The times apply to every day of the closure, so a single day can be re-opened on its own.
+            The pitch is closed for the whole span, and each day of it can be re-opened on its own.
           </p>
         </div>
 
