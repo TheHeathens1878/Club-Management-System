@@ -4,7 +4,7 @@ import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
-import { payBookingMock, createCheckoutForBooking, finalizeCheckout } from "./actions";
+import { createCheckoutForBooking, finalizeCheckout } from "./actions";
 
 type WidgetGlobal = { SumUpCard?: { mount: (o: Record<string, unknown>) => void } };
 
@@ -26,6 +26,13 @@ function loadSumUpSdk(): Promise<void> {
   });
 }
 
+// The only way a payment is recorded from here is SumUp saying so: the
+// checkout is created server-side, the widget takes the card, and
+// `finalizeCheckout` re-reads the checkout from SumUp before anything is
+// written. The Phase 2 "mock payment" stand-in — a button that wrote a
+// payment row on the booker's say-so — was removed on 2026-09-05 (Codex
+// review, finding 2). With SumUp not configured the button is simply not
+// live, and says so.
 export function PayButton({
   bookingId,
   amountPence,
@@ -106,16 +113,6 @@ export function PayButton({
     }, 50);
   }
 
-  function startMock() {
-    if (!confirm(`Pay ${formatCurrency(amountPence)} now?`)) return;
-    setError(null);
-    startTransition(async () => {
-      const r = await payBookingMock(bookingId, amountPence);
-      if (r?.error) setError(r.error);
-      else router.refresh();
-    });
-  }
-
   // The deposit terms tick — shown with the idle button; paying the deposit
   // is what accepts them, so the tick gates the start of the checkout.
   const termsTick =
@@ -151,6 +148,19 @@ export function PayButton({
     );
   }
 
+  if (!sumupEnabled) {
+    return (
+      <div className="space-y-1.5">
+        <Button size="sm" variant={variant} disabled>
+          {label} ({formatCurrency(amountPence)})
+        </Button>
+        <p className="text-xs text-muted-foreground">
+          Online payment isn&apos;t available right now — please contact the club to pay.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-1.5">
       {termsTick}
@@ -158,7 +168,7 @@ export function PayButton({
         size="sm"
         variant={variant}
         disabled={isPending || stage === "loading" || (purpose === "deposit" && !termsAccepted)}
-        onClick={sumupEnabled ? startSumUp : startMock}
+        onClick={startSumUp}
       >
         {stage === "loading" ? "Starting…" : isPending ? "Processing…" : `${label} (${formatCurrency(amountPence)})`}
       </Button>

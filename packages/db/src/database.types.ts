@@ -1529,6 +1529,58 @@ export type Database = {
         }
         Relationships: []
       }
+
+      collection_attempts: {
+        Row: {
+          amount_pence: number
+          attempt_no: number
+          charge_id: string
+          checkout_reference: string
+          error: string | null
+          finished_at: string | null
+          id: string
+          started_at: string
+          status: string
+          sumup_checkout_id: string | null
+          sumup_status: string | null
+        }
+        Insert: {
+          amount_pence: number
+          attempt_no: number
+          charge_id: string
+          checkout_reference: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          sumup_checkout_id?: string | null
+          sumup_status?: string | null
+        }
+        Update: {
+          amount_pence?: number
+          attempt_no?: number
+          charge_id?: string
+          checkout_reference?: string
+          error?: string | null
+          finished_at?: string | null
+          id?: string
+          started_at?: string
+          status?: string
+          sumup_checkout_id?: string | null
+          sumup_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collection_attempts_charge_id_fkey"
+            columns: ["charge_id"]
+            isOneToOne: false
+            referencedRelation: "charges"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
       comms_preferences: {
         Row: {
           channel: Database["public"]["Enums"]["comms_channel"]

@@ -108,9 +108,13 @@ export async function getSumUpCheckout(id: string): Promise<SumUpCheckout | null
 // Idempotently record a paid SumUp checkout as a payment, recompute the
 // booking's payment_status and email the booker. Safe to call from the widget
 // finalize action, the webhook, and the 3DS return route — only records once.
+//
+// `failed` is the one answer that is neither "recorded" nor "nothing to
+// record": SumUp says paid and the ledger write did not happen. The webhook
+// answers it with a 5xx so SumUp redelivers.
 export async function recordSumUpPaymentIfPaid(
   checkoutId: string,
-): Promise<{ recorded: boolean; present: boolean; status?: string }> {
+): Promise<{ recorded: boolean; present: boolean; status?: string; failed?: boolean }> {
   const checkout = await getSumUpCheckout(checkoutId);
   if (!checkout) {
     console.warn("[sumup] checkout not found", checkoutId);
@@ -156,8 +160,10 @@ export async function recordSumUpPaymentIfPaid(
     note: "Paid online (SumUp)",
   });
   if (insertErr) {
+    // 23505 on sumup_checkout_id: recorded by a concurrent caller. Fine.
+    if (insertErr.code === "23505") return { recorded: false, present: true, status: checkout.status };
     console.error("[sumup] failed to insert payment", insertErr);
-    return { recorded: false, present: false, status: checkout.status };
+    return { recorded: false, present: false, status: checkout.status, failed: true };
   }
 
   // Recompute payment_status
