@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { getCapabilities } from "@/lib/capabilities";
-import { chargeStoredCard, isSumUpConfigured, recordSumUpChargePaymentIfPaid } from "@/lib/sumup-finance";
+import { collectChargeFromStoredCard, isSumUpConfigured, listCustomerInstruments } from "@/lib/sumup-finance";
 import { createClient } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/audit";
 import { getSessionProfile } from "@/lib/auth";
@@ -354,22 +354,38 @@ export async function collectFromStoredCard(_prev: ActionState, formData: FormDa
     .maybeSingle();
   if (!mandate) return { error: "No active card on file for this membership." };
 
-  const { listCustomerInstruments } = await import("@/lib/sumup-finance");
   const instruments = await listCustomerInstruments(mandate.sumup_customer_id);
   const instrument = instruments.find((i) => i.active);
   if (!instrument) return { error: "The stored card is no longer usable — ask the member to save a new one." };
 
+  // The same door the nightly run uses: the attempt is claimed before SumUp
+  // is asked, an earlier unfinished attempt is reconciled first, and the
+  // amount is what is still outstanding — so "collect now" twice, or once
+  // during the cron, cannot take the money twice.
+  let collectedPence = 0;
   try {
-    const checkout = await chargeStoredCard({
+    const result = await collectChargeFromStoredCard({
       chargeId: charge.id,
-      amountPence: charge.amount_pence,
       description: charge.description,
       customerId: mandate.sumup_customer_id,
       token: instrument.token,
     });
-    const result = await recordSumUpChargePaymentIfPaid(checkout.id);
-    if (!result.recorded && !result.present) {
-      return { error: `Collection did not complete (status ${result.status ?? "unknown"}).` };
+    switch (result.outcome) {
+      case "collected":
+        collectedPence = result.amountPence;
+        break;
+      case "recovered":
+        refreshFinance();
+        return { notice: "An earlier collection had already gone through — it is now recorded." };
+      case "settled":
+        refreshFinance();
+        return { notice: "Nothing outstanding on this charge." };
+      case "below_minimum":
+        return { error: "The outstanding balance is under £1.00, which is less than a card payment can be. Record it another way." };
+      case "in_flight":
+        return { error: "A collection for this charge started moments ago and has not finished. Give it a few minutes." };
+      case "failed":
+        return { error: `Collection did not complete: ${result.reason}` };
     }
   } catch (e) {
     console.error("[finance] stored-card collection failed:", e);
@@ -382,7 +398,7 @@ export async function collectFromStoredCard(_prev: ActionState, formData: FormDa
     action: "finance.mandate_collection",
     entity: "charges",
     entityId: chargeId,
-    detail: { amount_pence: charge.amount_pence },
+    detail: { amount_pence: collectedPence },
   });
   refreshFinance();
   return { notice: "Collected from the stored card." };

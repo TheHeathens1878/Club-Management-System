@@ -4,10 +4,10 @@ import { writeAudit } from "@/lib/audit";
 import { sendEmail, isEmailConfigured } from "@/lib/email";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
 import {
-  chargeStoredCard,
+  collectChargeFromStoredCard,
   isSumUpConfigured,
   listCustomerInstruments,
-  recordSumUpChargePaymentIfPaid,
+  type SumUpInstrument,
 } from "@/lib/sumup-finance";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -27,8 +27,15 @@ export const dynamic = "force-dynamic";
  *      be collected.
  *
  * Vercel cron, daily 07:30 UTC. Idempotent end to end: the cycle only walks
- * forward, and payments are unique per SumUp checkout.
+ * forward, and every collection goes through `collectChargeFromStoredCard`,
+ * which claims a `collection_attempts` row before it asks SumUp for anything
+ * and reconciles any earlier unfinished attempt first — so a run that died
+ * after the card was charged is recorded, not repeated, and two overlapping
+ * runs cannot both collect the same charge (Codex review, findings 4 and 5).
+ * The amount collected is what is still outstanding, never the face value.
  */
+const PAGE = 200;
+
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
@@ -37,7 +44,7 @@ export async function GET(request: Request) {
   }
 
   const admin = createAdminClient();
-  const summary = { raised: 0, collected: 0, collectFailed: 0, emailed: 0 };
+  const summary = { raised: 0, collected: 0, skipped: 0, collectFailed: 0, emailed: 0 };
 
   // 1. Raise what has come due.
   const { data: raised, error: cycleError } = await admin.rpc("run_billing_cycle");
@@ -49,45 +56,74 @@ export async function GET(request: Request) {
 
   // 2. Auto-collect where a mandate stands.
   if (isSumUpConfigured()) {
-    const [{ data: mandateRows }, { data: pending }] = await Promise.all([
-      admin
-        .from("payment_mandates")
-        .select("account_id,sumup_customer_id,covers_fines")
-        .eq("status", "active"),
-      admin
+    const { data: mandateRows } = await admin
+      .from("payment_mandates")
+      .select("account_id,sumup_customer_id,covers_fines")
+      .eq("status", "active");
+    const mandateByAccount = new Map((mandateRows ?? []).map((m) => [m.account_id, m]));
+    // One instrument lookup per customer per run, not per charge.
+    const instrumentByCustomer = new Map<string, SumUpInstrument | null>();
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Keyset pages ordered by id: a charge that settles mid-run drops out of
+    // the pending set without shifting the ones after it, which an offset
+    // page would skip.
+    let afterId: string | null = null;
+    for (;;) {
+      let query = admin
         .from("charges")
         .select("id,charge_no,account_id,kind,description,amount_pence,agreement_id,billing_agreements(auto_collect)")
         .eq("status", "pending")
-        .lte("due_on", new Date().toISOString().slice(0, 10)),
-    ]);
-    const mandateByAccount = new Map((mandateRows ?? []).map((m) => [m.account_id, m]));
-
-    for (const charge of pending ?? []) {
-      const mandate = mandateByAccount.get(charge.account_id);
-      if (!mandate) continue;
-      const authorised =
-        (charge.agreement_id && charge.billing_agreements?.auto_collect) ||
-        (charge.kind === "fine" && mandate.covers_fines);
-      if (!authorised) continue;
-
-      try {
-        const instruments = await listCustomerInstruments(mandate.sumup_customer_id);
-        const instrument = instruments.find((i) => i.active);
-        if (!instrument) continue;
-        const checkout = await chargeStoredCard({
-          chargeId: charge.id,
-          amountPence: charge.amount_pence,
-          description: charge.description,
-          customerId: mandate.sumup_customer_id,
-          token: instrument.token,
-        });
-        const result = await recordSumUpChargePaymentIfPaid(checkout.id);
-        if (result.recorded || result.present) summary.collected += 1;
-        else summary.collectFailed += 1;
-      } catch (e) {
-        console.error(`[finance-billing] auto-collect failed for charge ${charge.id}:`, e);
-        summary.collectFailed += 1;
+        .lte("due_on", today)
+        .order("id")
+        .limit(PAGE);
+      if (afterId) query = query.gt("id", afterId);
+      const { data: page, error: pageError } = await query;
+      if (pageError) {
+        console.error("[finance-billing] reading pending charges failed:", pageError);
+        break;
       }
+      const charges = page ?? [];
+
+      for (const charge of charges) {
+        const mandate = mandateByAccount.get(charge.account_id);
+        if (!mandate) continue;
+        const authorised =
+          (charge.agreement_id && charge.billing_agreements?.auto_collect) ||
+          (charge.kind === "fine" && mandate.covers_fines);
+        if (!authorised) continue;
+
+        try {
+          let instrument = instrumentByCustomer.get(mandate.sumup_customer_id);
+          if (instrument === undefined) {
+            const instruments = await listCustomerInstruments(mandate.sumup_customer_id);
+            instrument = instruments.find((i) => i.active) ?? null;
+            instrumentByCustomer.set(mandate.sumup_customer_id, instrument);
+          }
+          if (!instrument) continue;
+
+          const result = await collectChargeFromStoredCard({
+            chargeId: charge.id,
+            description: charge.description,
+            customerId: mandate.sumup_customer_id,
+            token: instrument.token,
+          });
+          if (result.outcome === "collected" || result.outcome === "recovered") {
+            summary.collected += 1;
+          } else if (result.outcome === "failed") {
+            console.error(`[finance-billing] auto-collect failed for charge ${charge.id}: ${result.reason}`);
+            summary.collectFailed += 1;
+          } else {
+            summary.skipped += 1;
+          }
+        } catch (e) {
+          console.error(`[finance-billing] auto-collect failed for charge ${charge.id}:`, e);
+          summary.collectFailed += 1;
+        }
+      }
+
+      if (charges.length < PAGE) break;
+      afterId = charges[charges.length - 1]!.id;
     }
   }
 
