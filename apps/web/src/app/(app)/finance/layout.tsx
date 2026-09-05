@@ -8,7 +8,7 @@ import { SectionHomeLink } from "@/components/section-home-link";
 export default function FinanceLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <SectionHomeLink href="/finance" label="Finance home" icon={Landmark} />
+      <SectionHomeLink href="/finance" label="Finance home" icon={<Landmark className="h-4 w-4" aria-hidden />} />
       {children}
     </>
   );

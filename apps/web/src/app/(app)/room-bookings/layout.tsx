@@ -8,7 +8,7 @@ import { SectionHomeLink } from "@/components/section-home-link";
 export default function RoomBookingsLayout({ children }: { children: ReactNode }) {
   return (
     <>
-      <SectionHomeLink href="/room-bookings" label="Room bookings home" icon={CalendarDays} />
+      <SectionHomeLink href="/room-bookings" label="Room bookings home" icon={<CalendarDays className="h-4 w-4" aria-hidden />} />
       {children}
     </>
   );
