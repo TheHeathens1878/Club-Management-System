@@ -6,18 +6,26 @@ import { RoleSwitcherSheet } from "@/components/role-switcher-sheet";
 import type { RoleSwitcherOption } from "@/components/role-switcher";
 
 /**
- * The phone's identity strip (Club CRM mobile design): crest + club name over
- * the current role in crest orange — tapping the role opens the Viewing-as
- * sheet — with the notifications bell and the person's initials on the right.
+ * The phone's identity strip: crest + club name over the CONTEXT the page is
+ * wearing — "Coaching · U14 Mavericks", "Your child · U12 Cobras", "Club
+ * administration" — with the search magnifier, the notifications bell and
+ * the person's initials on the right. Tapping the context line opens the
+ * switcher sheet, the explicit way to change hats when a page could mean two
+ * things (P7.2: most people never need it — the Club rows put the right hat
+ * on as they open).
+ *
  * Ink on paper, same `theme-ink` scope as the sidebar rail; hidden on lg+
  * where the sidebar carries all of this.
  */
 export function MobileHeader({
   name,
+  context,
   switcher,
   unread,
 }: {
   name: string;
+  /** The hat's plain label, or null when the person is simply themselves. */
+  context: string | null;
   switcher: { options: RoleSwitcherOption[]; current: string } | null;
   unread: number;
 }) {
@@ -31,12 +39,9 @@ export function MobileHeader({
 
   // A declared height, not one that falls out of the tallest child: the thread
   // — and anything else that fills the screen — measures itself against
-  // `--mobile-header-h`, and a strip that quietly grew by a few pixels would
-  // push the bottom of those pages off the screen (Adam, 2026-09-01). It costs
-  // the 44px bell nothing; it still centres inside the 56px.
+  // `--mobile-header-h` (Adam, 2026-09-01).
   return (
     <header className="theme-ink sticky top-0 z-30 flex h-[var(--mobile-header-h)] items-center gap-3 border-b border-border bg-background px-4 text-foreground lg:hidden">
-      {/* Same drop-shadow rim as the sidebar crest — black shield on ink. */}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src="/crest.png"
@@ -47,14 +52,14 @@ export function MobileHeader({
         <p className="font-display truncate text-[13px] font-semibold uppercase leading-tight tracking-wide">
           AoM Sports Club
         </p>
-        {switcher ? (
+        {switcher && switcher.options.length > 1 ? (
           <RoleSwitcherSheet
             options={switcher.options}
             current={switcher.current}
             trigger="role-line"
           />
         ) : (
-          <p className="truncate text-[11.5px] leading-tight text-foreground/55">{name}</p>
+          <p className="truncate text-[11.5px] leading-tight text-foreground/55">{context ?? name}</p>
         )}
       </div>
       <SearchTrigger variant="icon" />
