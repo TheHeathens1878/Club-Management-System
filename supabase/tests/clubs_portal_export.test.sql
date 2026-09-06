@@ -133,7 +133,7 @@ insert into public.emergency_contacts (person_id, "position", first_name, last_n
   values ('9e9e9e9e-0906-4111-8111-000000000001', 1, 'petra', 'PARENT', '07700 900001');
 set local request.jwt.claims to '{"sub":"c1c1c1c1-0906-4111-8111-000000000001","role":"authenticated"}';
 set local role authenticated;
-select is((select (r -> 'contact1' ->> 'source') || '|' || (r -> 'contact1' ->> 'sex')
+select is((select (r.contact1 ->> 'source') || '|' || (r.contact1 ->> 'sex')
              from public.clubs_portal_export(array['7c7c7c7c-0906-4111-8111-000000000001']::uuid[]) r
             where r.person_id = '9e9e9e9e-0906-4111-8111-000000000001'),
   'guardian|female', 'an unlinked contact whose name matches a guardian is read from the guardian');
