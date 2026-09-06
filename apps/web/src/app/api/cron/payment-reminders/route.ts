@@ -263,6 +263,13 @@ export async function GET(request: Request) {
 
   // --- Thank-you: the day after a confirmed booking happened (7-day window,
   // so a paused cron does not thank people about ancient history) ---
+  //
+  // HIRES ONLY. `bookings` has held every resource since P1.6 — pitches as
+  // well as the function room — and this query used to read all of it, so a
+  // coach who booked training at Wellfield was thanked for "your booking"
+  // with the pitch's name where the room's should be (Adam, 2026-09-06: "this
+  // should ONLY be for Function Room bookings"). A hire is the one kind a
+  // hirer makes; training, matches, club use and closures are not thanked.
   let thankYous = 0;
   {
     const now = new Date().toISOString();
@@ -271,6 +278,7 @@ export async function GET(request: Request) {
       .from("bookings")
       .select("id,booker_name,booker_email,starts_at,ends_at,resources(name)")
       .eq("status", "confirmed")
+      .eq("kind", "hire")
       .is("thank_you_sent_at", null)
       .lt("ends_at", now)
       .gt("ends_at", weekAgo);
