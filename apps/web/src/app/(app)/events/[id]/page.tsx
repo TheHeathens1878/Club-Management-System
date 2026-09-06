@@ -34,6 +34,7 @@ import {
   type DeleteFixtureCounts,
 } from "../../teams/[id]/fixtures/[fixtureId]/delete-fixture-card";
 import { DeleteEventCard } from "./delete-event-card";
+import { TrainingSessionCard } from "./training-session-card";
 import { AssignPitch } from "./assign-pitch";
 import { EventTabs } from "./event-tabs";
 import { MatchStatsSection } from "./match-stats-section";
@@ -101,6 +102,8 @@ type Detail = {
   detailsChangedAt: string | null;
   changeNote: string | null;
   series: { title: string; weekday: string; time: string; repeatUntil: string; occurrences: number } | null;
+  /** Set when a training block's sync wrote this session (Adam, 2026-09-06). */
+  training: { blockId: string; blockName: string; share: string | null } | null;
 };
 
 function str(record: Record<string, Json | undefined>, key: string): string | null {
@@ -129,6 +132,17 @@ function parseDetail(value: Json | null): Detail | null {
     };
   }
 
+  let training: Detail["training"] = null;
+  const rawTraining = record["training"];
+  if (rawTraining && typeof rawTraining === "object" && !Array.isArray(rawTraining)) {
+    const t = rawTraining as Record<string, Json | undefined>;
+    training = {
+      blockId: str(t, "block_id") ?? "",
+      blockName: str(t, "block_name") ?? "Training block",
+      share: str(t, "share"),
+    };
+  }
+
   return {
     id,
     teamId: str(record, "team_id") ?? "",
@@ -149,6 +163,7 @@ function parseDetail(value: Json | null): Detail | null {
     detailsChangedAt: str(record, "details_changed_at"),
     changeNote: str(record, "change_note"),
     series,
+    training,
   };
 }
 
@@ -382,6 +397,13 @@ export default async function EventPage({
   }
   const canDeleteManual = canManageMatch && !detail.fixtureId;
 
+  // A winter training session gets the coach's one-tap cancel (Adam,
+  // 2026-09-06) — the team's staff or an administrator, wearing that hat,
+  // while the session is still ahead. The card flips to "put it back on"
+  // once it is cancelled.
+  const trainingTap =
+    !!detail.training && canManageMatch && new Date(detail.startsAt).getTime() > Date.now();
+
   // Editing (Adam, 2026-08-25): the team's staff and club admins, on a manual
   // event that has not been cancelled and has not happened. A fixture-mirrored
   // event is edited through its fixture — `update_team_event` says the same
@@ -488,7 +510,18 @@ export default async function EventPage({
           {cancelled ? (
             <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
               This event has been cancelled.
+              {detail.changeNote?.startsWith("Cancelled") ? ` ${detail.changeNote.replace(/^Cancelled(\s—\s|\.)?/, "")}` : ""}
             </p>
+          ) : null}
+
+          {trainingTap && detail.training ? (
+            <TrainingSessionCard
+              eventId={detail.id}
+              cancelled={cancelled}
+              blockName={detail.training.blockName}
+              share={detail.training.share}
+              when={`${formatEventDate(detail.startsAt)}, ${formatEventTime(detail.startsAt)}`}
+            />
           ) : null}
 
           {!cancelled && detail.detailsChangedAt ? (
