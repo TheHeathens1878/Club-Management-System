@@ -993,12 +993,23 @@ export default async function TeamPage({
                       2026-08-25: "coaches should not be able to download photos
                       in a zip file") — and the route refuses anyone else again. */}
                   {clubAdmin && (view === "admin" || view === null) && (
-                    <a
-                      href={`/teams/${team.id}/photos.zip`}
-                      className={`${buttonVariants({ variant: "outline", size: "sm" })} min-h-11 sm:min-h-0`}
-                    >
-                      Export photos for FA Clubs Portal
-                    </a>
+                    <span className="flex flex-wrap gap-2">
+                      {/* The Portal's spreadsheet for this one team (Adam,
+                          2026-09-06: "also be available to admins in the
+                          squad section of the team page"). */}
+                      <a
+                        href={`/teams/clubs-portal/export.csv?team=${team.id}`}
+                        className={`${buttonVariants({ variant: "outline", size: "sm" })} min-h-11 sm:min-h-0`}
+                      >
+                        Export for FA Clubs Portal
+                      </a>
+                      <a
+                        href={`/teams/${team.id}/photos.zip`}
+                        className={`${buttonVariants({ variant: "outline", size: "sm" })} min-h-11 sm:min-h-0`}
+                      >
+                        Export photos for FA Clubs Portal
+                      </a>
+                    </span>
                   )}
                 </div>
                 <p className="text-sm text-muted-foreground">

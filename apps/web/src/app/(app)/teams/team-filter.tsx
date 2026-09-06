@@ -31,6 +31,7 @@ import { Select } from "@/components/ui/field";
 import { Card, CardContent } from "@/components/ui/card";
 
 import { BulkHomeVenueBar, type BulkPitch } from "./bulk-home-venue-bar";
+import { ClubsPortalExportBar } from "./clubs-portal-export-bar";
 
 export type TeamFilterColumn = {
   label: string;
@@ -103,6 +104,7 @@ export function TeamFilterGrid({
   footerNote,
   canTick = false,
   pitches = [],
+  canExportPortal = false,
 }: {
   items: TeamFilterItem[];
   /** The table's columns, in order — labels, sub-lines and filters alike. */
@@ -119,6 +121,8 @@ export function TeamFilterGrid({
   canTick?: boolean;
   /** Active pitches for the bulk bar's venue-grouped picker. */
   pitches?: BulkPitch[];
+  /** The FA Clubs Portal exports for the ticked teams — club administrators (the routes re-check). */
+  canExportPortal?: boolean;
 }) {
   const [query, setQuery] = useState(initialQuery);
   const [showAll, setShowAll] = useState(initialShowAll);
@@ -273,6 +277,9 @@ export function TeamFilterGrid({
           pitches={pitches}
           onDone={() => setSelected(new Set())}
         />
+      )}
+      {canTick && canExportPortal && selected.size > 0 && (
+        <ClubsPortalExportBar teamIds={[...selected]} />
       )}
 
       {shown.length === 0 ? (

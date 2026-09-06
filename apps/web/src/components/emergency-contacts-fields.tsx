@@ -8,13 +8,22 @@
  *
  * `lead` offers "I am the first emergency contact" (Adam: "Emergency contact
  * can be lead contact also, so a tick button would be helpful"). Ticked, the
- * name and number for contact 1 are not rendered at all — the server copies
- * them from the caller's own record — which is also what makes the server's
- * rule safe: a typed contact 1 can only arrive when the box was unticked.
+ * fields for contact 1 are not rendered at all — the server copies the name
+ * and number from the caller's own record and LINKS the row to it, so the
+ * date of birth, sex, email and address the FA Clubs Portal asks for are
+ * read from there — which is also what makes the server's rule safe: a typed
+ * contact 1 can only arrive when the box was unticked.
+ *
+ * A typed contact carries the Portal's fields too (Adam, 2026-09-06: "the
+ * above information needs to be collected for emergency contacts even if
+ * they aren't the lead booker"). The postcode is required as soon as any of
+ * the address is; on a registration the whole address is.
  */
 
 import { useState } from "react";
 
+import { DateOfBirthInput } from "@/components/date-of-birth-input";
+import { Select } from "@/components/ui/field";
 import { Input, Label } from "@/components/ui/input";
 import {
   MAX_EMERGENCY_CONTACTS,
@@ -62,7 +71,9 @@ export function EmergencyContactsFields({
         Who the club rings if something happens to {personName} — an injury at training, or
         anything at a match that means somebody has to be told now. Up to two, and the first is
         tried first. They are kept on {personName}&rsquo;s record rather than on a registration
-        form, so they are asked for once and can be changed at any time.
+        form, so they are asked for once and can be changed at any time. The FA Clubs Portal
+        registers a parent or carer with their date of birth, sex, email and address, so those are
+        asked here too.
       </p>
 
       {lead && (
@@ -80,7 +91,7 @@ export function EmergencyContactsFields({
             I am the first emergency contact
             <span className="block text-xs text-muted-foreground">
               {lead.phone
-                ? `${lead.name} · ${lead.phone}`
+                ? `${lead.name} · ${lead.phone} — your own date of birth, email and address are used from your record.`
                 : "Your own phone number is not on record yet — add it on My profile, or type the contact below."}
             </span>
           </span>
@@ -95,6 +106,7 @@ export function EmergencyContactsFields({
         // rather than echoing the lead's details — unticking means "someone
         // else", and pre-filling the lead would post them as a typed contact.
         const prefill = position === 1 && leadIsFirst ? null : contact;
+        const id = (key: string): string => `${idPrefix}-ec${position}-${key}`;
         return (
           <div key={position} className="space-y-2 rounded-lg border bg-secondary/20 p-3">
             <p className="text-xs font-medium uppercase text-muted-foreground">
@@ -102,52 +114,123 @@ export function EmergencyContactsFields({
               {position === 2 ? " (optional)" : ""}
             </p>
             {!leadHere && (
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label htmlFor={`${idPrefix}-ec${position}-first-name`}>
-                    First name {required && <span className="text-destructive">*</span>}
-                  </Label>
-                  <Input
-                    id={`${idPrefix}-ec${position}-first-name`}
-                    name={contactField(position, "first_name")}
-                    defaultValue={prefill?.firstName ?? ""}
-                    required={required}
-                    autoComplete="off"
-                  />
+              <>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor={id("first-name")}>
+                      First name {required && <span className="text-destructive">*</span>}
+                    </Label>
+                    <Input
+                      id={id("first-name")}
+                      name={contactField(position, "first_name")}
+                      defaultValue={prefill?.firstName ?? ""}
+                      required={required}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("last-name")}>
+                      Last name {required && <span className="text-destructive">*</span>}
+                    </Label>
+                    <Input
+                      id={id("last-name")}
+                      name={contactField(position, "last_name")}
+                      defaultValue={prefill?.lastName ?? ""}
+                      required={required}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("phone")}>
+                      Mobile {required && <span className="text-destructive">*</span>}
+                    </Label>
+                    <Input
+                      id={id("phone")}
+                      name={contactField(position, "phone")}
+                      type="tel"
+                      defaultValue={prefill?.phone ?? ""}
+                      required={required}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("email")}>Email</Label>
+                    <Input
+                      id={id("email")}
+                      name={contactField(position, "email")}
+                      type="email"
+                      defaultValue={prefill?.email ?? ""}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("dob")}>Date of birth</Label>
+                    <DateOfBirthInput
+                      id={id("dob")}
+                      name={contactField(position, "dob")}
+                      defaultValue={prefill?.dob ?? ""}
+                      start="adult"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("sex")}>Sex</Label>
+                    <Select id={id("sex")} name={contactField(position, "sex")} defaultValue={prefill?.sex ?? ""}>
+                      <option value="">Not said</option>
+                      <option value="female">Female</option>
+                      <option value="male">Male</option>
+                    </Select>
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`${idPrefix}-ec${position}-last-name`}>
-                    Last name {required && <span className="text-destructive">*</span>}
-                  </Label>
-                  <Input
-                    id={`${idPrefix}-ec${position}-last-name`}
-                    name={contactField(position, "last_name")}
-                    defaultValue={prefill?.lastName ?? ""}
-                    required={required}
-                    autoComplete="off"
-                  />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor={id("line1")}>Address line 1</Label>
+                    <Input
+                      id={id("line1")}
+                      name={contactField(position, "address_line1")}
+                      defaultValue={prefill?.address.line1 ?? ""}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("line2")}>Address line 2</Label>
+                    <Input
+                      id={id("line2")}
+                      name={contactField(position, "address_line2")}
+                      defaultValue={prefill?.address.line2 ?? ""}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("town")}>Town</Label>
+                    <Input
+                      id={id("town")}
+                      name={contactField(position, "address_town")}
+                      defaultValue={prefill?.address.town ?? ""}
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor={id("postcode")}>
+                      Postcode {required && <span className="text-destructive">*</span>}
+                    </Label>
+                    <Input
+                      id={id("postcode")}
+                      name={contactField(position, "address_postcode")}
+                      defaultValue={prefill?.address.postcode ?? ""}
+                      required={required}
+                      autoComplete="off"
+                      className="uppercase"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1">
-                  <Label htmlFor={`${idPrefix}-ec${position}-phone`}>
-                    Phone {required && <span className="text-destructive">*</span>}
-                  </Label>
-                  <Input
-                    id={`${idPrefix}-ec${position}-phone`}
-                    name={contactField(position, "phone")}
-                    type="tel"
-                    defaultValue={prefill?.phone ?? ""}
-                    required={required}
-                    autoComplete="off"
-                  />
-                </div>
-              </div>
+              </>
             )}
             <div className="space-y-1">
-              <Label htmlFor={`${idPrefix}-ec${position}-rel`}>
+              <Label htmlFor={id("rel")}>
                 {leadHere ? `Your relationship to ${personName}` : "Relationship"}
               </Label>
               <Input
-                id={`${idPrefix}-ec${position}-rel`}
+                id={id("rel")}
                 name={contactField(position, "relationship")}
                 defaultValue={contact?.relationship ?? ""}
                 placeholder="Mother, father, grandparent…"

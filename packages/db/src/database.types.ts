@@ -1870,7 +1870,11 @@ export type Database = {
       }
       emergency_contacts: {
         Row: {
+          address: Json | null
+          contact_person_id: string | null
           created_at: string
+          dob: string | null
+          email: string | null
           first_name: string
           id: string
           last_name: string
@@ -1880,11 +1884,16 @@ export type Database = {
           phone: string
           position: number
           relationship: string | null
+          sex: string | null
           updated_at: string
           updated_by: string | null
         }
         Insert: {
+          address?: Json | null
+          contact_person_id?: string | null
           created_at?: string
+          dob?: string | null
+          email?: string | null
           first_name: string
           id?: string
           last_name?: string
@@ -1892,10 +1901,16 @@ export type Database = {
           phone: string
           position: number
           relationship?: string | null
+          sex?: string | null
           updated_at?: string
           updated_by?: string | null
         }
         Update: {
+          address?: Json | null
+          contact_person_id?: string | null
+          dob?: string | null
+          email?: string | null
+          sex?: string | null
           created_at?: string
           first_name?: string
           id?: string
@@ -6403,6 +6418,24 @@ export type Database = {
       cancel_training_session: {
         Args: { p_event_id: string; p_reason?: string }
         Returns: undefined
+      }
+      clubs_portal_export: {
+        Args: { p_team_ids: string[] }
+        Returns: {
+          address: Json
+          age_proved: boolean
+          contact1: Json
+          contact2: Json
+          dob: string
+          email: string
+          first_name: string
+          last_name: string
+          person_id: string
+          phone: string
+          sex: string
+          team_id: string
+          team_name: string
+        }[]
       }
       club_lobby_posts: {
         Args: { p_limit?: number }

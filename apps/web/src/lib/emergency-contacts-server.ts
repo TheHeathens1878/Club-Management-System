@@ -13,9 +13,28 @@
  * profile and people actions, which are the "use server" files.
  */
 
-import { createClient } from "@/lib/supabase/server";
+import type { Json } from "@club/db";
 
-import type { EmergencyContact, PostedEmergencyContacts } from "@/lib/emergency-contacts";
+import { createClient } from "@/lib/supabase/server";
+import { addressToFields } from "@/lib/people-display";
+
+import {
+  EMPTY_CONTACT_ADDRESS,
+  addressGiven,
+  type ContactAddress,
+  type ContactSex,
+  type EmergencyContact,
+  type PostedEmergencyContacts,
+} from "@/lib/emergency-contacts";
+
+function contactAddress(value: Json | null): ContactAddress {
+  const fields = addressToFields(value);
+  return { line1: fields.line1, line2: fields.line2, town: fields.town, postcode: fields.postcode };
+}
+
+function asSex(value: string | null): ContactSex {
+  return value === "male" || value === "female" ? value : "";
+}
 
 /** Every contact the caller may read for these people, keyed by person. */
 export async function loadEmergencyContacts(
@@ -26,7 +45,7 @@ export async function loadEmergencyContacts(
   const supabase = await createClient();
   const { data } = await supabase
     .from("emergency_contacts")
-    .select("person_id,position,first_name,last_name,name,phone,relationship")
+    .select("person_id,position,first_name,last_name,name,phone,relationship,contact_person_id,dob,sex,email,address")
     .in("person_id", personIds)
     .order("position");
   for (const row of data ?? []) {
@@ -38,37 +57,51 @@ export async function loadEmergencyContacts(
       name: row.name,
       phone: row.phone,
       relationship: row.relationship ?? "",
+      contactPersonId: row.contact_person_id,
+      dob: row.dob ?? "",
+      sex: asSex(row.sex),
+      email: row.email ?? "",
+      address: row.address ? contactAddress(row.address) : { ...EMPTY_CONTACT_ADDRESS },
     });
     contacts.set(row.person_id, list);
   }
   return contacts;
 }
 
+type ContactPayload = {
+  first_name: string;
+  last_name: string;
+  phone: string;
+  relationship: string | null;
+  contact_person_id: string | null;
+  dob: string | null;
+  sex: string | null;
+  email: string | null;
+  address: Json | null;
+};
+
 /**
  * Resolve "I am the first emergency contact" from the caller's OWN `people`
  * row and write the set. The tick is a statement about the caller, so the
  * name and number come from what the club holds for them — never from the
  * browser — which is also why a caller with no phone on record is sent to
- * My Profile rather than guessed at.
+ * My Profile rather than guessed at. Since 20260906120000 the row also
+ * LINKS to the caller, so the Portal export reads their date of birth, sex,
+ * email and address live from their record rather than from a copy.
  */
 export async function saveEmergencyContacts(
   personId: string,
   posted: PostedEmergencyContacts,
 ): Promise<{ error?: string }> {
   const supabase = await createClient();
-  const contacts: {
-    first_name: string;
-    last_name: string;
-    phone: string;
-    relationship: string | null;
-  }[] = [];
+  const contacts: ContactPayload[] = [];
 
   if (posted.useLead) {
     const { data: me } = await supabase.rpc("current_person_id");
     const { data: lead } = me
       ? await supabase
           .from("people")
-          .select("first_name,last_name,phone")
+          .select("id,first_name,last_name,phone,dob,sex,email,address")
           .eq("id", me)
           .maybeSingle()
       : { data: null };
@@ -89,6 +122,11 @@ export async function saveEmergencyContacts(
       last_name: lead.last_name,
       phone: lead.phone,
       relationship: posted.leadRelationship || null,
+      contact_person_id: lead.id,
+      dob: lead.dob,
+      sex: lead.sex,
+      email: lead.email,
+      address: lead.address,
     });
   }
   for (const row of posted.typed) {
@@ -97,12 +135,24 @@ export async function saveEmergencyContacts(
       last_name: row.lastName,
       phone: row.phone,
       relationship: row.relationship || null,
+      contact_person_id: null,
+      dob: row.dob || null,
+      sex: row.sex || null,
+      email: row.email || null,
+      address: addressGiven(row.address)
+        ? ({
+            line1: row.address.line1,
+            line2: row.address.line2,
+            town: row.address.town,
+            postcode: row.address.postcode,
+          } as Json)
+        : null,
     });
   }
 
   const { error } = await supabase.rpc("set_emergency_contacts", {
     p_person_id: personId,
-    p_contacts: contacts,
+    p_contacts: contacts as unknown as Json,
   });
   if (error) {
     if (error.code === "42501") {

@@ -43,6 +43,7 @@ export default async function NewPersonPage() {
                 last_name: "",
                 preferred_name: "",
                 dob: "",
+                sex: "",
                 email: "",
                 phone: "",
                 address: addressToFields(null),

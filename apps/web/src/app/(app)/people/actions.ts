@@ -54,6 +54,8 @@ type PersonInput = {
   last_name: string;
   preferred_name: string | null;
   dob: string | null;
+  /** male | female | null — the FA Clubs Portal asks (Adam, 2026-09-06). */
+  sex: string | null;
   email: string | null;
   phone: string | null;
   address: Json | null;
@@ -73,6 +75,10 @@ function readPerson(formData: FormData): PersonInput | { error: string } {
   if (dob && !/^\d{4}-\d{2}-\d{2}$/.test(dob)) {
     return { error: "Enter the date of birth as a date, or leave it blank." };
   }
+  const sex = text(formData, "sex").toLowerCase();
+  if (sex && sex !== "male" && sex !== "female") {
+    return { error: "Sex is male or female, or left blank." };
+  }
 
   const fields = {} as AddressFields;
   for (const key of ADDRESS_KEYS) fields[key] = text(formData, `address_${key}`);
@@ -85,6 +91,7 @@ function readPerson(formData: FormData): PersonInput | { error: string } {
     last_name: lastName,
     preferred_name: text(formData, "preferred_name") || null,
     dob: dob || null,
+    sex: sex || null,
     email: text(formData, "email") || null,
     phone: text(formData, "phone") || null,
     address: addressFromFields(fields),
