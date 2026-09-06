@@ -320,7 +320,11 @@ comment on column public.events.training_on is
   'The local calendar day of the session, so (allocation, day) is unique regardless of the clock change.';
 
 -- Deleting a whole block takes its future sessions with it — nothing else
--- would be able to find them once the block row is gone. The past stays.
+-- would be able to find them once the block row is gone. The past stays,
+-- unlinked here rather than left to the two SET NULL actions: those run as
+-- separate AFTER triggers, and a row updated by the first while the second
+-- is still queued re-checks its allocation key against a slot the cascade
+-- has already removed.
 create or replace function public.training_blocks_before_delete()
   returns trigger
   language plpgsql
@@ -330,6 +334,9 @@ as $$
 begin
   delete from public.events e
    where e.training_block_id = old.id and e.starts_at > now();
+  update public.events e
+     set training_block_id = null, training_allocation_id = null
+   where e.training_block_id = old.id;
   return old;
 end;
 $$;
