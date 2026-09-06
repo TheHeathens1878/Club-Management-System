@@ -13,7 +13,7 @@
 
 begin;
 
-select plan(22);
+select plan(24);
 
 -- An administrator, a parent, a coach; a child, an adult player.
 insert into auth.users (id, email, raw_user_meta_data) values
