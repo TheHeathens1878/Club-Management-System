@@ -489,3 +489,58 @@ export async function deleteEvent(
   revalidatePath("/events");
   redirect("/events");
 }
+
+// ---------------------------------------------------------------------------
+// A winter training session — the coach's tap (Adam, 2026-09-06: "Coaches
+// should be able to cancel them if they aren't training").
+//
+// `cancel_training_session` is `cancel_team_event` plus the sentence nobody
+// was sending: each household is told, with the reason, and the reason is
+// kept on the event. `reinstate_training_session` puts it back and tells
+// them through the details-changed path. Both gate themselves — the team's
+// staff or a club administrator — and both refuse a fixture.
+// ---------------------------------------------------------------------------
+
+export async function cancelTrainingSession(
+  _prev: EventActionState,
+  formData: FormData,
+): Promise<EventActionState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in again to cancel the session." };
+
+  const eventId = text(formData, "event_id", 40);
+  const reason = text(formData, "reason", 300);
+  if (!eventId) return { error: "No session given." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("cancel_training_session", {
+    p_event_id: eventId,
+    p_reason: reason || undefined,
+  });
+  if (error) return { error: friendlyDbError(error, CREATE_REFUSED) };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  revalidatePath("/training");
+  return { notice: "Session cancelled. The families have been told." };
+}
+
+export async function reinstateTrainingSession(
+  _prev: EventActionState,
+  formData: FormData,
+): Promise<EventActionState> {
+  const session = await getSessionProfile();
+  if (!session) return { error: "Sign in again to reinstate the session." };
+
+  const eventId = text(formData, "event_id", 40);
+  if (!eventId) return { error: "No session given." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reinstate_training_session", { p_event_id: eventId });
+  if (error) return { error: friendlyDbError(error, CREATE_REFUSED) };
+
+  revalidatePath(`/events/${eventId}`);
+  revalidatePath("/events");
+  revalidatePath("/training");
+  return { notice: "Back on. The families have been told." };
+}

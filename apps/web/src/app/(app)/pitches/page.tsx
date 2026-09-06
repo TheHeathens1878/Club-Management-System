@@ -21,7 +21,7 @@ import {
   weekendWindow,
   type GridEntry,
 } from "@/lib/pitch-grid";
-import { AlertCircle, CalendarRange, ChevronLeft, ChevronRight, Settings2, ShieldAlert } from "lucide-react";
+import { AlertCircle, CalendarRange, ChevronLeft, ChevronRight, Settings2, ShieldAlert, Snowflake } from "lucide-react";
 import { AllocateControl, type PitchOption } from "./allocate-control";
 import { WeekendPitchGrid, type GridDay } from "./weekend-grid";
 
@@ -189,6 +189,9 @@ export default async function PitchesPage({
           <div className="flex gap-2">
             <Link href="/pitches/calendar" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <CalendarRange className="h-4 w-4" /> Calendar
+            </Link>
+            <Link href="/pitches/training" className={buttonVariants({ variant: "outline", size: "sm" })}>
+              <Snowflake className="h-4 w-4" /> Training blocks
             </Link>
             <Link href="/pitches/manage" className={buttonVariants({ variant: "outline", size: "sm" })}>
               <Settings2 className="h-4 w-4" /> Manage pitches

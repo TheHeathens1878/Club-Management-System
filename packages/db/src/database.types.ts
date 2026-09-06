@@ -2045,6 +2045,9 @@ export type Database = {
           status: Database["public"]["Enums"]["event_status"]
           team_id: string
           title: string
+          training_allocation_id: string | null
+          training_block_id: string | null
+          training_on: string | null
           type: Database["public"]["Enums"]["event_type"]
           updated_at: string
           venue_resource_id: string | null
@@ -2067,6 +2070,9 @@ export type Database = {
           status?: Database["public"]["Enums"]["event_status"]
           team_id: string
           title: string
+          training_allocation_id?: string | null
+          training_block_id?: string | null
+          training_on?: string | null
           type: Database["public"]["Enums"]["event_type"]
           updated_at?: string
           venue_resource_id?: string | null
@@ -2089,12 +2095,29 @@ export type Database = {
           status?: Database["public"]["Enums"]["event_status"]
           team_id?: string
           title?: string
+          training_allocation_id?: string | null
+          training_block_id?: string | null
+          training_on?: string | null
           type?: Database["public"]["Enums"]["event_type"]
           updated_at?: string
           venue_resource_id?: string | null
           venue_text?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "events_training_allocation_id_fkey"
+            columns: ["training_allocation_id"]
+            isOneToOne: false
+            referencedRelation: "training_allocations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_training_block_id_fkey"
+            columns: ["training_block_id"]
+            isOneToOne: false
+            referencedRelation: "training_blocks"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "events_booking_id_fkey"
             columns: ["booking_id"]
@@ -5335,6 +5358,186 @@ export type Database = {
         }
         Relationships: []
       }
+      training_allocations: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          shares: number
+          slot_id: string
+          team_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          shares?: number
+          slot_id: string
+          team_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          shares?: number
+          slot_id?: string
+          team_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_allocations_slot_id_fkey"
+            columns: ["slot_id"]
+            isOneToOne: false
+            referencedRelation: "training_slots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_allocations_team_id_fkey"
+            columns: ["team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_blackouts: {
+        Row: {
+          block_id: string
+          created_at: string
+          ends_on: string
+          id: string
+          label: string
+          starts_on: string
+        }
+        Insert: {
+          block_id: string
+          created_at?: string
+          ends_on: string
+          id?: string
+          label: string
+          starts_on: string
+        }
+        Update: {
+          block_id?: string
+          created_at?: string
+          ends_on?: string
+          id?: string
+          label?: string
+          starts_on?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_blackouts_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "training_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_blocks: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          ends_on: string
+          id: string
+          last_synced_at: string | null
+          name: string
+          notes: string | null
+          season_id: string | null
+          session_title: string
+          starts_on: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          ends_on: string
+          id?: string
+          last_synced_at?: string | null
+          name: string
+          notes?: string | null
+          season_id?: string | null
+          session_title?: string
+          starts_on: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          ends_on?: string
+          id?: string
+          last_synced_at?: string | null
+          name?: string
+          notes?: string | null
+          season_id?: string | null
+          session_title?: string
+          starts_on?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_blocks_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      training_slots: {
+        Row: {
+          block_id: string
+          created_at: string
+          end_time: string
+          id: string
+          notes: string | null
+          parts: number
+          start_time: string
+          updated_at: string
+          venue_address: string | null
+          venue_name: string
+          weekday: number
+        }
+        Insert: {
+          block_id: string
+          created_at?: string
+          end_time: string
+          id?: string
+          notes?: string | null
+          parts?: number
+          start_time: string
+          updated_at?: string
+          venue_address?: string | null
+          venue_name: string
+          weekday: number
+        }
+        Update: {
+          block_id?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          notes?: string | null
+          parts?: number
+          start_time?: string
+          updated_at?: string
+          venue_address?: string | null
+          venue_name?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_slots_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "training_blocks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venues: {
         Row: {
           active: boolean
@@ -6188,6 +6391,7 @@ export type Database = {
       bump_age_group: { Args: { p_text: string }; Returns: string }
       can_act_for: { Args: { p_person_id: string }; Returns: boolean }
       can_manage_conversation_post: { Args: { p_post_id: string }; Returns: boolean }
+      can_plan_training: { Args: never; Returns: boolean }
       can_read_board_post: { Args: { p_post_id: string }; Returns: boolean }
       can_view_album: { Args: { p_album_id: string }; Returns: boolean }
       can_view_pitch_calendar: { Args: never; Returns: boolean }
@@ -6196,6 +6400,10 @@ export type Database = {
         Returns: boolean
       }
       cancel_team_event: { Args: { p_event_id: string }; Returns: undefined }
+      cancel_training_session: {
+        Args: { p_event_id: string; p_reason?: string }
+        Returns: undefined
+      }
       club_lobby_posts: {
         Args: { p_limit?: number }
         Returns: {
@@ -7152,6 +7360,10 @@ export type Database = {
         Args: { p_note?: string; p_request_id: string }
         Returns: undefined
       }
+      reinstate_training_session: {
+        Args: { p_event_id: string }
+        Returns: undefined
+      }
       remind_event_nonresponders: {
         Args: { p_event_id: string }
         Returns: number
@@ -7361,6 +7573,16 @@ export type Database = {
         }
         Returns: undefined
       }
+      sync_training_block: {
+        Args: { p_block_id: string; p_dry_run?: boolean }
+        Returns: {
+          added: number
+          cancelled: number
+          removed: number
+          unchanged: number
+          updated: number
+        }[]
+      }
       team_board_posts: {
         Args: { p_limit?: number; p_team_id: string }
         Returns: {
@@ -7409,6 +7631,25 @@ export type Database = {
           team_name: string
           there: number
         }[]
+      }
+      training_block_plan: {
+        Args: { p_block_id: string }
+        Returns: {
+          allocation_id: string
+          ends_at: string
+          notes: string
+          slot_id: string
+          starts_at: string
+          team_id: string
+          title: string
+          training_on: string
+          venue_text: string
+        }[]
+      }
+      training_parts_label: { Args: { p_parts: number }; Returns: string }
+      training_share_label: {
+        Args: { p_parts: number; p_shares: number }
+        Returns: string
       }
       training_sessions: {
         Args: { p_from: string; p_to: string }
