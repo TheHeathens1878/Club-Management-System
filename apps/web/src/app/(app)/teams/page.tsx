@@ -631,6 +631,7 @@ export default async function TeamsPage({
           initialQuery={query}
           initialShowAll={showAll}
           canTick={canAdmin}
+          canExportPortal={canAdmin && clubAdmin}
           pitches={allPitches}
           columns={
             [

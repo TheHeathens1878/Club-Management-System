@@ -403,6 +403,7 @@ export default async function PersonPage({
                 last_name: person.last_name,
                 preferred_name: person.preferred_name ?? "",
                 dob: person.dob ?? "",
+                sex: person.sex ?? "",
                 email: person.email ?? "",
                 phone: person.phone ?? "",
                 address: addressToFields(person.address),

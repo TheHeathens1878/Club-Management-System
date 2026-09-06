@@ -15,7 +15,7 @@ import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { TownCountyFields } from "@/components/town-county-fields";
-import { Textarea } from "@/components/ui/field";
+import { Select, Textarea } from "@/components/ui/field";
 import { ADDRESS_KEYS, ADDRESS_LABELS, type AddressFields } from "@/lib/people-display";
 
 import { createPerson, updatePerson, type PersonActionState } from "./actions";
@@ -27,6 +27,8 @@ export type PersonFormValues = {
   last_name: string;
   preferred_name: string;
   dob: string;
+  /** "male" | "female" | "" — asked by the FA Clubs Portal (Adam, 2026-09-06). */
+  sex: string;
   email: string;
   phone: string;
   address: AddressFields;
@@ -93,6 +95,17 @@ export function PersonForm({
                 </span>
               </>
             )}
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="sex">Sex</Label>
+          <Select id="sex" name="sex" defaultValue={values.sex}>
+            <option value="">Not said</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            As the FA Clubs Portal records it, and as a girls&rsquo; team is eligible on.
           </p>
         </div>
         <div className="space-y-1.5">
