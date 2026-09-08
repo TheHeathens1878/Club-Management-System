@@ -409,7 +409,7 @@ export function MatchesDesk({
 
       {/* --------------------------------------------------- action bar */}
       {canManage && chosen.length > 0 && (
-        <div className="space-y-3 rounded-xl border border-primary/30 bg-card p-3">
+        <div className="space-y-3 rounded-xl border border-primary/30 bg-card p-3 print:hidden">
           <p className="text-sm font-medium">
             {chosen.length} ticked
             <span className="ml-2 text-xs font-normal text-muted-foreground">
@@ -497,7 +497,7 @@ export function MatchesDesk({
       {canManage && chosen.length === 0 ? messages : null}
 
       {/* -------------------------------------------------- phone cards */}
-      <div className="space-y-3 lg:hidden">
+      <div className="space-y-3 print:hidden lg:hidden">
         <details className="rounded-xl border bg-card">
           <summary className="min-h-[44px] cursor-pointer list-none px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
             Filter{filtering ? ` · showing ${filtered.length}` : ""}
@@ -595,13 +595,16 @@ export function MatchesDesk({
       </div>
 
       {/* ------------------------------------------------ desktop table */}
-      <div className="hidden rounded-xl border bg-card lg:block">
+      {/* On paper the table is the desk whatever the screen was: a phone
+          prints the same rows a desktop would (Adam, 2026-09-08: the whole
+          club, "export to pdf", from the phone). */}
+      <div className="hidden rounded-xl border bg-card print:block lg:block">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-secondary/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
                 {canManage && (
-                  <th className="w-10 px-3 py-2">
+                  <th className="w-10 px-3 py-2 print:hidden">
                     <input
                       type="checkbox"
                       checked={filtered.length > 0 && filtered.every((row) => selected.has(row.id))}
@@ -685,7 +688,7 @@ export function MatchesDesk({
                 return (
                   <tr key={row.id} className="border-b last:border-b-0 hover:bg-secondary/40">
                     {canManage && (
-                      <td className="px-3 py-3 align-top">
+                      <td className="px-3 py-3 align-top print:hidden">
                         <input
                           type="checkbox"
                           checked={selected.has(row.id)}

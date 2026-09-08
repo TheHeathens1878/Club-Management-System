@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
+
+import { contextHref } from "@/lib/destinations";
 import { ChevronLeft, Wrench } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
@@ -1524,6 +1526,26 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {tab === "settings" && committeeTools && (
           <div className="space-y-6">
+            {/* The home pitch and "Allocate the season" are the admin hat's
+                (Adam, 2026-08-25: "make sure coaches cannot assign pitches").
+                A committee member wearing the coach hat lands here and finds
+                them read-only, so say where they went (Adam, 2026-09-08: "How
+                do I allocate a pitch to a team … It used to be in team
+                settings"). */}
+            {!allocationTools ? (
+              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+                <span>
+                  The home pitch, kick-off and &ldquo;Allocate the season&rdquo; are set under Club
+                  administration.
+                </span>
+                <Link
+                  href={contextHref({ view: "admin" }, `/teams/${team.id}?tab=settings`)}
+                  className="font-medium underline underline-offset-2"
+                >
+                  Open these settings as Club administration
+                </Link>
+              </p>
+            ) : null}
             {/* Where this team plays and how long a match takes. Written
                 through the caller's own client, so `teams_staff_update` lets a
                 coach maintain it and `trg_teams_home_resource_guard` is what

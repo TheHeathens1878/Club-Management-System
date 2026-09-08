@@ -18,12 +18,19 @@ import { isRoleView } from "@/lib/role-view";
  * `next` must be a path on this site — `safeRelativePath` refuses anything
  * else, because a redirector that forwards to arbitrary URLs is an open
  * redirect wearing a club crest.
+ *
+ * THE REDIRECT STAYS ON THE HOST THAT WAS ASKED (Adam, 2026-09-08: "Club
+ * administration › Teams should allow me to see all teams and not just my
+ * own"). This handler used to send the browser to NEXT_PUBLIC_SITE_URL,
+ * which on production is the Vercel project address while the club opens
+ * the app on its own domain — so the hat was written as a cookie on one
+ * host and the page opened on the other, without it, still in the coach
+ * view. The path is already vetted; the origin is simply the request's.
  */
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? url.origin;
   const view = url.searchParams.get("view");
   const team = url.searchParams.get("team");
   const next = safeRelativePath(url.searchParams.get("next")) ?? "/lobby";
@@ -31,5 +38,5 @@ export async function GET(request: Request) {
   if (isRoleView(view)) {
     await applyRoleView(view, team ?? undefined);
   }
-  return NextResponse.redirect(`${origin}${next}`, { status: 303 });
+  return NextResponse.redirect(new URL(next, url.origin), { status: 303 });
 }
