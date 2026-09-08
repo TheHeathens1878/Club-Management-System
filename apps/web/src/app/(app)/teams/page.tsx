@@ -571,6 +571,22 @@ export default async function TeamsPage({
         }
       />
       <div className="space-y-6 p-4 lg:p-6">
+        {/* A committee member or club administrator looking as a coach sees
+            only their own teams — by design (Adam, 2026-09-01) — but the way
+            to the whole club should be one tap, not a hunt for the switcher
+            (Adam, 2026-09-08: "Club administration › Teams should allow me to
+            see all teams and not just my own"). */}
+        {!canAdmin && (committee || clubAdmin) ? (
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+            <span>You are looking at the teams you coach.</span>
+            <Link
+              href={`/context?view=admin&next=${encodeURIComponent("/teams")}`}
+              className="font-medium underline underline-offset-2"
+            >
+              See every team as Club administration
+            </Link>
+          </p>
+        ) : null}
         {/* The design's two sub-tabs: the list, and the FA formats reference.
             They scroll rather than wrap on a phone (mobile design). */}
         <div className="-mx-4 flex gap-6 overflow-x-auto whitespace-nowrap border-b px-4 lg:mx-0 lg:px-0">

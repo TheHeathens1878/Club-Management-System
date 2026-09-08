@@ -255,9 +255,14 @@ export default async function MatchesPage({
                 {tab.label}
               </Link>
             ))}
-            {/* A narrowed desk (a coach's, or a team pick) can widen to the
-                whole club and back (Adam, 2026-09-04). An admin hat already
-                sees everything, so it gets no switch. */}
+          </div>
+          {/* A narrowed desk (a coach's, or a team pick) can widen to the
+              whole club and back (Adam, 2026-09-04). An admin hat already
+              sees everything, so it gets no switch. On a phone the pair has
+              its own row rather than trailing off the end of the period strip
+              where nobody scrolls to (Adam, 2026-09-08: "being able to see
+              the whole club" on the mobile view). */}
+          <div className="flex gap-2 lg:contents">
             {narrowedByDefault && (
               <>
                 <Link
@@ -285,7 +290,7 @@ export default async function MatchesPage({
               </>
             )}
           </div>
-          <span className="flex flex-wrap gap-2 lg:ml-auto">
+          <span className="flex flex-wrap items-center gap-2 lg:ml-auto">
             {needPitch > 0 ? (
               <Badge variant="destructive">
                 {needPitch} need{needPitch === 1 ? "s" : ""} a pitch
@@ -296,6 +301,19 @@ export default async function MatchesPage({
             ) : null}
           </span>
         </div>
+
+        {/* The PDF says what it is: on paper the chips above are gone. */}
+        <p className="hidden text-sm text-muted-foreground print:block">
+          {tabs.find((tab) => tab.key === period)?.label ?? "Matches"} ·{" "}
+          {wholeClub || !narrowedByDefault ? "Whole club" : scope ? scope.name : "My teams"} ·
+          printed{" "}
+          {new Date().toLocaleDateString("en-GB", {
+            timeZone: "Europe/London",
+            day: "numeric",
+            month: "long",
+            year: "numeric",
+          })}
+        </p>
 
         {error ? (
           <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
