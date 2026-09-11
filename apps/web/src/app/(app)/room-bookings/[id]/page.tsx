@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import { StatusForm } from "../status-form";
 import { PaymentsPanel } from "../payments-panel";
+import { ReplyForm } from "../reply-form";
 import { addInternalNote } from "../actions";
 import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
@@ -89,16 +90,15 @@ export default async function RoomBookingDetailPage({
   // enquiry or a quote about a taken night is allowed (asking is free), but
   // the desk must see the clash before it reaches for Confirm — the constraint
   // would refuse that click, and the refusal is a worse way to find out.
+  // A cancelled row is checked too: it can be re-quoted from this page, and
+  // the desk should know first if the night has gone to somebody else.
   const holdsRoom = booking.status === "confirmed" || booking.status === "pending";
-  const { data: clashRows } =
-    booking.status === "cancelled"
-      ? { data: [] }
-      : await admin.rpc("booking_conflicts", {
-          p_resource_id: booking.resource_id,
-          p_starts_at: booking.starts_at,
-          p_ends_at: booking.ends_at,
-          p_exclude_booking_id: id,
-        });
+  const { data: clashRows } = await admin.rpc("booking_conflicts", {
+    p_resource_id: booking.resource_id,
+    p_starts_at: booking.starts_at,
+    p_ends_at: booking.ends_at,
+    p_exclude_booking_id: id,
+  });
   const clashes = (clashRows ?? []).map((row) => {
     const w = instantsToLocalWindow(row.starts_at, row.ends_at);
     return {
@@ -150,7 +150,9 @@ export default async function RoomBookingDetailPage({
               <p className="font-semibold text-destructive">
                 {holdsRoom
                   ? "Another booking overlaps this one on the same room"
-                  : "This slot is already taken — this request is not holding the room"}
+                  : booking.status === "cancelled"
+                    ? "This slot has since been taken — it cannot be re-quoted"
+                    : "This slot is already taken — this request is not holding the room"}
               </p>
               <ul className="mt-2 space-y-1">
                 {clashes.map((c) => (
@@ -164,7 +166,7 @@ export default async function RoomBookingDetailPage({
                   </li>
                 ))}
               </ul>
-              {!holdsRoom && (
+              {!holdsRoom && booking.status !== "cancelled" && (
                 <p className="mt-2 text-muted-foreground">
                   Confirming this one will be refused while the other stands. Reply with alternatives, or cancel the other booking first.
                 </p>
@@ -219,9 +221,104 @@ export default async function RoomBookingDetailPage({
                   value={`${formatCurrency(booking.security_deposit_pence)} (refundable — 18th birthday)`}
                 />
               )}
-              {booking.total_pence !== null && <Detail label="Quoted price" value={formatCurrency(booking.total_pence)} />}
+              {booking.total_pence !== null && (
+                <Detail
+                  label={
+                    booking.final_chaser_discount_pence
+                      ? "Quoted price (final offer)"
+                      : booking.status === "enquiry" || booking.status === "pending"
+                        ? "Estimated price"
+                        : booking.status === "confirmed"
+                          ? "Agreed price"
+                          : "Quoted price"
+                  }
+                  value={
+                    booking.final_chaser_discount_pence
+                      ? `${formatCurrency(booking.total_pence)} — was ${formatCurrency(booking.total_pence + booking.final_chaser_discount_pence)}`
+                      : formatCurrency(booking.total_pence)
+                  }
+                />
+              )}
             </CardContent>
           </Card>
+
+          {/* The cost, in its parts (Adam, 2026-09-11: "the cost details need
+              to pull through to enquiries"). The public form records the room
+              hire and the extras separately; older rows have only a total. */}
+          {(booking.total_pence !== null || booking.base_hire_pence > 0 || booking.extras_total_pence > 0) && (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {booking.status === "enquiry" || booking.status === "pending"
+                    ? "Estimated cost"
+                    : booking.status === "confirmed"
+                      ? "Agreed cost"
+                      : "Quoted cost"}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <dl className="space-y-1.5 text-sm">
+                  {booking.base_hire_pence > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Room hire ({window.startTime}–{window.endTime})</dt>
+                      <dd className="tabular-nums">{formatCurrency(booking.base_hire_pence)}</dd>
+                    </div>
+                  )}
+                  {booking.extras_total_pence > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">
+                        Extras{extrasSummary(booking.selected_extras) ? ` — ${extrasSummary(booking.selected_extras)}` : ""}
+                      </dt>
+                      <dd className="tabular-nums">{formatCurrency(booking.extras_total_pence)}</dd>
+                    </div>
+                  )}
+                  {(booking.member_discount_pence ?? 0) > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Member discount</dt>
+                      <dd className="tabular-nums">−{formatCurrency(booking.member_discount_pence ?? 0)}</dd>
+                    </div>
+                  )}
+                  {(booking.final_chaser_discount_pence ?? 0) > 0 && (
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Final offer — half off room hire</dt>
+                      <dd className="tabular-nums">−{formatCurrency(booking.final_chaser_discount_pence ?? 0)}</dd>
+                    </div>
+                  )}
+                  <div className="flex justify-between gap-4 border-t pt-1.5 font-semibold">
+                    <dt>Total</dt>
+                    <dd className="tabular-nums">{booking.total_pence !== null ? formatCurrency(booking.total_pence) : "—"}</dd>
+                  </div>
+                  {(booking.security_deposit_pence ?? 0) > 0 && (
+                    <div className="flex justify-between gap-4 text-muted-foreground">
+                      <dt>Refundable security deposit (18th birthday), on top</dt>
+                      <dd className="tabular-nums">{formatCurrency(booking.security_deposit_pence ?? 0)}</dd>
+                    </div>
+                  )}
+                </dl>
+                {(booking.status === "enquiry" || booking.status === "pending") && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    The public form&apos;s estimate at the room&apos;s current prices. Send a quote to put the club&apos;s price on it; a member discount is applied at confirmation once the claim is checked.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Email the booker (Adam, 2026-09-11): a plain reply from the desk,
+              logged and audited. Any booking with an address, not only an
+              enquiry. */}
+          {booking.kind !== "block" && booking.booker_email.includes("@") && (
+            <Card>
+              <CardHeader><CardTitle>Email the booker</CardTitle></CardHeader>
+              <CardContent>
+                <ReplyForm
+                  bookingId={id}
+                  bookerEmail={booking.booker_email}
+                  defaultSubject={`Re: your ${booking.status === "enquiry" ? "enquiry" : "booking"} — ${roomName}, ${formatBookingDate(window.date)}`}
+                />
+              </CardContent>
+            </Card>
+          )}
 
           {/* Booker details */}
           <Card>
@@ -312,6 +409,9 @@ export default async function RoomBookingDetailPage({
                   defaultDepositPence={defaultDepositPence}
                   currentTotalPence={totalPence || null}
                   currentDepositPence={depositPence || null}
+                  chaserSentAt={booking.chaser_sent_at}
+                  finalChaserSentAt={booking.final_chaser_sent_at}
+                  finalChaserDiscountPence={booking.final_chaser_discount_pence}
                 />
               </CardContent>
             </Card>

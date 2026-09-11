@@ -8,7 +8,7 @@ import { writeAudit } from "@/lib/audit";
 import { upsertBookingContact } from "@/lib/booking-contacts";
 import { joinContactName } from "@/lib/person-name";
 import { sendEmail } from "@/lib/email";
-import { renderEmailTemplate } from "@/lib/template-engine";
+import { emailLayout, renderEmailTemplate } from "@/lib/template-engine";
 import { getEmailBrandColor, getSettings, getRecipientEmails } from "@/lib/settings";
 import { createCalendarEvent, deleteCalendarEvent } from "@/lib/calendar";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
@@ -1067,7 +1067,11 @@ export async function declineAndDeleteSeries(
  */
 export async function sendQuote(
   bookingId: string,
-  input: { totalPence: number | null },
+  input: {
+    totalPence: number | null;
+    /** A note from the desk, sent inside the quote email (Adam, 2026-09-11: "ability to email along with the quote"). */
+    message?: string | null;
+  },
 ): Promise<{ error?: string }> {
   const session = await getSessionProfile();
   if (!session || !isSuperUser(session.profile?.role)) return { error: "Not authorised." };
@@ -1078,12 +1082,30 @@ export async function sendQuote(
   const admin = createAdminClient();
   const { data: booking } = await admin
     .from("bookings")
-    .select("id,status,booker_name,booker_email,starts_at,ends_at,resources(name)")
+    .select("id,status,kind,resource_id,booker_name,booker_email,starts_at,ends_at,resources(name)")
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking) return { error: "Booking not found." };
-  if (booking.status === "confirmed" || booking.status === "cancelled") {
-    return { error: "Only an enquiry or a pending request can be quoted." };
+  if (booking.status === "confirmed") {
+    return { error: "A confirmed booking is not quoted — cancel it first if the price has to change." };
+  }
+  if (booking.kind === "block") return { error: "A block booking has nobody to quote." };
+  if (booking.starts_at <= new Date().toISOString()) return { error: "That date has passed." };
+  // A cancelled booking — the cron's auto-cancel for a missed deposit most
+  // often — is re-quoted from here (Adam, 2026-09-11: "email bookers where
+  // bookings have been auto cancelled and re-quoting"). Quoting holds
+  // nothing, so it cannot collide; but a quote for a night somebody else has
+  // since taken would be a promise the club cannot keep.
+  const reopening = booking.status === "cancelled";
+  if (
+    await slotHasConflict(admin, {
+      resourceId: booking.resource_id,
+      startsAt: booking.starts_at,
+      endsAt: booking.ends_at,
+      excludeBookingId: booking.id,
+    })
+  ) {
+    return { error: "Another booking now holds this slot — there is nothing to quote." };
   }
 
   const { error } = await admin
@@ -1092,6 +1114,9 @@ export async function sendQuote(
       status: "quoted",
       total_pence: input.totalPence,
       quote_followup_sent_at: null,
+      // A reopened booking starts its money over: the old deadlines belonged
+      // to the confirmation that lapsed.
+      ...(reopening ? { deposit_due_date: null, balance_due_date: null, calendar_event_id: null } : {}),
     })
     .eq("id", bookingId);
   if (error) return { error: conflictOrMessage(error, "The database refused that.") };
@@ -1109,6 +1134,7 @@ export async function sendQuote(
           start_time: window.startTime,
           end_time: window.endTime,
           total_cost: formatCurrency(input.totalPence),
+          message: input.message?.trim() ? typedTextToHtml(input.message.trim()) : "",
           portal_url: `${getSiteUrl()}/portal`,
         },
         brandColor,
@@ -1128,10 +1154,295 @@ export async function sendQuote(
   await writeAudit({
     actorId: session.userId,
     actorEmail: session.email,
-    action: "quote",
+    action: reopening ? "requote_after_cancel" : "quote",
     entity: "room_booking",
     entityId: bookingId,
-    detail: { total_pence: input.totalPence },
+    detail: { total_pence: input.totalPence, with_message: Boolean(input.message?.trim()) },
+  });
+
+  revalidatePath(`/room-bookings/${bookingId}`);
+  revalidatePath("/room-bookings");
+  return {};
+}
+
+// ---------------------------------------------------------------------------
+// Two chasers for a room that was asked about and never taken (Adam,
+// 2026-09-11: "a chaser email for quoted and enquiries, asking if they still
+// want the room … a final chaser email where we will deduct 50% off the
+// room … it needs to amend the quote and include these details in the
+// email … initiated by staff members"). Neither holds the room; both are
+// desk buttons, not cron jobs.
+// ---------------------------------------------------------------------------
+
+type ChaserBooking = {
+  id: string;
+  status: BookingStatus;
+  booker_name: string;
+  booker_email: string;
+  starts_at: string;
+  ends_at: string;
+  resource_id: string;
+  total_pence: number | null;
+  base_hire_pence: number;
+  extras_total_pence: number;
+  final_chaser_sent_at: string | null;
+  resources: { name: string } | null;
+};
+
+/** The booking a chaser may go to, or the reason it may not. */
+async function chaserTarget(
+  admin: AdminClient,
+  bookingId: string,
+): Promise<{ booking: ChaserBooking } | { error: string }> {
+  const { data } = await admin
+    .from("bookings")
+    .select(
+      "id,status,booker_name,booker_email,starts_at,ends_at,resource_id,total_pence,base_hire_pence,extras_total_pence,final_chaser_sent_at,resources(name)",
+    )
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!data) return { error: "Booking not found." };
+  const booking = data as unknown as ChaserBooking;
+  if (booking.status !== "enquiry" && booking.status !== "quoted") {
+    return { error: "Only an enquiry or a quoted booking can be chased." };
+  }
+  if (!booking.booker_email || booking.booker_email === "—") {
+    return { error: "This booking has no email address to chase." };
+  }
+  if (booking.starts_at <= new Date().toISOString()) {
+    return { error: "That date has passed." };
+  }
+  // Chasing somebody for a night another booking now holds would be an offer
+  // the club cannot honour.
+  if (
+    await slotHasConflict(admin, {
+      resourceId: booking.resource_id,
+      startsAt: booking.starts_at,
+      endsAt: booking.ends_at,
+      excludeBookingId: booking.id,
+    })
+  ) {
+    return { error: "Another booking now holds this slot — there is nothing to offer them." };
+  }
+  return { booking };
+}
+
+/** Typed text as safe email HTML: escaped, blank-line paragraphs, line breaks kept. */
+function typedTextToHtml(text: string): string {
+  const escaped = text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  return escaped
+    .split(/\n{2,}/)
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map((para) => `<p style="margin:0 0 14px;font-size:15px;color:#374151;line-height:1.6;">${para.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+/**
+ * A plain email from the desk to the booker (Adam, 2026-09-11: "the ability
+ * to email enquiry bookers back, with audit trail"). Any booking with an
+ * address — an enquiry most often, but a quote or a confirmed hire too.
+ * Logged in outbound_messages against the booking (so it is in the page's
+ * email list) and as an audit row naming the sender and the subject.
+ */
+export async function replyToBooker(
+  bookingId: string,
+  input: { subject: string; message: string },
+): Promise<{ error?: string }> {
+  const session = await requireStaff();
+  const subject = input.subject.trim();
+  const message = input.message.trim();
+  if (!subject) return { error: "Give the email a subject." };
+  if (!message) return { error: "Write the message first." };
+  if (message.length > 10_000) return { error: "That message is too long for one email." };
+
+  const admin = createAdminClient();
+  const { data: booking } = await admin
+    .from("bookings")
+    .select("id,kind,booker_name,booker_email,starts_at,ends_at,resources(name)")
+    .eq("id", bookingId)
+    .maybeSingle();
+  if (!booking) return { error: "Booking not found." };
+  if (booking.kind === "block") return { error: "A block booking has nobody to email." };
+  if (!booking.booker_email || booking.booker_email === "—" || !booking.booker_email.includes("@")) {
+    return { error: "This booking has no email address." };
+  }
+
+  const senderName = session.profile?.full_name || session.email || "The club";
+  try {
+    const [brandColor, settings] = await Promise.all([
+      getEmailBrandColor().catch(() => "#1249bf"),
+      getSettings(),
+    ]);
+    const body = typedTextToHtml(message)
+      + `<p style="margin:14px 0 0;font-size:13px;color:#6b7280;">${settings.club_name} · sent by ${senderName.replace(/</g, "&lt;")}</p>`;
+    await sendEmail({
+      to: booking.booker_email,
+      subject,
+      html: emailLayout(body, brandColor, settings.club_name),
+      text: `${message}\n\n${settings.club_name} · sent by ${senderName}`,
+      template: "staff_reply",
+      entity: "bookings",
+      entityId: bookingId,
+    });
+  } catch (e) {
+    console.error("[room-booking] reply email failed:", e);
+    return { error: "The email could not be sent." };
+  }
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "email_booker",
+    entity: "room_booking",
+    entityId: bookingId,
+    detail: { to: booking.booker_email, subject, sent_by: senderName },
+  });
+
+  revalidatePath(`/room-bookings/${bookingId}`);
+  return {};
+}
+
+/** "Do you still want the room?" — re-sendable; the latest send is recorded. */
+export async function sendChaser(bookingId: string): Promise<{ error?: string }> {
+  const session = await requireStaff();
+  const admin = createAdminClient();
+  const target = await chaserTarget(admin, bookingId);
+  if ("error" in target) return { error: target.error };
+  const { booking } = target;
+
+  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
+  const brandColor = await getEmailBrandColor().catch(() => undefined);
+  try {
+    const tpl = await renderEmailTemplate(
+      "room_booking_chaser",
+      {
+        name: booking.booker_name || "there",
+        room_name: booking.resources?.name ?? "Function room",
+        booking_date: formatBookingDate(window.date),
+        start_time: window.startTime,
+        end_time: window.endTime,
+        // An enquiry's price is the form's estimate; a quote's is the club's word.
+        price_line: booking.total_pence
+          ? booking.status === "quoted"
+            ? `The price we quoted was ${formatCurrency(booking.total_pence)}.`
+            : `The estimated price for this was ${formatCurrency(booking.total_pence)}, subject to confirmation.`
+          : "",
+        portal_url: `${getSiteUrl()}/portal`,
+      },
+      brandColor,
+    );
+    await sendEmail({
+      to: booking.booker_email,
+      ...tpl,
+      template: "room_booking_chaser",
+      entity: "bookings",
+      entityId: bookingId,
+    });
+  } catch (e) {
+    console.error("[room-booking] chaser email failed:", e);
+    return { error: "The email could not be sent." };
+  }
+
+  await admin
+    .from("bookings")
+    .update({ chaser_sent_at: new Date().toISOString() })
+    .eq("id", bookingId);
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "chaser",
+    entity: "room_booking",
+    entityId: bookingId,
+  });
+
+  revalidatePath(`/room-bookings/${bookingId}`);
+  return {};
+}
+
+/**
+ * The last offer: half off the room hire (the hire alone — extras stay at
+ * their price). The quote is amended FIRST — total_pence becomes the new
+ * price and the row is `quoted` — so what the email promises is what the
+ * portal shows and what Confirm prefills. Goes once per booking.
+ */
+export async function sendFinalChaser(bookingId: string): Promise<{ error?: string }> {
+  const session = await requireStaff();
+  const admin = createAdminClient();
+  const target = await chaserTarget(admin, bookingId);
+  if ("error" in target) return { error: target.error };
+  const { booking } = target;
+
+  if (booking.final_chaser_sent_at) return { error: "The final offer has already gone to this booker." };
+  const originalPence = Number(booking.total_pence ?? 0);
+  if (originalPence <= 0) return { error: "Send a quote first — there is no price to halve." };
+  // The room hire is what gets halved. A booking from the public form has it
+  // split out; an older or desk-typed one has only a total, which is then
+  // the hire less any extras it carries.
+  const hirePence =
+    booking.base_hire_pence > 0
+      ? Math.min(booking.base_hire_pence, originalPence)
+      : Math.max(0, originalPence - Number(booking.extras_total_pence ?? 0));
+  const discountPence = Math.round(hirePence / 2);
+  if (discountPence <= 0) return { error: "There is no room hire in this price to halve." };
+  const newPence = originalPence - discountPence;
+
+  // Amend the quote before a word of it is promised.
+  const { error } = await admin
+    .from("bookings")
+    .update({
+      status: "quoted",
+      total_pence: newPence,
+      final_chaser_discount_pence: discountPence,
+      final_chaser_sent_at: new Date().toISOString(),
+      // The cron's automatic quote nudge must not land on top of this.
+      quote_followup_sent_at: new Date().toISOString(),
+    })
+    .eq("id", bookingId);
+  if (error) return { error: conflictOrMessage(error, "The database refused that.") };
+
+  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
+  const brandColor = await getEmailBrandColor().catch(() => undefined);
+  try {
+    const tpl = await renderEmailTemplate(
+      "room_booking_final_chaser",
+      {
+        name: booking.booker_name || "there",
+        room_name: booking.resources?.name ?? "Function room",
+        booking_date: formatBookingDate(window.date),
+        start_time: window.startTime,
+        end_time: window.endTime,
+        original_cost: formatCurrency(originalPence),
+        discount: formatCurrency(discountPence),
+        new_cost: formatCurrency(newPence),
+        portal_url: `${getSiteUrl()}/portal`,
+      },
+      brandColor,
+    );
+    await sendEmail({
+      to: booking.booker_email,
+      ...tpl,
+      template: "room_booking_final_chaser",
+      entity: "bookings",
+      entityId: bookingId,
+    });
+  } catch (e) {
+    console.error("[room-booking] final chaser email failed:", e);
+    return { error: "The quote was amended but the email could not be sent — re-send it from Email Templates or by hand." };
+  }
+
+  await writeAudit({
+    actorId: session.userId,
+    actorEmail: session.email,
+    action: "final_chaser",
+    entity: "room_booking",
+    entityId: bookingId,
+    detail: { original_pence: originalPence, discount_pence: discountPence, new_total_pence: newPence },
   });
 
   revalidatePath(`/room-bookings/${bookingId}`);

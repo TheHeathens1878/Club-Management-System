@@ -12,6 +12,8 @@ export type TemplateKey =
   | "balance_reminder"
   | "room_booking_quote"
   | "quote_followup"
+  | "room_booking_chaser"
+  | "room_booking_final_chaser"
   | "room_booking_thank_you"
   | "fixture_reallocated"
   | "password_set";
@@ -146,11 +148,13 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "start_time", label: "Start time", example: "19:00" },
       { key: "end_time", label: "End time", example: "23:00" },
       { key: "total_cost", label: "Quoted total", example: "£350.00" },
+      { key: "message", label: "Personal message typed by staff when sending (blank if none)", example: "We can also do a later finish if you need it." },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — your quote`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
 <p>Thank you for your interest in hiring the {{room_name}} at ${c}. For {{booking_date}}, {{start_time}} – {{end_time}}, the price would be <strong>{{total_cost}}</strong>.</p>
+{{message}}
 <p>Please note the date is <strong>not held</strong> by this quote — it stays open to other bookings until you confirm one with us.</p>
 <p>To go ahead, just reply to this email or contact the club, and we will confirm the booking with you.</p>
 <p><a href="{{portal_url}}">View this in your portal</a></p>`,
@@ -170,6 +174,53 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
     defaultBody: () => `<p>Dear {{name}},</p>
 <p>A few days ago we quoted <strong>{{total_cost}}</strong> for the {{room_name}} on {{booking_date}}. The date is still open — and still not held — so if you would like to go ahead, reply to this email or contact the club and we will confirm it for you.</p>
 <p>If your plans have changed, no need to do anything.</p>
+<p><a href="{{portal_url}}">View this in your portal</a></p>`,
+  },
+
+  room_booking_chaser: {
+    name: "Chaser — still want the room?",
+    description: "Sent by staff to an enquiry or a quoted booking that has gone quiet, asking whether they still want the room.",
+    variables: [
+      { key: "name", label: "Booker name", example: "Jane Smith" },
+      { key: "room_name", label: "Room name", example: "Main Function Room" },
+      { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
+      { key: "start_time", label: "Start time", example: "19:00" },
+      { key: "end_time", label: "End time", example: "23:00" },
+      { key: "price_line", label: "Price sentence (blank if nothing has been quoted)", example: "The price we quoted was £350.00." },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
+    ],
+    defaultSubject: (c) => `${c} — do you still want the room on {{booking_date}}?`,
+    defaultBody: (c) => `<p>Dear {{name}},</p>
+<p>You asked about the <strong>{{room_name}}</strong> at ${c} on <strong>{{booking_date}}</strong>, {{start_time}} – {{end_time}}, and we have not heard back from you since.</p>
+<p>{{price_line}}</p>
+<p>Do you still want the room? The date is not held for you, so if you would like to go ahead please reply to this email or contact the club and we will confirm it. If your plans have changed, just let us know and we will close the enquiry.</p>
+<p><a href="{{portal_url}}">View this in your portal</a></p>`,
+  },
+
+  room_booking_final_chaser: {
+    name: "Final chaser — half off the room hire",
+    description: "Sent once by staff as a last offer: the room hire is halved and the quote is amended to the new price before this goes.",
+    variables: [
+      { key: "name", label: "Booker name", example: "Jane Smith" },
+      { key: "room_name", label: "Room name", example: "Main Function Room" },
+      { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
+      { key: "start_time", label: "Start time", example: "19:00" },
+      { key: "end_time", label: "End time", example: "23:00" },
+      { key: "original_cost", label: "Price before the offer", example: "£350.00" },
+      { key: "discount", label: "Amount taken off (half the room hire)", example: "£150.00" },
+      { key: "new_cost", label: "New total", example: "£200.00" },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
+    ],
+    defaultSubject: (c) => `${c} — a final offer on the room for {{booking_date}}`,
+    defaultBody: (c) => `<p>Dear {{name}},</p>
+<p>We still have the <strong>{{room_name}}</strong> at ${c} free on <strong>{{booking_date}}</strong>, {{start_time}} – {{end_time}}, and we would rather it was used than empty.</p>
+<p>So here is a final offer: <strong>half off the room hire</strong>.</p>
+<ul>
+<li><strong>Price quoted:</strong> {{original_cost}}</li>
+<li><strong>Less half the room hire:</strong> −{{discount}}</li>
+<li><strong>New total:</strong> {{new_cost}}</li>
+</ul>
+<p>Your quote has been updated to the new total. The date is still not held for you — reply to this email or contact the club and we will confirm it at this price. If we do not hear from you, we will take it that your plans have changed.</p>
 <p><a href="{{portal_url}}">View this in your portal</a></p>`,
   },
 
