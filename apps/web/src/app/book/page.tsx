@@ -5,7 +5,7 @@ import { parseExtrasConfig } from "@/lib/booking-extras";
 import { standardHireSentence } from "@/lib/room-pricing";
 import { formatCurrency } from "@/lib/utils";
 import { Users, Clock, Info } from "lucide-react";
-import { addDays, instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
+import { instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 export const metadata = { title: "Function room hire" };
@@ -39,15 +39,13 @@ export default async function BookPage() {
     .order("sort_order")
     .order("created_at");
 
-  // Availability is shown three London months ahead. The period is
-  // timestamptz, so the cut-off is midnight London at the start of the day
-  // after the last date we want.
-  const threeMonthsOut = new Date();
-  threeMonthsOut.setMonth(threeMonthsOut.getMonth() + 3);
-  const lastDate = londonToday(threeMonthsOut);
-
-  // Function-room slots only: `bookings` also holds every pitch booking
-  // (fixtures, training), which are no business of the room availability grid.
+  // Every future slot that is held, however far ahead. This used to stop three
+  // months out while the calendar let a visitor page as far ahead as they
+  // liked, so a wedding confirmed for next July showed as a free date and an
+  // enquiry landed on top of it (Adam, 2026-09-11: "it should show the room
+  // as busy in public view if it is confirmed"). Function rooms only —
+  // `bookings` also holds every pitch booking. The period is timestamptz, so
+  // "from today" is midnight London at the start of today.
   const { data: rawBookings } = await admin
     .from("bookings")
     .select("resource_id, starts_at, ends_at")
@@ -56,7 +54,8 @@ export default async function BookPage() {
       (rooms ?? []).map((room) => room.id),
     )
     .in("status", ["pending", "confirmed"])
-    .lt("starts_at", localToInstant(addDays(lastDate, 1), "00:00"));
+    .gte("ends_at", localToInstant(londonToday(), "00:00"))
+    .order("starts_at");
 
   const roomList = (rooms ?? []).map((r) => ({
     id: r.id,

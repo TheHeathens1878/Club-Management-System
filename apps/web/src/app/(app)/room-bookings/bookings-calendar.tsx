@@ -20,9 +20,16 @@ const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 function pad(n: number) { return String(n).padStart(2, "0"); }
 
-/** `YYYY-MM` split into definite numbers; falls back to the current month. */
-function parseYm(ym: string): { year: number; month: number } {
-  const match = /^(d{4})-(d{2})$/.exec(ym);
+/**
+ * `YYYY-MM` split into definite numbers; falls back to the current month.
+ *
+ * Exported for its test: from P1.6 until 2026-09-11 the pattern here had lost
+ * its backslashes (`d{4}`, matching the letter d), so every month string
+ * failed to parse, every render fell back to the current month, and the
+ * prev/next buttons appeared to do nothing.
+ */
+export function parseYm(ym: string): { year: number; month: number } {
+  const match = /^(\d{4})-(\d{2})$/.exec(ym);
   if (!match) {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() + 1 };
@@ -40,15 +47,28 @@ function getCalendarGrid(year: number, month: number): (number | null)[] {
   return grid;
 }
 
-// Status-based colour: green=confirmed, yellow=pending, red=cancelled, amber=blocked
+// Status-based colour. Only `confirmed` (and a block) holds the room, and only
+// it is green: an enquiry or a quote is a conversation about a date, not a
+// claim on it, and painting those green is how one confirmed booking looked
+// like three bookings on the same night.
 function bookingColor(status: BookingStatus, kind: BookingKind): string {
   if (kind === "block") return "bg-amber-100 text-amber-800 border-amber-200";
   if (status === "cancelled") return "bg-red-100 text-red-800 border-red-200";
   if (status === "pending") return "bg-amber-50 text-yellow-800 border-yellow-300";
+  if (status === "enquiry") return "border-dashed bg-slate-50 text-slate-600 border-slate-300";
+  if (status === "quoted") return "border-dashed bg-violet-50 text-violet-800 border-violet-300";
   return "bg-green-100 text-green-800 border-green-200"; // confirmed
 }
 
-function buildMonthRange(from: string, to: string): string[] {
+/** The bracketed word after the booker's name on a chip, for anything not holding the room. */
+export function statusTag(status: BookingStatus): string {
+  if (status === "pending") return " (PENDING)";
+  if (status === "enquiry") return " (ENQUIRY)";
+  if (status === "quoted") return " (QUOTED)";
+  return "";
+}
+
+export function buildMonthRange(from: string, to: string): string[] {
   const months: string[] = [];
   const { year: fy, month: fm } = parseYm(from);
   const { year: ty, month: tm } = parseYm(to);
@@ -136,11 +156,10 @@ function MonthGrid({
                   <div className="space-y-0.5">
                     {dayBookings.map((b, bi) => {
                       const rName = roomName[b.resource_id] ?? "";
-                      const isPending = b.status === "pending";
                       const label =
                         b.kind === "block"
                           ? "Blocked"
-                          : `${b.start_time} ${b.booker_name}${isPending ? " (PENDING)" : ""} (${rName})`;
+                          : `${b.start_time} ${b.booker_name}${statusTag(b.status)} (${rName})`;
 
                       const chip = (
                         <span className={`cal-chip block rounded border px-1 py-0.5 text-[9px] leading-tight font-medium truncate ${bookingColor(b.status, b.kind)} ${bi >= 3 && !forPrint ? "hidden" : ""}`}>
@@ -263,6 +282,8 @@ export function BookingsCalendar({
             {[
               { label: "Confirmed", color: "#dcfce7", border: "#86efac" },
               { label: "Pending", color: "#fefce8", border: "#fde047" },
+              { label: "Enquiry (not held)", color: "#f8fafc", border: "#cbd5e1" },
+              { label: "Quoted (not held)", color: "#f5f3ff", border: "#c4b5fd" },
               { label: "Cancelled", color: "#fee2e2", border: "#fca5a5" },
               { label: "Staff away", color: "#fef2f2", border: "#fca5a5" },
               { label: "Blocked", color: "#fef9c3", border: "#fde047" },
@@ -357,6 +378,8 @@ export function BookingsCalendar({
         {[
           { label: "Confirmed", color: "bg-green-100 border-green-200" },
           { label: "Pending", color: "bg-amber-50 border-yellow-300" },
+          { label: "Enquiry (not held)", color: "border-dashed bg-slate-50 border-slate-300" },
+          { label: "Quoted (not held)", color: "border-dashed bg-violet-50 border-violet-300" },
           { label: "Cancelled", color: "bg-red-100 border-red-200" },
           { label: "Staff away", color: "bg-red-50 border-red-200" },
           { label: "Blocked", color: "bg-amber-100 border-amber-200" },
