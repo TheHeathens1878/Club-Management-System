@@ -868,6 +868,7 @@ export type Database = {
           booker_profile_id: string | null
           calendar_event_id: string | null
           cancellation_warning_sent_at: string | null
+          chaser_sent_at: string | null
           child_name: string | null
           child_team: string | null
           confirmation_note: string | null
@@ -881,6 +882,8 @@ export type Database = {
           ends_at: string
           estimated_guests: number | null
           extras_total_pence: number
+          final_chaser_discount_pence: number | null
+          final_chaser_sent_at: string | null
           fixture_id: string | null
           id: string
           internal_notes: string | null
@@ -936,6 +939,7 @@ export type Database = {
           booker_profile_id?: string | null
           calendar_event_id?: string | null
           cancellation_warning_sent_at?: string | null
+          chaser_sent_at?: string | null
           child_name?: string | null
           child_team?: string | null
           confirmation_note?: string | null
@@ -949,6 +953,8 @@ export type Database = {
           ends_at: string
           estimated_guests?: number | null
           extras_total_pence?: number
+          final_chaser_discount_pence?: number | null
+          final_chaser_sent_at?: string | null
           fixture_id?: string | null
           id?: string
           internal_notes?: string | null
@@ -1004,6 +1010,7 @@ export type Database = {
           booker_profile_id?: string | null
           calendar_event_id?: string | null
           cancellation_warning_sent_at?: string | null
+          chaser_sent_at?: string | null
           child_name?: string | null
           child_team?: string | null
           confirmation_note?: string | null
@@ -1017,6 +1024,8 @@ export type Database = {
           ends_at?: string
           estimated_guests?: number | null
           extras_total_pence?: number
+          final_chaser_discount_pence?: number | null
+          final_chaser_sent_at?: string | null
           fixture_id?: string | null
           id?: string
           internal_notes?: string | null
@@ -6333,6 +6342,7 @@ export type Database = {
           booker_profile_id: string | null
           calendar_event_id: string | null
           cancellation_warning_sent_at: string | null
+          chaser_sent_at: string | null
           child_name: string | null
           child_team: string | null
           confirmation_note: string | null
@@ -6346,6 +6356,8 @@ export type Database = {
           ends_at: string
           estimated_guests: number | null
           extras_total_pence: number
+          final_chaser_discount_pence: number | null
+          final_chaser_sent_at: string | null
           fixture_id: string | null
           id: string
           internal_notes: string | null
