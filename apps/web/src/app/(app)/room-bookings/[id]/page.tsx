@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { extrasSummary } from "@/lib/booking-extras";
 import { SecurityDepositCard } from "../security-deposit-card";
@@ -84,6 +85,30 @@ export default async function RoomBookingDetailPage({
   // The period is timestamptz; this page has always shown London wall clock.
   const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
 
+  // Does a row that is NOT holding the room sit on top of one that is? An
+  // enquiry or a quote about a taken night is allowed (asking is free), but
+  // the desk must see the clash before it reaches for Confirm — the constraint
+  // would refuse that click, and the refusal is a worse way to find out.
+  const holdsRoom = booking.status === "confirmed" || booking.status === "pending";
+  const { data: clashRows } =
+    booking.status === "cancelled"
+      ? { data: [] }
+      : await admin.rpc("booking_conflicts", {
+          p_resource_id: booking.resource_id,
+          p_starts_at: booking.starts_at,
+          p_ends_at: booking.ends_at,
+          p_exclude_booking_id: id,
+        });
+  const clashes = (clashRows ?? []).map((row) => {
+    const w = instantsToLocalWindow(row.starts_at, row.ends_at);
+    return {
+      id: row.id,
+      who: row.kind === "block" ? "Blocked by the club" : row.booker_name,
+      status: row.status,
+      when: `${w.startTime}–${w.endTime}`,
+    };
+  });
+
   const payments = (paymentRows ?? []).map((p) => ({
     id: p.id,
     amount_pence: p.amount_pence,
@@ -120,6 +145,33 @@ export default async function RoomBookingDetailPage({
 
       <div className="grid gap-4 p-4 lg:grid-cols-3 lg:gap-6 lg:p-6">
         <div className="space-y-4 lg:col-span-2 lg:space-y-6">
+          {clashes.length > 0 && (
+            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
+              <p className="font-semibold text-destructive">
+                {holdsRoom
+                  ? "Another booking overlaps this one on the same room"
+                  : "This slot is already taken — this request is not holding the room"}
+              </p>
+              <ul className="mt-2 space-y-1">
+                {clashes.map((c) => (
+                  <li key={c.id}>
+                    <Link href={`/room-bookings/${c.id}`} className="text-primary hover:underline">
+                      {c.who}
+                    </Link>{" "}
+                    <span className="text-muted-foreground">
+                      · {c.when} · {c.status}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              {!holdsRoom && (
+                <p className="mt-2 text-muted-foreground">
+                  Confirming this one will be refused while the other stands. Reply with alternatives, or cancel the other booking first.
+                </p>
+              )}
+            </div>
+          )}
+
           {/* Booking details */}
           <Card>
             <CardHeader className="flex-row items-center justify-between gap-2">
@@ -128,6 +180,9 @@ export default async function RoomBookingDetailPage({
                 <Badge variant={statusVariant(booking.status)} className="capitalize">
                   {booking.status}
                 </Badge>
+                {(booking.status === "enquiry" || booking.status === "quoted") && (
+                  <Badge variant="muted">Not holding the room</Badge>
+                )}
                 {booking.payment_status === "paid" && (
                   <Badge variant="success">Paid</Badge>
                 )}

@@ -172,11 +172,12 @@ export async function submitBooking(
 
   // `booking_has_conflict()` applies exactly the rule `bookings_no_overlap`
   // enforces, so the answer here and the constraint below cannot disagree
-  // about an edge; the constraint still guards against a race. An enquiry
-  // skips it: it takes no slot, so there is nothing to conflict with.
-  if (!isEnquiry && (await slotHasConflict(admin, { resourceId: roomId, startsAt, endsAt }))) {
-    return { error: SLOT_TAKEN_MESSAGE };
-  }
+  // about an edge; the constraint still guards against a race. An enquiry is
+  // still allowed about a taken slot — it holds nothing, and asking is free —
+  // but nobody should have to discover the clash for themselves: the desk's
+  // notification leads with it and the enquirer's acknowledgement says it.
+  const slotTaken = await slotHasConflict(admin, { resourceId: roomId, startsAt, endsAt });
+  if (slotTaken && !isEnquiry) return { error: SLOT_TAKEN_MESSAGE };
 
   const amountPence = calcAmount(room, startTime, endTime);
 
@@ -298,6 +299,7 @@ export async function submitBooking(
 ${extrasLine}
 ${estimateLine}
 <p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>Please note: this is an enquiry only — the room is not held for you.</strong> The date stays open to other bookings until you confirm one with us.</p>
+${slotTaken ? '<p style="border-left:3px solid #dc2626;background:#fef2f2;padding:10px 14px;"><strong>This room already has a booking at that time.</strong> We will come back to you with what is available around it, or an alternative date.</p>' : ''}
 ${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, payable before the event and returned after it if all is well.</p>' : ''}
 ${accessLine}
 <p style="font-size:13px;color:#6b7280;">If you didn't send this enquiry, please contact us.</p>`
@@ -317,7 +319,7 @@ ${accessLine}
           : `${club_name} — booking request received`,
         html: bookerEmailHtml(intro, brandColor, club_name),
         text: isEnquiry
-          ? `Thank you for your enquiry at ${club_name}. ${room.name} on ${dateFormatted}, ${startTime}-${endTime}. Please note: this is an enquiry only - the room is NOT held for you until a booking is confirmed. Your portal: ${siteUrl}/portal`
+          ? `Thank you for your enquiry at ${club_name}. ${room.name} on ${dateFormatted}, ${startTime}-${endTime}. Please note: this is an enquiry only - the room is NOT held for you until a booking is confirmed.${slotTaken ? " This room already has a booking at that time; we will come back to you with alternatives." : ""} Your portal: ${siteUrl}/portal`
           : `Thank you for your booking request at ${club_name}. ${room.name} on ${dateFormatted}, ${startTime}-${endTime}. Access your portal: ${siteUrl}/portal`,
       });
     } catch (e) {
@@ -345,6 +347,9 @@ ${accessLine}
           estimatedGuests,
           notes:
             [
+              slotTaken
+                ? "CLASHES with a confirmed or pending booking on this room at this time — the enquirer has been told. Reply with alternatives; do not confirm this one as it stands."
+                : null,
               connection === "family"
                 ? `Member discount claimed (club family): ${childName ?? "?"} (${childTeam ?? "team not given"}) — check before quoting.`
                 : connection === "player"
