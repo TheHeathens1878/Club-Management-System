@@ -14,16 +14,25 @@ import { FUNCTION_ROOM } from "@/lib/booking-types";
 
 export const metadata = { title: "New internal booking" };
 
+// A refused booking — a clash, a missing name, a bad time — comes back to
+// this form as a message. It used to be thrown, and a thrown server-action
+// error is shown by Next in production as "Application error: a client-side
+// exception has occurred", which told the desk nothing.
 async function submitAction(formData: FormData): Promise<void> {
   "use server";
   const result = await createInternalBooking(formData);
-  if (result?.error) throw new Error(result.error);
+  if (result?.error) redirect(`/room-bookings/new?error=${encodeURIComponent(result.error)}`);
 }
 
-export default async function NewInternalBookingPage() {
+export default async function NewInternalBookingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   if (!isStaff(session.profile?.role)) redirect("/lobby");
+  const { error } = await searchParams;
 
   const admin = createAdminClient();
   const [{ data: rooms }, { data: contacts }] = await Promise.all([
@@ -55,6 +64,11 @@ export default async function NewInternalBookingPage() {
         }
       />
       <div className="max-w-2xl p-4 lg:p-6">
+        {error && (
+          <p role="alert" className="mb-4 rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            {error}
+          </p>
+        )}
         <form action={submitAction} className="space-y-4 lg:space-y-6">
           <Card>
             <CardHeader><CardTitle>Room &amp; timing</CardTitle></CardHeader>
