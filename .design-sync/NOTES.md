@@ -36,7 +36,7 @@ node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules ./node
 with `DS_CHROMIUM_PATH` set as above.
 
 ## Decisions
-- All 23 components sit in one group ("general"). Regrouping needs a matched doc with a `category`
+- All 22 components sit in one group ("general"). (SidebarNav left with the three-noun navigation, P7.5.) Regrouping needs a matched doc with a `category`
   frontmatter, and a matched doc replaces the synthesized prompt including its `## Examples` — the
   examples matter more to the design agent than grouping. Revisit only if the converter grows a
   group override.

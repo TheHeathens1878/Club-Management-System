@@ -6,10 +6,15 @@ import {
   allHrefs,
   contextHref,
   contextLabel,
+  destination,
+  destinationHref,
+  destinationLabel,
+  drawerItemsFor,
   itemsFor,
   linkHref,
   paletteEntries,
   sectionsOf,
+  visibleDestinations,
 } from "@/lib/destinations";
 import type { Capabilities } from "@/lib/role-view";
 
@@ -105,10 +110,27 @@ const RETIRED_MENU_HREFS = [
   "/settings/comms",
 ];
 
-describe("the five destinations", () => {
-  it("are Home, Calendar, Messages, Club, Me — in that order, always", () => {
-    expect(DESTINATIONS.map((d) => d.label)).toEqual(["Home", "Calendar", "Messages", "Club", "Me"]);
-    expect(DESTINATIONS.map((d) => d.href)).toEqual(["/lobby", "/events", "/messages", "/club", "/me"]);
+describe("the four nouns and two utilities", () => {
+  it("are Diary, People, Clubhouse, Money, then Inbox and Messages — in that order, always", () => {
+    expect(DESTINATIONS.map((d) => d.label)).toEqual(["Diary", "People", "Clubhouse", "Money", "Inbox", "Messages"]);
+    expect(DESTINATIONS.map((d) => d.kind)).toEqual(["noun", "noun", "noun", "noun", "utility", "utility"]);
+  });
+
+  it("shows the Clubhouse door to staff and to nobody else", () => {
+    expect(visibleDestinations(person()).map((d) => d.key)).toEqual(["diary", "people", "money", "inbox", "messages"]);
+    expect(visibleDestinations(clubAdmin).map((d) => d.key)).toContain("clubhouse");
+  });
+
+  it("names People and Money for the person looking at them", () => {
+    const people = destination("people");
+    const money = destination("money");
+    expect(destinationLabel(people, clubAdmin)).toBe("People");
+    expect(destinationLabel(people, parentCoach)).toBe("My teams");
+    expect(destinationLabel(people, person({ isGuardian: true }))).toBe("Family");
+    expect(destinationLabel(money, clubAdmin)).toBe("Money");
+    expect(destinationLabel(money, parentCoach)).toBe("What I owe");
+    expect(destinationHref(money, clubAdmin)).toBe("/finance");
+    expect(destinationHref(money, parentCoach)).toBe("/my-payments");
   });
 
   it("reach every route the retired per-hat menus reached, for somebody who holds every hat", () => {
@@ -134,22 +156,37 @@ describe("the five destinations", () => {
     expect(allHrefs(person({ hasPlayerMembership: true }))).toContain("/my-teams");
   });
 
-  it("gives each route one home — no destination lists an href twice", () => {
+  it("gives each route one home — no door or drawer lists an href twice, and none share one", () => {
+    const seen = new Map<string, string>();
+    const claim = (owner: string, key: string) => {
+      expect(seen.get(key), `${key} is listed under both ${seen.get(key)} and ${owner}`).toBeUndefined();
+      seen.set(key, owner);
+    };
     for (const d of DESTINATIONS) {
-      const hrefs = itemsFor(d.key, clubAdmin).map((item) => `${item.href}|${item.context?.view ?? ""}`);
-      expect(new Set(hrefs).size, `${d.label} repeats a row`).toBe(hrefs.length);
+      for (const item of itemsFor(d.key, clubAdmin)) claim(d.label, item.href);
     }
+    for (const item of drawerItemsFor(clubAdmin)) claim("the drawer", item.href);
   });
 
-  it("puts the whole of the admin desk under Club, in a labelled administration area", () => {
-    const sections = sectionsOf(itemsFor("club", clubAdmin)).map((s) => s.section);
-    expect(sections).toEqual(["Your teams", "Club administration", "Pitches", "Function room", "Money"]);
+  it("puts the daily desks under the nouns and the set-up behind the crest", () => {
+    expect(sectionsOf(itemsFor("diary", clubAdmin)).map((s) => s.section)).toEqual(["What's on", "Coaching", "Pitches"]);
+    expect(sectionsOf(itemsFor("people", clubAdmin)).map((s) => s.section)).toEqual([
+      "Your teams",
+      "Waiting on you",
+      "Directory",
+      "Protected",
+    ]);
+    expect(sectionsOf(itemsFor("clubhouse", clubAdmin)).map((s) => s.section)).toEqual(["Bookings", "The building"]);
+    expect(sectionsOf(itemsFor("money", clubAdmin)).map((s) => s.section)).toEqual(["The books", "Yours"]);
+    expect(sectionsOf(drawerItemsFor(clubAdmin)).map((s) => s.section)).toEqual(["Running the club", "You", "Help"]);
+    // A member has no club to run: the drawer opens on "You".
+    expect(sectionsOf(drawerItemsFor(person())).map((s) => s.section)).toEqual(["You", "Help"]);
   });
 });
 
 describe("a parent who also coaches", () => {
   it("sees both halves of their week without switching hats", () => {
-    const rows = itemsFor("club", parentCoach).filter((item) => item.section === "Your teams");
+    const rows = itemsFor("people", parentCoach).filter((item) => item.section === "Your teams");
     expect(rows.map((r) => r.label)).toEqual(["Your child · U12 Cobras", "Coaching · U14 Mavericks"]);
     expect(rows[0]!.detail).toBe("for Ben");
     expect(rows[0]!.context).toEqual({ view: "parent", teamId: "t-u12" });
@@ -162,6 +199,7 @@ describe("a parent who also coaches", () => {
     expect(hrefs).not.toContain("/finance");
     expect(hrefs).not.toContain("/approvals");
     expect(hrefs).not.toContain("/settings");
+    expect(hrefs).not.toContain("/room-bookings");
     // …but the coaching desks are theirs.
     expect(hrefs).toContain("/matches");
     expect(hrefs).toContain("/training");
@@ -169,16 +207,16 @@ describe("a parent who also coaches", () => {
   });
 
   it("opens the coaching desks as a coach, never as an admin they are not", () => {
-    const training = itemsFor("calendar", parentCoach).find((item) => item.href === "/training")!;
+    const training = itemsFor("diary", parentCoach).find((item) => item.href === "/training")!;
     expect(training.context).toEqual({ view: "coach", teamId: "t-u14" });
-    const teams = itemsFor("club", parentCoach).find((item) => item.href === "/teams")!;
+    const teams = itemsFor("people", parentCoach).find((item) => item.href === "/teams")!;
     expect(teams.context).toEqual({ view: "coach", teamId: "t-u14" });
   });
 });
 
 describe("context follows the link", () => {
   it("routes through /context only when the hat changes", () => {
-    const coaching = itemsFor("club", parentCoach).find((item) => item.label.startsWith("Coaching"))!;
+    const coaching = itemsFor("people", parentCoach).find((item) => item.label.startsWith("Coaching"))!;
     expect(linkHref(coaching, { view: "parent", teamId: "t-u12" })).toBe(
       "/context?view=coach&next=%2Fteams%2Ft-u14&team=t-u14",
     );
@@ -186,7 +224,7 @@ describe("context follows the link", () => {
   });
 
   it("a row with no context keeps whatever hat is on", () => {
-    const profile = itemsFor("me", parentCoach).find((item) => item.href === "/profile")!;
+    const profile = drawerItemsFor(parentCoach).find((item) => item.href === "/profile")!;
     expect(linkHref(profile, { view: "coach", teamId: "t-u14" })).toBe("/profile");
   });
 
@@ -203,20 +241,25 @@ describe("context follows the link", () => {
 });
 
 describe("where am I", () => {
-  it("lights the destination whose prefix matches most of the path", () => {
-    expect(activeDestination("/lobby")).toBe("home");
-    expect(activeDestination("/events/abc")).toBe("calendar");
-    expect(activeDestination("/pitches/calendar")).toBe("calendar");
-    expect(activeDestination("/pitches")).toBe("club");
-    expect(activeDestination("/settings")).toBe("club");
-    expect(activeDestination("/settings/comms")).toBe("me");
-    expect(activeDestination("/safeguarding")).toBe("club");
-    expect(activeDestination("/safeguarding/report")).toBe("me");
-    expect(activeDestination("/teams/t-1/fixtures/f-1")).toBe("club");
+  it("lights the door whose prefix matches most of the path", () => {
+    expect(activeDestination("/lobby")).toBe("inbox");
+    expect(activeDestination("/notifications")).toBe("inbox");
+    expect(activeDestination("/events/abc")).toBe("diary");
+    expect(activeDestination("/pitches/calendar")).toBe("diary");
+    expect(activeDestination("/pitches")).toBe("diary");
+    expect(activeDestination("/people/p-1")).toBe("people");
+    expect(activeDestination("/safeguarding")).toBe("people");
+    expect(activeDestination("/teams/t-1/fixtures/f-1")).toBe("people");
+    expect(activeDestination("/room-bookings/b-1")).toBe("clubhouse");
+    expect(activeDestination("/bar")).toBe("clubhouse");
+    expect(activeDestination("/finance/charges")).toBe("money");
+    expect(activeDestination("/my-payments")).toBe("money");
     expect(activeDestination("/messages/c-1")).toBe("messages");
   });
 
-  it("claims nothing for a route outside the five", () => {
+  it("claims nothing for a drawer screen or a route outside the doors", () => {
+    expect(activeDestination("/profile")).toBeNull();
+    expect(activeDestination("/settings")).toBeNull();
     expect(activeDestination("/portal")).toBeNull();
   });
 });
@@ -224,13 +267,16 @@ describe("where am I", () => {
 describe("search words", () => {
   it("finds paying subs by the words a member would type", () => {
     const entries = paletteEntries(person(), { view: "me", teamId: null });
-    const pay = entries.find((entry) => entry.href === "/my-payments")!;
+    // The Money door itself opens at /my-payments for a member; the ROW is the
+    // one that carries the everyday words.
+    const pay = entries.find((entry) => entry.href === "/my-payments" && entry.group !== "Go to")!;
     expect(pay.keywords).toContain("pay subs");
-    expect(pay.group).toBe("Me · Membership");
+    expect(pay.group).toBe("What I owe · Yours");
   });
 
-  it("offers the five destinations first", () => {
+  it("offers the doors first, then the drawer", () => {
     const entries = paletteEntries(person(), { view: "me", teamId: null });
-    expect(entries.slice(0, 5).map((entry) => entry.label)).toEqual(["Home", "Calendar", "Messages", "Club", "Me"]);
+    expect(entries.slice(0, 5).map((entry) => entry.label)).toEqual(["Diary", "People", "What I owe", "Inbox", "Messages"]);
+    expect(entries.find((entry) => entry.href === "/profile")?.group).toBe("You");
   });
 });

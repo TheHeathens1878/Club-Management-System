@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { itemsFor, linkHref, sectionsOf } from "@/lib/destinations";
+import { drawerItemsFor, linkHref, sectionsOf } from "@/lib/destinations";
 import { loadUnreadNotificationCount } from "@/lib/notifications-data";
 import { resolveRoleView } from "@/lib/role-view";
 import { signPeoplePhotos } from "@/lib/avatars";
@@ -47,7 +47,7 @@ export default async function MePage() {
   const photos = person?.photo_path ? await signPeoplePhotos([person]) : new Map<string, string>();
   const name = person ? `${person.first_name} ${person.last_name}` : session.profile?.full_name || session.email || "You";
 
-  const sections: HubSection[] = sectionsOf(itemsFor("me", capabilities)).map((section) => ({
+  const sections: HubSection[] = sectionsOf(drawerItemsFor(capabilities).filter((item) => item.section !== "Running the club")).map((section) => ({
     section: section.section,
     rows: section.items.map((item) => ({
       href: linkHref(item, current),

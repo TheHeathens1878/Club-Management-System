@@ -1,26 +1,27 @@
 /**
- * The five places the app goes (P7.2, 2026-09-05): Home · Calendar · Messages
- * · Club · Me. The same five on the desktop sidebar, the phone tab bar and
- * the native app, in the same order, always.
+ * The app's map (P7.5, the three-noun navigation — Adam's Claude Design
+ * template of 2026-09-12): every screen has exactly ONE home, and the homes
+ * are few.
  *
- * This replaces the per-hat menus of nav.ts and mobile-nav.ts. Those showed
- * ONE role view at a time — a parent who also coached switched hats to see
- * the other half of their week. Here the menu is the union of what the person
- * may reach, and the CONTEXT is carried on the link instead: "Your child ·
- * U12s" and "Coaching · U14s" open the same team page wearing different
- * hats, through /context, which writes the same cookies the switcher does.
+ *   · Four NOUNS across the top: Diary, People, Clubhouse and Money — the
+ *     things a club is made of. A noun is a door and a set of rows; the rows
+ *     are its tabs. Clubhouse (the building and the bar) shows only to staff;
+ *     a member's People is "Family" and their Money is "What I owe".
+ *   · Two UTILITIES on the right: Inbox (everything waiting on you, whichever
+ *     noun it belongs to) and Messages. They are verbs — how work arrives, not
+ *     where it lives — so they sit outside the nouns.
+ *   · The DRAWER behind the crest: running the club (set up once, changed
+ *     rarely, out of the way of the daily work) and you (profile, family,
+ *     preferences, help), then the way out.
  *
- * TWO GATES, AS BEFORE. `allowed(capabilities)` mirrors the destination
- * page's own guard, so the menu never offers a page that would bounce the
- * reader. There is no second gate any more — no view filter — because the
- * context is now something a link sets, not something the menu is scoped to.
- * Nothing here widens access: the pages keep their guards and the database
- * keeps its policies. A menu is not an authorisation layer.
+ * Every entry names the CAPABILITY that must be true for it to show — the
+ * same answer the destination page's own guard gives, so the menu never
+ * offers a door that will not open. A row that switches hat carries its
+ * `context` and goes through `/context`. Nothing here authorises anything:
+ * each page keeps its own guard.
  *
  * ONE HOME PER TASK. Every route the old menus reached appears exactly once
- * below (the test pins it), under the destination a person would look in
- * first. Secondary screens live inside their destination rather than growing
- * the primary five.
+ * below (the test pins it), under the noun a person would look in first.
  */
 
 import {
@@ -36,7 +37,6 @@ import {
   Contact,
   CreditCard,
   DoorOpen,
-  Home,
   Images,
   Inbox,
   Landmark,
@@ -62,10 +62,11 @@ import {
 
 import type { Capabilities, RoleView, TeamRef } from "@/lib/role-view";
 
-export type DestinationKey = "home" | "calendar" | "messages" | "club" | "me";
+/** The four nouns and the two utilities — the six doors of the top bar. */
+export type DestinationKey = "diary" | "people" | "clubhouse" | "money" | "inbox" | "messages";
 
 /** The counts a destination or an item can carry beside its label. */
-export type NavBadge = "approvals" | "registrations" | "messages" | "roomBookings";
+export type NavBadge = "approvals" | "registrations" | "messages" | "roomBookings" | "notifications";
 
 /** The role and team a link opens in — the cookies /context writes. */
 export type NavContext = { view: RoleView; teamId?: string };
@@ -90,96 +91,101 @@ export type NavItem = {
 
 export type Destination = {
   key: DestinationKey;
+  /** A noun sits across the top; a utility sits on the right. */
+  kind: "noun" | "utility";
   href: string;
   label: string;
   icon: LucideIcon;
   /** Pathname prefixes that count as "inside" this destination. */
   match: string[];
   keywords: string[];
-  /** The one count the tab itself wears. */
+  /** The one count the door itself wears. */
   badge?: NavBadge;
+  /** Who sees the door at all. Absent = everyone. */
+  allowed?: (c: Capabilities) => boolean;
 };
 
 export const DESTINATIONS: readonly Destination[] = [
   {
-    key: "home",
-    href: "/lobby",
-    label: "Home",
-    icon: Home,
-    match: ["/lobby"],
-    keywords: ["home", "lobby", "noticeboard", "what needs my attention", "start"],
-  },
-  {
-    key: "calendar",
+    key: "diary",
+    kind: "noun",
     href: "/events",
-    label: "Calendar",
+    label: "Diary",
     icon: CalendarDays,
-    match: ["/events", "/pitches/calendar", "/pitches/book", "/pitches/mine", "/matches", "/training", "/social"],
-    keywords: ["calendar", "events", "fixtures", "matches", "next match", "training", "availability", "diary"],
+    match: [
+      "/events",
+      "/pitches",
+      "/venues",
+      "/matches",
+      "/training",
+      "/social",
+    ],
+    keywords: ["diary", "calendar", "events", "fixtures", "matches", "next match", "training", "availability", "pitches"],
   },
   {
-    key: "messages",
-    href: "/messages",
-    label: "Messages",
-    icon: MessageSquare,
-    match: ["/messages", "/groups"],
-    keywords: ["messages", "chat", "message coach", "groups", "announcements"],
-    badge: "messages",
-  },
-  {
-    key: "club",
+    key: "people",
+    kind: "noun",
     href: "/club",
-    label: "Club",
-    icon: Users,
+    label: "People",
+    icon: Contact,
     match: [
       "/club",
       "/teams",
       "/my-teams",
       "/my-team",
       "/referee",
-      "/overview",
       "/people",
       "/approvals",
       "/registrations",
       "/waiting-list",
-      "/pitches",
-      "/venues",
-      "/room-bookings",
-      "/bar",
-      "/finance",
       "/safeguarding",
-      "/media",
-      "/settings",
-      "/super-users",
-      "/email-templates",
-      "/subs",
-    ],
-    keywords: ["club", "teams", "people", "admin", "administration", "manage"],
-    badge: "approvals",
-  },
-  {
-    key: "me",
-    href: "/me",
-    label: "Me",
-    icon: UserCircle,
-    match: [
-      "/me",
-      "/profile",
       "/family",
       "/family-linking",
       "/connected-adults",
-      "/my-registrations",
-      "/my-payments",
-      "/my-subs",
-      "/membership-card",
-      "/getting-started",
-      "/welcome",
-      "/settings/comms",
-      "/notifications",
-      "/complete-profile",
-      "/safeguarding/report",
+      "/groups",
     ],
-    keywords: ["me", "profile", "account", "family", "children", "membership", "payments", "subs"],
+    keywords: ["people", "teams", "family", "children", "members", "contacts", "squads", "registrations"],
+    badge: "approvals",
+  },
+  {
+    key: "clubhouse",
+    kind: "noun",
+    href: "/room-bookings",
+    label: "Clubhouse",
+    icon: Beer,
+    match: ["/room-bookings", "/bar"],
+    keywords: ["clubhouse", "function room", "room bookings", "bar", "hire"],
+    badge: "roomBookings",
+    allowed: (c) => c.isStaff,
+  },
+  {
+    key: "money",
+    kind: "noun",
+    href: "/finance",
+    label: "Money",
+    icon: Receipt,
+    match: ["/finance", "/subs", "/my-payments", "/my-subs", "/membership-card"],
+    keywords: ["money", "finance", "subs", "payments", "pay", "owed", "fees", "membership card"],
+  },
+  {
+    key: "inbox",
+    kind: "utility",
+    href: "/lobby",
+    label: "Inbox",
+    icon: Inbox,
+    match: ["/lobby", "/notifications", "/overview"],
+    keywords: ["inbox", "home", "lobby", "noticeboard", "what needs my attention", "notifications", "start"],
+    badge: "notifications",
+  },
+  {
+    key: "messages",
+    kind: "utility",
+    href: "/messages",
+    label: "Messages",
+    icon: MessageSquare,
+    match: ["/messages"],
+    keywords: ["messages", "chat", "message coach", "groups", "announcements"],
+    badge: "messages",
   },
 ];
 
@@ -187,11 +193,43 @@ export function destination(key: DestinationKey): Destination {
   return DESTINATIONS.find((d) => d.key === key)!;
 }
 
+/** The doors THIS person sees, in order — nouns first, then the utilities. */
+export function visibleDestinations(c: Capabilities): Destination[] {
+  return DESTINATIONS.filter((d) => !d.allowed || d.allowed(c));
+}
+
+/**
+ * The name a noun wears for this person. The design's own rule: People is
+ * "My teams" to a coach who is nobody else, and "Family" to a parent or player
+ * who is nobody else; Money is "What I owe" to anyone without the finance
+ * role. Everybody else sees the plain noun.
+ */
+export function destinationLabel(d: Destination, c: Capabilities): string {
+  if (d.key === "people") {
+    if (admin(c) || c.isCommittee || c.isStaff) return "People";
+    if (c.isTeamStaff || c.hasCoachRole) return "My teams";
+    if (c.isGuardian || c.hasParentRole || c.hasPlayerMembership) return "Family";
+    return "People";
+  }
+  if (d.key === "money") return c.hasFinanceRole ? "Money" : "What I owe";
+  return d.label;
+}
+
+/**
+ * Where a noun's door opens for this person: Money opens the finance section
+ * for the treasurer and "My payments" for everyone else. Every other door is
+ * one place for everybody.
+ */
+export function destinationHref(d: Destination, c: Capabilities): string {
+  if (d.key === "money") return c.hasFinanceRole ? "/finance" : "/my-payments";
+  return d.href;
+}
+
 /**
  * Which destination a pathname is inside — the LONGEST matching prefix wins,
- * so /settings/comms lights Me while /settings lights Club, and
- * /pitches/calendar lights Calendar while /pitches lights Club. Null for a
- * route no destination claims (a detail page reached from search).
+ * so /pitches/calendar and /pitches both light Diary while /safeguarding/report
+ * (the drawer's) still lights People. Null for a route no destination claims
+ * (a detail page reached from search, or a drawer screen like /profile).
  */
 export function activeDestination(pathname: string): DestinationKey | null {
   let best: DestinationKey | null = null;
@@ -224,15 +262,15 @@ function coachContext(c: Capabilities): NavContext {
 }
 
 // ---------------------------------------------------------------------------
-// The items behind each destination
+// The items behind each door
 // ---------------------------------------------------------------------------
 
-const CALENDAR_ITEMS: readonly NavItem[] = [
+const DIARY_ITEMS: readonly NavItem[] = [
   {
     href: "/events",
     label: "Your calendar",
     icon: CalendarCheck,
-    section: "Your diary",
+    section: "What's on",
     detail: "Matches, training and socials for everyone in your household — accept or decline",
     allowed: anyone,
     keywords: ["events", "fixtures", "next match", "availability", "respond", "accept", "decline", "training"],
@@ -241,7 +279,7 @@ const CALENDAR_ITEMS: readonly NavItem[] = [
     href: "/pitches/calendar",
     label: "Pitch calendar",
     icon: LandPlot,
-    section: "Your diary",
+    section: "What's on",
     detail: "Which pitch, which team, all weekend",
     allowed: (c) => c.isTeamStaff || c.isGuardian || c.hasPlayerMembership || c.isCommittee || c.isClubAdmin,
     keywords: ["pitch", "pitches", "where are we playing"],
@@ -250,7 +288,7 @@ const CALENDAR_ITEMS: readonly NavItem[] = [
     href: "/social",
     label: "Social events",
     icon: CalendarDays,
-    section: "Your diary",
+    section: "What's on",
     detail: "What's on at the clubhouse",
     allowed: anyone,
     keywords: ["social", "clubhouse", "events"],
@@ -288,172 +326,6 @@ const CALENDAR_ITEMS: readonly NavItem[] = [
     section: "Coaching",
     allowed: staffOrAdmin,
     keywords: ["pitch bookings", "my bookings"],
-  },
-];
-
-const MESSAGES_ITEMS: readonly NavItem[] = [
-  {
-    href: "/messages",
-    label: "All messages",
-    icon: MessageSquare,
-    section: "Messages",
-    allowed: anyone,
-    keywords: ["inbox", "conversations"],
-  },
-  {
-    href: "/messages?filter=groups",
-    label: "My groups",
-    icon: UsersRound,
-    section: "Messages",
-    detail: "Team rooms and the groups you belong to",
-    allowed: anyone,
-    keywords: ["groups", "team chat", "team room"],
-  },
-  {
-    href: "/messages/new",
-    label: "New message",
-    icon: MessageSquarePlus,
-    section: "Messages",
-    detail: "Message a coach, a parent or a team",
-    allowed: anyone,
-    keywords: ["new message", "message coach", "message the coach", "write"],
-  },
-  {
-    href: "/groups",
-    label: "Groups directory",
-    icon: UsersRound,
-    section: "Administration",
-    detail: "Every group at the club and who is in it",
-    allowed: (c) => c.isClubAdmin,
-    context: { view: "admin" },
-    keywords: ["groups directory", "manage groups"],
-  },
-];
-
-const CLUB_ADMIN_ITEMS: readonly NavItem[] = [
-  {
-    href: "/overview",
-    label: "Overview",
-    icon: LayoutDashboard,
-    section: "Club administration",
-    detail: "The club at a glance",
-    allowed: admin,
-    context: { view: "admin" },
-    keywords: ["overview", "dashboard"],
-  },
-  {
-    href: "/teams",
-    label: "Teams",
-    icon: Users,
-    section: "Club administration",
-    detail: "Every team, squad and season",
-    allowed: staffOrAdmin,
-    context: { view: "admin" },
-    keywords: ["teams", "squads"],
-  },
-  {
-    href: "/people",
-    label: "People",
-    icon: Contact,
-    section: "Club administration",
-    detail: "The members database",
-    allowed: (c) => c.isCommittee,
-    context: { view: "admin" },
-    keywords: ["people", "members", "member record", "find a person"],
-  },
-  {
-    href: "/approvals",
-    label: "Approvals",
-    icon: UserCheck,
-    section: "Club administration",
-    detail: "Role requests and players leaving",
-    allowed: (c) => c.isClubAdmin,
-    context: { view: "admin" },
-    badge: "approvals",
-    keywords: ["approvals", "approve", "requests"],
-  },
-  {
-    href: "/registrations",
-    label: "Registrations",
-    icon: ClipboardCheck,
-    section: "Club administration",
-    detail: "Review and approve player registrations",
-    allowed: (c) => c.isClubAdmin,
-    context: { view: "admin" },
-    badge: "registrations",
-    keywords: ["registrations", "review registration", "approve registration"],
-  },
-  {
-    href: "/registrations/form",
-    label: "Registration form",
-    icon: ClipboardList,
-    section: "Club administration",
-    allowed: (c) => c.isClubAdmin,
-    context: { view: "admin" },
-    keywords: ["registration form", "form builder"],
-  },
-  {
-    href: "/waiting-list/manage",
-    label: "Waiting list",
-    icon: ClipboardList,
-    section: "Club administration",
-    allowed: (c) => c.isClubAdmin || c.hasWaitingListAccess,
-    keywords: ["waiting list", "trialists"],
-  },
-  {
-    href: "/venues",
-    label: "Venues",
-    icon: MapPin,
-    section: "Club administration",
-    allowed: admin,
-    context: { view: "admin" },
-    keywords: ["venues", "grounds", "addresses"],
-  },
-  {
-    href: "/safeguarding",
-    label: "Safeguarding",
-    icon: ShieldCheck,
-    section: "Club administration",
-    detail: "Concerns and oversight",
-    allowed: (c) => c.isSafeguardingLead || c.isCommittee,
-    context: { view: "admin" },
-    keywords: ["safeguarding", "concerns", "welfare"],
-  },
-  {
-    href: "/media",
-    label: "Media",
-    icon: Images,
-    section: "Club administration",
-    allowed: admin,
-    context: { view: "admin" },
-    keywords: ["media", "photos", "albums"],
-  },
-  {
-    href: "/settings",
-    label: "Settings",
-    icon: Settings,
-    section: "Club administration",
-    allowed: (c) => c.isSuperUser,
-    context: { view: "admin" },
-    keywords: ["settings", "club settings"],
-  },
-  {
-    href: "/super-users",
-    label: "Super users",
-    icon: ShieldCheck,
-    section: "Club administration",
-    allowed: (c) => c.isSuperUser,
-    context: { view: "admin" },
-    keywords: ["super users", "admin accounts"],
-  },
-  {
-    href: "/email-templates",
-    label: "Email templates",
-    icon: Mail,
-    section: "Club administration",
-    allowed: (c) => c.isCommittee,
-    context: { view: "admin" },
-    keywords: ["email templates"],
   },
   {
     href: "/pitches",
@@ -503,10 +375,124 @@ const CLUB_ADMIN_ITEMS: readonly NavItem[] = [
     keywords: ["manage pitches"],
   },
   {
+    href: "/venues",
+    label: "Venues",
+    icon: MapPin,
+    section: "Pitches",
+    allowed: admin,
+    context: { view: "admin" },
+    keywords: ["venues", "grounds", "addresses"],
+  },
+];
+
+const MESSAGES_ITEMS: readonly NavItem[] = [
+  {
+    href: "/messages",
+    label: "All messages",
+    icon: MessageSquare,
+    section: "Messages",
+    allowed: anyone,
+    keywords: ["inbox", "conversations"],
+  },
+  {
+    href: "/messages?filter=groups",
+    label: "My groups",
+    icon: UsersRound,
+    section: "Messages",
+    detail: "Team rooms and the groups you belong to",
+    allowed: anyone,
+    keywords: ["groups", "team chat", "team room"],
+  },
+  {
+    href: "/messages/new",
+    label: "New message",
+    icon: MessageSquarePlus,
+    section: "Messages",
+    detail: "Message a coach, a parent or a team",
+    allowed: anyone,
+    keywords: ["new message", "message coach", "message the coach", "write"],
+  },
+];
+
+const PEOPLE_ITEMS: readonly NavItem[] = [
+  {
+    href: "/approvals",
+    label: "Approvals",
+    icon: UserCheck,
+    section: "Waiting on you",
+    detail: "Role requests and players leaving",
+    allowed: (c) => c.isClubAdmin,
+    context: { view: "admin" },
+    badge: "approvals",
+    keywords: ["approvals", "approve", "requests"],
+  },
+  {
+    href: "/registrations",
+    label: "Registrations",
+    icon: ClipboardCheck,
+    section: "Waiting on you",
+    detail: "Review and approve player registrations",
+    allowed: (c) => c.isClubAdmin,
+    context: { view: "admin" },
+    badge: "registrations",
+    keywords: ["registrations", "review registration", "approve registration"],
+  },
+  {
+    href: "/waiting-list/manage",
+    label: "Waiting list",
+    icon: ClipboardList,
+    section: "Waiting on you",
+    allowed: (c) => c.isClubAdmin || c.hasWaitingListAccess,
+    keywords: ["waiting list", "trialists"],
+  },
+  {
+    href: "/teams",
+    label: "Teams",
+    icon: Users,
+    section: "Directory",
+    detail: "Every team, squad and season",
+    allowed: staffOrAdmin,
+    context: { view: "admin" },
+    keywords: ["teams", "squads"],
+  },
+  {
+    href: "/people",
+    label: "Contacts",
+    icon: Contact,
+    section: "Directory",
+    detail: "The members database — players, guardians, coaches and committee",
+    allowed: (c) => c.isCommittee,
+    context: { view: "admin" },
+    keywords: ["people", "members", "member record", "find a person", "contacts"],
+  },
+  {
+    href: "/groups",
+    label: "Groups directory",
+    icon: UsersRound,
+    section: "Directory",
+    detail: "Every group at the club and who is in it",
+    allowed: (c) => c.isClubAdmin,
+    context: { view: "admin" },
+    keywords: ["groups directory", "manage groups"],
+  },
+  {
+    href: "/safeguarding",
+    label: "Safeguarding",
+    icon: ShieldCheck,
+    section: "Protected",
+    detail: "Concerns and oversight",
+    allowed: (c) => c.isSafeguardingLead || c.isCommittee,
+    context: { view: "admin" },
+    keywords: ["safeguarding", "concerns", "welfare"],
+  },
+];
+
+const CLUBHOUSE_ITEMS: readonly NavItem[] = [
+  {
     href: "/room-bookings",
     label: "Room bookings",
     icon: CalendarDays,
-    section: "Function room",
+    section: "Bookings",
     detail: "The function room diary",
     allowed: (c) => c.isStaff,
     context: { view: "function_room" },
@@ -519,7 +505,7 @@ const CLUB_ADMIN_ITEMS: readonly NavItem[] = [
     href: "/room-bookings?status=open&view=list",
     label: "Pending requests",
     icon: Clock,
-    section: "Function room",
+    section: "Bookings",
     detail: "Requests and enquiries waiting for an answer",
     allowed: (c) => c.isStaff,
     context: { view: "function_room" },
@@ -527,45 +513,131 @@ const CLUB_ADMIN_ITEMS: readonly NavItem[] = [
     keywords: ["pending bookings", "booking requests", "enquiries", "waiting"],
   },
   {
-    href: "/room-bookings/rooms",
-    label: "Rooms",
-    icon: DoorOpen,
-    section: "Function room",
-    allowed: (c) => c.isCommittee,
-    context: { view: "function_room" },
-    keywords: ["rooms", "room prices"],
-  },
-  {
     href: "/room-bookings/contacts",
     label: "Hire contacts",
     icon: Contact,
-    section: "Function room",
+    section: "Bookings",
     allowed: (c) => c.isStaff,
     context: { view: "function_room" },
     keywords: ["hire contacts", "hirers"],
   },
   {
+    href: "/room-bookings/rooms",
+    label: "Rooms",
+    icon: DoorOpen,
+    section: "The building",
+    allowed: (c) => c.isCommittee,
+    context: { view: "function_room" },
+    keywords: ["rooms", "room prices"],
+  },
+  {
     href: "/bar",
     label: "Bar",
     icon: Beer,
-    section: "Function room",
+    section: "The building",
     allowed: (c) => c.isBarManager,
     context: { view: "function_room" },
     keywords: ["bar", "rota", "stock"],
   },
+];
+
+const MONEY_ITEMS: readonly NavItem[] = [
   {
     href: "/finance",
     label: "Finance",
     icon: Landmark,
-    section: "Money",
+    section: "The books",
     detail: "Membership numbers, fees, charges, the ledger, Xero",
     allowed: (c) => c.hasFinanceRole,
     context: { view: "admin" },
     keywords: ["finance", "treasurer", "fees", "charges", "ledger", "xero", "income"],
   },
+  {
+    href: "/my-payments",
+    label: "My payments",
+    icon: Receipt,
+    section: "Yours",
+    detail: "Subs and charges for your household — pay online",
+    allowed: anyone,
+    keywords: ["pay subs", "subs", "payments", "pay", "membership fee", "outstanding", "owed", "card"],
+  },
+  {
+    href: "/membership-card",
+    label: "Membership card",
+    icon: CreditCard,
+    section: "Yours",
+    allowed: anyone,
+    keywords: ["membership card", "member number", "card"],
+  },
 ];
 
-const ME_ITEMS: readonly NavItem[] = [
+/**
+ * The crest drawer. "Running the club" is set up once and changed rarely, so
+ * it stays out of the way of the daily work; "You" is the person; "Help" is
+ * for everyone, always. The sign-out is the drawer's last row, drawn by the
+ * top bar itself (a form, not a link).
+ */
+const DRAWER_ITEMS: readonly NavItem[] = [
+  {
+    href: "/overview",
+    label: "Overview",
+    icon: LayoutDashboard,
+    section: "Running the club",
+    detail: "The club at a glance",
+    allowed: admin,
+    context: { view: "admin" },
+    keywords: ["overview", "dashboard"],
+  },
+  {
+    href: "/settings",
+    label: "Settings",
+    icon: Settings,
+    section: "Running the club",
+    detail: "Club details, branding, payments and notifications",
+    allowed: (c) => c.isSuperUser,
+    context: { view: "admin" },
+    keywords: ["settings", "club settings"],
+  },
+  {
+    href: "/super-users",
+    label: "Super users",
+    icon: ShieldCheck,
+    section: "Running the club",
+    detail: "Who can see and change what",
+    allowed: (c) => c.isSuperUser,
+    context: { view: "admin" },
+    keywords: ["super users", "admin accounts"],
+  },
+  {
+    href: "/registrations/form",
+    label: "Registration form",
+    icon: ClipboardList,
+    section: "Running the club",
+    detail: "The questions a new player answers",
+    allowed: (c) => c.isClubAdmin,
+    context: { view: "admin" },
+    keywords: ["registration form", "form builder"],
+  },
+  {
+    href: "/email-templates",
+    label: "Email templates",
+    icon: Mail,
+    section: "Running the club",
+    detail: "Templates, senders and reply-to addresses",
+    allowed: (c) => c.isCommittee,
+    context: { view: "admin" },
+    keywords: ["email templates", "comms templates"],
+  },
+  {
+    href: "/media",
+    label: "Media",
+    icon: Images,
+    section: "Running the club",
+    detail: "Photos and albums",
+    allowed: admin,
+    context: { view: "admin" },
+    keywords: ["media", "photos", "albums"],
+  },
   {
     href: "/getting-started",
     label: "Getting started",
@@ -603,35 +675,19 @@ const ME_ITEMS: readonly NavItem[] = [
     keywords: ["register", "registration", "register a player", "sign up a child"],
   },
   {
-    href: "/my-payments",
-    label: "My payments",
-    icon: Receipt,
-    section: "Membership",
-    detail: "Subs and charges for your household — pay online",
-    allowed: anyone,
-    keywords: ["pay subs", "subs", "payments", "pay", "membership fee", "outstanding", "owed", "card"],
-  },
-  {
-    href: "/membership-card",
-    label: "Membership card",
-    icon: CreditCard,
-    section: "Membership",
-    allowed: anyone,
-    keywords: ["membership card", "member number", "card"],
-  },
-  {
     href: "/notifications",
     label: "Notifications",
     icon: BellRing,
-    section: "Preferences",
+    section: "You",
     allowed: anyone,
+    badge: "notifications",
     keywords: ["notifications", "alerts"],
   },
   {
     href: "/settings/comms",
     label: "Comms preferences",
     icon: Mail,
-    section: "Preferences",
+    section: "You",
     detail: "How the club may contact you",
     allowed: anyone,
     keywords: ["comms", "email preferences", "unsubscribe", "contact preferences"],
@@ -640,7 +696,7 @@ const ME_ITEMS: readonly NavItem[] = [
     href: "/welcome",
     label: "My role",
     icon: Megaphone,
-    section: "Preferences",
+    section: "You",
     detail: "Ask to coach or referee; see your requests",
     allowed: anyone,
     keywords: ["my role", "become a coach", "become a referee", "role request"],
@@ -650,7 +706,7 @@ const ME_ITEMS: readonly NavItem[] = [
     label: "Report a concern",
     icon: ShieldAlert,
     section: "Help",
-    detail: "Raise a safeguarding concern — anyone can",
+    detail: "In every role, for everyone, always",
     allowed: anyone,
     keywords: ["report", "concern", "safeguarding", "welfare"],
   },
@@ -673,9 +729,9 @@ function childrenLabel(team: TeamRef): string | undefined {
 }
 
 /**
- * The Club destination's first section is the person's OWN teams, one row per
- * hat per team, each opening the team page in that hat. This is where the
- * old role switcher's team-scoped picks went: a row, not a mode.
+ * People's first section is the person's OWN teams, one row per hat per team,
+ * each opening the team page in that hat. This is where the old role
+ * switcher's team-scoped picks went: a row, not a mode.
  */
 function teamItems(c: Capabilities): NavItem[] {
   const items: NavItem[] = [];
@@ -761,31 +817,38 @@ function teamItems(c: Capabilities): NavItem[] {
 }
 
 /**
- * The items a destination holds for THIS person: the static rows whose gate
- * passes, plus the team rows their hats generate. Order is the order drawn.
+ * The items a door holds for THIS person: the static rows whose gate passes,
+ * plus the team rows their hats generate. Order is the order drawn.
  */
 export function itemsFor(key: DestinationKey, c: Capabilities): NavItem[] {
   switch (key) {
-    case "home":
-      return [];
-    case "calendar":
-      return CALENDAR_ITEMS.filter((item) => item.allowed(c)).map((item) =>
+    case "diary":
+      return DIARY_ITEMS.filter((item) => item.allowed(c)).map((item) =>
         item.section === "Coaching" && !item.context ? { ...item, context: coachContext(c) } : item,
       );
-    case "messages":
-      return MESSAGES_ITEMS.filter((item) => item.allowed(c));
-    case "club":
+    case "people":
       return [
         ...teamItems(c),
-        ...CLUB_ADMIN_ITEMS.filter((item) => item.allowed(c)).map((item) =>
+        ...PEOPLE_ITEMS.filter((item) => item.allowed(c)).map((item) =>
           // A coach who is not an administrator opens Teams and the waiting
           // list as a coach, not as an admin they are not.
           item.context?.view === "admin" && coachOnly(c) ? { ...item, context: coachContext(c) } : item,
         ),
       ];
-    case "me":
-      return ME_ITEMS.filter((item) => item.allowed(c));
+    case "clubhouse":
+      return CLUBHOUSE_ITEMS.filter((item) => item.allowed(c));
+    case "money":
+      return MONEY_ITEMS.filter((item) => item.allowed(c));
+    case "inbox":
+      return [];
+    case "messages":
+      return MESSAGES_ITEMS.filter((item) => item.allowed(c));
   }
+}
+
+/** The crest drawer's rows for this person, in the order drawn. */
+export function drawerItemsFor(c: Capabilities): NavItem[] {
+  return DRAWER_ITEMS.filter((item) => item.allowed(c));
 }
 
 export type NavSection = { section: string; items: NavItem[] };
@@ -825,27 +888,37 @@ export function contextHref(context: NavContext, next: string): string {
 }
 
 /**
- * Everything the palette can offer this person: the five destinations, then
- * every item they may reach, each with its section and everyday words.
+ * Everything the palette can offer this person: the doors, then every item
+ * they may reach behind them and in the drawer, each with its section and
+ * everyday words.
  */
 export type PaletteEntry = { label: string; href: string; group: string; keywords: string[] };
 
 export function paletteEntries(c: Capabilities, current: CurrentContext): PaletteEntry[] {
-  const out: PaletteEntry[] = DESTINATIONS.map((d) => ({
-    label: d.label,
-    href: d.href,
+  const doors = visibleDestinations(c);
+  const out: PaletteEntry[] = doors.map((d) => ({
+    label: destinationLabel(d, c),
+    href: destinationHref(d, c),
     group: "Go to",
     keywords: d.keywords,
   }));
-  for (const d of DESTINATIONS) {
+  for (const d of doors) {
     for (const item of itemsFor(d.key, c)) {
       out.push({
         label: item.label,
         href: linkHref(item, current),
-        group: `${d.label} · ${item.section}`,
+        group: `${destinationLabel(d, c)} · ${item.section}`,
         keywords: item.keywords ?? [],
       });
     }
+  }
+  for (const item of drawerItemsFor(c)) {
+    out.push({
+      label: item.label,
+      href: linkHref(item, current),
+      group: item.section,
+      keywords: item.keywords ?? [],
+    });
   }
   return out;
 }
@@ -875,7 +948,11 @@ export function contextLabel(view: RoleView | null, team: TeamRef | null): strin
   }
 }
 
-/** The whole menu, flattened — what the sidebar highlights against. */
+/** The whole menu, flattened — what the top bar's highlight is measured against. */
 export function allHrefs(c: Capabilities): string[] {
-  return DESTINATIONS.flatMap((d) => [d.href, ...itemsFor(d.key, c).map((item) => item.href)]);
+  const doors = visibleDestinations(c);
+  return [
+    ...doors.flatMap((d) => [destinationHref(d, c), ...itemsFor(d.key, c).map((item) => item.href)]),
+    ...drawerItemsFor(c).map((item) => item.href),
+  ];
 }

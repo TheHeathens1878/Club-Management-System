@@ -31,5 +31,3 @@ export { NavLink } from "../apps/web/src/components/nav-link";
 export { SectionHomeLink } from "../apps/web/src/components/section-home-link";
 export { MobileTabBar } from "../apps/web/src/components/mobile-tab-bar";
 export type { MobileTabItem } from "../apps/web/src/components/mobile-tab-bar";
-export { SidebarNav } from "../apps/web/src/components/sidebar-nav";
-export type { SidebarItem, SidebarSection, SidebarDestination } from "../apps/web/src/components/sidebar-nav";

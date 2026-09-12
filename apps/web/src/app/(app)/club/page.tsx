@@ -6,16 +6,16 @@ import { HubList, type HubSection } from "@/components/hub-list";
 import { PageHeader } from "@/components/page-header";
 import { getSessionProfile } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { itemsFor, linkHref, sectionsOf } from "@/lib/destinations";
+import { destination, destinationLabel, itemsFor, linkHref, sectionsOf } from "@/lib/destinations";
 import { loadNavCounts, NO_NAV_COUNTS } from "@/lib/nav-counts";
 import { resolveRoleView } from "@/lib/role-view";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Club" };
+export const metadata = { title: "People" };
 
 /**
- * The Club hub (P7.2): your own teams first — one row per hat per team, each
+ * The People hub (P7.2, renamed by P7.5): your own teams first — one row per hat per team, each
  * opening the team page wearing that hat — then the club's management tools
  * for whoever holds them, under a heading that says so. The rows are the
  * `destinations` table's; this page only draws them.
@@ -29,7 +29,7 @@ export default async function ClubPage() {
   const scope = await getTeamScope(view, capabilities);
   const current = { view, teamId: scope?.id ?? null };
 
-  const items = itemsFor("club", capabilities);
+  const items = itemsFor("people", capabilities);
   const counts = items.some((item) => item.badge)
     ? await loadNavCounts(capabilities.isClubAdmin, capabilities.isStaff)
     : NO_NAV_COUNTS;
@@ -41,7 +41,10 @@ export default async function ClubPage() {
       label: item.label,
       icon: item.icon,
       detail: item.detail,
-      badge: item.badge && item.badge !== "messages" ? counts[item.badge] || undefined : undefined,
+      badge:
+        item.badge && item.badge !== "messages" && item.badge !== "notifications"
+          ? counts[item.badge] || undefined
+          : undefined,
     })),
   }));
 
@@ -50,7 +53,7 @@ export default async function ClubPage() {
   return (
     <>
       <PageHeader
-        title="Club"
+        title={destinationLabel(destination("people"), capabilities)}
         subtitle={
           hasTeams
             ? "Your teams, and the club around them"
