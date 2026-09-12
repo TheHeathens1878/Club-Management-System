@@ -65,7 +65,7 @@ import type { Capabilities, RoleView, TeamRef } from "@/lib/role-view";
 export type DestinationKey = "home" | "calendar" | "messages" | "club" | "me";
 
 /** The counts a destination or an item can carry beside its label. */
-export type NavBadge = "approvals" | "registrations" | "messages";
+export type NavBadge = "approvals" | "registrations" | "messages" | "roomBookings";
 
 /** The role and team a link opens in — the cookies /context writes. */
 export type NavContext = { view: RoleView; teamId?: string };
@@ -513,13 +513,18 @@ const CLUB_ADMIN_ITEMS: readonly NavItem[] = [
     keywords: ["room bookings", "function room", "booking", "find a booking", "hire"],
   },
   {
-    href: "/room-bookings?status=pending&view=list",
+    // `status=open` is the list's "Waiting" tab: pending requests AND
+    // enquiries, both of which the desk owes an answer. The badge counts the
+    // same rows (lib/nav-counts), so the number and the page agree.
+    href: "/room-bookings?status=open&view=list",
     label: "Pending requests",
     icon: Clock,
     section: "Function room",
+    detail: "Requests and enquiries waiting for an answer",
     allowed: (c) => c.isStaff,
     context: { view: "function_room" },
-    keywords: ["pending bookings", "booking requests"],
+    badge: "roomBookings",
+    keywords: ["pending bookings", "booking requests", "enquiries", "waiting"],
   },
   {
     href: "/room-bookings/rooms",

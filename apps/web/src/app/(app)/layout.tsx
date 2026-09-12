@@ -64,16 +64,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const supabase = await createClient();
   const [scope, counts, unreadMessages, unreadNotifications, personId] = await Promise.all([
     view ? getTeamScope(view, capabilities) : null,
-    capabilities.isClubAdmin ? loadNavCounts(true) : NO_NAV_COUNTS,
+    capabilities.isClubAdmin || capabilities.isStaff
+      ? loadNavCounts(capabilities.isClubAdmin, capabilities.isStaff)
+      : NO_NAV_COUNTS,
     supabase.rpc("my_unread_message_count").then(({ data }) => data ?? 0),
     loadUnreadNotificationCount(),
     getCurrentPersonId(),
   ]);
   const current = { view, teamId: scope?.id ?? null };
   const badges: Record<NavBadge, number> = {
-    approvals: counts.approvals + counts.registrations,
+    // The Club tab wears every queue behind it: the admin's two and the room
+    // desk's waiting requests.
+    approvals: counts.approvals + counts.registrations + counts.roomBookings,
     registrations: counts.registrations,
     messages: unreadMessages,
+    roomBookings: counts.roomBookings,
   };
   const badgeFor = (key: NavBadge | undefined, itemLevel = false): number | undefined => {
     if (!key) return undefined;

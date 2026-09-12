@@ -121,7 +121,10 @@ export default async function RoomBookingsPage({
     } else if (effectivePeriod === "past") {
       filtered = filtered.filter((b) => b.date < todayStr).reverse();
     }
-    if (statusFilter) filtered = filtered.filter((b) => b.status === statusFilter);
+    // "open" is everything the desk owes an answer: a pending request or an
+    // enquiry. It is what the nav's number counts (lib/nav-counts).
+    if (statusFilter === "open") filtered = filtered.filter((b) => b.status === "pending" || b.status === "enquiry");
+    else if (statusFilter) filtered = filtered.filter((b) => b.status === statusFilter);
     if (roomFilter) filtered = filtered.filter((b) => b.resource_id === roomFilter);
   }
 
@@ -133,6 +136,7 @@ export default async function RoomBookingsPage({
   }).filter((b) => !roomFilter || b.resource_id === roomFilter);
   const counts = {
     all: base.length,
+    open: base.filter((b) => b.status === "pending" || b.status === "enquiry").length,
     enquiry: base.filter((b) => b.status === "enquiry").length,
     quoted: base.filter((b) => b.status === "quoted").length,
     pending: base.filter((b) => b.status === "pending").length,
@@ -238,7 +242,7 @@ export default async function RoomBookingsPage({
 
               {/* Status */}
               <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
-                {(["all", "enquiry", "quoted", "pending", "confirmed", "cancelled"] as const).map((s) => (
+                {(["all", "open", "enquiry", "quoted", "pending", "confirmed", "cancelled"] as const).map((s) => (
                   <Link
                     key={s}
                     href={filterHref({ status: s === "all" ? undefined : s })}
@@ -248,7 +252,8 @@ export default async function RoomBookingsPage({
                         : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {s} <span className="ml-1 text-xs opacity-60">({s === "all" ? counts.all : counts[s]})</span>
+                    {s === "open" ? "Waiting" : s}{" "}
+                    <span className="ml-1 text-xs opacity-60">({s === "all" ? counts.all : counts[s]})</span>
                   </Link>
                 ))}
               </div>

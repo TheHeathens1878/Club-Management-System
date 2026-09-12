@@ -18,6 +18,7 @@ import { upsertBookingContact } from "@/lib/booking-contacts";
 import { extraLabel, parseExtrasConfig, poundsLabel, priceExtras } from "@/lib/booking-extras";
 import { roomHirePence, type RoomPricingFields } from "@/lib/room-pricing";
 import { conflictOrMessage, slotHasConflict, SLOT_TAKEN_MESSAGE } from "@/lib/booking-conflict";
+import { notifyRoomDesk } from "@/lib/room-desk-notify";
 
 type AdminClient = ReturnType<typeof createAdminClient>;
 
@@ -368,6 +369,19 @@ ${accessLine}
   });
 
   after(async () => {
+    // The bell for everyone on the room desk, before the email: the email
+    // goes to whoever is listed in settings, the notification to everyone
+    // who can act on the booking.
+    await notifyRoomDesk(admin, {
+      subject: isEnquiry
+        ? `Room enquiry — ${bookerName}, ${formatBookingDate(date)}`
+        : `Room booking request — ${bookerName}, ${formatBookingDate(date)}`,
+      body: `${room.name} · ${startTime}–${endTime}${occasion ? ` · ${occasion}` : ""}${
+        slotTaken ? " · CLASHES with a booking already held" : ""
+      }${isEnquiry ? " · enquiry only, nothing held" : ""}`,
+      bookingId: booking.id,
+    });
+
     try {
       const [brandColor, staffEmails] = await Promise.all([
         getEmailBrandColor().catch(() => "#1249bf"),
