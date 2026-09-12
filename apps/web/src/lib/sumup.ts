@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getEmailBrandColor } from "@/lib/settings";
+import { getEmailBrandColor, getRecipientEmails } from "@/lib/settings";
 import { renderEmailTemplate } from "@/lib/template-engine";
 import { sendEmail } from "@/lib/email";
 import { formatCurrency } from "@/lib/utils";
@@ -96,14 +96,23 @@ export async function createSumUpCheckout(params: {
   return res.json();
 }
 
+// A checkout by id: null when SumUp has never heard of it, an exception when
+// SumUp could not answer. Until 2026-09-12 every non-OK answer was null, so a
+// SumUp outage at the moment of a webhook read as "no such checkout" — the
+// webhook answered 200, SumUp stopped redelivering, and a taken payment could
+// go unrecorded. Now only a 404 is "not found"; the rest throws, and every
+// caller that must not lose a payment turns the throw into a retry.
 export async function getSumUpCheckout(id: string): Promise<SumUpCheckout | null> {
   const auth = await authHeader();
   const res = await fetch(`${BASE}/v0.1/checkouts/${encodeURIComponent(id)}`, {
     headers: { Authorization: auth },
   });
-  if (!res.ok) return null;
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`SumUp checkout lookup failed (${res.status})`);
   return res.json();
 }
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Idempotently record a paid SumUp checkout as a payment, recompute the
 // booking's payment_status and email the booker. Safe to call from the widget
@@ -142,9 +151,15 @@ export async function recordSumUpPaymentIfPaid(
     .maybeSingle();
   if (existing) return { recorded: false, present: true, status: checkout.status };
 
-  const bookingId = String(checkout.checkout_reference || "").split(":")[0];
-  if (!bookingId) return { recorded: false, present: false, status: checkout.status };
-
+  // The reference is `<bookingId>:<purpose>:<stamp>`, minted by this app. A
+  // reference that is not that shape is not ours (a finance checkout, or
+  // nonsense) and is nothing to record — not a 22P02 to retry for ever.
+  const [bookingId = "", purpose = ""] = String(checkout.checkout_reference || "").split(":");
+  if (!UUID_RE.test(bookingId)) return { recorded: false, present: false, status: checkout.status };
+  if (checkout.currency && checkout.currency.toUpperCase() !== "GBP") {
+    console.error("[sumup] checkout in an unexpected currency", checkoutId, checkout.currency);
+    return { recorded: false, present: false, status: checkout.status, failed: true };
+  }
 
   const amountPence = Math.round(Number(checkout.amount || 0) * 100);
   const txnCode = checkout.transaction_code || checkout.transactions?.[0]?.transaction_code || null;
@@ -166,14 +181,49 @@ export async function recordSumUpPaymentIfPaid(
     return { recorded: false, present: false, status: checkout.status, failed: true };
   }
 
-  // Recompute payment_status
+  // Paying the deposit is what accepts the deposit terms; the moment is the
+  // payment landing, not the checkout being opened and perhaps abandoned.
+  if (purpose === "deposit") {
+    await admin
+      .from("bookings")
+      .update({ deposit_terms_accepted_at: new Date().toISOString() })
+      .eq("id", bookingId)
+      .is("deposit_terms_accepted_at", null);
+  }
+
+  // Recompute payment_status — net of refunds, which the ledger records on
+  // the payment row and which used to be ignored here.
   const [{ data: totalsRow }, { data: payments }] = await Promise.all([
-    admin.from("bookings").select("total_pence,deposit_pence,booker_name,booker_email,starts_at,resources(name)").eq("id", bookingId).maybeSingle(),
-    admin.from("payments").select("amount_pence").eq("booking_id", bookingId),
+    admin.from("bookings").select("status,total_pence,deposit_pence,booker_name,booker_email,starts_at,resources(name)").eq("id", bookingId).maybeSingle(),
+    admin.from("payments").select("amount_pence,refunded_pence").eq("booking_id", bookingId),
   ]);
+
+  // Money taken for a booking that is no longer live — the cron auto-cancelled
+  // it for a missed deposit and the bank's confirmation arrived late, or the
+  // desk cancelled while a card was mid-flight. The ledger row is right (the
+  // card WAS charged); what must not happen is nobody noticing. Tell the desk.
+  if (totalsRow?.status === "cancelled") {
+    try {
+      const desk = await getRecipientEmails("notify_booking_request").catch(() => []);
+      if (desk.length > 0) {
+        const when = formatBookingDate(instantToLocal(totalsRow.starts_at).date);
+        await sendEmail({
+          to: desk,
+          subject: `Payment received on a CANCELLED booking — ${totalsRow.booker_name} (${when})`,
+          html: `<p>${formatCurrency(amountPence)} has just been taken by card from ${totalsRow.booker_name} (${totalsRow.booker_email}) for ${totalsRow.resources?.name ?? "the function room"} on ${when} — but that booking is <strong>cancelled</strong>.</p><p>Either reinstate the booking (re-quote it from its page, then confirm) or arrange a refund through SumUp. Nothing has been done automatically.</p>`,
+          text: `${formatCurrency(amountPence)} was taken by card from ${totalsRow.booker_name} (${totalsRow.booker_email}) for ${when}, but that booking is cancelled. Reinstate it or arrange a refund; nothing has been done automatically.`,
+          template: "payment_on_cancelled_booking",
+          entity: "bookings",
+          entityId: bookingId,
+        });
+      }
+    } catch (e) {
+      console.error("[sumup] could not alert the desk to a payment on a cancelled booking", e);
+    }
+  }
   const totalPence = totalsRow?.total_pence ?? 0;
   const depositPence = totalsRow?.deposit_pence ?? 0;
-  const paidPence = (payments ?? []).reduce((acc, p) => acc + p.amount_pence, 0);
+  const paidPence = (payments ?? []).reduce((acc, p) => acc + p.amount_pence - (p.refunded_pence ?? 0), 0);
   let status: BookingPaymentStatus = "unpaid";
   if (totalPence > 0 && paidPence >= totalPence) status = "paid";
   else if (paidPence > 0 && (depositPence === 0 || paidPence >= depositPence)) status = "deposit_paid";

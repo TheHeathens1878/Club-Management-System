@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { recordSumUpPaymentIfPaid } from "@/lib/sumup";
 import { recordSumUpChargePaymentIfPaid } from "@/lib/sumup-finance";
@@ -16,6 +17,19 @@ import { recordSumUpChargePaymentIfPaid } from "@/lib/sumup-finance";
 // redelivers. Recording is keyed by checkout id, so a redelivery of something
 // that DID land is a no-op.
 export async function POST(req: Request) {
+  // Optional shared secret. SumUp's checkout callbacks carry no signature,
+  // so authenticity rests on re-fetching the checkout from SumUp — a forged
+  // call can record nothing that was not paid. What it CAN do is make this
+  // route do work for free. Set SUMUP_WEBHOOK_TOKEN in Vercel and put
+  // `?token=<the same>` on the callback URL registered with SumUp, and calls
+  // without it are dropped. Unset, behaviour is as before.
+  const required = process.env.SUMUP_WEBHOOK_TOKEN;
+  if (required) {
+    const given = new URL(req.url).searchParams.get("token") ?? "";
+    if (given.length !== required.length || !timingSafeEqual(Buffer.from(given), Buffer.from(required))) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+  }
   try {
     const body = await req.json().catch(() => ({} as Record<string, unknown>));
     const b = body as Record<string, unknown>;

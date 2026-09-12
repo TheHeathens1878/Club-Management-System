@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { getSessionProfile } from "@/lib/auth";
 import { getSiteUrl } from "@/lib/utils";
+import { requestOrigin } from "@/lib/request-origin";
 import {
   createChargeCheckout,
   ensureSumUpCustomer,
@@ -70,7 +71,8 @@ export async function createCheckoutForCharge(
       chargeId: charge.id,
       amountPence: outstanding,
       description: `CHG-${charge.charge_no} — ${charge.description}`,
-      returnUrl: `${getSiteUrl()}/my-payments`,
+      // Back to the host the member is signed in on (lib/request-origin).
+      returnUrl: `${(await requestOrigin()) || getSiteUrl()}/my-payments`,
       saveCard: save,
     });
     return { checkoutId: checkout.id };

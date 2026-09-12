@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getEmailBrandColor, getSettings, getRecipientEmails } from "@/lib/settings";
@@ -37,10 +38,11 @@ function roomNameOf(booking: Booking): string {
 async function paidMap(admin: ReturnType<typeof createAdminClient>, ids: string[]) {
   const map = new Map<string, number>();
   if (ids.length === 0) return map;
-  const { data } = await admin.from("payments").select("booking_id,amount_pence").in("booking_id", ids);
+  const { data } = await admin.from("payments").select("booking_id,amount_pence,refunded_pence").in("booking_id", ids);
   for (const p of data ?? []) {
     if (!p.booking_id) continue; // ledger rows for subscriptions carry no booking
-    map.set(p.booking_id, (map.get(p.booking_id) ?? 0) + p.amount_pence);
+    // Net of refunds: a refunded deposit is not a paid one.
+    map.set(p.booking_id, (map.get(p.booking_id) ?? 0) + p.amount_pence - (p.refunded_pence ?? 0));
   }
   return map;
 }
@@ -55,7 +57,9 @@ const SELECT_WITH_CALENDAR =
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const given = request.headers.get("authorization") ?? "";
+  const expected = `Bearer ${secret}`;
+  if (given.length !== expected.length || !timingSafeEqual(Buffer.from(given), Buffer.from(expected))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -71,6 +75,8 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(SELECT)
     .eq("status", "confirmed")
+    .eq("kind", "hire")
+    .gt("starts_at", new Date().toISOString())
     .is("deposit_reminder_sent_at", null)
     .gt("deposit_pence", 0)
     .not("deposit_due_date", "is", null)
@@ -115,6 +121,8 @@ export async function GET(request: Request) {
     .from("bookings")
     .select(SELECT)
     .eq("status", "confirmed")
+    .eq("kind", "hire")
+    .gt("starts_at", new Date().toISOString())
     .is("balance_reminder_sent_at", null)
     .gt("total_pence", 0)
     .not("balance_due_date", "is", null)
@@ -161,6 +169,11 @@ export async function GET(request: Request) {
       .from("bookings")
       .select(SELECT_WITH_CALENDAR)
       .eq("status", "confirmed")
+      // Hires that have not happened yet. Without both, an old hire whose
+      // deposit was taken in cash and never keyed in was cancelled — and its
+      // hirer emailed — months after the party.
+      .eq("kind", "hire")
+      .gt("starts_at", new Date().toISOString())
       .gt("deposit_pence", 0)
       .not("deposit_due_date", "is", null)
       .lt("deposit_due_date", today); // deadline is strictly in the past
