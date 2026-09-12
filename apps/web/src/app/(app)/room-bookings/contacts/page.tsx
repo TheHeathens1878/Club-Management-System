@@ -1,18 +1,26 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarPlus, Search } from "lucide-react";
+import { CalendarPlus, ChevronRight, Search } from "lucide-react";
 
+import { LinkRow } from "@/components/link-row";
 import { PageHeader } from "@/components/page-header";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { getSessionProfile, isStaff } from "@/lib/auth";
 import { formatBookingDateShort, instantToLocal } from "@/lib/booking-time";
+import { bookingStatusVariant } from "@/lib/booking-types";
 import { createClient } from "@/lib/supabase/server";
 
 /**
  * /room-bookings/contacts — the function room's own contacts book (Adam,
  * 2026-08-25: hire contacts kept OUT of the members database).
+ *
+ * Every row is a link to the contact's page (Adam, 2026-09-12: "click
+ * anywhere on the line and go into a contact page"), and the table says
+ * what the desk asks of a name: how to reach them, how often they hire, and
+ * what their last booking was and where it got to.
  *
  * Read as the caller: `booking_contacts` is staff/club_admin under RLS, and
  * so are the bookings behind the hire counts. Contacts are written by the
@@ -25,6 +33,8 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Hire contacts" };
 
 const PAGE_LIMIT = 200;
+
+type LastBooking = { id: string; starts_at: string; status: string };
 
 export default async function BookingContactsPage({
   searchParams,
@@ -50,20 +60,25 @@ export default async function BookingContactsPage({
   }
   const { data: contacts, error } = await query;
 
+  // Every booking behind these contacts, once: the hire count leaves
+  // cancellations out, but "last booking" is the most recent whatever became
+  // of it — a cancelled last booking is exactly the thing the desk wants to
+  // see before ringing someone.
   const ids = (contacts ?? []).map((contact) => contact.id);
-  const { data: hireRows } = ids.length
+  const { data: bookingRows } = ids.length
     ? await supabase
         .from("bookings")
-        .select("contact_id,starts_at,status")
+        .select("id,contact_id,starts_at,status")
         .in("contact_id", ids)
-        .neq("status", "cancelled")
     : { data: [] };
-  const hires = new Map<string, { count: number; last: string }>();
-  for (const row of hireRows ?? []) {
+  const hires = new Map<string, { count: number; last: LastBooking | null }>();
+  for (const row of bookingRows ?? []) {
     if (!row.contact_id) continue;
-    const entry = hires.get(row.contact_id) ?? { count: 0, last: "" };
-    entry.count += 1;
-    if (row.starts_at > entry.last) entry.last = row.starts_at;
+    const entry = hires.get(row.contact_id) ?? { count: 0, last: null };
+    if (row.status !== "cancelled") entry.count += 1;
+    if (!entry.last || row.starts_at > entry.last.starts_at) {
+      entry.last = { id: row.id, starts_at: row.starts_at, status: row.status };
+    }
     hires.set(row.contact_id, entry);
   }
 
@@ -112,13 +127,18 @@ export default async function BookingContactsPage({
           </Card>
         ) : (
           <>
-          {/* Phone: one card per contact — name and email as the title block,
-              the hire history as the right-hand pill. */}
+          {/* Phone: one card per contact, the whole card a link — name and
+              email as the title block, the hire history as the right-hand
+              pill, the last booking and its status on the bottom line. */}
           <div className="space-y-2 lg:hidden">
             {(contacts ?? []).map((contact) => {
               const hire = hires.get(contact.id) ?? null;
               return (
-                <div key={contact.id} className="rounded-xl border bg-card p-3 shadow-sm">
+                <Link
+                  key={contact.id}
+                  href={`/room-bookings/contacts/${contact.id}`}
+                  className="block rounded-xl border bg-card p-3 shadow-sm transition-colors hover:bg-secondary/40"
+                >
                   <div className="flex items-start justify-between gap-2">
                     <p className="min-w-0 flex-1 font-medium">{contact.name}</p>
                     <span className="shrink-0 rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
@@ -128,16 +148,19 @@ export default async function BookingContactsPage({
                   {contact.email && (
                     <p className="mt-0.5 break-words text-xs text-muted-foreground">{contact.email}</p>
                   )}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {contact.phone ?? "No phone"}
-                    {hire?.last
-                      ? ` · last hire ${formatBookingDateShort(instantToLocal(hire.last).date)}`
-                      : ""}
-                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{contact.phone ?? "No phone"}</p>
+                  {hire?.last ? (
+                    <p className="mt-1.5 flex items-center gap-2 text-xs text-muted-foreground">
+                      Last booking {formatBookingDateShort(instantToLocal(hire.last.starts_at).date)}
+                      <Badge variant={bookingStatusVariant(hire.last.status)} className="capitalize">
+                        {hire.last.status}
+                      </Badge>
+                    </p>
+                  ) : null}
                   {contact.notes && (
                     <p className="mt-1 text-xs text-muted-foreground">{contact.notes}</p>
                   )}
-                </div>
+                </Link>
               );
             })}
           </div>
@@ -147,23 +170,37 @@ export default async function BookingContactsPage({
               <thead className="border-b bg-secondary/40 text-xs text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2.5 font-medium">Contact</th>
+                  <th className="px-4 py-2.5 font-medium">Email</th>
                   <th className="px-4 py-2.5 font-medium">Phone</th>
                   <th className="px-4 py-2.5 font-medium">Hires</th>
-                  <th className="px-4 py-2.5 font-medium">Last hire</th>
+                  <th className="px-4 py-2.5 font-medium">Last booking</th>
+                  <th className="px-4 py-2.5 font-medium">
+                    <span className="sr-only">Open</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y">
                 {(contacts ?? []).map((contact) => {
                   const hire = hires.get(contact.id) ?? null;
                   return (
-                    <tr key={contact.id} className="transition-colors hover:bg-secondary/40">
+                    <LinkRow
+                      key={contact.id}
+                      href={`/room-bookings/contacts/${contact.id}`}
+                      className="transition-colors hover:bg-secondary/40"
+                    >
                       <td className="px-4 py-3 align-top">
                         <p className="font-medium">{contact.name}</p>
-                        {contact.email && (
-                          <p className="text-xs text-muted-foreground">{contact.email}</p>
-                        )}
                         {contact.notes && (
                           <p className="mt-0.5 text-xs text-muted-foreground">{contact.notes}</p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top">
+                        {contact.email ? (
+                          <a href={`mailto:${contact.email}`} className="text-primary hover:underline">
+                            {contact.email}
+                          </a>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 align-top">
@@ -172,12 +209,25 @@ export default async function BookingContactsPage({
                       <td className="px-4 py-3 align-top">{hire?.count ?? 0}</td>
                       <td className="px-4 py-3 align-top">
                         {hire?.last ? (
-                          formatBookingDateShort(instantToLocal(hire.last).date)
+                          <span className="flex flex-wrap items-center gap-2">
+                            <Link
+                              href={`/room-bookings/${hire.last.id}`}
+                              className="hover:underline"
+                            >
+                              {formatBookingDateShort(instantToLocal(hire.last.starts_at).date)}
+                            </Link>
+                            <Badge variant={bookingStatusVariant(hire.last.status)} className="capitalize">
+                              {hire.last.status}
+                            </Badge>
+                          </span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                    </tr>
+                      <td className="px-4 py-3 align-top text-right">
+                        <ChevronRight className="inline h-4 w-4 text-muted-foreground" aria-hidden />
+                      </td>
+                    </LinkRow>
                   );
                 })}
               </tbody>

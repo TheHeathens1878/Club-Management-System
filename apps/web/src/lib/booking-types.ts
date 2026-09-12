@@ -118,3 +118,25 @@ export function bookingPeriod(
     blocked_until: endsAt,
   };
 }
+
+/**
+ * The badge a booking status wears wherever it is drawn as a pill: the desk's
+ * list, the contact book, a contact's history. Confirmed is the only green;
+ * pending is the amber "somebody owes an answer"; an enquiry is quiet.
+ */
+export function bookingStatusVariant(
+  status: string,
+): "success" | "destructive" | "warning" | "muted" | "default" {
+  switch (status) {
+    case "confirmed":
+      return "success";
+    case "cancelled":
+      return "destructive";
+    case "pending":
+      return "warning";
+    case "enquiry":
+      return "muted";
+    default:
+      return "default";
+  }
+}
