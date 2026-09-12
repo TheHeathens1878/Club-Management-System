@@ -39,7 +39,7 @@ export async function loadHomeAttention(): Promise<{
       .select("id,amount_pence,status,payments(amount_pence,refunded_pence)")
       .eq("status", "pending"),
     supabase.rpc("my_unread_message_count"),
-    loadNavCounts(capabilities.isClubAdmin),
+    loadNavCounts(capabilities.isClubAdmin, capabilities.isStaff),
   ]);
 
   const events: AttentionEvent[] = (eventsResult.data ?? []).map((row) => ({
@@ -63,6 +63,7 @@ export async function loadHomeAttention(): Promise<{
     unreadMessages: unreadResult.data ?? 0,
     approvals: counts.approvals,
     registrations: counts.registrations,
+    roomBookings: counts.roomBookings,
   };
 
   const upcoming = events

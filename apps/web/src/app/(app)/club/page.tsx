@@ -31,7 +31,7 @@ export default async function ClubPage() {
 
   const items = itemsFor("club", capabilities);
   const counts = items.some((item) => item.badge)
-    ? await loadNavCounts(capabilities.isClubAdmin)
+    ? await loadNavCounts(capabilities.isClubAdmin, capabilities.isStaff)
     : NO_NAV_COUNTS;
 
   const sections: HubSection[] = sectionsOf(items).map((section) => ({

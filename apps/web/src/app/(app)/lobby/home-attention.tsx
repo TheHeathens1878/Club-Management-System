@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CalendarCheck, ChevronRight, ClipboardCheck, MessageSquare, Receipt, UserCheck } from "lucide-react";
+import { CalendarCheck, ChevronRight, ClipboardCheck, DoorOpen, MessageSquare, Receipt, UserCheck } from "lucide-react";
 
 import { RespondButtons } from "@/app/(app)/events/respond-buttons";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
@@ -12,6 +12,7 @@ const ICONS: Record<AttentionItem["kind"], typeof Receipt> = {
   messages: MessageSquare,
   approvals: UserCheck,
   registrations: ClipboardCheck,
+  roomBookings: DoorOpen,
 };
 
 /**

@@ -88,8 +88,12 @@ describe("what needs my attention", () => {
       unreadMessages: 1,
       registrations: 2,
       approvals: 1,
+      roomBookings: 3,
     });
-    expect(items.map((item) => item.kind)).toEqual(["pay", "messages", "registrations", "approvals"]);
+    expect(items.map((item) => item.kind)).toEqual(["pay", "messages", "roomBookings", "registrations", "approvals"]);
+    expect(items[2]!.title).toBe("3 room booking requests waiting");
+    expect(items[2]!.href).toBe("/context?view=function_room&next=%2Froom-bookings%3Fstatus%3Dopen%26view%3Dlist");
+    items.splice(2, 1);
     expect(items[0]!.title).toBe("£42.50 to pay");
     expect(items[0]!.href).toBe("/my-payments");
     expect(items[1]!.title).toBe("1 unread message");

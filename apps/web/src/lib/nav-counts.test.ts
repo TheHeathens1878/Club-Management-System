@@ -34,14 +34,24 @@ const everyone: Capabilities = {
 describe("nav waiting-counts", () => {
   const badgedItems = DESTINATIONS.flatMap((d) => itemsFor(d.key, everyone)).filter((item) => item.badge);
 
-  it("counts exactly the two admin queues Adam asked for, on their rows", () => {
-    expect(badgedItems.map((entry) => entry.href).sort()).toEqual(["/approvals", "/registrations"]);
+  it("counts the two admin queues and the room desk's waiting requests, on their rows", () => {
+    expect(badgedItems.map((entry) => entry.href).sort()).toEqual([
+      "/approvals",
+      "/registrations",
+      "/room-bookings?status=open&view=list",
+    ]);
   });
 
-  it("draws them only where a club administrator would see them", () => {
-    for (const entry of badgedItems) {
+  it("draws the admin queues only where a club administrator would see them", () => {
+    for (const entry of badgedItems.filter((entry) => entry.badge !== "roomBookings")) {
       expect(entry.allowed({ ...everyone, isClubAdmin: false })).toBe(false);
     }
+  });
+
+  it("draws the room desk's count for staff who are not administrators", () => {
+    const desk = badgedItems.find((entry) => entry.badge === "roomBookings")!;
+    expect(desk.allowed({ ...everyone, isClubAdmin: false, isCommittee: false, isSuperUser: false })).toBe(true);
+    expect(desk.allowed({ ...everyone, isStaff: false })).toBe(false);
   });
 
   it("the tabs themselves wear only Messages and the admin queues", () => {
@@ -53,7 +63,7 @@ describe("nav waiting-counts", () => {
   });
 
   it("every badge key has a counter behind it", () => {
-    const keys: NavBadge[] = ["approvals", "registrations", "messages"];
+    const keys: NavBadge[] = ["approvals", "registrations", "messages", "roomBookings"];
     for (const key of keys) {
       if (key === "messages") continue; // my_unread_message_count(), read in the layout
       expect(NO_NAV_COUNTS).toHaveProperty(key);

@@ -91,7 +91,7 @@ const RETIRED_MENU_HREFS = [
   "/pitches/manage",
   "/venues",
   "/room-bookings",
-  "/room-bookings?status=pending&view=list",
+  "/room-bookings?status=open&view=list",
   "/room-bookings/rooms",
   "/room-bookings/contacts",
   "/bar",

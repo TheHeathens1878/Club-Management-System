@@ -31,11 +31,13 @@ export type AttentionInputs = {
   /** Admin queues — zero for everyone who is not a club administrator. */
   approvals: number;
   registrations: number;
+  /** Room requests and enquiries waiting for the desk — zero for anyone not on it. */
+  roomBookings?: number;
 };
 
 export type AttentionItem = {
   key: string;
-  kind: "respond" | "pay" | "messages" | "approvals" | "registrations";
+  kind: "respond" | "pay" | "messages" | "approvals" | "registrations" | "roomBookings";
   title: string;
   detail: string;
   href: string;
@@ -127,6 +129,18 @@ export function attentionItems(input: AttentionInputs): AttentionItem[] {
       detail: "Direct messages, team rooms and announcements",
       href: "/messages?filter=unread",
       count: input.unreadMessages,
+    });
+  }
+
+  if ((input.roomBookings ?? 0) > 0) {
+    const n = input.roomBookings ?? 0;
+    items.push({
+      key: "roomBookings",
+      kind: "roomBookings",
+      title: `${n} room booking request${n === 1 ? "" : "s"} waiting`,
+      detail: "Requests and enquiries for the function room — the desk owes an answer",
+      href: "/context?view=function_room&next=%2Froom-bookings%3Fstatus%3Dopen%26view%3Dlist",
+      count: n,
     });
   }
 
