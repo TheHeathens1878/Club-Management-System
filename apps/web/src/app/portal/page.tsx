@@ -38,6 +38,22 @@ export default async function PortalPage({
 
   const sumupEnabled = isSumUpConfigured();
   const admin = createAdminClient();
+
+  // Claim the bookings made in this person's name before they had an account:
+  // the rows imported from the old room app, and anything the desk typed in
+  // for them. Those carry the email but no profile id, so until 2026-09-12 a
+  // hirer who signed in saw an empty portal and could not pay online. Hires
+  // only, matched on the address case-insensitively, linked once and for good.
+  if (session.email) {
+    await admin
+      .from("bookings")
+      .update({ booker_profile_id: session.userId })
+      .is("booker_profile_id", null)
+      .eq("kind", "hire")
+      // `_` and `%` are wildcards to ilike; an address is a literal.
+      .ilike("booker_email", session.email.replace(/[\\%_]/g, "\\$&"));
+  }
+
   // Function-room hires only: pitch bookings (training a coach booked) also
   // carry the booker's profile id, but they are team business with no invoice
   // — they live on /pitches/mine, not in the hirer portal.
@@ -56,13 +72,14 @@ export default async function PortalPage({
   if (ids.length > 0) {
     const { data: payments } = await admin
       .from("payments")
-      .select("booking_id,amount_pence")
+      .select("booking_id,amount_pence,refunded_pence")
       .in("booking_id", ids);
     for (const p of payments ?? []) {
       if (!p.booking_id) continue;
+      // Net of refunds: a refunded deposit is owed again.
       paidByBooking.set(
         p.booking_id,
-        (paidByBooking.get(p.booking_id) ?? 0) + p.amount_pence,
+        (paidByBooking.get(p.booking_id) ?? 0) + p.amount_pence - (p.refunded_pence ?? 0),
       );
     }
   }
@@ -199,7 +216,12 @@ export default async function PortalPage({
                   </>
                 )}
 
-                {confirmed && total === 0 && (
+                {confirmed && b.total_pence === null && (
+                  <p className="mt-4 text-sm text-muted-foreground">
+                    We&apos;ll confirm the cost with you shortly; you&apos;ll be able to pay here once it is set.
+                  </p>
+                )}
+                {confirmed && b.total_pence === 0 && (
                   <p className="mt-4 text-sm text-muted-foreground">No payment is required for this booking.</p>
                 )}
 

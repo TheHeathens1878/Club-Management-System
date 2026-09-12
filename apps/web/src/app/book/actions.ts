@@ -36,27 +36,54 @@ async function ensureBookerAccount(
   admin: AdminClient,
   email: string,
   fullName: string,
-): Promise<{ userId: string | null; isNew: boolean }> {
+): Promise<{ userId: string | null; personId: string | null; isNew: boolean; neverSignedIn: boolean }> {
+  // Does the club already know this address as a PERSON — a parent, a
+  // player, a coach — who simply has no login yet? The sign-up trigger will
+  // link the new login to that record (branch 1b), and until 2026-09-12 the
+  // re-role below then made them a `booker`: locked to the hire portal, out
+  // of the member app, on the strength of an unauthenticated form. A known
+  // person keeps the role the trigger gives; only a stranger becomes a hirer.
+  const { data: knownPerson } = await admin
+    .from("people")
+    .select("id")
+    .is("deleted_at", null)
+    .ilike("email", email.replace(/[\\%_]/g, "\\$&"))
+    .limit(1)
+    .maybeSingle();
+
   const { data: created } = await admin.auth.admin.createUser({
     email,
     email_confirm: true,
     user_metadata: { needs_password: true, full_name: fullName },
   });
   if (created?.user) {
-    // The sign-up trigger has already made the profile (role member); this
-    // is the re-role, not the creation.
-    const { error } = await admin
+    const { data: profile, error } = await admin
       .from("profiles")
-      .update({ role: "booker", full_name: fullName })
-      .eq("id", created.user.id);
+      .update(knownPerson ? {} : { role: "booker", full_name: fullName })
+      .eq("id", created.user.id)
+      .select("person_id")
+      .maybeSingle();
     if (error) console.error("[room-booking] booker profile role not written:", error);
-    return { userId: created.user.id, isNew: true };
+    return { userId: created.user.id, personId: profile?.person_id ?? null, isNew: true, neverSignedIn: true };
   }
   // Already registered — find their id without touching their role. A
   // targeted lookup, not a page of the admin user list (finding 10).
   const { data: existingId, error } = await admin.rpc("auth_user_id_for_email", { p_email: email });
   if (error) console.error("[room-booking] auth_user_id_for_email failed:", error);
-  return { userId: existingId ?? null, isNew: false };
+  if (!existingId) return { userId: null, personId: null, isNew: false, neverSignedIn: false };
+  // A returning hirer whose first booking made an account they never
+  // activated needs the set-password link again, or the portal is a door
+  // with no key.
+  const [{ data: profile }, { data: userRes }] = await Promise.all([
+    admin.from("profiles").select("person_id").eq("id", existingId).maybeSingle(),
+    admin.auth.admin.getUserById(existingId),
+  ]);
+  return {
+    userId: existingId,
+    personId: profile?.person_id ?? null,
+    isNew: false,
+    neverSignedIn: !userRes?.user?.last_sign_in_at,
+  };
 }
 
 function bookerEmailHtml(intro: string, brandColor: string, clubName: string): string {
@@ -134,8 +161,14 @@ export async function submitBooking(
   // Checked here as well as in the form, because a form is only a suggestion.
   const birthdayAgeRaw = String(formData.get("birthday_age") ?? "").trim();
   const birthdayAge = birthdayAgeRaw ? Number(birthdayAgeRaw) : null;
-  const isBirthday = (occasion ?? "").toLowerCase().startsWith("birthday");
-  if (isBirthday && birthdayAge !== null && Number.isFinite(birthdayAge) && birthdayAge < 18) {
+  // Any occasion that mentions a birthday is one, however it is worded — and
+  // a birthday with no age given is refused, because "no age" was the way
+  // round both the under-18 rule and the 18th's deposit.
+  const isBirthday = /birthday|bday|b-day/i.test(occasion ?? "");
+  if (isBirthday && (birthdayAge === null || !Number.isFinite(birthdayAge) || birthdayAge <= 0)) {
+    return { error: "Please tell us the age being celebrated." };
+  }
+  if (isBirthday && birthdayAge !== null && birthdayAge < 18) {
     return { error: "Sorry — we don't take bookings for under-18 birthday parties." };
   }
   const eighteenth = isBirthday && birthdayAge === 18;
@@ -248,10 +281,17 @@ export async function submitBooking(
   }
 
   // Create / link a booker account so they can access the portal
-  const { userId: bookerId, isNew } = await ensureBookerAccount(admin, bookerEmail, bookerName)
-    .catch(() => ({ userId: null as string | null, isNew: false }));
+  const { userId: bookerId, personId: bookerPersonId, isNew, neverSignedIn } =
+    await ensureBookerAccount(admin, bookerEmail, bookerName)
+      .catch(() => ({ userId: null as string | null, personId: null as string | null, isNew: false, neverSignedIn: false }));
   if (bookerId) {
-    await admin.from("bookings").update({ booker_profile_id: bookerId }).eq("id", booking.id);
+    // Both links: the profile id is what the portal reads; the person id is
+    // what the bookings_booker_read / payments_booker_read policies key on,
+    // which until 2026-09-12 was never written and so never matched.
+    await admin
+      .from("bookings")
+      .update({ booker_profile_id: bookerId, ...(bookerPersonId ? { booker_person_id: bookerPersonId } : {}) })
+      .eq("id", booking.id);
   }
 
   // Send the booker their acknowledgement + portal access, and tell the desk.
@@ -279,7 +319,7 @@ export async function submitBooking(
 
       let accessLine = `<p>You can track your booking and pay online any time in your portal.</p>
 <p><a href="${siteUrl}/portal" style="color:${brandColor};font-weight:600;">Open your booking portal →</a></p>`;
-      if (isNew && bookerId) {
+      if (bookerId && (isNew || neverSignedIn)) {
         const { data: linkData } = await admin.auth.admin.generateLink({
           type: "magiclink",
           email: bookerEmail,

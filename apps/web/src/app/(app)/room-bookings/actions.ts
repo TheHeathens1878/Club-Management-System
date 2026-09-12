@@ -20,6 +20,7 @@ import {
   isValidDateString,
   isValidTimeString,
   legacyWindowToInstants,
+  londonToday,
 } from "@/lib/booking-time";
 import {
   bookingPeriod,
@@ -72,13 +73,18 @@ export async function confirmBooking(
   const balanceDays = Number(settings.balance_reminder_days) || 14;
   const defaultDeposit = Number(settings.deposit_default_pence) || 0;
 
-  const totalPence = opts?.totalPence ?? null;
+  // A blank price box keeps the price the booking already carries — a quote,
+  // or an earlier confirmation. Writing NULL over it meant the booking could
+  // never reach "paid" and no balance reminder would ever go.
+  const totalPence = opts?.totalPence ?? booking.total_pence ?? null;
   const depositPence = opts?.depositPence ?? defaultDeposit;
 
-  // Deposit due = today + window; balance due = booking date − reminder lead time
-  const depositDue = new Date();
-  depositDue.setDate(depositDue.getDate() + depositWindow);
-  const depositDueStr = depositDue.toISOString().slice(0, 10);
+  // Deposit due = today + window; balance due = booking date − reminder lead
+  // time. "Today" is the London date: the server runs in UTC, and between
+  // midnight and 1am BST the UTC date is still yesterday, which used to hand
+  // out a deadline a day early.
+  const depositDueStr = addDays(londonToday(), depositWindow);
+  const depositDue = new Date(`${depositDueStr}T12:00:00Z`);
 
   const balanceDueStr = addDays(window.date, -balanceDays);
 
@@ -383,12 +389,16 @@ async function recomputePaymentStatus(
 ): Promise<{ totalPence: number; depositPence: number; paidPence: number }> {
   const [{ data: booking }, { data: payments }] = await Promise.all([
     admin.from("bookings").select("total_pence,deposit_pence").eq("id", bookingId).maybeSingle(),
-    admin.from("payments").select("amount_pence").eq("booking_id", bookingId),
+    admin.from("payments").select("amount_pence,refunded_pence").eq("booking_id", bookingId),
   ]);
 
   const totalPence = Number(booking?.total_pence ?? 0);
   const depositPence = Number(booking?.deposit_pence ?? 0);
-  const paidPence = (payments ?? []).reduce((acc, p) => acc + Number(p.amount_pence ?? 0), 0);
+  // Net of refunds: money given back is money owed again.
+  const paidPence = (payments ?? []).reduce(
+    (acc, p) => acc + Number(p.amount_pence ?? 0) - Number(p.refunded_pence ?? 0),
+    0,
+  );
 
   let status: BookingPaymentStatus;
   if (totalPence > 0 && paidPence >= totalPence) status = "paid";
@@ -483,15 +493,24 @@ export async function deletePayment(paymentId: string, bookingId: string): Promi
   if (!session || !isCommittee(session.profile?.role)) return { error: "Not authorised." };
 
   const admin = createAdminClient();
-  // Only manual payments can be deleted; SumUp records are locked.
+  // Only manual payments can be deleted; SumUp records are locked. And only
+  // THIS booking's: the id alone used to be enough, which let a committee
+  // member's click reach a subscription or charge ledger row and then
+  // recompute the wrong booking.
   const { data: payment } = await admin
     .from("payments")
     .select("source")
     .eq("id", paymentId)
+    .eq("booking_id", bookingId)
     .maybeSingle();
-  if (payment?.source === "sumup") return { error: "SumUp payments cannot be deleted." };
+  if (!payment) return { error: "That payment is not on this booking." };
+  if (payment.source === "sumup") return { error: "SumUp payments cannot be deleted." };
 
-  const { error } = await admin.from("payments").delete().eq("id", paymentId);
+  const { error } = await admin
+    .from("payments")
+    .delete()
+    .eq("id", paymentId)
+    .eq("booking_id", bookingId);
   if (error) return { error: "Failed to delete payment." };
 
   await recomputePaymentStatus(admin, bookingId);
@@ -934,6 +953,29 @@ export async function createInternalBooking(
         ),
       };
     }
+  }
+
+  // "Mark as paid" with a price used to set payment_status alone, so the
+  // booking wore a Paid badge while the ledger and the finance pages held no
+  // money for it (eight such rows on prod, 2026-09-12). The tick now writes
+  // the payment it claims, as a manual receipt taken at the desk. A tick
+  // with no price still only sets the status: there is no figure to record.
+  const markPaid = formData.get("mark_paid") === "on";
+  const paidPence = amountPounds ? Math.round(amountPounds * 100) : 0;
+  if (markPaid && paidPence > 0) {
+    const { error: paymentErr } = await admin.from("payments").insert({
+      booking_id: booking.id,
+      amount_pence: paidPence,
+      paid_at: new Date().toISOString(),
+      method: "other",
+      reference: null,
+      source: "manual",
+      authorised_by_profile: session.userId,
+      authorised_by_name: session.profile?.full_name || session.email || "Staff",
+      authorised_by_email: session.email,
+      note: "Marked as paid when the booking was created",
+    });
+    if (paymentErr) console.error("[room-booking] mark-as-paid receipt not written:", paymentErr);
   }
 
   await writeAudit({
@@ -1405,6 +1447,8 @@ export async function sendFinalChaser(bookingId: string): Promise<{ error?: stri
     })
     .eq("id", bookingId);
   if (error) return { error: conflictOrMessage(error, "The database refused that.") };
+  // A lower total can already be met by what was paid.
+  await recomputePaymentStatus(admin, bookingId);
 
   const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
   const brandColor = await getEmailBrandColor().catch(() => undefined);

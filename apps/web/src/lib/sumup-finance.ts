@@ -317,7 +317,14 @@ export async function collectChargeFromStoredCard(params: {
     }
   }
 
-  const recorded = await recordSumUpChargePaymentIfPaid(checkout.id);
+  let recorded: Awaited<ReturnType<typeof recordSumUpChargePaymentIfPaid>>;
+  try {
+    recorded = await recordSumUpChargePaymentIfPaid(checkout.id);
+  } catch (e) {
+    // SumUp could not be asked again. The card may well have been charged;
+    // the attempt stays open for the next run to reconcile.
+    return { outcome: "failed", reason: `SumUp could not confirm the outcome: ${e instanceof Error ? e.message : String(e)}`, status: final?.status };
+  }
   if (recorded.recorded || recorded.present) {
     await finishAttempt(claimed.id, "paid", { sumupStatus: final?.status ?? checkout.status });
     return { outcome: "collected", checkoutId: checkout.id, amountPence: outstanding };
@@ -327,7 +334,14 @@ export async function collectChargeFromStoredCard(params: {
     // run's reconcile pass will record it, and nothing will charge again.
     return { outcome: "failed", reason: "the payment could not be written to the ledger", status: final?.status };
   }
-  const status = final?.status ?? recorded.status ?? "unknown";
+  const status = (final?.status ?? recorded.status ?? "unknown").toUpperCase();
+  // Only SumUp's own word that the card was NOT charged closes the attempt.
+  // Anything else — PAID in hand but the re-read lagging behind 3-D Secure,
+  // PENDING, an unknown status — stays open, because closing it as failed is
+  // what let the next night claim a fresh attempt and charge the card again.
+  if (status !== "FAILED" && status !== "EXPIRED") {
+    return { outcome: "failed", reason: completionError ?? `checkout is ${status}; left open for the next run to settle`, status };
+  }
   await finishAttempt(claimed.id, "failed", { sumupStatus: status, error: completionError });
   return { outcome: "failed", reason: completionError ?? `checkout ended ${status}`, status };
 }

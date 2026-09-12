@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { recordSumUpPaymentIfPaid } from "@/lib/sumup";
+import { originFromHeaders } from "@/lib/request-origin";
 
 // 3DS / redirect return target. SumUp hits this both as a browser redirect
 // (GET, with the booker's session) and as a server-to-server callback
@@ -52,7 +53,10 @@ async function extractCheckoutId(req: Request, url: URL): Promise<string | null>
 
 async function handle(req: Request): Promise<Response> {
   const url = new URL(req.url);
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? url.origin;
+  // The browser is redirected onward; it must stay on the host whose cookie
+  // it carries (see lib/request-origin). The canonical address was sending a
+  // booker back from 3-D Secure to a host they were not signed in on.
+  const origin = originFromHeaders(req.headers) || url.origin;
   const checkoutId = await extractCheckoutId(req, url);
 
   if (!checkoutId) {

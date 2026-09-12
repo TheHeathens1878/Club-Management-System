@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 
 import { writeAudit } from "@/lib/audit";
@@ -39,7 +40,9 @@ const PAGE = 200;
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "CRON_SECRET not configured" }, { status: 500 });
-  if (request.headers.get("authorization") !== `Bearer ${secret}`) {
+  const given = request.headers.get("authorization") ?? "";
+  const expected = `Bearer ${secret}`;
+  if (given.length !== expected.length || !timingSafeEqual(Buffer.from(given), Buffer.from(expected))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -148,8 +151,19 @@ export async function GET(request: Request) {
         .from("people")
         .select("id,first_name,email")
         .in("id", [...byLead.keys()]);
+      // One digest per lead per day. The charges are "created in the last 24
+      // hours", so a retried or re-run cron used to send the same email
+      // again; the send log is the memory.
+      const { data: alreadySent } = await admin
+        .from("outbound_messages")
+        .select("entity_id")
+        .eq("template", "billing_digest")
+        .eq("entity", "people")
+        .gte("created_at", since);
+      const sentToday = new Set((alreadySent ?? []).map((m) => m.entity_id));
       for (const lead of leads ?? []) {
         if (!lead.email) continue;
+        if (sentToday.has(lead.id)) continue;
         const items = byLead.get(lead.id) ?? [];
         const collected = items.filter((i) => i.status === "paid");
         const owed = items.filter((i) => i.status === "pending");
@@ -167,7 +181,9 @@ export async function GET(request: Request) {
                 : "Nothing more to do — thank you."
             }</p><p>AoM Sports Club</p>`,
             category: "reminder",
-            entity: "charges",
+            template: "billing_digest",
+            entity: "people",
+            entityId: lead.id,
           });
           summary.emailed += 1;
         } catch (e) {
