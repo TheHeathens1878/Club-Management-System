@@ -31,3 +31,10 @@ export { NavLink } from "../apps/web/src/components/nav-link";
 export { SectionHomeLink } from "../apps/web/src/components/section-home-link";
 export { MobileTabBar } from "../apps/web/src/components/mobile-tab-bar";
 export type { MobileTabItem } from "../apps/web/src/components/mobile-tab-bar";
+
+// Shell pieces (P7.5). AppTopBar is not synced: its role switcher calls a
+// server action, which cannot bundle for a preview.
+export { NounTabs } from "../apps/web/src/components/noun-tabs";
+export type { NounTab, NounTabGroup } from "../apps/web/src/components/noun-tabs";
+export { FilterRail } from "../apps/web/src/components/filter-rail";
+export type { RailGroup, RailOption } from "../apps/web/src/components/filter-rail";

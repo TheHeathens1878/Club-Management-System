@@ -30,7 +30,9 @@
     "LinkRow": "apps/web/src/components/link-row.tsx",
     "NavLink": "apps/web/src/components/nav-link.tsx",
     "SectionHomeLink": "apps/web/src/components/section-home-link.tsx",
-    "MobileTabBar": "apps/web/src/components/mobile-tab-bar.tsx"
+    "MobileTabBar": "apps/web/src/components/mobile-tab-bar.tsx",
+    "NounTabs": "apps/web/src/components/noun-tabs.tsx",
+    "FilterRail": "apps/web/src/components/filter-rail.tsx"
   },
   "dtsPropsFor": {
     "Button": "  /** Visual style. `default` is the crest-orange fill; `outline` and `secondary` sit on paper; `ghost` is bare; `link` is inline text. */\n  variant?: \"default\" | \"destructive\" | \"outline\" | \"secondary\" | \"ghost\" | \"link\";\n  /** `default` is 40px tall, `sm` 36px, `lg` 44px; `icon` is a 40px square for a lone icon. */\n  size?: \"default\" | \"sm\" | \"lg\" | \"icon\";\n  children?: React.ReactNode;\n  className?: string;\n  disabled?: boolean;\n  type?: \"button\" | \"submit\" | \"reset\";\n  onClick?: React.MouseEventHandler<HTMLButtonElement>;",
@@ -54,7 +56,9 @@
     "LinkRow": "  /** Where a click anywhere on the row goes. */\n  href: string;\n  className?: string;\n  /** The row's `<td>` cells. */\n  children: React.ReactNode;",
     "NavLink": "  href: string;\n  /** Every href in the menu, so only the best match highlights. */\n  hrefs?: string[];\n  /** Indented sub-entry. */\n  child?: boolean;\n  /** Right-aligned count pill. */\n  badge?: string | number;\n  /** Right-aligned admin-only lock glyph. */\n  lock?: boolean;\n  /** Icon element followed by the label text. */\n  children: React.ReactNode;",
     "SectionHomeLink": "  href: string;\n  label: string;\n  /** Pre-rendered icon element. */\n  icon?: React.ReactNode;",
-    "MobileTabBar": "  /** Up to five tabs. `match` lists the pathname prefixes that count as being on the tab; `moreFallback` marks the tab that lights when nothing matches. */\n  tabs: { href: string; label: string; icon: React.ReactNode; match: string[]; moreFallback?: boolean; badge?: number }[];"
+    "MobileTabBar": "  /** Up to five tabs. `match` lists the pathname prefixes that count as being on the tab; `moreFallback` marks the tab that lights when nothing matches. */\n  tabs: { href: string; label: string; icon: React.ReactNode; match: string[]; moreFallback?: boolean; badge?: number }[];",
+    "NounTabs": "  /** One group per door; the strip shows the group whose door the current path is inside. Overview first, then the rows. */\n  groups: { key: \"diary\" | \"people\" | \"clubhouse\" | \"money\" | \"inbox\" | \"messages\"; tabs: { href: string; label: string; badge?: number }[] }[];",
+    "FilterRail": "  /** Show me / Whose groups; each option is a link with an optional swatch colour and live count. Drawn at lg and above only. */\n  groups: { title: string; options: { href: string; label: string; active: boolean; swatch?: string; count?: number | string }[] }[];\n  /** One thing worth knowing about this list. */\n  note?: { title: string; body: string };\n  footnote?: string;\n  /** The list itself, to the right of the rail. */\n  children: React.ReactNode;"
   },
   "overrides": {
     "MobileTabBar": {
