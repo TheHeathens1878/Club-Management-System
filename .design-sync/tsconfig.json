@@ -1,0 +1,11 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["../apps/web/src/*"],
+      "next/link": ["./shims/next-link.tsx"],
+      "next/navigation": ["./shims/next-navigation.ts"]
+    }
+  }
+}
