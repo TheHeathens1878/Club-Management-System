@@ -39,7 +39,7 @@
      * somewhere no gesture could reach (Adam, 2026-09-01: "you can't actually
      * scroll to the bottom to see the details").
      */
-    --mobile-header-h: 3.5rem; /* MobileHeader — below lg only */
+    --mobile-header-h: 3.625rem; /* AppTopBar — 58px, at every width (P7.5) */
     --tab-bar-h: 55px; /* MobileTabBar: a 54px tab plus its hairline top border */
   }
 

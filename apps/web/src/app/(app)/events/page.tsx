@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { CalendarDays, CalendarPlus, ChevronRight, LandPlot } from "lucide-react";
 
+import { FilterRail, type RailGroup } from "@/components/filter-rail";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -38,19 +39,27 @@ import {
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Calendar" };
+export const metadata = { title: "Diary" };
 
 const HORIZON_DAYS = 90;
+
+/** The diary's kinds — every competition is a match. */
+const KINDS = {
+  match: ["league_match", "cup_match", "friendly"],
+  training: ["practice"],
+  social: ["social"],
+} as const;
+type Kind = keyof typeof KINDS;
 
 export default async function EventsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ team?: string }>;
+  searchParams: Promise<{ team?: string; type?: string }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
-  const [supabase, capabilities, { team: teamParam }] = await Promise.all([
+  const [supabase, capabilities, { team: teamParam, type: typeParam }] = await Promise.all([
     createClient(),
     getCapabilities(),
     searchParams,
@@ -66,7 +75,55 @@ export default async function EventsPage({
   const filter = teamParam && teams.has(teamParam) ? teams.get(teamParam)! : null;
 
   const all = data ?? [];
-  const events = filter ? all.filter((event) => event.team_id === filter.id) : all;
+  const byTeam = filter ? all.filter((event) => event.team_id === filter.id) : all;
+
+  // "Show me" — the diary's kinds, as the design's rail names them: matches
+  // of every competition, training, socials. The filter is a URL, so it can
+  // be shared and the back button undoes it.
+  const kind = typeParam && typeParam in KINDS ? (typeParam as Kind) : null;
+  const ofKind = (k: Kind, source = byTeam) =>
+    source.filter((event) => (KINDS[k] as readonly string[]).includes(event.type));
+  const events = kind ? ofKind(kind) : byTeam;
+
+  const query = (overrides: { team?: string | null; type?: Kind | null }) => {
+    const params = new URLSearchParams();
+    const team = overrides.team === undefined ? filter?.id : overrides.team;
+    const type = overrides.type === undefined ? kind : overrides.type;
+    if (team) params.set("team", team);
+    if (type) params.set("type", type);
+    const text = params.toString();
+    return text ? `/events?${text}` : "/events";
+  };
+  const kindOptions = (
+    [
+      ["Everything", null, "hsl(20 18% 7%)"],
+      ["Matches", "match", "hsl(12 76% 51%)"],
+      ["Training", "training", "hsl(200 51% 37%)"],
+      ["Socials", "social", "hsl(151 33% 37%)"],
+    ] as const
+  ).map(([label, k, swatch]) => ({
+    href: query({ type: k }),
+    label,
+    active: kind === k,
+    swatch,
+    count: k ? ofKind(k).length : byTeam.length,
+  }));
+  const rail: RailGroup[] = [{ title: "Show me", options: kindOptions }];
+  if (chips.length > 1) {
+    const withinKind = kind ? ofKind(kind, all) : all;
+    rail.push({
+      title: "Whose",
+      options: [
+        { href: query({ team: null }), label: "Everyone", active: !filter, count: withinKind.length },
+        ...chips.map((team) => ({
+          href: query({ team: team.id }),
+          label: team.name,
+          active: filter?.id === team.id,
+          count: withinKind.filter((event) => event.team_id === team.id).length,
+        })),
+      ],
+    });
+  }
 
   // "New event" is a coach's or an administrator's button, and only while
   // they are wearing that hat (Adam, 2026-09-02). In a member view the list is
@@ -85,7 +142,7 @@ export default async function EventsPage({
   return (
     <>
       <PageHeader
-        title="Calendar"
+        title="Diary"
         subtitle={
           filter
             ? `Matches, practices and socials for ${filter.name} — accept or decline`
@@ -100,6 +157,10 @@ export default async function EventsPage({
         }
       />
 
+      <FilterRail
+        groups={rail}
+        footnote="Fixtures, training and socials share one diary, so a clash cannot hide in another list."
+      >
       <div className="space-y-4 p-4 lg:p-6">
         {/* The other diaries FIRST, on their own wrapping row — a coach looks
             here for the pitch calendar and the booking form, and a link at
@@ -127,14 +188,22 @@ export default async function EventsPage({
           </Chip>
         </div>
 
-        {/* Which team — one strip, scrollable on a phone. */}
+        {/* What kind, then which team — two strips, scrollable on a phone.
+            Above lg the rail on the left carries the same filters. */}
+        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
+          {kindOptions.map((option) => (
+            <Chip key={option.label} href={option.href} active={option.active}>
+              {option.label}
+            </Chip>
+          ))}
+        </div>
         {chips.length > 1 ? (
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:px-0">
-            <Chip href="/events" active={!filter}>
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
+            <Chip href={query({ team: null })} active={!filter}>
               Everyone
             </Chip>
             {chips.map((team) => (
-              <Chip key={team.id} href={`/events?team=${team.id}`} active={filter?.id === team.id}>
+              <Chip key={team.id} href={query({ team: team.id })} active={filter?.id === team.id}>
                 {team.name}
               </Chip>
             ))}
@@ -201,6 +270,7 @@ export default async function EventsPage({
           })
         )}
       </div>
+      </FilterRail>
     </>
   );
 }

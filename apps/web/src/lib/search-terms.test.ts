@@ -52,12 +52,12 @@ describe("everyday words find the page", () => {
   it("scores nothing for an unrelated word and lists the first pages for an empty query", () => {
     expect(rankPages(pages, "zebra")).toEqual([]);
     expect(rankPages(pages, "").map((p) => p.label).slice(0, 5)).toEqual([
-      "Home",
-      "Calendar",
+      "Diary",
+      "Family",
+      "What I owe",
+      "Inbox",
       "Messages",
-      "Club",
-      "Me",
     ]);
-    expect(pageScore({ label: "Home", href: "/lobby", group: "Go to", keywords: [] }, "")).toBe(0);
+    expect(pageScore({ label: "Inbox", href: "/lobby", group: "Go to", keywords: [] }, "")).toBe(0);
   });
 });

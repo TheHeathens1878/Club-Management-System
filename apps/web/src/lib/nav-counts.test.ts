@@ -54,18 +54,21 @@ describe("nav waiting-counts", () => {
     expect(desk.allowed({ ...everyone, isStaff: false })).toBe(false);
   });
 
-  it("the tabs themselves wear only Messages and the admin queues", () => {
+  it("the doors themselves wear the admin queues, the room desk, and the two unread counts", () => {
     const tabBadges = DESTINATIONS.filter((d) => d.badge).map((d) => [d.key, d.badge]);
     expect(tabBadges).toEqual([
+      ["people", "approvals"],
+      ["clubhouse", "roomBookings"],
+      ["inbox", "notifications"],
       ["messages", "messages"],
-      ["club", "approvals"],
     ]);
   });
 
   it("every badge key has a counter behind it", () => {
-    const keys: NavBadge[] = ["approvals", "registrations", "messages", "roomBookings"];
+    const keys: NavBadge[] = ["approvals", "registrations", "messages", "roomBookings", "notifications"];
     for (const key of keys) {
-      if (key === "messages") continue; // my_unread_message_count(), read in the layout
+      // my_unread_message_count() and unread_notification_count(), read in the layout
+      if (key === "messages" || key === "notifications") continue;
       expect(NO_NAV_COUNTS).toHaveProperty(key);
     }
   });

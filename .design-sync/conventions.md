@@ -26,8 +26,8 @@ unusual class, and fall back to an inline `style` for anything missing. Phone hi
 `action`). Hub screens are a `HubList` of grouped rows; an empty list is an `EmptyState`; tables use
 `LinkRow` so the whole row is the link. Forms are `Label` + `Input` / `Select` / `Textarea` stacks in
 `space-y-1.5`, with one `SubmitButton` inside the `<form>`. People are `Avatar` (initials fallback);
-players on a pitch are `PlayerToken`. Desktop navigation is `SidebarNav` inside a `.theme-ink` rail;
-phones use `MobileTabBar`.
+players on a pitch are `PlayerToken`. Navigation is a `.theme-ink` top bar of `NavLink`s at every width; phones add
+`MobileTabBar`.
 
 **Where the truth lives.** `styles.css` (tokens, scopes, fonts), then each
 `components/general/<Name>/<Name>.prompt.md` for props and working examples.
