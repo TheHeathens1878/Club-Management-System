@@ -8,14 +8,15 @@
 --      teams already in it
 --   C  a clone carries the club's share
 --   D  a slot lists its venue on the block; a venue with slots stays on it
---   E  bookings are noted against a venue for a season; planners write, coaches read
+--   E  bookings are noted against a venue for a season, with their weekly slots;
+--      planners write, coaches read
 --
 -- Run with: npx supabase test db
 -- =============================================================================
 
 begin;
 
-select plan(18);
+select plan(21);
 
 insert into public.teams (id, name, age_group) values
   ('7b7b7b7b-0913-4111-8111-000000000001', 'TS Alpha', 'U10'),
@@ -112,9 +113,18 @@ $$, 'a venue with no slots in the block comes off it');
 -- E. a venue's bookings, season by season ----------------------------------------------
 insert into public.seasons (id, name, starts_on, ends_on) values
   ('5ea50000-0913-4111-8111-000000000001', 'TS 2026/27', '2026-08-01', '2027-07-31');
-insert into public.venue_bookings (venue_id, season_id, starts_on, ends_on, when_text, reference) values
-  ('e4e4e4e4-0913-4111-8111-000000000002', '5ea50000-0913-4111-8111-000000000001',
-   '2026-10-06', '2027-03-23', 'Tuesdays 19:00–20:00', 'LHS-0412');
+insert into public.venue_bookings (id, venue_id, season_id, starts_on, ends_on, reference) values
+  ('b0b0b0b0-0913-4111-8111-000000000001', 'e4e4e4e4-0913-4111-8111-000000000002', '5ea50000-0913-4111-8111-000000000001',
+   '2026-10-06', '2027-03-23', 'LHS-0412');
+insert into public.venue_booking_slots (booking_id, weekday, start_time, end_time) values
+  ('b0b0b0b0-0913-4111-8111-000000000001', 2, '19:00', '20:00'),
+  ('b0b0b0b0-0913-4111-8111-000000000001', 4, '18:00', '19:30');
+select is((select count(*)::int from public.venue_booking_slots where booking_id = 'b0b0b0b0-0913-4111-8111-000000000001'),
+  2, 'a booking has its weekly slots — Tuesday and Thursday');
+select throws_ok($$
+  insert into public.venue_booking_slots (booking_id, weekday, start_time, end_time) values
+  ('b0b0b0b0-0913-4111-8111-000000000001', 2, '20:00', '19:00')
+$$, '23514', null, 'a slot cannot end before it starts');
 select is((select count(*)::int from public.venue_bookings where venue_id = 'e4e4e4e4-0913-4111-8111-000000000002'),
   1, 'a booking is noted against the venue for the season');
 select throws_ok($$
@@ -145,6 +155,11 @@ select lives_ok($$
   ('e4e4e4e4-0913-4111-8111-000000000002', '2027-04-06', '2027-05-25', 'Summer term, same slot')
 $$, 'a planner notes a booking');
 reset role;
+
+-- Removing the booking takes its slots with it.
+delete from public.venue_bookings where id = 'b0b0b0b0-0913-4111-8111-000000000001';
+select is((select count(*)::int from public.venue_booking_slots where booking_id = 'b0b0b0b0-0913-4111-8111-000000000001'),
+  0, 'a removed booking takes its slots with it');
 
 select * from finish();
 rollback;

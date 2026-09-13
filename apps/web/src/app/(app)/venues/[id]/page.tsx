@@ -61,7 +61,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
     // for winter training is both.
     supabase
       .from("venue_bookings")
-      .select("id,season_id,starts_on,ends_on,when_text,reference,notes,seasons(name,is_current,starts_on)")
+      .select("id,season_id,starts_on,ends_on,reference,notes,seasons(name,is_current,starts_on),venue_booking_slots(id,weekday,start_time,end_time)")
       .eq("venue_id", id)
       .order("starts_on", { ascending: false }),
     supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
@@ -92,9 +92,14 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
       seasonCurrent: row.seasons?.is_current ?? false,
       startsOn: row.starts_on,
       endsOn: row.ends_on,
-      whenText: row.when_text,
       reference: row.reference,
       notes: row.notes,
+      slots: (row.venue_booking_slots ?? []).map((slot) => ({
+        id: slot.id,
+        weekday: slot.weekday,
+        startTime: slot.start_time,
+        endTime: slot.end_time,
+      })),
     }))
     .sort(
       (a, b) =>

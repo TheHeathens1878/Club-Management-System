@@ -5619,6 +5619,42 @@ export type Database = {
           },
         ]
       }
+      /** The weekly slots a venue booking covers (20260913150000). */
+      venue_booking_slots: {
+        Row: {
+          booking_id: string
+          created_at: string
+          end_time: string
+          id: string
+          start_time: string
+          weekday: number
+        }
+        Insert: {
+          booking_id: string
+          created_at?: string
+          end_time: string
+          id?: string
+          start_time: string
+          weekday: number
+        }
+        Update: {
+          booking_id?: string
+          created_at?: string
+          end_time?: string
+          id?: string
+          start_time?: string
+          weekday?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_booking_slots_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "venue_bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       /** The dates the club has booked a training venue for, season by season (20260913130000). */
       venue_bookings: {
         Row: {
@@ -5632,7 +5668,6 @@ export type Database = {
           starts_on: string
           updated_at: string
           venue_id: string
-          when_text: string | null
         }
         Insert: {
           created_at?: string
@@ -5645,7 +5680,6 @@ export type Database = {
           starts_on: string
           updated_at?: string
           venue_id: string
-          when_text?: string | null
         }
         Update: {
           created_at?: string
@@ -5658,7 +5692,6 @@ export type Database = {
           starts_on?: string
           updated_at?: string
           venue_id?: string
-          when_text?: string | null
         }
         Relationships: [
           {
