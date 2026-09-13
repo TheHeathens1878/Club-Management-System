@@ -180,6 +180,47 @@ export async function setVenueActive(
 }
 
 /**
+ * A new pitch on this ground (Adam, 2026-09-13: "some venues have two
+ * pitches also"). Name and what it is for; `resources_admin_insert` decides.
+ */
+export async function createPitchAtVenue(
+  _prev: VenueActionState,
+  formData: FormData,
+): Promise<VenueActionState> {
+  const venueId = text(formData, "venue_id", 40);
+  const name = text(formData, "name", 120);
+  if (!venueId) return { error: "No venue was named." };
+  if (!name) return { error: "Give the pitch a name — “Pitch 1”." };
+  const forMatches = formData.get("for_matches") === "on";
+  const forTraining = formData.get("for_training") === "on";
+  if (!forMatches && !forTraining) return { error: "Tick what the pitch is used for — matches, training, or both." };
+
+  const supabase = await createClient();
+  const { data: lastRow } = await supabase
+    .from("resources")
+    .select("sort_order")
+    .eq("type", "pitch")
+    .order("sort_order", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const { error } = await supabase.from("resources").insert({
+    type: "pitch",
+    name,
+    venue_id: venueId,
+    for_matches: forMatches,
+    for_training: forTraining,
+    active: true,
+    sort_order: (lastRow?.sort_order ?? -1) + 1,
+  });
+  if (error) return refuse(error, `The club already has a pitch called ${name}.`);
+
+  revalidatePath("/venues");
+  revalidatePath(`/venues/${venueId}`);
+  revalidatePath("/pitches/manage");
+  return { notice: `${name} added to this ground.` };
+}
+
+/**
  * Put a pitch on this venue, or take it off.
  *
  * `resources.venue_id` is the link (20260901180000 §2). Moving it fires

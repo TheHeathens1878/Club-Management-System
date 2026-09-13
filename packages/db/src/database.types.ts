@@ -4202,6 +4202,10 @@ export type Database = {
           description: string | null
           extra_hour_pence: number | null
           extras_config: Json
+          /** A pitch the club plays matches on (20260913160000). */
+          for_matches: boolean
+          /** A pitch the club trains on (20260913160000). */
+          for_training: boolean
           id: string
           information: string | null
           legacy_function_room_id: string | null
@@ -4230,6 +4234,8 @@ export type Database = {
           description?: string | null
           extra_hour_pence?: number | null
           extras_config?: Json
+          for_matches?: boolean
+          for_training?: boolean
           id?: string
           information?: string | null
           legacy_function_room_id?: string | null
@@ -4258,6 +4264,8 @@ export type Database = {
           description?: string | null
           extra_hour_pence?: number | null
           extras_config?: Json
+          for_matches?: boolean
+          for_training?: boolean
           id?: string
           information?: string | null
           legacy_function_room_id?: string | null
@@ -5564,6 +5572,8 @@ export type Database = {
           id: string
           notes: string | null
           parts: number
+          /** Which of the venue's pitches the slot is on; null = the only one (20260913160000). */
+          pitch_id: string | null
           start_time: string
           updated_at: string
           venue_address: string | null
@@ -5580,6 +5590,7 @@ export type Database = {
           id?: string
           notes?: string | null
           parts?: number
+          pitch_id?: string | null
           start_time: string
           updated_at?: string
           venue_address?: string | null
@@ -5595,6 +5606,7 @@ export type Database = {
           id?: string
           notes?: string | null
           parts?: number
+          pitch_id?: string | null
           start_time?: string
           updated_at?: string
           venue_address?: string | null
@@ -5608,6 +5620,13 @@ export type Database = {
             columns: ["block_id"]
             isOneToOne: false
             referencedRelation: "training_blocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_slots_pitch_id_fkey"
+            columns: ["pitch_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
             referencedColumns: ["id"]
           },
           {
@@ -5626,6 +5645,12 @@ export type Database = {
           created_at: string
           end_time: string
           id: string
+          /** How the pitch is divided for this slot, 1–6 (20260913160000). */
+          parts: number
+          /** Which of the venue's pitches (a resources row); null = the only one (20260913160000). */
+          pitch_id: string | null
+          /** How many of parts the club has booked (20260913160000). */
+          shares: number
           start_time: string
           weekday: number
         }
@@ -5634,6 +5659,9 @@ export type Database = {
           created_at?: string
           end_time: string
           id?: string
+          parts?: number
+          pitch_id?: string | null
+          shares?: number
           start_time: string
           weekday: number
         }
@@ -5642,10 +5670,20 @@ export type Database = {
           created_at?: string
           end_time?: string
           id?: string
+          parts?: number
+          pitch_id?: string | null
+          shares?: number
           start_time?: string
           weekday?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "venue_booking_slots_pitch_id_fkey"
+            columns: ["pitch_id"]
+            isOneToOne: false
+            referencedRelation: "resources"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "venue_booking_slots_booking_id_fkey"
             columns: ["booking_id"]

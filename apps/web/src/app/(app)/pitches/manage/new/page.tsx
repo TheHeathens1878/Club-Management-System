@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 
@@ -22,6 +23,10 @@ export default async function NewPitchPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
+
+  const supabaseForVenues = await createClient();
+  const { data: venueRows } = await supabaseForVenues.from("venues").select("id,name").eq("active", true).order("sort_order").order("name");
+  const venues = (venueRows ?? []).map((v) => ({ id: v.id, name: v.name }));
 
   return (
     <>
@@ -48,7 +53,7 @@ export default async function NewPitchPage() {
             </p>
           </CardHeader>
           <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
-            <NewPitchForm />
+            <NewPitchForm venues={venues} />
           </CardContent>
         </Card>
       </div>

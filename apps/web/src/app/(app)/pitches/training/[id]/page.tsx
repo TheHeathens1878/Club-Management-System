@@ -54,6 +54,8 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
     { data: venueRows },
     { data: blockVenueRows },
     dryRun,
+    { data: bookedSlotRows },
+    { data: pitchRows },
   ] = await Promise.all([
       supabase
         .from("training_blocks")
@@ -68,7 +70,7 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
       supabase
         .from("training_slots")
         .select(
-          "id,venue_id,venue_name,venue_address,weekday,start_time,end_time,parts,club_parts,notes,training_allocations(id,team_id,shares,teams(name,age_group))",
+          "id,venue_id,venue_name,venue_address,pitch_id,weekday,start_time,end_time,parts,club_parts,notes,resources(name),training_allocations(id,team_id,shares,teams(name,age_group))",
         )
         .eq("block_id", id),
       supabase.from("teams").select("id,name,age_group,default_training_day").eq("active", true).order("name"),
@@ -83,6 +85,22 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
         .order("name"),
       supabase.from("training_block_venues").select("venue_id").eq("block_id", id),
       supabase.rpc("sync_training_block", { p_block_id: id, p_dry_run: true }),
+      // What the club has booked at its training venues — every slot, with
+      // its pitch and its booking's dates; narrowed to this block below.
+      supabase
+        .from("venue_booking_slots")
+        .select("pitch_id,weekday,start_time,end_time,parts,shares,resources(name),venue_bookings!inner(venue_id,starts_on,ends_on)")
+        .order("weekday")
+        .order("start_time"),
+      // The pitches on each venue, for "which pitch" on a slot.
+      supabase
+        .from("resources")
+        .select("id,name,venue_id")
+        .eq("type", "pitch")
+        .eq("active", true)
+        .not("venue_id", "is", null)
+        .order("sort_order")
+        .order("name"),
     ]);
   if (!block) notFound();
 
@@ -94,6 +112,8 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
       venueId: row.venue_id,
       venueName: row.venue_name,
       venueAddress: row.venue_address,
+      pitchId: row.pitch_id,
+      pitchName: row.resources?.name ?? null,
       weekday: row.weekday,
       startTime: row.start_time,
       endTime: row.end_time,
@@ -117,6 +137,25 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
     ageGroup: t.age_group,
     trainingDay: t.default_training_day,
   }));
+  // A booked slot counts for this block when its booking overlaps the
+  // block's dates.
+  const bookedFor = (venueId: string) =>
+    (bookedSlotRows ?? [])
+      .filter(
+        (row) =>
+          row.venue_bookings?.venue_id === venueId &&
+          row.venue_bookings.starts_on <= block.ends_on &&
+          row.venue_bookings.ends_on >= block.starts_on,
+      )
+      .map((row) => ({
+        pitchId: row.pitch_id,
+        pitchName: row.resources?.name ?? null,
+        weekday: row.weekday,
+        startTime: row.start_time,
+        endTime: row.end_time,
+        parts: row.parts,
+        shares: row.shares,
+      }));
   const venueOptions: VenueOption[] = (venueRows ?? []).map((v) => ({
     id: v.id,
     name: v.name,
@@ -124,6 +163,8 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
     trainingParts: v.training_parts,
     trainingShares: v.training_shares,
     trainingNotes: v.training_notes,
+    pitches: (pitchRows ?? []).filter((p) => p.venue_id === v.id).map((p) => ({ id: p.id, name: p.name })),
+    bookedSlots: bookedFor(v.id),
   }));
   const blockVenueIds = (blockVenueRows ?? []).map((row) => row.venue_id);
   // The block's venues in the club's order — the planner's columns.

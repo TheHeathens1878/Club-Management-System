@@ -18,6 +18,7 @@
 import { revalidatePath } from "next/cache";
 
 import { isValidDateString, isValidTimeString, normaliseTime } from "@/lib/booking-time";
+import { parseShareKey } from "@/lib/training-plan";
 import { friendlyDbError } from "@/lib/people-display";
 import { createClient } from "@/lib/supabase/server";
 
@@ -38,7 +39,14 @@ function uuid(formData: FormData, key: string): string | null {
   return UUID_RE.test(value) ? value : null;
 }
 
-type SlotInput = { weekday: number; start_time: string; end_time: string };
+type SlotInput = {
+  weekday: number;
+  start_time: string;
+  end_time: string;
+  pitch_id: string | null;
+  parts: number;
+  shares: number;
+};
 
 /**
  * The slot rows the form sends as parallel fields — `slot_weekday`,
@@ -50,6 +58,8 @@ function readSlots(formData: FormData): { error: string } | { slots: SlotInput[]
   const days = formData.getAll("slot_weekday").map((v) => String(v).trim());
   const starts = formData.getAll("slot_start").map((v) => String(v).trim());
   const ends = formData.getAll("slot_end").map((v) => String(v).trim());
+  const pitches = formData.getAll("slot_pitch").map((v) => String(v).trim());
+  const sharesKeys = formData.getAll("slot_share").map((v) => String(v).trim());
   const slots: SlotInput[] = [];
   for (let i = 0; i < Math.max(days.length, starts.length, ends.length); i += 1) {
     const day = days[i] ?? "";
@@ -62,7 +72,16 @@ function readSlots(formData: FormData): { error: string } | { slots: SlotInput[]
     const startTime = normaliseTime(start);
     const endTime = normaliseTime(end);
     if (endTime <= startTime) return { error: "A slot must end after it starts." };
-    slots.push({ weekday, start_time: startTime, end_time: endTime });
+    const share = parseShareKey(sharesKeys[i] ?? "1:1");
+    const pitchRaw = pitches[i] ?? "";
+    slots.push({
+      weekday,
+      start_time: startTime,
+      end_time: endTime,
+      pitch_id: UUID_RE.test(pitchRaw) ? pitchRaw : null,
+      parts: share.parts,
+      shares: share.shares,
+    });
   }
   if (slots.length > 20) return { error: "That is more than twenty slots — split the booking." };
   return { slots };

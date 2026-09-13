@@ -101,21 +101,34 @@ export function DayPlanner({
   const [weekday, setWeekday] = useState(initialDay);
 
   const daySlots = slots.filter((slot) => slot.weekday === weekday);
-  // Columns: the block's venues, then any venue a slot names that the block
-  // has not listed (it cannot happen after 20260913130000, but a column is
-  // cheaper than a missing slot).
-  const columns: { key: string; name: string; venue: VenueOption | null }[] = venues.map((venue) => ({
-    key: venue.id,
-    name: venue.name,
-    venue,
-  }));
-  for (const slot of daySlots) {
-    if (!columns.some((c) => (slot.venueId ? c.key === slot.venueId : c.name === slot.venueName))) {
-      columns.push({ key: slot.venueId ?? slot.venueName, name: slot.venueName, venue: null });
+  // Columns: one per venue AND pitch (Adam, 2026-09-13: Partington has two
+  // pitches, and Pitch 1 at 6pm and Pitch 2 at 6pm are two places). A venue
+  // with pitches gets a column per pitch, plus one for slots on no pitch;
+  // one without gets a single column. Then any venue a slot names that the
+  // block has not listed (it cannot happen after 20260913130000, but a
+  // column is cheaper than a missing slot).
+  type Column = { key: string; venueKey: string; name: string; pitchId: string | null; pitch: string | null; venue: VenueOption | null };
+  const columns: Column[] = [];
+  const addColumn = (venueKey: string, name: string, pitchId: string | null, pitch: string | null, venue: VenueOption | null) => {
+    const key = `${venueKey}|${pitchId ?? ""}`;
+    if (!columns.some((c) => c.key === key)) columns.push({ key, venueKey, name, pitchId, pitch, venue });
+  };
+  for (const venue of venues) {
+    if (venue.pitches.length === 0) addColumn(venue.id, venue.name, null, null, venue);
+    for (const pitch of venue.pitches) addColumn(venue.id, venue.name, pitch.id, pitch.name, venue);
+    if (venue.pitches.length > 0 && slots.some((slot) => slot.venueId === venue.id && !slot.pitchId)) {
+      addColumn(venue.id, venue.name, null, null, venue);
     }
   }
-  const slotsIn = (column: { key: string; name: string }) =>
-    daySlots.filter((slot) => (slot.venueId ? slot.venueId === column.key : slot.venueName === column.name));
+  for (const slot of daySlots) {
+    addColumn(slot.venueId ?? slot.venueName, slot.venueName, slot.pitchId, slot.pitchName, null);
+  }
+  const slotsIn = (column: Column) =>
+    daySlots.filter(
+      (slot) =>
+        (slot.venueId ? slot.venueId === column.venueKey : slot.venueName === column.name) &&
+        (slot.pitchId ?? "") === (column.pitchId ?? ""),
+    );
 
   const from = daySlots.length ? Math.min(...daySlots.map((s) => minutes(s.startTime))) : DEFAULT_FROM;
   const to = daySlots.length ? Math.max(...daySlots.map((s) => minutes(s.endTime))) : DEFAULT_TO;
@@ -287,8 +300,13 @@ export function DayPlanner({
               >
                 <div />
                 {columns.map((column) => (
-                  <div key={column.key} className="min-w-0 px-2 pb-2" title={column.name}>
+                  <div key={column.key} className="min-w-0 px-2 pb-2" title={column.pitch ? `${column.name} · ${column.pitch}` : column.name}>
                     <p className="truncate text-[13px] font-semibold">{column.name}</p>
+                    {column.pitch ? (
+                      <p className="truncate text-[11px] font-medium text-primary">{column.pitch}</p>
+                    ) : column.venue && column.venue.pitches.length > 0 ? (
+                      <p className="truncate text-[11px] text-muted-foreground">No pitch named</p>
+                    ) : null}
                     {column.venue && column.venue.trainingParts > 1 ? (
                       <p className="truncate text-[11px] text-muted-foreground">
                         {column.venue.trainingShares >= column.venue.trainingParts
@@ -324,6 +342,9 @@ export function DayPlanner({
                       {here.length === 0 ? (
                         <p className="absolute inset-x-2 top-2 rounded-lg border border-dashed p-2 text-center text-[11px] text-muted-foreground">
                           No slot on {weekdayLabel(weekday)}s — add one below
+                          {column.venue?.bookedSlots.some((b) => b.weekday === weekday && (b.pitchId ?? "") === (column.pitchId ?? ""))
+                            ? " (the club has this booked)"
+                            : ""}
                         </p>
                       ) : null}
                       {here.map((slot) => {

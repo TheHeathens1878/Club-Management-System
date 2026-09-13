@@ -158,6 +158,40 @@ export function partsFree(capacity: number, allocations: readonly { shares: numb
   return Math.max(0, capacity - allocations.reduce((sum, a) => sum + a.shares, 0));
 }
 
+/**
+ * The shares a booked slot can be, as "parts:shares" keys for a select
+ * (Adam, 2026-09-13: "some days we might only have half a pitch, or a
+ * quarter, or a full pitch").
+ */
+export const SHARE_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: "1:1", label: "Full pitch" },
+  { value: "2:1", label: "Half a pitch" },
+  { value: "3:1", label: "A third" },
+  { value: "3:2", label: "Two thirds" },
+  { value: "4:1", label: "A quarter" },
+  { value: "4:2", label: "Half (2 of 4)" },
+  { value: "4:3", label: "Three quarters" },
+  { value: "6:1", label: "A sixth" },
+];
+
+export function shareKey(parts: number, shares: number): string {
+  return `${parts}:${Math.min(shares, parts)}`;
+}
+
+/** "2:1" → { parts: 2, shares: 1 }; anything else → the whole pitch. */
+export function parseShareKey(key: string): { parts: number; shares: number } {
+  const [pRaw, sRaw] = key.split(":");
+  const p = Number.parseInt(pRaw ?? "", 10);
+  const s = Number.parseInt(sRaw ?? "", 10);
+  if (!Number.isInteger(p) || !Number.isInteger(s) || p < 1 || p > 6 || s < 1 || s > p) return { parts: 1, shares: 1 };
+  return { parts: p, shares: s };
+}
+
+/** "full pitch" / "½ pitch" for a chip. */
+export function shareWord(parts: number, shares: number): string {
+  return parts <= 1 || shares >= parts ? "full pitch" : `${shareChip(shares, parts)} pitch`;
+}
+
 /** "2 of 4 ours" — or nothing when the whole slot is the club's. */
 export function oursLabel(slot: { parts: number; clubParts: number | null }): string | null {
   if (slot.parts <= 1 || slot.clubParts === null || slot.clubParts >= slot.parts) return null;

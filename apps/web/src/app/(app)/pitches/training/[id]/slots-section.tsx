@@ -57,6 +57,9 @@ export type SlotRow = {
   venueId: string | null;
   venueName: string;
   venueAddress: string | null;
+  /** Which of the venue's pitches; null = the only one. */
+  pitchId: string | null;
+  pitchName: string | null;
   weekday: number;
   startTime: string;
   endTime: string;
@@ -78,6 +81,21 @@ export type VenueOption = {
   /** How many of those parts are the club's. */
   trainingShares: number;
   trainingNotes: string | null;
+  /** The venue's pitches (active), for "which pitch" on a slot. */
+  pitches: { id: string; name: string }[];
+  /** What the club has booked here for this block's dates — the quick picks. */
+  bookedSlots: BookedSlot[];
+};
+
+/** A slot the club has booked at a venue (venue_booking_slots), as a quick pick. */
+export type BookedSlot = {
+  pitchId: string | null;
+  pitchName: string | null;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  parts: number;
+  shares: number;
 };
 
 /** The `club_parts` the form sends for a venue's share: "" means all of it. */
@@ -109,6 +127,10 @@ function SlotFields({
   const grounds = venues.filter((venue) => !onBlock.has(venue.id) && !venue.forTraining);
 
   const [venueId, setVenueId] = useState(slot?.venueId ?? defaultVenueId ?? "");
+  const [pitchId, setPitchId] = useState(slot?.pitchId ?? "");
+  const [weekday, setWeekday] = useState(String(slot?.weekday ?? 1));
+  const [startTime, setStartTime] = useState(slot?.startTime.slice(0, 5) ?? "18:00");
+  const [endTime, setEndTime] = useState(slot?.endTime.slice(0, 5) ?? "19:00");
   const [parts, setParts] = useState(
     slot ? slot.parts : (venues.find((v) => v.id === venueId)?.trainingParts ?? 1),
   );
@@ -119,6 +141,7 @@ function SlotFields({
 
   function chooseVenue(id: string) {
     setVenueId(id);
+    setPitchId("");
     // A new slot starts from the venue's share; an existing one keeps its own.
     const next = venues.find((v) => v.id === id);
     if (!slot && next) {
@@ -130,6 +153,18 @@ function SlotFields({
   function chooseParts(next: number) {
     setParts(next);
     setClubParts((current) => (current !== "" && Number(current) >= next ? "" : current));
+  }
+
+  // A booked slot fills the whole form: pitch, day, hours, and how much of
+  // the pitch is ours (Adam, 2026-09-13: Partington, Pitch 1 Monday 6–7 half
+  // a pitch, 7–8 the full pitch).
+  function pickBooked(booked: BookedSlot) {
+    setPitchId(booked.pitchId ?? "");
+    setWeekday(String(booked.weekday));
+    setStartTime(booked.startTime.slice(0, 5));
+    setEndTime(booked.endTime.slice(0, 5));
+    setParts(booked.parts);
+    setClubParts(booked.parts > 1 && booked.shares < booked.parts ? String(booked.shares) : "");
   }
 
   const group = (label: string, list: VenueOption[]) =>
@@ -167,7 +202,28 @@ function SlotFields({
             : "Not listed? Add it under Venues. A venue picked here joins the block, and a match ground becomes a training venue too."}
         </p>
       </div>
-      <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
+      {venue && venue.bookedSlots.length > 0 ? (
+        <div className="space-y-1.5 sm:col-span-2 lg:col-span-6">
+          <p className="text-xs font-medium text-muted-foreground">Booked at {venue.name} — pick one to fill the slot in:</p>
+          <div className="flex flex-wrap gap-1.5">
+            {venue.bookedSlots.map((booked, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => pickBooked(booked)}
+                className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full border bg-card px-2.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary"
+              >
+                {booked.pitchName ? <span className="text-primary">{booked.pitchName} ·</span> : null}
+                {weekdayLabel(booked.weekday, true)} {timeRange(booked.startTime, booked.endTime)}
+                <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                  {booked.parts <= 1 || booked.shares >= booked.parts ? "full" : shareChip(booked.shares, booked.parts)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+      <div className="space-y-1.5 sm:col-span-2 lg:col-span-2">
         <Label htmlFor={`${prefix}-address`}>Address for this slot (optional)</Label>
         <Input
           id={`${prefix}-address`}
@@ -177,9 +233,32 @@ function SlotFields({
           maxLength={300}
         />
       </div>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${prefix}-pitch`}>Pitch</Label>
+        <Select
+          id={`${prefix}-pitch`}
+          name="pitch_id"
+          value={pitchId}
+          onChange={(event) => setPitchId(event.target.value)}
+          disabled={!venue || venue.pitches.length === 0}
+        >
+          <option value="">{venue && venue.pitches.length > 0 ? "Any" : "The only one"}</option>
+          {(venue?.pitches ?? []).map((pitch) => (
+            <option key={pitch.id} value={pitch.id}>
+              {pitch.name}
+            </option>
+          ))}
+        </Select>
+      </div>
       <div className="space-y-1.5 lg:col-span-2">
         <Label htmlFor={`${prefix}-weekday`}>Day</Label>
-        <Select id={`${prefix}-weekday`} name="weekday" defaultValue={String(slot?.weekday ?? 1)} required>
+        <Select
+          id={`${prefix}-weekday`}
+          name="weekday"
+          value={weekday}
+          onChange={(event) => setWeekday(event.target.value)}
+          required
+        >
           {WEEKDAYS.map((day) => (
             <option key={day.value} value={day.value}>
               {day.label}
@@ -189,11 +268,25 @@ function SlotFields({
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={`${prefix}-start`}>From</Label>
-        <Input id={`${prefix}-start`} type="time" name="start_time" defaultValue={slot?.startTime.slice(0, 5) ?? "18:00"} required />
+        <Input
+          id={`${prefix}-start`}
+          type="time"
+          name="start_time"
+          value={startTime}
+          onChange={(event) => setStartTime(event.target.value)}
+          required
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={`${prefix}-end`}>Until</Label>
-        <Input id={`${prefix}-end`} type="time" name="end_time" defaultValue={slot?.endTime.slice(0, 5) ?? "19:00"} required />
+        <Input
+          id={`${prefix}-end`}
+          type="time"
+          name="end_time"
+          value={endTime}
+          onChange={(event) => setEndTime(event.target.value)}
+          required
+        />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor={`${prefix}-parts`}>Divided into</Label>
@@ -245,7 +338,7 @@ function CloneForm({ blockId, slot, onDone }: { blockId: string; slot: SlotRow; 
       <input type="hidden" name="block_id" value={blockId} />
       <input type="hidden" name="slot_id" value={slot.id} />
       <p className="text-sm">
-        Copy <span className="font-medium">{slot.venueName}</span>, {partsLabel(slot.parts).toLowerCase()}
+        Copy <span className="font-medium">{slot.venueName}{slot.pitchName ? ` · ${slot.pitchName}` : ""}</span>, {partsLabel(slot.parts).toLowerCase()}
         {oursLabel(slot) ? ` (${oursLabel(slot)})` : ""}
         {slot.allocations.length > 0 ? ` and its ${slot.allocations.length} ${slot.allocations.length === 1 ? "team" : "teams"}` : ""}, to:
       </p>
@@ -408,6 +501,7 @@ function SlotCard({
         <span className="text-[15px] font-semibold">
           {weekdayLabel(slot.weekday)} · {timeRange(slot.startTime, slot.endTime)}
         </span>
+        {slot.pitchName ? <Badge variant="outline" className="text-primary">{slot.pitchName}</Badge> : null}
         <Badge variant="muted">{partsLabel(slot.parts)}</Badge>
         {ours ? <Badge variant="outline">{ours}</Badge> : null}
         {capacity > 1 ? (

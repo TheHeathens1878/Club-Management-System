@@ -11,6 +11,7 @@ import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
 
 import { EditVenueForm, RetireVenueForm } from "../venue-forms";
+import { AddPitchForm } from "./add-pitch-form";
 import { AttachPitchForm, DetachPitchForm } from "./pitch-venue-forms";
 import { VenueBookingsCard, type SeasonOption, type VenueBookingRow } from "./venue-bookings-card";
 
@@ -50,7 +51,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
     await Promise.all([
     supabase
       .from("resources")
-      .select("id,name,active,venue_id,venues(name)")
+      .select("id,name,active,venue_id,for_matches,for_training,venues(name)")
       .eq("type", "pitch")
       .order("sort_order")
       .order("name"),
@@ -61,7 +62,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
     // for winter training is both.
     supabase
       .from("venue_bookings")
-      .select("id,season_id,starts_on,ends_on,reference,notes,seasons(name,is_current,starts_on),venue_booking_slots(id,weekday,start_time,end_time)")
+      .select("id,season_id,starts_on,ends_on,reference,notes,seasons(name,is_current,starts_on),venue_booking_slots(id,weekday,start_time,end_time,pitch_id,parts,shares,resources(name))")
       .eq("venue_id", id)
       .order("starts_on", { ascending: false }),
     supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
@@ -99,6 +100,10 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
         weekday: slot.weekday,
         startTime: slot.start_time,
         endTime: slot.end_time,
+        pitchId: slot.pitch_id,
+        pitchName: slot.resources?.name ?? null,
+        parts: slot.parts,
+        shares: slot.shares,
       })),
     }))
     .sort(
@@ -160,7 +165,12 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
         </Card>
 
         {venue.for_training || bookings.length > 0 ? (
-          <VenueBookingsCard venueId={venue.id} bookings={bookings} seasons={seasons} />
+          <VenueBookingsCard
+            venueId={venue.id}
+            bookings={bookings}
+            seasons={seasons}
+            pitches={here.filter((pitch) => pitch.active).map((pitch) => ({ id: pitch.id, name: pitch.name }))}
+          />
         ) : null}
 
         <Card>
@@ -195,6 +205,9 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
                         {pitch.name}
                       </Link>
                       {!pitch.active && <Badge variant="outline">Out of use</Badge>}
+                      <Badge variant="outline">
+                        {pitch.for_matches && pitch.for_training ? "Matches & training" : pitch.for_matches ? "Matches" : "Training"}
+                      </Badge>
                     </div>
                     <DetachPitchForm venueId={venue.id} pitch={pitch} />
                   </div>
@@ -202,6 +215,9 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
               </div>
             )}
 
+            <div className="flex flex-wrap items-start gap-3">
+              <AddPitchForm venueId={venue.id} forTraining={venue.for_training && !venue.for_matches} />
+            </div>
             <AttachPitchForm venueId={venue.id} candidates={elsewhere} />
           </CardContent>
         </Card>

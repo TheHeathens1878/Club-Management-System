@@ -114,6 +114,7 @@ export default async function MatchesPage({
       .from("resources")
       .select("id,name,venues(name)")
       .neq("type", "function_room")
+      .eq("for_matches", true)
       .eq("active", true)
       .order("sort_order")
       .order("name"),

@@ -201,12 +201,17 @@ export async function loadPitches(): Promise<PitchOption[]> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("resources")
-    .select("id,name")
+    .select("id,name,for_matches,for_training")
     .eq("type", "pitch")
     .eq("active", true)
     .order("sort_order")
     .order("name");
-  return (data ?? []).map((row) => ({ id: row.id, name: row.name }));
+  return (data ?? []).map((row) => ({
+    id: row.id,
+    name: row.name,
+    forMatches: row.for_matches,
+    forTraining: row.for_training,
+  }));
 }
 
 /** One booking, read as the caller. Null when RLS says they may not see it. */

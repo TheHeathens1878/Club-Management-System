@@ -23,7 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 import { movePitch, setPitchActive, updatePitch, type PitchAdminActionState } from "./pitch-actions";
-import { PitchFields } from "./pitch-fields";
+import { PitchFields, type VenueChoice } from "./pitch-fields";
 
 const EMPTY: PitchAdminActionState = {};
 
@@ -41,6 +41,10 @@ export type PitchAdminRow = {
   legacyId: string | null;
   /** Live bookings still pointing at this pitch, so retiring it is informed. */
   upcomingBookings: number;
+  forMatches: boolean;
+  forTraining: boolean;
+  venueId: string | null;
+  venueName: string | null;
 };
 
 export function PitchAdminFeedback({ state }: { state: PitchAdminActionState }) {
@@ -61,7 +65,7 @@ export function PitchAdminFeedback({ state }: { state: PitchAdminActionState }) 
   return null;
 }
 
-export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
+export function ManagePitchesPanel({ pitches, venues }: { pitches: PitchAdminRow[]; venues: VenueChoice[] }) {
   const [moveState, moveAction, moving] = useActionState(movePitch, EMPTY);
   const [activeState, activeAction, togglingActive] = useActionState(setPitchActive, EMPTY);
   const [editState, editAction, saving] = useActionState(updatePitch, EMPTY);
@@ -93,6 +97,10 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                     <Badge variant={pitch.active ? "success" : "muted"}>
                       {pitch.active ? "Bookable" : "Out of use"}
                     </Badge>
+                    <Badge variant="outline">
+                      {pitch.forMatches && pitch.forTraining ? "Matches & training" : pitch.forMatches ? "Matches" : "Training"}
+                    </Badge>
+                    {pitch.venueName ? <Badge variant="muted">{pitch.venueName}</Badge> : null}
                     {pitch.legacyId && (
                       <Badge variant="outline" title="The id this pitch had in the booking app">
                         Legacy {pitch.legacyId.slice(0, 8)}
@@ -207,7 +215,11 @@ export function ManagePitchesPanel({ pitches }: { pitches: PitchAdminRow[] }) {
                       capacity: pitch.capacity,
                       defaultPreBufferMinutes: pitch.defaultPreBufferMinutes,
                       defaultPostBufferMinutes: pitch.defaultPostBufferMinutes,
+                      forMatches: pitch.forMatches,
+                      forTraining: pitch.forTraining,
+                      venueId: pitch.venueId,
                     }}
+                    venues={venues}
                   />
                   <div className="flex items-center gap-2">
                     <Button
