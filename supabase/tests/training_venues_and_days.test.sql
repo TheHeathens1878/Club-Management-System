@@ -56,7 +56,7 @@ select is((select venue_address from public.training_slots where id = '510d0000-
 select throws_ok($$
   insert into public.training_slots (block_id, venue_id, weekday, start_time, end_time)
   values ('b20cb20c-0913-4111-8111-000000000001', 'e1e1e1e1-0913-4111-8111-00000000dead', 1, '18:00', '19:00')
-$$, '23503', null, 'a slot cannot be at a venue that does not exist');
+$, 'P0001', 'training_slots: that venue does not exist', 'a slot cannot be at a venue that does not exist');
 
 
 -- B. the training day ---------------------------------------------------------
