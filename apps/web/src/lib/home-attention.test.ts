@@ -103,6 +103,14 @@ describe("what needs my attention", () => {
     expect(items[3]!.href).toBe("/context?view=admin&next=%2Fapprovals");
   });
 
+  it("lists unread notifications, so the Inbox count always has a row behind it (Adam, 2026-09-13)", () => {
+    const items = attentionItems({ ...quiet, unreadMessages: 2, unreadNotifications: 4 });
+    expect(items.map((item) => item.kind)).toEqual(["messages", "notifications"]);
+    expect(items[1]).toMatchObject({ title: "4 notifications to read", href: "/notifications", count: 4 });
+    expect(attentionItems({ ...quiet, unreadNotifications: 1 })[0]!.title).toBe("1 notification to read");
+    expect(attentionItems({ ...quiet, unreadNotifications: 0 })).toEqual([]);
+  });
+
   it("prints money the way the rest of the app does", () => {
     expect(poundsLabel(100)).toBe("£1.00");
     expect(poundsLabel(123456)).toBe("£1,234.56");

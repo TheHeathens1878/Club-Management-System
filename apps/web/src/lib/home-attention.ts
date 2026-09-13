@@ -28,6 +28,8 @@ export type AttentionInputs = {
   /** Pence still owed across the household's pending charges, net of refunds. */
   outstandingPence: number;
   unreadMessages: number;
+  /** In-app notifications not yet read — the Inbox count, so Home lists what the count promises. */
+  unreadNotifications?: number;
   /** Admin queues — zero for everyone who is not a club administrator. */
   approvals: number;
   registrations: number;
@@ -37,7 +39,7 @@ export type AttentionInputs = {
 
 export type AttentionItem = {
   key: string;
-  kind: "respond" | "pay" | "messages" | "approvals" | "registrations" | "roomBookings";
+  kind: "respond" | "pay" | "messages" | "notifications" | "approvals" | "registrations" | "roomBookings";
   title: string;
   detail: string;
   href: string;
@@ -129,6 +131,18 @@ export function attentionItems(input: AttentionInputs): AttentionItem[] {
       detail: "Direct messages, team rooms and announcements",
       href: "/messages?filter=unread",
       count: input.unreadMessages,
+    });
+  }
+
+  if ((input.unreadNotifications ?? 0) > 0) {
+    const n = input.unreadNotifications ?? 0;
+    items.push({
+      key: "notifications",
+      kind: "notifications",
+      title: n === 1 ? "1 notification to read" : n + " notifications to read",
+      detail: "Booking answers, role decisions and the rest of what the club has told you",
+      href: "/notifications",
+      count: n,
     });
   }
 

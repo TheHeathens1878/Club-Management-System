@@ -1,6 +1,7 @@
 import { outstandingPence } from "@/lib/collection";
 import { getCapabilities } from "@/lib/capabilities";
 import { loadNavCounts } from "@/lib/nav-counts";
+import { loadUnreadNotificationCount } from "@/lib/notifications-data";
 import { createClient } from "@/lib/supabase/server";
 import { parseEventPeople } from "@/app/(app)/events/shared";
 
@@ -15,7 +16,8 @@ import { attentionItems, type AttentionEvent, type AttentionInputs, type Attenti
  *   · money — the household's pending `charges` under `charges_read`, with
  *     their payments, netted by the SAME arithmetic the collector uses
  *     (`outstandingPence`) — no second way of adding money up;
- *   · unread — `my_unread_message_count()`;
+ *   · unread — `my_unread_message_count()`, and `unread_notification_count()`
+ *     for the in-app notifications the Inbox door counts;
  *   · queues — `loadNavCounts`, which is zero for anyone who is not a club
  *     administrator and whose RLS makes the number the club's, not the reader's.
  *
@@ -32,7 +34,7 @@ export async function loadHomeAttention(): Promise<{
   const [supabase, capabilities] = await Promise.all([createClient(), getCapabilities()]);
   const now = Date.now();
 
-  const [eventsResult, chargesResult, unreadResult, counts] = await Promise.all([
+  const [eventsResult, chargesResult, unreadResult, counts, unreadNotifications] = await Promise.all([
     supabase.rpc("my_events", { p_horizon_days: HORIZON_DAYS }),
     supabase
       .from("charges")
@@ -40,6 +42,7 @@ export async function loadHomeAttention(): Promise<{
       .eq("status", "pending"),
     supabase.rpc("my_unread_message_count"),
     loadNavCounts(capabilities.isClubAdmin, capabilities.isStaff),
+    loadUnreadNotificationCount(),
   ]);
 
   const events: AttentionEvent[] = (eventsResult.data ?? []).map((row) => ({
@@ -61,6 +64,7 @@ export async function loadHomeAttention(): Promise<{
     events,
     outstandingPence: owed,
     unreadMessages: unreadResult.data ?? 0,
+    unreadNotifications,
     approvals: counts.approvals,
     registrations: counts.registrations,
     roomBookings: counts.roomBookings,
