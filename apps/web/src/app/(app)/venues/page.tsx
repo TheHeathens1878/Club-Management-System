@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
-import { blackoutLabel, shareChip } from "@/lib/training-plan";
+import { blackoutLabel, shareChip, weekdayLabel } from "@/lib/training-plan";
 
 export const metadata = { title: "Venues" };
 
@@ -61,7 +61,7 @@ export default async function VenuesPage({
     supabase.from("training_slots").select("venue_id"),
     supabase
       .from("venue_bookings")
-      .select("venue_id,starts_on,ends_on,seasons(is_current)")
+      .select("venue_id,starts_on,ends_on,seasons(is_current),venue_booking_slots(weekday)")
       .order("starts_on"),
   ]);
 
@@ -81,14 +81,16 @@ export default async function VenuesPage({
   const unplaced = pitches.filter((pitch) => pitch.venue_id === null && pitch.active);
   // This season's booking span per venue — the earliest start and latest end
   // of its bookings in the current season, so the tab says "Booked 6 Oct – 23 Mar".
-  const booked = new Map<string, { startsOn: string; endsOn: string }>();
+  const booked = new Map<string, { startsOn: string; endsOn: string; days: Set<number> }>();
   for (const row of bookingRows ?? []) {
     if (!row.seasons?.is_current) continue;
+    const days = (row.venue_booking_slots ?? []).map((slot) => slot.weekday);
     const span = booked.get(row.venue_id);
-    if (!span) booked.set(row.venue_id, { startsOn: row.starts_on, endsOn: row.ends_on });
+    if (!span) booked.set(row.venue_id, { startsOn: row.starts_on, endsOn: row.ends_on, days: new Set(days) });
     else {
       if (row.starts_on < span.startsOn) span.startsOn = row.starts_on;
       if (row.ends_on > span.endsOn) span.endsOn = row.ends_on;
+      for (const day of days) span.days.add(day);
     }
   }
 
@@ -238,7 +240,7 @@ function VenueList({
   venues: VenueRow[];
   pitchCount: Map<string, number>;
   slotCount: Map<string, number>;
-  booked: Map<string, { startsOn: string; endsOn: string }>;
+  booked: Map<string, { startsOn: string; endsOn: string; days: Set<number> }>;
 }) {
   return (
     <Card>
@@ -289,7 +291,13 @@ function VenueList({
                         {slotsHere} {slotsHere === 1 ? "training slot" : "training slots"}
                       </Badge>
                       <Badge variant={span ? "success" : "outline"}>
-                        {span ? `Booked ${blackoutLabel(span.startsOn, span.endsOn)}` : "No booking this season"}
+                        {span
+                          ? `Booked ${blackoutLabel(span.startsOn, span.endsOn)}${
+                              span.days.size > 0
+                                ? ` · ${[1, 2, 3, 4, 5, 6, 0].filter((d) => span.days.has(d)).map((d) => weekdayLabel(d, true)).join(", ")}`
+                                : ""
+                            }`
+                          : "No booking this season"}
                       </Badge>
                     </>
                   ) : (
