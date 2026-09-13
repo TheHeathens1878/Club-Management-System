@@ -4,8 +4,10 @@ import {
   blackoutLabel,
   calendarSummary,
   dateSpanLabel,
+  oursLabel,
   partsFree,
   shareChip,
+  slotCapacity,
   shareLabel,
   slotOrder,
   syncPending,
@@ -79,5 +81,16 @@ describe("slots", () => {
     expect(partsFree(3, [{ shares: 1 }, { shares: 1 }])).toBe(1);
     expect(partsFree(3, [{ shares: 2 }, { shares: 1 }])).toBe(0);
     expect(partsFree(1, [])).toBe(1);
+  });
+
+  it("counts against the club's share of the slot, not the whole pitch", () => {
+    expect(slotCapacity({ parts: 4, clubParts: null })).toBe(4);
+    expect(slotCapacity({ parts: 4, clubParts: 2 })).toBe(2);
+    expect(slotCapacity({ parts: 2, clubParts: 5 })).toBe(2);
+    expect(partsFree(slotCapacity({ parts: 4, clubParts: 2 }), [{ shares: 1 }])).toBe(1);
+    expect(oursLabel({ parts: 4, clubParts: 2 })).toBe("2 of 4 ours");
+    expect(oursLabel({ parts: 4, clubParts: null })).toBeNull();
+    expect(oursLabel({ parts: 4, clubParts: 4 })).toBeNull();
+    expect(oursLabel({ parts: 1, clubParts: 1 })).toBeNull();
   });
 });

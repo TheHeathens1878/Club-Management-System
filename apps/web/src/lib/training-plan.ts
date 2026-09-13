@@ -148,7 +148,18 @@ export function slotOrder<T extends { venueName: string; weekday: number; startT
   );
 }
 
-/** How many of a slot's parts are still free. */
-export function partsFree(parts: number, allocations: readonly { shares: number }[]): number {
-  return Math.max(0, parts - allocations.reduce((sum, a) => sum + a.shares, 0));
+/** How many of a slot's parts the club may hand out: its share, else all of them. */
+export function slotCapacity(slot: { parts: number; clubParts: number | null }): number {
+  return slot.clubParts === null ? slot.parts : Math.min(slot.clubParts, slot.parts);
+}
+
+/** How many of the parts the club has are still free. */
+export function partsFree(capacity: number, allocations: readonly { shares: number }[]): number {
+  return Math.max(0, capacity - allocations.reduce((sum, a) => sum + a.shares, 0));
+}
+
+/** "2 of 4 ours" — or nothing when the whole slot is the club's. */
+export function oursLabel(slot: { parts: number; clubParts: number | null }): string | null {
+  if (slot.parts <= 1 || slot.clubParts === null || slot.clubParts >= slot.parts) return null;
+  return `${slot.clubParts} of ${slot.parts} ours`;
 }

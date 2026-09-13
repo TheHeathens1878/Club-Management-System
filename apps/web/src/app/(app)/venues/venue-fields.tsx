@@ -7,13 +7,17 @@
  * first time needs to know — and, since 2026-09-13, what it is FOR: the
  * club's matches (the grounds with our pitches, or a central venue), its
  * training (a hired 3G or school pitch the winter blocks are planned at), or
- * both. It carries no booking settings of its own — buffers, capacity and
- * pricing all live on the pitch, because a booking is made against a pitch
- * and never against a ground.
+ * both. A training venue also says how much of its pitch is ours — "half of
+ * Loreto" — and carries notes for whoever plans there. It carries no booking
+ * settings of its own — buffers, capacity and pricing all live on the pitch,
+ * because a booking is made against a pitch and never against a ground.
  */
 
+import { useState } from "react";
+
 import { Input, Label } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/field";
+import { Select, Textarea } from "@/components/ui/field";
+import { PARTS_OPTIONS, shareChip } from "@/lib/training-plan";
 
 export type VenueFieldValues = {
   name: string;
@@ -22,6 +26,11 @@ export type VenueFieldValues = {
   sortOrder: number;
   forMatches: boolean;
   forTraining: boolean;
+  /** How the pitch is divided when the club trains here, 1–6. */
+  trainingParts: number;
+  /** How many of those parts are the club's. */
+  trainingShares: number;
+  trainingNotes: string | null;
 };
 
 export const EMPTY_VENUE_FIELDS: VenueFieldValues = {
@@ -31,6 +40,9 @@ export const EMPTY_VENUE_FIELDS: VenueFieldValues = {
   sortOrder: 0,
   forMatches: true,
   forTraining: false,
+  trainingParts: 1,
+  trainingShares: 1,
+  trainingNotes: null,
 };
 
 export function VenueFields({
@@ -40,6 +52,10 @@ export function VenueFields({
   idPrefix: string;
   values: VenueFieldValues;
 }) {
+  const [forTraining, setForTraining] = useState(values.forTraining);
+  const [parts, setParts] = useState(values.trainingParts);
+  const [shares, setShares] = useState(Math.min(values.trainingShares, values.trainingParts));
+
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-1.5 sm:col-span-2">
@@ -74,7 +90,8 @@ export function VenueFields({
             <input
               type="checkbox"
               name="for_training"
-              defaultChecked={values.forTraining}
+              checked={forTraining}
+              onChange={(event) => setForTraining(event.target.checked)}
               className="h-4 w-4 rounded border-input"
             />
             Training
@@ -86,6 +103,69 @@ export function VenueFields({
           training venue on its own.
         </p>
       </fieldset>
+
+      {forTraining ? (
+        <fieldset className="space-y-3 rounded-lg border bg-secondary/30 p-3 sm:col-span-2">
+          <legend className="px-1 text-sm font-medium leading-none text-foreground">Our share of the pitch</legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor={`${idPrefix}-training-parts`}>The pitch is divided into</Label>
+              <Select
+                id={`${idPrefix}-training-parts`}
+                name="training_parts"
+                value={String(parts)}
+                onChange={(event) => {
+                  const next = Number(event.target.value);
+                  setParts(next);
+                  setShares((current) => Math.min(current, next));
+                }}
+              >
+                {PARTS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor={`${idPrefix}-training-shares`}>Of which the club has</Label>
+              <Select
+                id={`${idPrefix}-training-shares`}
+                name="training_shares"
+                value={String(shares)}
+                onChange={(event) => setShares(Number(event.target.value))}
+                disabled={parts === 1}
+              >
+                {Array.from({ length: parts }, (_, i) => i + 1).map((n) => (
+                  <option key={n} value={n}>
+                    {n === parts ? "All of it" : `${n} of ${parts} · ${shareChip(n, parts)}`}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            A new training slot here starts from this: the slot is divided the same way, and only
+            our share is handed out to teams. Each slot can still say otherwise.
+          </p>
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-training-notes`}>
+              Training notes{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                which half is ours, where the equipment lives, who to ring
+              </span>
+            </Label>
+            <Textarea
+              id={`${idPrefix}-training-notes`}
+              name="training_notes"
+              rows={2}
+              maxLength={2000}
+              defaultValue={values.trainingNotes ?? ""}
+              placeholder="e.g. The far half, by the changing rooms. Lights go off at 21:00 sharp."
+            />
+          </div>
+        </fieldset>
+      ) : null}
 
       <div className="space-y-1.5 sm:col-span-2">
         <Label htmlFor={`${idPrefix}-address`}>

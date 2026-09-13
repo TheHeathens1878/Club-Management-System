@@ -5466,6 +5466,40 @@ export type Database = {
           },
         ]
       }
+      /** The venues a training block plans at (20260913130000). */
+      training_block_venues: {
+        Row: {
+          block_id: string
+          created_at: string
+          venue_id: string
+        }
+        Insert: {
+          block_id: string
+          created_at?: string
+          venue_id: string
+        }
+        Update: {
+          block_id?: string
+          created_at?: string
+          venue_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_block_venues_block_id_fkey"
+            columns: ["block_id"]
+            isOneToOne: false
+            referencedRelation: "training_blocks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "training_block_venues_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       training_blocks: {
         Row: {
           created_at: string
@@ -5519,6 +5553,8 @@ export type Database = {
       training_slots: {
         Row: {
           block_id: string
+          /** How many of `parts` are the club's to hand out; null = all (20260913130000). */
+          club_parts: number | null
           created_at: string
           end_time: string
           id: string
@@ -5534,6 +5570,7 @@ export type Database = {
         }
         Insert: {
           block_id: string
+          club_parts?: number | null
           created_at?: string
           end_time: string
           id?: string
@@ -5548,6 +5585,7 @@ export type Database = {
         }
         Update: {
           block_id?: string
+          club_parts?: number | null
           created_at?: string
           end_time?: string
           id?: string
@@ -5577,6 +5615,64 @@ export type Database = {
           },
         ]
       }
+      /** The dates the club has booked a training venue for, season by season (20260913130000). */
+      venue_bookings: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          ends_on: string
+          id: string
+          notes: string | null
+          reference: string | null
+          season_id: string | null
+          starts_on: string
+          updated_at: string
+          venue_id: string
+          when_text: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          ends_on: string
+          id?: string
+          notes?: string | null
+          reference?: string | null
+          season_id?: string | null
+          starts_on: string
+          updated_at?: string
+          venue_id: string
+          when_text?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          ends_on?: string
+          id?: string
+          notes?: string | null
+          reference?: string | null
+          season_id?: string | null
+          starts_on?: string
+          updated_at?: string
+          venue_id?: string
+          when_text?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "venue_bookings_season_id_fkey"
+            columns: ["season_id"]
+            isOneToOne: false
+            referencedRelation: "seasons"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "venue_bookings_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       venues: {
         Row: {
           active: boolean
@@ -5590,6 +5686,12 @@ export type Database = {
           name: string
           notes: string | null
           sort_order: number
+          /** For whoever plans training here (20260913130000). */
+          training_notes: string | null
+          /** How the pitch is divided when the club trains here, 1–6 (20260913130000). */
+          training_parts: number
+          /** How many of training_parts the club has (20260913130000). */
+          training_shares: number
           updated_at: string
         }
         Insert: {
@@ -5602,6 +5704,9 @@ export type Database = {
           name: string
           notes?: string | null
           sort_order?: number
+          training_notes?: string | null
+          training_parts?: number
+          training_shares?: number
           updated_at?: string
         }
         Update: {
@@ -5614,6 +5719,9 @@ export type Database = {
           name?: string
           notes?: string | null
           sort_order?: number
+          training_notes?: string | null
+          training_parts?: number
+          training_shares?: number
           updated_at?: string
         }
         Relationships: []

@@ -54,6 +54,9 @@ function fieldsFrom(formData: FormData): {
   sortOrder: number;
   forMatches: boolean;
   forTraining: boolean;
+  trainingParts: number;
+  trainingShares: number;
+  trainingNotes: string | null;
 } | { error: string } {
   const name = text(formData, "name", 120);
   if (!name) return { error: "A venue needs a name — the ground as people call it." };
@@ -69,6 +72,16 @@ function fieldsFrom(formData: FormData): {
   if (!forMatches && !forTraining) {
     return { error: "Tick what the venue is used for — matches, training, or both." };
   }
+  // The club's share of a training venue (20260913130000). Only asked when
+  // the venue is for training; a match ground keeps the whole-pitch default.
+  const trainingParts = forTraining ? Number(text(formData, "training_parts", 2) || "1") : 1;
+  const trainingShares = forTraining ? Number(text(formData, "training_shares", 2) || String(trainingParts)) : 1;
+  if (!Number.isInteger(trainingParts) || trainingParts < 1 || trainingParts > 6) {
+    return { error: "Say how the pitch is divided — the whole pitch, halves, up to sixths." };
+  }
+  if (!Number.isInteger(trainingShares) || trainingShares < 1 || trainingShares > trainingParts) {
+    return { error: "The club cannot have more of the pitch than there are parts." };
+  }
   return {
     name,
     address: text(formData, "address", 300) || null,
@@ -76,6 +89,9 @@ function fieldsFrom(formData: FormData): {
     sortOrder,
     forMatches,
     forTraining,
+    trainingParts,
+    trainingShares,
+    trainingNotes: forTraining ? text(formData, "training_notes", 2000) || null : null,
   };
 }
 
@@ -96,6 +112,9 @@ export async function createVenue(
       sort_order: fields.sortOrder,
       for_matches: fields.forMatches,
       for_training: fields.forTraining,
+      training_parts: fields.trainingParts,
+      training_shares: fields.trainingShares,
+      training_notes: fields.trainingNotes,
     })
     .select("id")
     .single();
@@ -127,6 +146,9 @@ export async function updateVenue(
       sort_order: fields.sortOrder,
       for_matches: fields.forMatches,
       for_training: fields.forTraining,
+      training_parts: fields.trainingParts,
+      training_shares: fields.trainingShares,
+      training_notes: fields.trainingNotes,
     })
     .eq("id", id);
   if (error) return refuse(error, `The club already has a venue called ${fields.name}.`);

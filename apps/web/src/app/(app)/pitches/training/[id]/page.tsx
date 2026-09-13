@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { dateSpanLabel, slotOrder, type SyncCounts } from "@/lib/training-plan";
 
 import { BlackoutsCard } from "./blackouts-card";
+import { BlockVenuesCard } from "./block-venues-card";
 import { DayPlanner } from "./day-planner";
 import { DetailsCard } from "./details-card";
 import { SlotsSection, type SlotRow, type TeamOption, type VenueOption } from "./slots-section";
@@ -25,10 +26,12 @@ export const dynamic = "force-dynamic";
  *      `sync_training_block()` on every load, so the administrator always
  *      sees the plan and the calendar side by side.
  *   2. DATES OFF — Christmas, half-term.
- *   3. VENUES AND SLOTS — grouped by venue; each slot shows its day, its
- *      time, how it is divided and the teams in it, with "Add team" on the
- *      row. This is where the allocating happens.
- *   4. THE BLOCK — name, dates, title; delete at the bottom, armed.
+ *   3. THE DAY PLANNER — a column per venue in the block, drag the teams on.
+ *   4. THE BLOCK'S VENUES — which grounds it trains at (2026-09-13).
+ *   5. VENUES AND SLOTS — grouped by venue; each slot shows its day, its
+ *      time, how it is divided, how much is ours and the teams in it, with
+ *      "Add team" on the row. This is where the allocating happens.
+ *   6. THE BLOCK — name, dates, title; delete at the bottom, armed.
  *
  * Everything is read through the caller's own client. The four tables are
  * readable by anyone signed in; the guard here matches the write policies
@@ -43,8 +46,15 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: block }, { data: blackouts }, { data: slotRows }, { data: teamRows }, { data: venueRows }, dryRun] =
-    await Promise.all([
+  const [
+    { data: block },
+    { data: blackouts },
+    { data: slotRows },
+    { data: teamRows },
+    { data: venueRows },
+    { data: blockVenueRows },
+    dryRun,
+  ] = await Promise.all([
       supabase
         .from("training_blocks")
         .select("id,name,starts_on,ends_on,session_title,notes,last_synced_at")
@@ -58,7 +68,7 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
       supabase
         .from("training_slots")
         .select(
-          "id,venue_id,venue_name,venue_address,weekday,start_time,end_time,parts,notes,training_allocations(id,team_id,shares,teams(name,age_group))",
+          "id,venue_id,venue_name,venue_address,weekday,start_time,end_time,parts,club_parts,notes,training_allocations(id,team_id,shares,teams(name,age_group))",
         )
         .eq("block_id", id),
       supabase.from("teams").select("id,name,age_group,default_training_day").eq("active", true).order("name"),
@@ -66,11 +76,12 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
       // match ground (picking one makes it a training venue too).
       supabase
         .from("venues")
-        .select("id,name,for_training")
+        .select("id,name,for_training,training_parts,training_shares,training_notes")
         .eq("active", true)
         .order("for_training", { ascending: false })
         .order("sort_order")
         .order("name"),
+      supabase.from("training_block_venues").select("venue_id").eq("block_id", id),
       supabase.rpc("sync_training_block", { p_block_id: id, p_dry_run: true }),
     ]);
   if (!block) notFound();
@@ -87,6 +98,7 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
       startTime: row.start_time,
       endTime: row.end_time,
       parts: row.parts,
+      clubParts: row.club_parts,
       notes: row.notes,
       allocations: (row.training_allocations ?? [])
         .map((a) => ({
@@ -105,8 +117,22 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
     ageGroup: t.age_group,
     trainingDay: t.default_training_day,
   }));
-  const venueOptions: VenueOption[] = (venueRows ?? []).map((v) => ({ id: v.id, name: v.name, forTraining: v.for_training }));
-  const venues = Array.from(new Set(slots.map((s) => s.venueName)));
+  const venueOptions: VenueOption[] = (venueRows ?? []).map((v) => ({
+    id: v.id,
+    name: v.name,
+    forTraining: v.for_training,
+    trainingParts: v.training_parts,
+    trainingShares: v.training_shares,
+    trainingNotes: v.training_notes,
+  }));
+  const blockVenueIds = (blockVenueRows ?? []).map((row) => row.venue_id);
+  // The block's venues in the club's order — the planner's columns.
+  const blockVenues = venueOptions.filter((venue) => blockVenueIds.includes(venue.id));
+  const slotsByVenue = new Map<string, number>();
+  for (const slot of slots) {
+    if (slot.venueId) slotsByVenue.set(slot.venueId, (slotsByVenue.get(slot.venueId) ?? 0) + 1);
+  }
+  const venues = Array.from(new Set([...blockVenues.map((v) => v.name), ...slots.map((s) => s.venueName)]));
 
   return (
     <>
@@ -137,9 +163,22 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
           }))}
         />
 
-        <DayPlanner blockId={block.id} slots={slots} teams={teams} />
+        <DayPlanner blockId={block.id} slots={slots} teams={teams} venues={blockVenues} />
 
-        <SlotsSection blockId={block.id} slots={slots} teams={teams} venues={venueOptions} />
+        <BlockVenuesCard
+          blockId={block.id}
+          venues={venueOptions}
+          blockVenueIds={blockVenueIds}
+          slotsByVenue={slotsByVenue}
+        />
+
+        <SlotsSection
+          blockId={block.id}
+          slots={slots}
+          teams={teams}
+          venues={venueOptions}
+          blockVenueIds={blockVenueIds}
+        />
 
         <DetailsCard
           block={{
