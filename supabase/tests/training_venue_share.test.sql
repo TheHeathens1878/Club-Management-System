@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(21);
+select plan(25);
 
 insert into public.teams (id, name, age_group) values
   ('7b7b7b7b-0913-4111-8111-000000000001', 'TS Alpha', 'U10'),
@@ -75,7 +75,10 @@ select lives_ok($$
 $$, 'with the whole pitch ours again, the other two quarters go');
 
 
--- C. a clone carries the share -----------------------------------------------------
+-- C. a clone carries the share, and the pitch --------------------------------------
+insert into public.resources (id, type, name, venue_id, for_matches, for_training) values
+  ('9c9c0000-0913-4111-8111-000000000003', 'pitch', 'TS Loreto 3G', 'e4e4e4e4-0913-4111-8111-000000000001', false, true);
+update public.training_slots set pitch_id = '9c9c0000-0913-4111-8111-000000000003' where id = '530f0000-0913-4111-8111-000000000001';
 -- Beta out again (2 parts), so the slot holds 2 and the club's share can drop to 3.
 delete from public.training_allocations where team_id = '7b7b7b7b-0913-4111-8111-000000000002';
 update public.training_slots set club_parts = 3 where id = '530f0000-0913-4111-8111-000000000001';
@@ -85,6 +88,8 @@ select set_config('ts.clone',
   public.clone_training_slot('530f0000-0913-4111-8111-000000000001', 4, '18:00', '19:00', false)::text, true);
 select is((select club_parts from public.training_slots where id = current_setting('ts.clone')::uuid),
   3::smallint, 'a clone has the same share of the pitch');
+select is((select pitch_id from public.training_slots where id = current_setting('ts.clone')::uuid),
+  '9c9c0000-0913-4111-8111-000000000003'::uuid, 'a clone is on the same pitch');
 
 
 
@@ -125,6 +130,22 @@ select throws_ok($$
   insert into public.venue_booking_slots (booking_id, weekday, start_time, end_time) values
   ('b0b0b0b0-0913-4111-8111-000000000001', 2, '20:00', '19:00')
 $$, '23514', null, 'a slot cannot end before it starts');
+-- Partington has two pitches (resources on the venue, training only); Pitch 1
+-- Monday 6–7 is half a pitch, Pitch 2 the full pitch.
+insert into public.resources (id, type, name, venue_id, for_matches, for_training) values
+  ('9c9c0000-0913-4111-8111-000000000001', 'pitch', 'TS Pitch 1', 'e4e4e4e4-0913-4111-8111-000000000002', false, true),
+  ('9c9c0000-0913-4111-8111-000000000002', 'pitch', 'TS Pitch 2', 'e4e4e4e4-0913-4111-8111-000000000002', false, true);
+select is((select (for_matches, for_training) from public.resources where id = '9c9c0000-0913-4111-8111-000000000001'),
+  (false, true), 'a pitch says what it is for');
+select lives_ok($$
+  insert into public.venue_booking_slots (booking_id, pitch_id, weekday, start_time, end_time, parts, shares) values
+    ('b0b0b0b0-0913-4111-8111-000000000001', '9c9c0000-0913-4111-8111-000000000001', 1, '18:00', '19:00', 2, 1),
+    ('b0b0b0b0-0913-4111-8111-000000000001', '9c9c0000-0913-4111-8111-000000000002', 1, '18:00', '19:00', 1, 1)
+$$, 'a booked slot names its pitch and the club''s share');
+select throws_ok($$
+  insert into public.venue_booking_slots (booking_id, pitch_id, weekday, start_time, end_time, parts, shares) values
+    ('b0b0b0b0-0913-4111-8111-000000000001', '9c9c0000-0913-4111-8111-000000000001', 1, '19:00', '20:00', 2, 3)
+$$, '23514', null, 'the club cannot have three halves of a booked slot');
 select is((select count(*)::int from public.venue_bookings where venue_id = 'e4e4e4e4-0913-4111-8111-000000000002'),
   1, 'a booking is noted against the venue for the season');
 select throws_ok($$

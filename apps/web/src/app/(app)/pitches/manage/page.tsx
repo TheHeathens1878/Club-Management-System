@@ -35,13 +35,15 @@ export default async function ManagePitchesPage() {
   const { data, error } = await supabase
     .from("resources")
     .select(
-      "id,name,description,address,information,capacity,active,sort_order,default_pre_buffer_minutes,default_post_buffer_minutes,legacy_neon_pitch_id",
+      "id,name,description,address,information,capacity,active,sort_order,default_pre_buffer_minutes,default_post_buffer_minutes,legacy_neon_pitch_id,for_matches,for_training,venue_id,venues(name)",
     )
     .eq("type", "pitch")
     .order("sort_order")
     .order("name");
 
   const rows = data ?? [];
+  const { data: venueRows } = await supabase.from("venues").select("id,name").eq("active", true).order("sort_order").order("name");
+  const venues = (venueRows ?? []).map((v) => ({ id: v.id, name: v.name }));
 
   // How much is still riding on each pitch, so "take out of use" is an
   // informed click. Cancelled bookings are not counted: they hold no slot.
@@ -69,6 +71,10 @@ export default async function ManagePitchesPage() {
     defaultPostBufferMinutes: row.default_post_buffer_minutes,
     legacyId: row.legacy_neon_pitch_id,
     upcomingBookings: bookingCount.get(row.id) ?? 0,
+    forMatches: row.for_matches,
+    forTraining: row.for_training,
+    venueId: row.venue_id,
+    venueName: row.venues?.name ?? null,
   }));
 
   return (
@@ -110,7 +116,7 @@ export default async function ManagePitchesPage() {
             </p>
           </CardHeader>
           <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
-            <ManagePitchesPanel pitches={pitches} />
+            <ManagePitchesPanel pitches={pitches} venues={venues} />
           </CardContent>
         </Card>
       </div>

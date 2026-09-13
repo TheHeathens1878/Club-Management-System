@@ -217,12 +217,16 @@ export function BookForm({
             <option value="" disabled>
               Choose a pitch…
             </option>
-            {pitches.map((pitch) => (
-              <option key={pitch.id} value={pitch.id}>
-                {pitch.name}
-                {pitch.id === homePitchByTeam[teamId] ? " (home)" : ""}
-              </option>
-            ))}
+            {/* A pitch is offered for what it is for (20260913160000): a
+                match on a match pitch, training on a training one. */}
+            {pitches
+              .filter((pitch) => (kind === "fixture" ? pitch.forMatches !== false : pitch.forTraining !== false))
+              .map((pitch) => (
+                <option key={pitch.id} value={pitch.id}>
+                  {pitch.name}
+                  {pitch.id === homePitchByTeam[teamId] ? " (home)" : ""}
+                </option>
+              ))}
           </Select>
         </div>
       </div>

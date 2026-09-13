@@ -12,7 +12,7 @@
  */
 
 import { Input, Label } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/field";
+import { Select, Textarea } from "@/components/ui/field";
 
 export type PitchFieldValues = {
   name: string;
@@ -22,6 +22,11 @@ export type PitchFieldValues = {
   capacity: number | null;
   defaultPreBufferMinutes: number;
   defaultPostBufferMinutes: number;
+  /** What the pitch is for (20260913160000). */
+  forMatches: boolean;
+  forTraining: boolean;
+  /** The ground it is on, if any. */
+  venueId: string | null;
 };
 
 export const EMPTY_PITCH_FIELDS: PitchFieldValues = {
@@ -32,15 +37,23 @@ export const EMPTY_PITCH_FIELDS: PitchFieldValues = {
   capacity: null,
   defaultPreBufferMinutes: 0,
   defaultPostBufferMinutes: 0,
+  forMatches: true,
+  forTraining: true,
+  venueId: null,
 };
+
+export type VenueChoice = { id: string; name: string };
 
 export function PitchFields({
   idPrefix,
   values,
+  venues = [],
 }: {
   /** Unique per form on the page, so every label points at its own input. */
   idPrefix: string;
   values: PitchFieldValues;
+  /** The club's venues, for "on which ground". */
+  venues?: VenueChoice[];
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
@@ -54,6 +67,40 @@ export function PitchFields({
           maxLength={120}
           required
         />
+      </div>
+
+      {/* What it is for, and where it is (Adam, 2026-09-13: "pitches should
+          have a tick box to note training or matches (or both) and should
+          be allocatable to venues"). */}
+      <fieldset className="space-y-2">
+        <legend className="text-sm font-medium leading-none text-foreground">Used for</legend>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+            <input type="checkbox" name="for_matches" defaultChecked={values.forMatches} className="h-4 w-4 rounded border-input" />
+            Matches
+          </label>
+          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+            <input type="checkbox" name="for_training" defaultChecked={values.forTraining} className="h-4 w-4 rounded border-input" />
+            Training
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          The booking form offers a pitch for what it is for; the fixture desk allocates match pitches only.
+        </p>
+      </fieldset>
+      <div className="space-y-1.5">
+        <Label htmlFor={`${idPrefix}-venue`}>On which ground</Label>
+        <Select id={`${idPrefix}-venue`} name="venue_id" defaultValue={values.venueId ?? ""}>
+          <option value="">No venue</option>
+          {venues.map((venue) => (
+            <option key={venue.id} value={venue.id}>
+              {venue.name}
+            </option>
+          ))}
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Moving a pitch moves the coaches who play on it into that ground&rsquo;s group.
+        </p>
       </div>
 
       <div className="space-y-1.5 sm:col-span-2">

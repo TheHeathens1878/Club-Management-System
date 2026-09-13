@@ -17,16 +17,16 @@ import { Select } from "@/components/ui/field";
 
 import { createPitch, type PitchAdminActionState } from "../pitch-actions";
 import { PitchAdminFeedback } from "../manage-panel";
-import { EMPTY_PITCH_FIELDS, PitchFields } from "../pitch-fields";
+import { EMPTY_PITCH_FIELDS, PitchFields, type VenueChoice } from "../pitch-fields";
 
 const EMPTY: PitchAdminActionState = {};
 
-export function NewPitchForm() {
+export function NewPitchForm({ venues = [] }: { venues?: VenueChoice[] }) {
   const [state, action, pending] = useActionState(createPitch, EMPTY);
 
   return (
     <form action={action} className="space-y-4">
-      <PitchFields idPrefix="new-pitch" values={EMPTY_PITCH_FIELDS} />
+      <PitchFields idPrefix="new-pitch" values={EMPTY_PITCH_FIELDS} venues={venues} />
 
       <div className="space-y-1.5 sm:max-w-xs">
         <Label htmlFor="new-pitch-active">Availability</Label>

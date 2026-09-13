@@ -65,7 +65,13 @@ export type TeamOption = {
   homeResourceId: string | null;
 };
 
-export type PitchOption = { id: string; name: string };
+export type PitchOption = {
+  id: string;
+  name: string;
+  /** What the pitch is for (20260913160000): the booking form offers it for that. Absent = both. */
+  forMatches?: boolean;
+  forTraining?: boolean;
+};
 
 export type PitchBookingItem = {
   id: string;

@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, Textarea } from "@/components/ui/field";
 import { Input, Label } from "@/components/ui/input";
-import { WEEKDAYS, timeRange, weekdayLabel } from "@/lib/training-plan";
+import { SHARE_OPTIONS, WEEKDAYS, shareWord, timeRange, weekdayLabel } from "@/lib/training-plan";
 
 import {
   addVenueBooking,
@@ -27,7 +27,19 @@ import {
 } from "../venue-booking-actions";
 import { VenueFeedback } from "../venue-forms";
 
-export type VenueBookingSlotRow = { id: string; weekday: number; startTime: string; endTime: string };
+export type VenueBookingSlotRow = {
+  id: string;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  /** Which of the venue's pitches; null = the only one. */
+  pitchId: string | null;
+  pitchName: string | null;
+  parts: number;
+  shares: number;
+};
+
+export type PitchChoice = { id: string; name: string };
 
 export type VenueBookingRow = {
   id: string;
@@ -54,20 +66,52 @@ export function bookingSpanLabel(startsOn: string, endsOn: string): string {
   return startsOn === endsOn ? fmt(startsOn) : `${fmt(startsOn)} – ${fmt(endsOn)}`;
 }
 
-/** Monday first, then by start time. */
+/** Pitch, then Monday first, then by start time. */
 function slotOrder(slots: VenueBookingSlotRow[]): VenueBookingSlotRow[] {
   const rank = (d: number) => (d + 6) % 7;
-  return [...slots].sort((a, b) => rank(a.weekday) - rank(b.weekday) || a.startTime.localeCompare(b.startTime));
+  return [...slots].sort(
+    (a, b) =>
+      (a.pitchName ?? "").localeCompare(b.pitchName ?? "") ||
+      rank(a.weekday) - rank(b.weekday) ||
+      a.startTime.localeCompare(b.startTime),
+  );
+}
+
+function PitchSelect({ id, pitches, value, onChange, defaultValue }: {
+  id: string;
+  pitches: PitchChoice[];
+  value?: string;
+  onChange?: (value: string) => void;
+  defaultValue?: string;
+}) {
+  return (
+    <Select
+      id={id}
+      name="slot_pitch"
+      value={value}
+      defaultValue={value === undefined ? defaultValue ?? "" : undefined}
+      onChange={onChange ? (event) => onChange(event.target.value) : undefined}
+    >
+      <option value="">{pitches.length === 0 ? "The pitch" : "Any / the whole venue"}</option>
+      {pitches.map((pitch) => (
+        <option key={pitch.id} value={pitch.id}>
+          {pitch.name}
+        </option>
+      ))}
+    </Select>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // The slot rows of the add form — day, from, until; add and take away
 // ---------------------------------------------------------------------------
 
-type DraftSlot = { key: number; weekday: string; start: string; end: string };
+type DraftSlot = { key: number; pitch: string; weekday: string; start: string; end: string; share: string };
 
-function SlotRowsEditor({ prefix }: { prefix: string }) {
-  const [rows, setRows] = useState<DraftSlot[]>([{ key: 1, weekday: "2", start: "19:00", end: "20:00" }]);
+function SlotRowsEditor({ prefix, pitches }: { prefix: string; pitches: PitchChoice[] }) {
+  const [rows, setRows] = useState<DraftSlot[]>([
+    { key: 1, pitch: pitches[0]?.id ?? "", weekday: "2", start: "19:00", end: "20:00", share: "1:1" },
+  ]);
   const [nextKey, setNextKey] = useState(2);
 
   function update(key: number, patch: Partial<DraftSlot>) {
@@ -78,11 +122,22 @@ function SlotRowsEditor({ prefix }: { prefix: string }) {
     <fieldset className="space-y-2">
       <legend className="text-sm font-medium leading-none text-foreground">Slots booked</legend>
       <p className="text-xs text-muted-foreground">
-        The day and the hours, one row per weekly slot — Tuesdays 19:00 to 20:00, Thursdays 18:00 to 19:30.
+        One row per weekly slot: which pitch, the day, the hours and how much of the pitch is ours —
+        Pitch 1 Mondays 18:00 to 19:00, half a pitch; Pitch 2 the same hour, the full pitch.
+        {pitches.length === 0 ? " Add the venue's pitches above to name them here." : ""}
       </p>
       <div className="space-y-2">
         {rows.map((row, index) => (
-          <div key={row.key} className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-end gap-2">
+          <div key={row.key} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_minmax(0,1fr)_auto]">
+            <div className="space-y-1">
+              {index === 0 ? <Label htmlFor={`${prefix}-pitch-${row.key}`} className="text-xs">Pitch</Label> : null}
+              <PitchSelect
+                id={`${prefix}-pitch-${row.key}`}
+                pitches={pitches}
+                value={row.pitch}
+                onChange={(value) => update(row.key, { pitch: value })}
+              />
+            </div>
             <div className="space-y-1">
               {index === 0 ? <Label htmlFor={`${prefix}-day-${row.key}`} className="text-xs">Day</Label> : null}
               <Select
@@ -120,6 +175,21 @@ function SlotRowsEditor({ prefix }: { prefix: string }) {
                 className="w-28"
               />
             </div>
+            <div className="space-y-1">
+              {index === 0 ? <Label htmlFor={`${prefix}-share-${row.key}`} className="text-xs">Ours</Label> : null}
+              <Select
+                id={`${prefix}-share-${row.key}`}
+                name="slot_share"
+                value={row.share}
+                onChange={(event) => update(row.key, { share: event.target.value })}
+              >
+                {SHARE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -142,7 +212,14 @@ function SlotRowsEditor({ prefix }: { prefix: string }) {
           const last = rows[rows.length - 1];
           setRows((current) => [
             ...current,
-            { key: nextKey, weekday: last?.weekday ?? "2", start: last?.end ?? "19:00", end: last?.end ?? "20:00" },
+            {
+              key: nextKey,
+              pitch: last?.pitch ?? "",
+              weekday: last?.weekday ?? "2",
+              start: last?.end ?? "19:00",
+              end: last?.end ?? "20:00",
+              share: last?.share ?? "1:1",
+            },
           ]);
           setNextKey((k) => k + 1);
         }}
@@ -168,7 +245,7 @@ function RemoveSlot({ venueId, slot }: { venueId: string; slot: VenueBookingSlot
       <button
         type="submit"
         disabled={pending}
-        aria-label={`Remove ${weekdayLabel(slot.weekday)} ${timeRange(slot.startTime, slot.endTime)}`}
+        aria-label={`Remove ${slot.pitchName ? `${slot.pitchName} ` : ""}${weekdayLabel(slot.weekday)} ${timeRange(slot.startTime, slot.endTime)}`}
         className="inline-flex h-6 w-6 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground disabled:opacity-50"
       >
         <X className="h-3 w-3" aria-hidden />
@@ -177,13 +254,27 @@ function RemoveSlot({ venueId, slot }: { venueId: string; slot: VenueBookingSlot
   );
 }
 
-function AddSlot({ venueId, bookingId, onDone }: { venueId: string; bookingId: string; onDone: () => void }) {
+function AddSlot({
+  venueId,
+  bookingId,
+  pitches,
+  onDone,
+}: {
+  venueId: string;
+  bookingId: string;
+  pitches: PitchChoice[];
+  onDone: () => void;
+}) {
   const [state, action] = useActionState(addVenueBookingSlot, {});
   const prefix = `slot-${bookingId}`;
   return (
     <form action={action} className="flex flex-wrap items-end gap-2 rounded-md border bg-secondary/40 p-2">
       <input type="hidden" name="venue_id" value={venueId} />
       <input type="hidden" name="booking_id" value={bookingId} />
+      <div className="min-w-0 flex-1 basis-32 space-y-1">
+        <Label htmlFor={`${prefix}-pitch`} className="text-xs">Pitch</Label>
+        <PitchSelect id={`${prefix}-pitch`} pitches={pitches} defaultValue={pitches[0]?.id ?? ""} />
+      </div>
       <div className="min-w-0 flex-1 basis-32 space-y-1">
         <Label htmlFor={`${prefix}-day`} className="text-xs">Day</Label>
         <Select id={`${prefix}-day`} name="slot_weekday" defaultValue="2">
@@ -202,6 +293,16 @@ function AddSlot({ venueId, bookingId, onDone }: { venueId: string; bookingId: s
         <Label htmlFor={`${prefix}-end`} className="text-xs">Until</Label>
         <Input id={`${prefix}-end`} type="time" name="slot_end" defaultValue="20:00" className="w-28" required />
       </div>
+      <div className="min-w-0 flex-1 basis-32 space-y-1">
+        <Label htmlFor={`${prefix}-share`} className="text-xs">Ours</Label>
+        <Select id={`${prefix}-share`} name="slot_share" defaultValue="1:1">
+          {SHARE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </div>
       <SubmitButton size="sm" variant="outline" className="min-h-[44px] lg:min-h-0" pendingLabel="Adding…">
         Add
       </SubmitButton>
@@ -213,7 +314,15 @@ function AddSlot({ venueId, bookingId, onDone }: { venueId: string; bookingId: s
   );
 }
 
-function BookingSlots({ venueId, booking }: { venueId: string; booking: VenueBookingRow }) {
+function BookingSlots({
+  venueId,
+  booking,
+  pitches,
+}: {
+  venueId: string;
+  booking: VenueBookingRow;
+  pitches: PitchChoice[];
+}) {
   const [adding, setAdding] = useState(false);
   const slots = slotOrder(booking.slots);
   return (
@@ -224,8 +333,17 @@ function BookingSlots({ venueId, booking }: { venueId: string; booking: VenueBoo
             key={slot.id}
             className="inline-flex items-center gap-1 rounded-full border bg-card py-0.5 pl-2.5 pr-1 text-xs font-medium"
           >
+            {slot.pitchName ? <span className="text-primary">{slot.pitchName} ·</span> : null}
             <span>{weekdayLabel(slot.weekday)}</span>
             <span className="font-normal text-muted-foreground">{timeRange(slot.startTime, slot.endTime)}</span>
+            <span
+              className={
+                "rounded-full px-1.5 py-0.5 text-[10px] font-semibold " +
+                (slot.shares >= slot.parts ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-900")
+              }
+            >
+              {shareWord(slot.parts, slot.shares)}
+            </span>
             <RemoveSlot venueId={venueId} slot={slot} />
           </li>
         ))}
@@ -242,7 +360,9 @@ function BookingSlots({ venueId, booking }: { venueId: string; booking: VenueBoo
           </li>
         ) : null}
       </ul>
-      {adding ? <AddSlot venueId={venueId} bookingId={booking.id} onDone={() => setAdding(false)} /> : null}
+      {adding ? (
+        <AddSlot venueId={venueId} bookingId={booking.id} pitches={pitches} onDone={() => setAdding(false)} />
+      ) : null}
     </div>
   );
 }
@@ -281,10 +401,13 @@ export function VenueBookingsCard({
   venueId,
   bookings,
   seasons,
+  pitches,
 }: {
   venueId: string;
   bookings: VenueBookingRow[];
   seasons: SeasonOption[];
+  /** The venue's pitches (active), for "which pitch" on a slot. */
+  pitches: PitchChoice[];
 }) {
   const [open, setOpen] = useState(bookings.length === 0);
   const [state, action] = useActionState(addVenueBooking, {});
@@ -310,8 +433,8 @@ export function VenueBookingsCard({
             <CalendarCheck className="h-4 w-4 text-primary" aria-hidden /> Bookings
           </CardTitle>
           <p className="text-sm text-muted-foreground">
-            What the club has booked here, season by season — the dates and the weekly slots. The
-            training block says what happens in them.
+            What the club has booked here, season by season — the dates, the weekly slots, which
+            pitch and how much of it is ours. A training block picks its slots from these.
           </p>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => setOpen((v) => !v)} className="min-h-[44px] lg:min-h-0">
@@ -345,7 +468,7 @@ export function VenueBookingsCard({
               </div>
             </div>
 
-            <SlotRowsEditor prefix="new-booking" />
+            <SlotRowsEditor prefix="new-booking" pitches={pitches} />
 
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
@@ -391,7 +514,7 @@ export function VenueBookingsCard({
                   <li key={booking.id} className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <p className="text-sm font-medium">{bookingSpanLabel(booking.startsOn, booking.endsOn)}</p>
-                      <BookingSlots venueId={venueId} booking={booking} />
+                      <BookingSlots venueId={venueId} booking={booking} pitches={pitches} />
                       {booking.reference ? <p className="text-xs text-muted-foreground">Ref {booking.reference}</p> : null}
                       {booking.notes ? <p className="whitespace-pre-line text-xs text-muted-foreground">{booking.notes}</p> : null}
                     </div>

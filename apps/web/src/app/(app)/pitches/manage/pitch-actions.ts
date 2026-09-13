@@ -101,6 +101,14 @@ function readFields(
   const postBuffer = bufferMinutes(formData, "default_post_buffer_minutes", "The clear-down buffer");
   if ("error" in postBuffer) return { error: postBuffer.error };
 
+  // What the pitch is for (20260913160000): an unticked box sends nothing,
+  // and a pitch for nothing at all is not a pitch.
+  const forMatches = formData.get("for_matches") === "on";
+  const forTraining = formData.get("for_training") === "on";
+  if (!forMatches && !forTraining) return { error: "Tick what the pitch is used for — matches, training, or both." };
+  const venueRaw = text(formData, "venue_id", 40);
+  const venueId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(venueRaw) ? venueRaw : null;
+
   return {
     fields: {
       name,
@@ -110,6 +118,9 @@ function readFields(
       capacity: capacity.value,
       default_pre_buffer_minutes: preBuffer.value,
       default_post_buffer_minutes: postBuffer.value,
+      for_matches: forMatches,
+      for_training: forTraining,
+      venue_id: venueId,
     },
   };
 }
@@ -179,6 +190,7 @@ export async function updatePitch(
   if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
 
   revalidatePitchPaths();
+  revalidatePath("/venues");
   return { notice: `${read.fields.name} saved.` };
 }
 

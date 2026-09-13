@@ -78,6 +78,8 @@ export default async function PitchesPage({
         .from("resources")
         .select("id,name,default_pre_buffer_minutes,default_post_buffer_minutes")
         .neq("type", "function_room")
+        // The weekend grid is the fixture desk's: match pitches only.
+        .eq("for_matches", true)
         .eq("active", true)
         .order("sort_order")
         .order("name"),

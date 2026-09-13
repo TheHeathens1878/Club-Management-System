@@ -194,6 +194,7 @@ export async function removeBlackout(_prev: PlanActionState, formData: FormData)
 function readSlot(formData: FormData): { error: string } | {
   venueId: string;
   venueAddress: string | null;
+  pitchId: string | null;
   weekday: number;
   startTime: string;
   endTime: string;
@@ -203,6 +204,7 @@ function readSlot(formData: FormData): { error: string } | {
 } {
   const venueId = uuid(formData, "venue_id");
   const venueAddress = text(formData, "venue_address", 300);
+  const pitchId = uuid(formData, "pitch_id");
   const weekday = integer(formData, "weekday", 0, 6);
   const startRaw = text(formData, "start_time", 8);
   const endRaw = text(formData, "end_time", 8);
@@ -225,6 +227,7 @@ function readSlot(formData: FormData): { error: string } | {
   return {
     venueId,
     venueAddress: venueAddress || null,
+    pitchId,
     weekday,
     startTime,
     endTime,
@@ -246,6 +249,7 @@ export async function addSlot(_prev: PlanActionState, formData: FormData): Promi
     block_id: blockId,
     venue_id: slot.venueId,
     venue_address: slot.venueAddress,
+    pitch_id: slot.pitchId,
     weekday: slot.weekday,
     start_time: slot.startTime,
     end_time: slot.endTime,
@@ -272,6 +276,7 @@ export async function updateSlot(_prev: PlanActionState, formData: FormData): Pr
     .update({
       venue_id: slot.venueId,
       venue_address: slot.venueAddress,
+      pitch_id: slot.pitchId,
       weekday: slot.weekday,
       start_time: slot.startTime,
       end_time: slot.endTime,
