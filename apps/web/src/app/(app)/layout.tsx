@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Home } from "lucide-react";
 
 import { AppTopBar, type DrawerSection, type TopBarDoor } from "@/components/app-top-bar";
 import { CommandPalette } from "@/components/command-palette";
@@ -139,13 +140,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // match and only that one (/pitches/calendar must not also light /pitches).
   const hrefs = allHrefs(capabilities);
 
-  // The phone's tab bar: the nouns, then Inbox and Messages while five fit.
-  // With four nouns Messages folds into Inbox — the Inbox tab then wears both
-  // counts and lights on /messages too.
+  // The phone's tab bar (Adam, 2026-09-13): Home first — the club lobby,
+  // wearing the notifications count and lighting for any route no tab
+  // claims — then the nouns, then Messages. Six for staff, five for a member
+  // without the Clubhouse door.
   const nounDoors = doors.filter((d) => d.kind === "noun");
   const inbox = doors.find((d) => d.key === "inbox")!;
   const messages = doors.find((d) => d.key === "messages")!;
-  const foldMessages = nounDoors.length + 2 > 5;
   const tabOf = (d: (typeof doors)[number], extra: Partial<MobileTabItem> = {}): MobileTabItem => {
     const Icon = d.icon;
     return {
@@ -158,17 +159,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     };
   };
   const tabs: MobileTabItem[] = [
+    tabOf(inbox, { label: "Home", icon: <Home className="h-[21px] w-[21px]" aria-hidden />, moreFallback: true }),
     ...nounDoors.map((d) => tabOf(d)),
-    tabOf(inbox, {
-      match: foldMessages ? [...inbox.match, ...messages.match] : inbox.match,
-      badge: foldMessages
-        ? badgeFor("notifications") || badgeFor("messages")
-          ? (badgeFor("notifications") ?? 0) + (badgeFor("messages") ?? 0)
-          : undefined
-        : badgeFor("notifications"),
-      moreFallback: true,
-    }),
-    ...(foldMessages ? [] : [tabOf(messages)]),
+    tabOf(messages),
   ];
 
   // `min-h-[100dvh]`, not `min-h-screen`: `vh` is the viewport with the URL bar
