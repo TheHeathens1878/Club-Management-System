@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
+import { blackoutLabel, shareChip } from "@/lib/training-plan";
 
 export const metadata = { title: "Venues" };
 
@@ -45,10 +46,10 @@ export default async function VenuesPage({
   const tab: Tab = tabParam === "training" ? "training" : "matches";
 
   const supabase = await createClient();
-  const [{ data: venueRows, error }, { data: pitchRows }, { data: slotRows }] = await Promise.all([
+  const [{ data: venueRows, error }, { data: pitchRows }, { data: slotRows }, { data: bookingRows }] = await Promise.all([
     supabase
       .from("venues")
-      .select("id,name,address,notes,active,sort_order,for_matches,for_training")
+      .select("id,name,address,notes,active,sort_order,for_matches,for_training,training_parts,training_shares,training_notes")
       .order("sort_order")
       .order("name"),
     supabase
@@ -58,6 +59,10 @@ export default async function VenuesPage({
       .order("sort_order")
       .order("name"),
     supabase.from("training_slots").select("venue_id"),
+    supabase
+      .from("venue_bookings")
+      .select("venue_id,starts_on,ends_on,seasons(is_current)")
+      .order("starts_on"),
   ]);
 
   const venues = venueRows ?? [];
@@ -74,6 +79,18 @@ export default async function VenuesPage({
     slotCount.set(slot.venue_id, (slotCount.get(slot.venue_id) ?? 0) + 1);
   }
   const unplaced = pitches.filter((pitch) => pitch.venue_id === null && pitch.active);
+  // This season's booking span per venue — the earliest start and latest end
+  // of its bookings in the current season, so the tab says "Booked 6 Oct – 23 Mar".
+  const booked = new Map<string, { startsOn: string; endsOn: string }>();
+  for (const row of bookingRows ?? []) {
+    if (!row.seasons?.is_current) continue;
+    const span = booked.get(row.venue_id);
+    if (!span) booked.set(row.venue_id, { startsOn: row.starts_on, endsOn: row.ends_on });
+    else {
+      if (row.starts_on < span.startsOn) span.startsOn = row.starts_on;
+      if (row.ends_on > span.endsOn) span.endsOn = row.ends_on;
+    }
+  }
 
   const onTab = venues.filter((venue) => (tab === "training" ? venue.for_training : venue.for_matches));
   const active = onTab.filter((venue) => venue.active);
@@ -173,6 +190,7 @@ export default async function VenuesPage({
           venues={active}
           pitchCount={pitchCount}
           slotCount={slotCount}
+          booked={booked}
         />
 
         {retired.length > 0 && (
@@ -183,6 +201,7 @@ export default async function VenuesPage({
             venues={retired}
             pitchCount={pitchCount}
             slotCount={slotCount}
+            booked={booked}
           />
         )}
       </div>
@@ -199,6 +218,9 @@ type VenueRow = {
   sort_order: number;
   for_matches: boolean;
   for_training: boolean;
+  training_parts: number;
+  training_shares: number;
+  training_notes: string | null;
 };
 
 function VenueList({
@@ -208,6 +230,7 @@ function VenueList({
   venues,
   pitchCount,
   slotCount,
+  booked,
 }: {
   tab: Tab;
   heading: string;
@@ -215,6 +238,7 @@ function VenueList({
   venues: VenueRow[];
   pitchCount: Map<string, number>;
   slotCount: Map<string, number>;
+  booked: Map<string, { startsOn: string; endsOn: string }>;
 }) {
   return (
     <Card>
@@ -233,6 +257,7 @@ function VenueList({
           venues.map((venue) => {
             const pitchesHere = pitchCount.get(venue.id) ?? 0;
             const slotsHere = slotCount.get(venue.id) ?? 0;
+            const span = booked.get(venue.id);
             return (
               <Link
                 key={venue.id}
@@ -245,15 +270,28 @@ function VenueList({
                     <MapPin className="h-3 w-3 shrink-0" />
                     {venue.address || "No address recorded"}
                   </p>
+                  {tab === "training" && venue.training_notes ? (
+                    <p className="mt-1 text-xs text-muted-foreground">{venue.training_notes}</p>
+                  ) : null}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {venue.for_matches && venue.for_training ? (
                     <Badge variant="outline">Matches &amp; training</Badge>
                   ) : null}
                   {tab === "training" ? (
-                    <Badge variant={slotsHere > 0 ? "muted" : "outline"}>
-                      {slotsHere} {slotsHere === 1 ? "training slot" : "training slots"}
-                    </Badge>
+                    <>
+                      <Badge variant="outline">
+                        {venue.training_parts <= 1 || venue.training_shares >= venue.training_parts
+                          ? "Whole pitch ours"
+                          : `${shareChip(venue.training_shares, venue.training_parts)} of the pitch ours`}
+                      </Badge>
+                      <Badge variant={slotsHere > 0 ? "muted" : "outline"}>
+                        {slotsHere} {slotsHere === 1 ? "training slot" : "training slots"}
+                      </Badge>
+                      <Badge variant={span ? "success" : "outline"}>
+                        {span ? `Booked ${blackoutLabel(span.startsOn, span.endsOn)}` : "No booking this season"}
+                      </Badge>
+                    </>
                   ) : (
                     <Badge variant={pitchesHere > 0 ? "muted" : "outline"}>
                       {pitchesHere} {pitchesHere === 1 ? "pitch" : "pitches"}

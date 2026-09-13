@@ -198,6 +198,7 @@ function readSlot(formData: FormData): { error: string } | {
   startTime: string;
   endTime: string;
   parts: number;
+  clubParts: number | null;
   notes: string | null;
 } {
   const venueId = uuid(formData, "venue_id");
@@ -206,6 +207,9 @@ function readSlot(formData: FormData): { error: string } | {
   const startRaw = text(formData, "start_time", 8);
   const endRaw = text(formData, "end_time", 8);
   const parts = integer(formData, "parts", 1, 6);
+  // "" = all of the parts are ours; otherwise how many of them (20260913130000).
+  const clubRaw = text(formData, "club_parts", 2);
+  const clubParts = clubRaw === "" ? null : integer(formData, "club_parts", 1, 6);
   const notes = text(formData, "notes", 500);
 
   if (!venueId) return { error: "Choose the venue — add it under Venues first if it is not listed." };
@@ -215,8 +219,19 @@ function readSlot(formData: FormData): { error: string } | {
   const endTime = normaliseTime(endRaw);
   if (endTime <= startTime) return { error: "The slot must end after it starts." };
   if (parts === null) return { error: "Say how the pitch is divided." };
+  if (clubRaw !== "" && clubParts === null) return { error: "Say how many of the parts are ours." };
+  if (clubParts !== null && clubParts > parts) return { error: "The club cannot have more of the pitch than there are parts." };
 
-  return { venueId, venueAddress: venueAddress || null, weekday, startTime, endTime, parts, notes: notes || null };
+  return {
+    venueId,
+    venueAddress: venueAddress || null,
+    weekday,
+    startTime,
+    endTime,
+    parts,
+    clubParts: clubParts !== null && clubParts >= parts ? null : clubParts,
+    notes: notes || null,
+  };
 }
 
 export async function addSlot(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {
@@ -235,6 +250,7 @@ export async function addSlot(_prev: PlanActionState, formData: FormData): Promi
     start_time: slot.startTime,
     end_time: slot.endTime,
     parts: slot.parts,
+    club_parts: slot.clubParts,
     notes: slot.notes,
   });
   if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
@@ -260,6 +276,7 @@ export async function updateSlot(_prev: PlanActionState, formData: FormData): Pr
       start_time: slot.startTime,
       end_time: slot.endTime,
       parts: slot.parts,
+      club_parts: slot.clubParts,
       notes: slot.notes,
     })
     .eq("id", slotId)
@@ -360,14 +377,20 @@ export async function moveAllocation(input: {
   blockId: string;
   allocationId: string;
   slotId: string;
+  /** How much of the new slot the team takes; omitted = keep its shares. */
+  shares?: number;
 }): Promise<PlanActionState> {
   if (!UUID_RE.test(input.blockId) || !UUID_RE.test(input.allocationId) || !UUID_RE.test(input.slotId)) {
     return { error: "No slot or team given." };
   }
   const supabase = await createClient();
+  const shares =
+    input.shares !== undefined && Number.isInteger(input.shares) && input.shares >= 1 && input.shares <= 6
+      ? input.shares
+      : undefined;
   const { data, error } = await supabase
     .from("training_allocations")
-    .update({ slot_id: input.slotId })
+    .update(shares === undefined ? { slot_id: input.slotId } : { slot_id: input.slotId, shares })
     .eq("id", input.allocationId)
     .select("id");
   if (error) {
@@ -456,4 +479,44 @@ export async function syncBlock(_prev: PlanActionState, formData: FormData): Pro
   revalidateBlock(blockId);
   revalidateCalendars();
   return { synced: row };
+}
+
+// ---------------------------------------------------------------------------
+// The block's venues (Adam, 2026-09-13: "for each training block, I need to
+// be able to select which venues apply to that training block")
+// ---------------------------------------------------------------------------
+
+export async function addBlockVenue(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {
+  const blockId = uuid(formData, "block_id");
+  const venueId = uuid(formData, "venue_id");
+  if (!blockId) return { error: "No block given." };
+  if (!venueId) return { error: "Choose a venue." };
+
+  const supabase = await createClient();
+  const { error } = await supabase.from("training_block_venues").insert({ block_id: blockId, venue_id: venueId });
+  if (error) {
+    if (error.code === "23505") return { error: "That venue is already on this block." };
+    return { error: friendlyDbError(error, NOT_ALLOWED) };
+  }
+  revalidateBlock(blockId);
+  revalidatePath("/venues");
+  return { notice: "Venue added to the block — it has a column in the day planner now." };
+}
+
+export async function removeBlockVenue(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {
+  const blockId = uuid(formData, "block_id");
+  const venueId = uuid(formData, "venue_id");
+  if (!blockId || !venueId) return { error: "No venue given." };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("training_block_venues")
+    .delete()
+    .eq("block_id", blockId)
+    .eq("venue_id", venueId)
+    .select("venue_id");
+  if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
+  if ((data ?? []).length === 0) return { error: NOT_ALLOWED };
+  revalidateBlock(blockId);
+  return { notice: "Venue taken off the block." };
 }

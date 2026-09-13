@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { EditVenueForm, RetireVenueForm } from "../venue-forms";
 import { AttachPitchForm, DetachPitchForm } from "./pitch-venue-forms";
+import { VenueBookingsCard, type SeasonOption, type VenueBookingRow } from "./venue-bookings-card";
 
 /**
  * `/venues/[id]` — one ground: what it is, which pitches are on it, and who
@@ -40,12 +41,13 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
 
   const { data: venue } = await supabase
     .from("venues")
-    .select("id,name,address,notes,active,sort_order,for_matches,for_training")
+    .select("id,name,address,notes,active,sort_order,for_matches,for_training,training_parts,training_shares,training_notes")
     .eq("id", id)
     .maybeSingle();
   if (!venue) notFound();
 
-  const [{ data: pitchRows }, { data: groupId }, { data: staffRows }] = await Promise.all([
+  const [{ data: pitchRows }, { data: groupId }, { data: staffRows }, { data: bookingRows }, { data: seasonRows }] =
+    await Promise.all([
     supabase
       .from("resources")
       .select("id,name,active,venue_id,venues(name)")
@@ -54,6 +56,15 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
       .order("name"),
     supabase.rpc("venue_coaches_group_id", { p_venue_id: id }),
     supabase.rpc("venue_coaching_staff", { p_venue_id: id }),
+    // The bookings, season by season (20260913130000) — a training-venue
+    // concern, but read for every venue: a match ground the club also hires
+    // for winter training is both.
+    supabase
+      .from("venue_bookings")
+      .select("id,season_id,starts_on,ends_on,when_text,reference,notes,seasons(name,is_current,starts_on)")
+      .eq("venue_id", id)
+      .order("starts_on", { ascending: false }),
+    supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
   ]);
 
   const pitches = pitchRows ?? [];
@@ -70,6 +81,28 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
   const staffNames = await resolveNames(staff.map((row) => row.person_id));
   const inGroup = staff.filter((row) => row.in_group);
   const waiting = staff.filter((row) => !row.in_group);
+
+  // Current season first, then newest; a booking with no season last.
+  const bookings: VenueBookingRow[] = (bookingRows ?? [])
+    .map((row) => ({
+      id: row.id,
+      seasonId: row.season_id,
+      seasonName: row.seasons?.name ?? null,
+      seasonStartsOn: row.seasons?.starts_on ?? "",
+      seasonCurrent: row.seasons?.is_current ?? false,
+      startsOn: row.starts_on,
+      endsOn: row.ends_on,
+      whenText: row.when_text,
+      reference: row.reference,
+      notes: row.notes,
+    }))
+    .sort(
+      (a, b) =>
+        Number(b.seasonCurrent) - Number(a.seasonCurrent) ||
+        b.seasonStartsOn.localeCompare(a.seasonStartsOn) ||
+        a.startsOn.localeCompare(b.startsOn),
+    );
+  const seasons: SeasonOption[] = (seasonRows ?? []).map((s) => ({ id: s.id, name: s.name, isCurrent: s.is_current }));
 
   return (
     <>
@@ -113,10 +146,17 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
                 sortOrder: venue.sort_order,
                 forMatches: venue.for_matches,
                 forTraining: venue.for_training,
+                trainingParts: venue.training_parts,
+                trainingShares: venue.training_shares,
+                trainingNotes: venue.training_notes,
               }}
             />
           </CardContent>
         </Card>
+
+        {venue.for_training || bookings.length > 0 ? (
+          <VenueBookingsCard venueId={venue.id} bookings={bookings} seasons={seasons} />
+        ) : null}
 
         <Card>
           <CardHeader className="p-4 lg:p-6">
