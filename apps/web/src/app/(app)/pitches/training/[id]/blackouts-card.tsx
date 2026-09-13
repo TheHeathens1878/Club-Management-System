@@ -10,6 +10,7 @@ import { useActionState, useState } from "react";
 import { CalendarOff, Plus, X } from "lucide-react";
 
 import { SubmitButton } from "@/components/submit-button";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
@@ -18,7 +19,14 @@ import { blackoutLabel } from "@/lib/training-plan";
 import { addBlackout, removeBlackout } from "../actions";
 import { EMPTY_PLAN_STATE, PlanFeedback } from "../plan-feedback";
 
-export type BlackoutRow = { id: string; label: string; startsOn: string; endsOn: string };
+export type BlackoutRow = {
+  id: string;
+  label: string;
+  startsOn: string;
+  endsOn: string;
+  /** Whether the venue still charges for these dates. */
+  charged: boolean;
+};
 
 function RemoveBlackout({ blockId, blackout }: { blockId: string; blackout: BlackoutRow }) {
   const [state, action, pending] = useActionState(removeBlackout, EMPTY_PLAN_STATE);
@@ -83,9 +91,13 @@ export function BlackoutsCard({
             {blackouts.map((blackout) => (
               <li key={blackout.id} className="flex min-h-[52px] items-center gap-3 px-4 py-2">
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-medium leading-snug">{blackout.label}</span>
+                  <span className="flex flex-wrap items-center gap-2 text-[15px] font-medium leading-snug">
+                    {blackout.label}
+                    {!blackout.charged ? <Badge variant="success">Not charged</Badge> : null}
+                  </span>
                   <span className="block text-[12.5px] text-muted-foreground">
                     {blackoutLabel(blackout.startsOn, blackout.endsOn)}
+                    {!blackout.charged ? " · the venue is not charging for these dates" : ""}
                   </span>
                 </span>
                 <RemoveBlackout blockId={blockId} blackout={blackout} />
@@ -112,6 +124,11 @@ export function BlackoutsCard({
             <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0" pendingLabel="Adding…">
               Add
             </SubmitButton>
+            <label className="flex min-h-[44px] items-center gap-2 text-sm sm:col-span-4 lg:min-h-0">
+              <input type="checkbox" name="not_charged" className="h-4 w-4 rounded border-input" />
+              The venue is not charging us for these dates
+              <span className="text-xs text-muted-foreground">— they come off the venue hire report</span>
+            </label>
             <p className="text-xs text-muted-foreground sm:col-span-4">
               Leave “Until” blank for a single day. Inclusive on both ends.
             </p>

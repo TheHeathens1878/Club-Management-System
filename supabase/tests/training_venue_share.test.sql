@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(27);
+select plan(28);
 
 insert into public.teams (id, name, age_group) values
   ('7b7b7b7b-0913-4111-8111-000000000001', 'TS Alpha', 'U10'),
@@ -155,6 +155,11 @@ select throws_ok($$
   update public.venue_booking_slots set price_pence = -1
    where booking_id = 'b0b0b0b0-0913-4111-8111-000000000001' and pitch_id = '9c9c0000-0913-4111-8111-000000000001'
 $$, '23514', null, 'a price below nothing is refused');
+-- Dates off the venue does not charge for (20260913180000): charged by default.
+insert into public.training_blackouts (block_id, label, starts_on, ends_on, charged) values
+  ('b40cb40c-0913-4111-8111-000000000001', 'TS Half-term', current_date + 20, current_date + 24, false);
+select is((select array_agg(charged order by charged) from public.training_blackouts where block_id = 'b40cb40c-0913-4111-8111-000000000001'),
+  array[false], 'a break the venue does not charge for says so');
 select is((select count(*)::int from public.venue_bookings where venue_id = 'e4e4e4e4-0913-4111-8111-000000000002'),
   1, 'a booking is noted against the venue for the season');
 select throws_ok($$
