@@ -21,7 +21,10 @@ export type SiteSettings = {
   home_benefit_2_desc: string;
   home_benefit_3_title: string;
   home_benefit_3_desc: string;
+  /** The most a room-hire deposit can be, in pence (20260913: the cap on half the hire). */
   deposit_default_pence: string;
+  /** The deposit as a share of the room hire, whole percent. */
+  deposit_percent: string;
   /** £ off room hire for players, club families and social members. */
   room_member_discount_pence: string;
   deposit_window_days: string;
@@ -53,6 +56,7 @@ const DEFAULTS: SiteSettings = {
   home_benefit_3_title: "How to join",
   home_benefit_3_desc: "Membership is by proposal from an existing member. Apply online and we'll guide you through the process step by step.",
   deposit_default_pence: "10000",
+  deposit_percent: "50",
   room_member_discount_pence: "0",
   deposit_window_days: "7",
   balance_reminder_days: "14",

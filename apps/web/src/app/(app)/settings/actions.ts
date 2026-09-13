@@ -56,11 +56,13 @@ export async function savePaymentSettings(formData: FormData) {
   // Deposit entered in pounds; store as pence
   const depositPounds = Number(formData.get("deposit_default_pounds") ?? 0);
   const depositPence = String(Math.max(0, Math.round(depositPounds * 100)));
+  const depositPercent = String(Math.min(100, Math.max(0, Math.round(Number(formData.get("deposit_percent") ?? 50) || 0))));
   const depositWindow = String(Math.max(0, Number(formData.get("deposit_window_days") ?? 7)));
   const balanceDays = String(Math.max(0, Number(formData.get("balance_reminder_days") ?? 14)));
 
   const entries: Record<string, string> = {
     deposit_default_pence: depositPence,
+    deposit_percent: depositPercent,
     deposit_window_days: depositWindow,
     balance_reminder_days: balanceDays,
     auto_cancel_unpaid: formData.get("auto_cancel_unpaid") === "1" ? "true" : "false",

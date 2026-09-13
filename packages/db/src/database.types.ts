@@ -3619,6 +3619,8 @@ export type Database = {
           method: string | null
           note: string | null
           paid_at: string
+          /** What a room-hire payment was for: deposit | balance | security_deposit; null = hire money, unlabelled (20260913140000). */
+          purpose: string | null
           reference: string | null
           refunded_at: string | null
           refunded_pence: number
@@ -3644,6 +3646,7 @@ export type Database = {
           method?: string | null
           note?: string | null
           paid_at?: string
+          purpose?: string | null
           reference?: string | null
           refunded_at?: string | null
           refunded_pence?: number
@@ -3669,6 +3672,7 @@ export type Database = {
           method?: string | null
           note?: string | null
           paid_at?: string
+          purpose?: string | null
           reference?: string | null
           refunded_at?: string | null
           refunded_pence?: number

@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, useTransition } from "react";
+import type { PaymentPurpose } from "@/lib/hire-terms";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { formatCurrency } from "@/lib/utils";
@@ -46,7 +47,7 @@ export function PayButton({
   label: string;
   variant?: "default" | "outline";
   sumupEnabled: boolean;
-  purpose: "deposit" | "balance";
+  purpose: PaymentPurpose;
 }) {
   const router = useRouter();
   const reactId = useId();
@@ -125,8 +126,9 @@ export function PayButton({
           className="mt-0.5 h-4 w-4"
         />
         <span>
-          I accept the deposit terms: the deposit secures the booking and is refundable only as
-          set out in the club&apos;s booking terms.
+          I accept the deposit terms: the deposit secures the room for my booking and is{" "}
+          <strong>non-refundable</strong>. The balance, plus any refundable security deposit, is
+          due at least two weeks before the event.
         </span>
       </label>
     ) : null;

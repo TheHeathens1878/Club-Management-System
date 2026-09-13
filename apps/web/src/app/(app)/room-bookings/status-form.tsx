@@ -18,6 +18,8 @@ export function StatusForm({
   defaultDepositPence = 0,
   currentTotalPence = null,
   currentDepositPence = null,
+  currentSecurityDepositPence = null,
+  depositRuleLabel,
   defaultMemberDiscountPence = null,
   chaserSentAt = null,
   finalChaserSentAt = null,
@@ -29,6 +31,10 @@ export function StatusForm({
   defaultDepositPence?: number;
   currentTotalPence?: number | null;
   currentDepositPence?: number | null;
+  /** The refundable security deposit the booking carries (an 18th birthday's £200). */
+  currentSecurityDepositPence?: number | null;
+  /** The deposit rule in words — "half the room hire, up to £100". */
+  depositRuleLabel?: string;
   /** The club's configured discount — prefilled when a claim is on the booking. */
   defaultMemberDiscountPence?: number | null;
   /** The chasers (Adam, 2026-09-11): when each last went, and what the final one took off. */
@@ -46,6 +52,9 @@ export function StatusForm({
   );
   const [depositPounds, setDepositPounds] = useState(
     String((currentDepositPence ?? defaultDepositPence) / 100 || ""),
+  );
+  const [securityPounds, setSecurityPounds] = useState(
+    currentSecurityDepositPence ? String(currentSecurityDepositPence / 100) : "",
   );
   const [discountPounds, setDiscountPounds] = useState(
     defaultMemberDiscountPence ? (defaultMemberDiscountPence / 100).toFixed(2) : "",
@@ -96,6 +105,7 @@ export function StatusForm({
       totalPence: totalPounds ? Math.round(Number(totalPounds) * 100) : null,
       depositPence: depositPounds ? Math.round(Number(depositPounds) * 100) : 0,
       memberDiscountPence: discountPounds ? Math.round(Number(discountPounds) * 100) : null,
+      securityDepositPence: securityPounds ? Math.round(Number(securityPounds) * 100) : 0,
     });
     setLoading(null);
     if (result.error) setError(result.error);
@@ -265,14 +275,30 @@ export function StatusForm({
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground uppercase">Deposit (£)</label>
+                  <label className="text-xs font-medium text-muted-foreground uppercase">Deposit (£) — non-refundable</label>
                   <Input
                     type="number" min="0" step="0.01"
                     value={depositPounds}
                     onChange={(e) => setDepositPounds(e.target.value)}
                     placeholder="0.00"
                   />
+                  <p className="text-xs text-muted-foreground">
+                    Secures the room, paid first. Prefilled as {depositRuleLabel ?? "the club's rule"}.
+                  </p>
                 </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground uppercase">Refundable security deposit (£, optional)</label>
+                <Input
+                  type="number" min="0" step="0.01"
+                  value={securityPounds}
+                  onChange={(e) => setSecurityPounds(e.target.value)}
+                  placeholder="0.00"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Held for the event and returned after it if all is well; due with the balance, two
+                  weeks before. An 18th birthday carries £200 from the form.
+                </p>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-muted-foreground uppercase">Member discount applied (£, optional)</label>
@@ -288,7 +314,9 @@ export function StatusForm({
                 </p>
               </div>
               <p className="text-xs text-muted-foreground">
-                The booker is emailed a confirmation with the total and deposit terms, plus a portal link to pay.
+                The booker is emailed a confirmation with the total and the terms — the non-refundable
+                deposit that secures the room, then the balance plus any security deposit two weeks
+                before — and a portal link to pay each.
               </p>
               <div className="flex gap-2">
                 <Button size="sm" onClick={runConfirm} disabled={loading !== null} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">

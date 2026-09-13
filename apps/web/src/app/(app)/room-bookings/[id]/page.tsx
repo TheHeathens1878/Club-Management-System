@@ -12,6 +12,7 @@ import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
+import { bookingDepositPence, depositRuleFrom, depositRuleLabel, sumSecurityPaid } from "@/lib/hire-terms";
 import { StatusForm } from "../status-form";
 import { PaymentsPanel } from "../payments-panel";
 import { ReplyForm } from "../reply-form";
@@ -118,12 +119,17 @@ export default async function RoomBookingDetailPage({
     source: p.source,
     authorised_by_name: p.authorised_by_name,
     note: p.note,
+    purpose: p.purpose,
   }));
   const totalPence = booking.total_pence ?? 0;
   const depositPence = booking.deposit_pence ?? 0;
   const settings = await getSettings();
   const memberDiscountDefault = Number(settings.room_member_discount_pence) || 0;
-  const defaultDepositPence = Number(settings.deposit_default_pence) || 0;
+  // The deposit rule (Adam, 2026-09-13): half the room hire, capped — worked
+  // out for this booking, and offered to the desk as the prefill.
+  const depositRule = depositRuleFrom(settings);
+  const defaultDepositPence = bookingDepositPence(booking, depositRule);
+  const securityPaidPence = sumSecurityPaid(paymentRows ?? []);
 
   const roomName = (rooms ?? []).find((r) => r.id === booking.resource_id)?.name ?? "Unknown room";
   const canEdit = isStaff(session.profile?.role);
@@ -409,6 +415,8 @@ export default async function RoomBookingDetailPage({
                   defaultDepositPence={defaultDepositPence}
                   currentTotalPence={totalPence || null}
                   currentDepositPence={depositPence || null}
+                  currentSecurityDepositPence={booking.security_deposit_pence}
+                  depositRuleLabel={depositRuleLabel(depositRule)}
                   chaserSentAt={booking.chaser_sent_at}
                   finalChaserSentAt={booking.final_chaser_sent_at}
                   finalChaserDiscountPence={booking.final_chaser_discount_pence}
@@ -431,6 +439,7 @@ export default async function RoomBookingDetailPage({
                 payments={payments}
                 totalPence={totalPence}
                 depositPence={depositPence}
+                securityDepositPence={booking.security_deposit_pence ?? 0}
                 canDelete={canDelete}
               />
             </CardContent>
@@ -443,6 +452,7 @@ export default async function RoomBookingDetailPage({
                 <SecurityDepositCard
                   bookingId={id}
                   amountPence={booking.security_deposit_pence ?? 0}
+                  paidPence={securityPaidPence}
                   returnedAt={booking.security_deposit_returned_at}
                   returnedMethod={booking.security_deposit_returned_method}
                   returnedNote={booking.security_deposit_returned_note}

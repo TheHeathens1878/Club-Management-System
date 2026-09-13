@@ -7,6 +7,7 @@ import { getSiteUrl } from "@/lib/utils";
 import { sendEmail } from "@/lib/email";
 import { roomBookingNotificationEmail } from "@/lib/email-templates";
 import { getEmailBrandColor, getRecipientEmails, getSettings } from "@/lib/settings";
+import { depositRuleFrom, hireTermsSummary } from "@/lib/hire-terms";
 import {
   formatBookingDate,
   isValidDateString,
@@ -303,10 +304,15 @@ export async function submitBooking(
   // link, for a new account) could simply never go (Codex review, finding 9).
   after(async () => {
     try {
-      const [brandColor, { club_name }] = await Promise.all([
+      const [brandColor, settingsNow] = await Promise.all([
         getEmailBrandColor().catch(() => "#1249bf"),
         getSettings(),
       ]);
+      const { club_name } = settingsNow;
+      // The terms, said at the start (Adam, 2026-09-13): the non-refundable
+      // deposit that secures the room, then the balance plus any security
+      // deposit two weeks before.
+      const termsLine = `<p style="font-size:13px;color:#374151;"><strong>How paying works:</strong> ${hireTermsSummary(depositRuleFrom(settingsNow))}</p>`;
       const siteUrl = getSiteUrl();
       const dateFormatted = formatBookingDate(date);
       const estimateLine =
@@ -341,7 +347,8 @@ ${extrasLine}
 ${estimateLine}
 <p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>Please note: this is an enquiry only — the room is not held for you.</strong> The date stays open to other bookings until you confirm one with us.</p>
 ${slotTaken ? '<p style="border-left:3px solid #dc2626;background:#fef2f2;padding:10px 14px;"><strong>This room already has a booking at that time.</strong> We will come back to you with what is available around it, or an alternative date.</p>' : ''}
-${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, payable before the event and returned after it if all is well.</p>' : ''}
+${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, due with the balance two weeks before the event and returned after it if all is well.</p>' : ''}
+${termsLine}
 ${accessLine}
 <p style="font-size:13px;color:#6b7280;">If you didn't send this enquiry, please contact us.</p>`
         : `<p>Dear ${bookerFirstName},</p>
@@ -349,7 +356,8 @@ ${accessLine}
 <p><strong>${room.name}</strong> · ${dateFormatted} · ${startTime}–${endTime}</p>
 ${extrasLine}
 ${estimateLine}
-${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, payable before the event and returned after it if all is well.</p>' : ''}
+${eighteenth ? '<p style="border-left:3px solid #d97706;background:#fffbeb;padding:10px 14px;"><strong>18th birthday parties carry a £200 refundable security deposit</strong>, due with the balance two weeks before the event and returned after it if all is well.</p>' : ''}
+${termsLine}
 ${accessLine}
 <p style="font-size:13px;color:#6b7280;">If you didn't make this request, please contact us.</p>`;
 

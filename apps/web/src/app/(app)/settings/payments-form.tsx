@@ -18,17 +18,30 @@ export function PaymentsForm({ settings }: { settings: SiteSettings }) {
 
   return (
     <form action={onSubmit} className="space-y-6 max-w-md">
-      <div className="space-y-1.5">
-        <Label htmlFor="deposit_default_pounds">Default deposit (£)</Label>
-        <Input
-          id="deposit_default_pounds"
-          name="deposit_default_pounds"
-          type="number" min="0" step="0.01"
-          defaultValue={depositPounds || ""}
-          placeholder="100.00"
-        />
-        <p className="text-xs text-muted-foreground">
-          Prefilled when staff confirm a booking. Can be changed per booking.
+      <div className="grid grid-cols-2 gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="deposit_percent">Deposit (% of room hire)</Label>
+          <Input
+            id="deposit_percent"
+            name="deposit_percent"
+            type="number" min="0" max="100" step="1"
+            defaultValue={settings.deposit_percent || "50"}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="deposit_default_pounds">Deposit cap (£)</Label>
+          <Input
+            id="deposit_default_pounds"
+            name="deposit_default_pounds"
+            type="number" min="0" step="0.01"
+            defaultValue={depositPounds || ""}
+            placeholder="100.00"
+          />
+        </div>
+        <p className="col-span-2 text-xs text-muted-foreground">
+          The non-refundable deposit that secures the room: this share of the room hire, and no
+          more than the cap — half the hire up to £100 by default. Prefilled when staff confirm a
+          booking; can be changed per booking.
         </p>
       </div>
 
@@ -43,7 +56,7 @@ export function PaymentsForm({ settings }: { settings: SiteSettings }) {
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor="balance_reminder_days">Balance reminder (days before booking)</Label>
+        <Label htmlFor="balance_reminder_days">Balance and security deposit due (days before booking)</Label>
         <Input
           id="balance_reminder_days"
           name="balance_reminder_days"
@@ -51,7 +64,9 @@ export function PaymentsForm({ settings }: { settings: SiteSettings }) {
           defaultValue={settings.balance_reminder_days || "14"}
         />
         <p className="text-xs text-muted-foreground">
-          How many days before the event the balance reminder email is sent.
+          The balance, plus any refundable security deposit, is due this many days before the
+          event (two weeks by default). The balance reminder email goes on that day if it is still
+          outstanding.
         </p>
       </div>
 

@@ -19,12 +19,15 @@ import { markSecurityDepositReturned } from "./actions";
 export function SecurityDepositCard({
   bookingId,
   amountPence,
+  paidPence = 0,
   returnedAt,
   returnedMethod,
   returnedNote,
 }: {
   bookingId: string;
   amountPence: number;
+  /** What has actually been paid in against it (20260913140000). */
+  paidPence?: number;
   returnedAt: string | null;
   returnedMethod: string | null;
   returnedNote: string | null;
@@ -65,7 +68,15 @@ export function SecurityDepositCard({
     <div className="space-y-3 text-sm">
       <p className="text-muted-foreground">
         A refundable <span className="font-medium text-foreground">{formatCurrency(amountPence)}</span>{" "}
-        security deposit applies (18th birthday). Record its return here once it has gone back.
+        security deposit applies, due with the balance two weeks before the event.{" "}
+        {paidPence >= amountPence ? (
+          <span className="font-medium text-green-700">Held in full.</span>
+        ) : paidPence > 0 ? (
+          <span className="font-medium text-amber-700">{formatCurrency(paidPence)} held so far.</span>
+        ) : (
+          <span className="font-medium text-amber-700">Not yet paid.</span>
+        )}{" "}
+        Record its return here once it has gone back.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="space-y-1 text-xs text-muted-foreground">

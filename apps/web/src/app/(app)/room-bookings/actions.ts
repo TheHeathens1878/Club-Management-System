@@ -13,6 +13,14 @@ import { getEmailBrandColor, getSettings, getRecipientEmails } from "@/lib/setti
 import { createCalendarEvent, deleteCalendarEvent } from "@/lib/calendar";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
 import {
+  bookingDepositPence,
+  depositRuleFrom,
+  hireTermsSummary,
+  paymentTermsText,
+  sumHirePaid,
+  type PaymentPurpose,
+} from "@/lib/hire-terms";
+import {
   addDays,
   formatBookingDate,
   instantToLocal,
@@ -51,7 +59,13 @@ async function requireCommittee() {
 
 export async function confirmBooking(
   bookingId: string,
-  opts?: { totalPence?: number | null; depositPence?: number | null; memberDiscountPence?: number | null },
+  opts?: {
+    totalPence?: number | null;
+    depositPence?: number | null;
+    memberDiscountPence?: number | null;
+    /** The refundable security deposit held for the event; null = keep what the booking carries. */
+    securityDepositPence?: number | null;
+  },
 ): Promise<{ error?: string }> {
   const session = await requireStaff();
   const admin = createAdminClient();
@@ -59,7 +73,7 @@ export async function confirmBooking(
   const { data: booking, error: fetchErr } = await admin
     .from("bookings")
     .select(
-      "booker_name,booker_email,starts_at,ends_at,occasion,estimated_guests,total_pence,payment_status,resources(name)",
+      "booker_name,booker_email,starts_at,ends_at,occasion,estimated_guests,total_pence,base_hire_pence,security_deposit_pence,payment_status,resources(name)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -71,13 +85,19 @@ export async function confirmBooking(
   const settings = await getSettings();
   const depositWindow = Number(settings.deposit_window_days) || 7;
   const balanceDays = Number(settings.balance_reminder_days) || 14;
-  const defaultDeposit = Number(settings.deposit_default_pence) || 0;
 
   // A blank price box keeps the price the booking already carries — a quote,
   // or an earlier confirmation. Writing NULL over it meant the booking could
   // never reach "paid" and no balance reminder would ever go.
   const totalPence = opts?.totalPence ?? booking.total_pence ?? null;
+  // The deposit rule (Adam, 2026-09-13): half the room hire, capped at £100,
+  // non-refundable. The desk may type another figure for this booking.
+  const defaultDeposit = bookingDepositPence(
+    { base_hire_pence: booking.base_hire_pence, total_pence: totalPence },
+    depositRuleFrom(settings),
+  );
   const depositPence = opts?.depositPence ?? defaultDeposit;
+  const securityDepositPence = Math.max(0, opts?.securityDepositPence ?? booking.security_deposit_pence ?? 0);
 
   // Deposit due = today + window; balance due = booking date − reminder lead
   // time. "Today" is the London date: the server runs in UTC, and between
@@ -106,6 +126,7 @@ export async function confirmBooking(
       status: "confirmed",
       total_pence: totalPence,
       deposit_pence: depositPence,
+      security_deposit_pence: securityDepositPence,
       // The club-family discount, once the desk has checked the claimed
       // child against the members list (Adam, 2026-09-03: "the child and
       // child's team was for member discount"). Informational beside the
@@ -127,7 +148,7 @@ export async function confirmBooking(
     action: "confirm",
     entity: "room_booking",
     entityId: bookingId,
-    detail: { total_pence: totalPence, deposit_pence: depositPence },
+    detail: { total_pence: totalPence, deposit_pence: depositPence, security_deposit_pence: securityDepositPence },
   });
 
   // Send confirmation email to booker
@@ -140,14 +161,32 @@ export async function confirmBooking(
           day: "numeric", month: "long", year: "numeric",
         });
 
-        let paymentStatusText: string;
-        if (depositPence > 0) {
-          paymentStatusText = `This confirmation is subject to a deposit of ${formatCurrency(depositPence)} being paid by ${depositDueFormatted}.`
-            + (totalPence ? ` The total cost is ${formatCurrency(totalPence)}.` : "");
-        } else if (totalPence) {
-          paymentStatusText = `The total cost is ${formatCurrency(totalPence)}. Please pay via your booking portal.`;
-        } else {
-          paymentStatusText = "No payment is required at this stage.";
+        // The terms as they apply to THIS booking: the deposit that secures
+        // the room (non-refundable, paid first), then the balance plus any
+        // refundable security deposit two weeks before. A re-confirmation
+        // after the deposit has been paid says so rather than asking again.
+        const { data: paidRows } = await admin
+          .from("payments")
+          .select("amount_pence,refunded_pence,purpose")
+          .eq("booking_id", bookingId);
+        const hirePaid = sumHirePaid(paidRows ?? []);
+        const balanceDueFormatted = new Date(`${balanceDueStr}T12:00:00Z`).toLocaleDateString("en-GB", {
+          day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+        });
+        let paymentStatusText = paymentTermsText({
+          depositPence,
+          depositDueLabel: depositDueFormatted,
+          depositPaid: depositPence > 0 && hirePaid >= depositPence,
+          // What is left once the deposit is in: the total less the larger of
+          // what has been paid and the deposit itself.
+          balancePence: Math.max(0, (totalPence ?? 0) - Math.max(hirePaid, depositPence)),
+          balanceDueLabel: balanceDueFormatted,
+          securityDepositPence,
+        });
+        if (!paymentStatusText) {
+          paymentStatusText = totalPence
+            ? `The total cost is ${formatCurrency(totalPence)}. Please pay via your booking portal.`
+            : "No payment is required at this stage.";
         }
 
         const tpl = await renderEmailTemplate("room_booking_confirmed", {
@@ -161,6 +200,8 @@ export async function confirmBooking(
           total_cost: totalPence ? formatCurrency(totalPence) : "—",
           deposit_amount: depositPence > 0 ? formatCurrency(depositPence) : "—",
           deposit_due_date: depositPence > 0 ? depositDueFormatted : "—",
+          balance_due_date: balanceDueFormatted,
+          security_deposit: securityDepositPence > 0 ? formatCurrency(securityDepositPence) : "—",
           portal_url: `${getSiteUrl()}/portal`,
         }, brandColor);
 
@@ -389,16 +430,14 @@ async function recomputePaymentStatus(
 ): Promise<{ totalPence: number; depositPence: number; paidPence: number }> {
   const [{ data: booking }, { data: payments }] = await Promise.all([
     admin.from("bookings").select("total_pence,deposit_pence").eq("id", bookingId).maybeSingle(),
-    admin.from("payments").select("amount_pence,refunded_pence").eq("booking_id", bookingId),
+    admin.from("payments").select("amount_pence,refunded_pence,purpose").eq("booking_id", bookingId),
   ]);
 
   const totalPence = Number(booking?.total_pence ?? 0);
   const depositPence = Number(booking?.deposit_pence ?? 0);
-  // Net of refunds: money given back is money owed again.
-  const paidPence = (payments ?? []).reduce(
-    (acc, p) => acc + Number(p.amount_pence ?? 0) - Number(p.refunded_pence ?? 0),
-    0,
-  );
+  // Net of refunds: money given back is money owed again. The security
+  // deposit is held, not earned, so it never counts towards the hire.
+  const paidPence = sumHirePaid(payments ?? []);
 
   let status: BookingPaymentStatus;
   if (totalPence > 0 && paidPence >= totalPence) status = "paid";
@@ -419,12 +458,18 @@ export async function addPayment(
     reference: string | null;
     note: string | null;
     send_email: boolean;
+    /** What the money was for; null = hire money, unlabelled. */
+    purpose?: PaymentPurpose | null;
   },
 ): Promise<{ error?: string }> {
   const session = await requireStaff();
   const admin = createAdminClient();
 
   if (!input.amount_pence || input.amount_pence <= 0) return { error: "Enter a valid amount." };
+  const purpose: PaymentPurpose | null =
+    input.purpose === "deposit" || input.purpose === "balance" || input.purpose === "security_deposit"
+      ? input.purpose
+      : null;
 
   const authorisedName = session.profile?.full_name || session.email || "Staff";
 
@@ -439,6 +484,7 @@ export async function addPayment(
     authorised_by_name: authorisedName,
     authorised_by_email: session.email,
     note: input.note || null,
+    purpose,
   });
   if (insertErr) return { error: "Failed to record payment." };
 
@@ -450,7 +496,7 @@ export async function addPayment(
     action: "record_payment",
     entity: "room_booking",
     entityId: bookingId,
-    detail: { amount_pence: input.amount_pence, method: input.method, authorised_by: authorisedName },
+    detail: { amount_pence: input.amount_pence, method: input.method, purpose, authorised_by: authorisedName },
   });
 
   // Email the booker confirming this payment
@@ -1177,6 +1223,7 @@ export async function sendQuote(
           end_time: window.endTime,
           total_cost: formatCurrency(input.totalPence),
           message: input.message?.trim() ? typedTextToHtml(input.message.trim()) : "",
+          deposit_terms: hireTermsSummary(depositRuleFrom(await getSettings())),
           portal_url: `${getSiteUrl()}/portal`,
         },
         brandColor,
