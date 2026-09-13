@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The phone's primary nav (Club CRM mobile design): a fixed bar of up to five
+ * The phone's primary nav (Club CRM mobile design): a fixed bar of up to six
  * 44px+ targets — icon over a 10px label, crest orange + 600 weight on the
  * active tab, an orange count pill on Messages when something is unread.
  *
