@@ -150,16 +150,16 @@ export default async function TeamPage({
 
   // --------------------------------------------------------------------
   // What every tab needs: the team itself, the pitch list behind the home
-  // pitch badge, and — for the committee wearing a committee hat — the
-  // Full-Time link that the header condenses into a badge. A coach never
-  // triggers the Full-Time read, and neither does an administrator looking at
-  // their own child's team as a parent: whether a team is linked to the FA
-  // feed is a thing the club does, not a thing the team's families see.
+  // pitch badge, and — for staff wearing a staff hat — the Full-Time link
+  // that the header condenses into a badge and the Settings tab lets a coach
+  // maintain (2026-09-13). An administrator looking at their own child's
+  // team as a parent never triggers the read: whether a team is linked to
+  // the FA feed is a thing the team's staff do, not a thing its families see.
   // --------------------------------------------------------------------
   const [teamResult, matchDayPitches, linkRow] = await Promise.all([
     admin.from("teams").select("*").eq("id", id).maybeSingle(),
     loadPitches(),
-    committeeTools
+    staffTools
       ? admin
           .from("team_fulltime_links")
           .select("*")
@@ -207,12 +207,12 @@ export default async function TeamPage({
     // calendars" — the same instinct, applied to the tabs).
     ...(staffTools ? [{ key: "squad", label: "Squad" } as TeamTab] : []),
     { key: "training", label: "Training" },
-    ...(committeeTools
-      ? [
-          { key: "subs", label: "Subs" } as TeamTab,
-          { key: "settings", label: "Settings" } as TeamTab,
-        ]
-      : []),
+    ...(committeeTools ? [{ key: "subs", label: "Subs" } as TeamTab] : []),
+    // Settings is the coach's too (Adam, 2026-09-13: "coaches to have the
+    // ability to post their code snippet in team settings") — the match-day
+    // card and the Full-Time link; the committee-only cards inside it keep
+    // their own gate.
+    ...(staffTools ? [{ key: "settings", label: "Settings" } as TeamTab] : []),
   ];
   // Old bookmarks keep working: every pre-design tab maps to its new home.
   const LEGACY_TABS: Record<string, TeamTabKey> = {
@@ -644,7 +644,7 @@ export default async function TeamPage({
   // link and the importer with its run history. Admin-only by tab guard,
   // and every write still meets the same RLS as anywhere else.
   // --------------------------------------------------------------------
-  if (tab === "settings" && committeeTools) {
+  if (tab === "settings" && staffTools) {
     const [seasonsResult, runRows, clubNameResult] = await Promise.all([
       userClient
         .from("seasons")
@@ -1524,7 +1524,7 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {/* Settings — admin-only: match day, Full-Time link, import runs    */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "settings" && committeeTools && (
+        {tab === "settings" && staffTools && (
           <div className="space-y-6">
             {/* The home pitch and "Allocate the season" are the admin hat's
                 (Adam, 2026-08-25: "make sure coaches cannot assign pitches").
@@ -1622,10 +1622,10 @@ export default async function TeamPage({
                 <CardTitle>FA Full-Time link</CardTitle>
                 <p className="text-sm text-muted-foreground">
                   The FA publishes no fixtures API, so fixtures and results are read from the
-                  team&apos;s Full-Time widget — the &ldquo;add to your website&rdquo; snippet.
-                  Paste it, preview what the parser reads, then save. Imports run nightly;
-                  re-linking for a new season updates this link and keeps the fixtures already
-                  imported.
+                  team&apos;s Full-Time code snippet. Copy it from Full-Time admin (the steps are
+                  below), paste it, preview what the parser reads, then save. Imports run
+                  nightly; re-linking for a new season updates this link and keeps the fixtures
+                  already imported.
                 </p>
               </CardHeader>
               <CardContent>
@@ -1639,6 +1639,7 @@ export default async function TeamPage({
               </CardContent>
             </Card>
 
+            {committeeTools && (
             <Card>
               <CardHeader>
                 <CardTitle>Manual import &amp; run history</CardTitle>
@@ -1661,10 +1662,12 @@ export default async function TeamPage({
                 />
               </CardContent>
             </Card>
+            )}
 
             {/* Active/inactive moved here from the teams table (the design
                 drops that column — the list's "Active only" filter shows the
                 state, this is where it changes). */}
+            {committeeTools && (
             <Card>
               <CardHeader>
                 <CardTitle>Team status</CardTitle>
@@ -1689,6 +1692,7 @@ export default async function TeamPage({
                 </form>
               </CardContent>
             </Card>
+            )}
           </div>
         )}
 
