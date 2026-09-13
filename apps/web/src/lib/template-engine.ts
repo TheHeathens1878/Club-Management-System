@@ -160,8 +160,8 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
 {{message}}
 <p>Please note the date is <strong>not held</strong> by this quote — it stays open to other bookings until you confirm one with us.</p>
 <p>{{deposit_terms}}</p>
-<p>To go ahead, just reply to this email or contact the club, and we will confirm the booking with you.</p>
-<p><a href="{{portal_url}}">View this in your portal</a></p>`,
+<p>To go ahead, accept the quote in your portal — the booking is then confirmed subject to the deposit, which you can pay there and then. Or reply to this email and we will confirm it with you.</p>
+<p><a href="{{portal_url}}">Accept the quote in your portal</a></p>`,
   },
 
   quote_followup: {

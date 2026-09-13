@@ -3,7 +3,9 @@ import { extrasSummary } from "@/lib/booking-extras";
 import { getSessionProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
-import { sumHirePaid, sumSecurityPaid } from "@/lib/hire-terms";
+import { depositRuleFrom, hireTermsSummary, sumHirePaid, sumSecurityPaid } from "@/lib/hire-terms";
+import { getSettings } from "@/lib/settings";
+import { AcceptQuoteButton } from "./accept-quote-button";
 import { isSumUpConfigured, recordSumUpPaymentIfPaid } from "@/lib/sumup";
 import { PayButton } from "./pay-button";
 import { PaymentPendingBanner } from "./payment-pending-banner";
@@ -66,6 +68,7 @@ export default async function PortalPage({
     .order("starts_at", { ascending: true });
 
   const list = bookings ?? [];
+  const termsSummary = hireTermsSummary(depositRuleFrom(await getSettings()));
 
   // Payments for all of this booker's bookings
   const ids = list.map((b) => b.id);
@@ -145,7 +148,9 @@ export default async function PortalPage({
                       ? "Awaiting confirmation"
                       : status === "enquiry"
                         ? "Enquiry — room not held"
-                        : status}
+                        : status === "quoted"
+                          ? "Quoted — waiting for you"
+                          : status}
                   </span>
                 </div>
 
@@ -279,6 +284,27 @@ export default async function PortalPage({
                   <p className="mt-4 text-sm text-muted-foreground">
                     We&apos;ll confirm your booking and the total cost soon. You&apos;ll be able to pay here once confirmed.
                   </p>
+                )}
+
+                {/* A quote waits on the booker (2026-09-13). The date is not
+                    held by a quote; accepting it confirms the booking subject
+                    to the deposit, and the deposit is what secures the room. */}
+                {status === "quoted" && (
+                  <div className="mt-4 space-y-3 rounded-md border border-amber-200 bg-amber-50 p-4">
+                    <p className="text-sm font-medium text-amber-900">
+                      {total > 0 ? `The club has quoted ${formatCurrency(total)} for this booking.` : "The club has sent you a quote for this booking."}
+                    </p>
+                    <p className="text-xs text-amber-900/80">
+                      The date is <strong>not held</strong> by a quote. To go ahead, accept it below: the booking is then
+                      confirmed subject to the deposit, and you can pay the deposit straight away.{" "}
+                      {termsSummary}
+                    </p>
+                    {total > 0 ? (
+                      <AcceptQuoteButton bookingId={b.id} totalPence={total} />
+                    ) : (
+                      <p className="text-xs text-amber-900/80">The quote has no price on it yet — please contact the club.</p>
+                    )}
+                  </div>
                 )}
               </div>
             );

@@ -227,6 +227,12 @@ export default async function RoomBookingDetailPage({
                   value={`${formatCurrency(booking.security_deposit_pence)} (refundable — 18th birthday)`}
                 />
               )}
+              {booking.quote_accepted_at && (
+                <Detail
+                  label="Quote accepted"
+                  value={`By the booker in their portal, ${new Date(booking.quote_accepted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
+                />
+              )}
               {booking.total_pence !== null && (
                 <Detail
                   label={
