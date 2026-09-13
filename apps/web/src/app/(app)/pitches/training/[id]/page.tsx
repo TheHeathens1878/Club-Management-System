@@ -64,7 +64,7 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
         .maybeSingle(),
       supabase
         .from("training_blackouts")
-        .select("id,label,starts_on,ends_on")
+        .select("id,label,starts_on,ends_on,charged")
         .eq("block_id", id)
         .order("starts_on"),
       supabase
@@ -201,6 +201,7 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
             label: b.label,
             startsOn: b.starts_on,
             endsOn: b.ends_on,
+            charged: b.charged,
           }))}
         />
 

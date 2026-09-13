@@ -5446,6 +5446,8 @@ export type Database = {
       training_blackouts: {
         Row: {
           block_id: string
+          /** Whether the venue still charges for these dates (20260913180000). */
+          charged: boolean
           created_at: string
           ends_on: string
           id: string
@@ -5454,6 +5456,7 @@ export type Database = {
         }
         Insert: {
           block_id: string
+          charged?: boolean
           created_at?: string
           ends_on: string
           id?: string
@@ -5462,6 +5465,7 @@ export type Database = {
         }
         Update: {
           block_id?: string
+          charged?: boolean
           created_at?: string
           ends_on?: string
           id?: string

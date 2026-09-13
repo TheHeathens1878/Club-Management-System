@@ -158,14 +158,21 @@ export async function addBlackout(_prev: PlanActionState, formData: FormData): P
   if (!isValidDateString(startsOn) || !isValidDateString(endsOn)) return { error: "Choose the dates." };
   if (endsOn < startsOn) return { error: "The last day off cannot be before the first." };
 
+  // Whether the venue still charges for these dates (Adam, 2026-09-13:
+  // "often we don't" get charged). The tick says it does not.
+  const charged = formData.get("not_charged") !== "on";
+
   const supabase = await createClient();
   const { error } = await supabase
     .from("training_blackouts")
-    .insert({ block_id: blockId, label, starts_on: startsOn, ends_on: endsOn });
+    .insert({ block_id: blockId, label, starts_on: startsOn, ends_on: endsOn, charged });
   if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
 
   revalidateBlock(blockId);
-  return { notice: `${label} added. Update the calendar to take those sessions off.` };
+  revalidatePath("/finance/venue-hire");
+  return {
+    notice: `${label} added${charged ? "" : " — the venue is not charging for it"}. Update the calendar to take those sessions off.`,
+  };
 }
 
 export async function removeBlackout(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {

@@ -7,7 +7,7 @@ import { requireFinance } from "@/lib/finance";
 import { createClient } from "@/lib/supabase/server";
 import { shareWord, timeRange, weekdayLabel } from "@/lib/training-plan";
 import { formatCurrency } from "@/lib/utils";
-import { bookingCost, slotCost } from "@/lib/venue-hire";
+import { bookingCost, slotCost, type DateRange } from "@/lib/venue-hire";
 
 export const metadata = { title: "Venue hire" };
 
@@ -59,6 +59,17 @@ export default async function VenueHireReportPage({
     .order("starts_on");
   const { data: bookingRows } = selected ? await query.eq("season_id", selected.id) : await query.is("season_id", null);
 
+  // Dates off the venue does not charge for (20260913180000): a block's
+  // uncharged break applies to every venue the block lists.
+  const { data: breakRows } = await supabase
+    .from("training_blackouts")
+    .select("label,starts_on,ends_on,training_blocks!inner(training_block_venues(venue_id))")
+    .eq("charged", false);
+  const unchargedFor = (venueId: string): DateRange[] =>
+    (breakRows ?? [])
+      .filter((b) => (b.training_blocks?.training_block_venues ?? []).some((v) => v.venue_id === venueId))
+      .map((b) => ({ startsOn: b.starts_on, endsOn: b.ends_on }));
+
   type SlotView = {
     id: string;
     pitchName: string | null;
@@ -69,6 +80,7 @@ export default async function VenueHireReportPage({
     shares: number;
     pricePence: number | null;
     sessions: number;
+    uncharged: number;
     costPence: number | null;
   };
   type BookingView = {
@@ -79,16 +91,18 @@ export default async function VenueHireReportPage({
     notes: string | null;
     slots: SlotView[];
     sessions: number;
+    uncharged: number;
     costPence: number;
     unpricedSlots: number;
   };
-  const byVenue = new Map<string, { venueId: string; name: string; bookings: BookingView[]; costPence: number; sessions: number; unpriced: number }>();
+  const byVenue = new Map<string, { venueId: string; name: string; bookings: BookingView[]; costPence: number; sessions: number; uncharged: number; unpriced: number }>();
 
   for (const row of bookingRows ?? []) {
     const booking = { startsOn: row.starts_on, endsOn: row.ends_on };
+    const uncharged = unchargedFor(row.venue_id);
     const slots: SlotView[] = (row.venue_booking_slots ?? [])
       .map((slot) => {
-        const cost = slotCost(booking, { weekday: slot.weekday, pricePence: slot.price_pence });
+        const cost = slotCost(booking, { weekday: slot.weekday, pricePence: slot.price_pence }, uncharged);
         return {
           id: slot.id,
           pitchName: slot.resources?.name ?? null,
@@ -99,6 +113,7 @@ export default async function VenueHireReportPage({
           shares: slot.shares,
           pricePence: slot.price_pence,
           sessions: cost.sessions,
+          uncharged: cost.uncharged,
           costPence: cost.costPence,
         };
       })
@@ -108,7 +123,7 @@ export default async function VenueHireReportPage({
           ((a.weekday + 6) % 7) - ((b.weekday + 6) % 7) ||
           a.startTime.localeCompare(b.startTime),
       );
-    const total = bookingCost({ ...booking, slots: slots.map((s) => ({ weekday: s.weekday, pricePence: s.pricePence })) });
+    const total = bookingCost({ ...booking, slots: slots.map((s) => ({ weekday: s.weekday, pricePence: s.pricePence })) }, uncharged);
     const view: BookingView = {
       id: row.id,
       startsOn: row.starts_on,
@@ -117,31 +132,38 @@ export default async function VenueHireReportPage({
       notes: row.notes,
       slots,
       sessions: total.sessions,
+      uncharged: total.uncharged,
       costPence: total.costPence,
       unpricedSlots: total.unpricedSlots,
     };
     const name = row.venues?.name ?? "Venue";
     let group = byVenue.get(row.venue_id);
     if (!group) {
-      group = { venueId: row.venue_id, name, bookings: [], costPence: 0, sessions: 0, unpriced: 0 };
+      group = { venueId: row.venue_id, name, bookings: [], costPence: 0, sessions: 0, uncharged: 0, unpriced: 0 };
       byVenue.set(row.venue_id, group);
     }
     group.bookings.push(view);
     group.costPence += view.costPence;
     group.sessions += view.sessions;
+    group.uncharged += view.uncharged;
     group.unpriced += view.unpricedSlots;
   }
   const groups = Array.from(byVenue.values()).sort((a, b) => a.name.localeCompare(b.name));
   const grand = groups.reduce(
-    (acc, g) => ({ costPence: acc.costPence + g.costPence, sessions: acc.sessions + g.sessions, unpriced: acc.unpriced + g.unpriced }),
-    { costPence: 0, sessions: 0, unpriced: 0 },
+    (acc, g) => ({
+      costPence: acc.costPence + g.costPence,
+      sessions: acc.sessions + g.sessions,
+      uncharged: acc.uncharged + g.uncharged,
+      unpriced: acc.unpriced + g.unpriced,
+    }),
+    { costPence: 0, sessions: 0, uncharged: 0, unpriced: 0 },
   );
 
   return (
     <>
       <PageHeader
         title="Venue hire"
-        subtitle="What the club pays for the venues it trains at — the bookings noted on each venue's page, priced per session and added up"
+        subtitle="What the club pays for the venues it trains at — the bookings noted on each venue's page, priced per session and added up, less the dates off the venue does not charge for"
         back={{ href: "/finance", label: "Finance" }}
       />
       <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
@@ -172,7 +194,12 @@ export default async function VenueHireReportPage({
           </div>
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Sessions booked</p>
-            <p className="text-2xl font-semibold tabular-nums">{grand.sessions}</p>
+            <p className="text-2xl font-semibold tabular-nums">
+              {grand.sessions}
+              {grand.uncharged > 0 ? (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">{grand.uncharged} not charged</span>
+              ) : null}
+            </p>
           </div>
           <div className="rounded-lg border bg-card p-3">
             <p className="text-xs text-muted-foreground">Slots without a price</p>
@@ -202,6 +229,7 @@ export default async function VenueHireReportPage({
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
                     {group.bookings.length} {group.bookings.length === 1 ? "booking" : "bookings"} · {group.sessions} sessions
+                    {group.uncharged > 0 ? ` (${group.uncharged} not charged)` : ""}
                     {group.unpriced > 0 ? ` · ${group.unpriced} ${group.unpriced === 1 ? "slot" : "slots"} unpriced` : ""}
                   </p>
                 </div>
@@ -222,7 +250,7 @@ export default async function VenueHireReportPage({
                             <th className="py-2 pr-3 font-medium">Slot</th>
                             <th className="py-2 pr-3 font-medium">Ours</th>
                             <th className="py-2 pr-3 text-right font-medium">A session</th>
-                            <th className="py-2 pr-3 text-right font-medium">Sessions</th>
+                            <th className="py-2 pr-3 text-right font-medium">Sessions (− not charged)</th>
                             <th className="py-2 text-right font-medium">Cost</th>
                           </tr>
                         </thead>
@@ -237,7 +265,10 @@ export default async function VenueHireReportPage({
                               <td className="py-2 pr-3 text-right tabular-nums">
                                 {slot.pricePence === null ? <span className="text-amber-700">unpriced</span> : formatCurrency(slot.pricePence)}
                               </td>
-                              <td className="py-2 pr-3 text-right tabular-nums">{slot.sessions}</td>
+                              <td className="py-2 pr-3 text-right tabular-nums">
+                                {slot.sessions}
+                                {slot.uncharged > 0 ? <span className="text-muted-foreground"> − {slot.uncharged}</span> : null}
+                              </td>
                               <td className="py-2 text-right tabular-nums">{slot.costPence === null ? "—" : formatCurrency(slot.costPence)}</td>
                             </tr>
                           ))}
@@ -254,7 +285,10 @@ export default async function VenueHireReportPage({
                             <td colSpan={4} className="py-2 pr-3 text-right">
                               Booking
                             </td>
-                            <td className="py-2 pr-3 text-right tabular-nums">{booking.sessions}</td>
+                            <td className="py-2 pr-3 text-right tabular-nums">
+                              {booking.sessions}
+                              {booking.uncharged > 0 ? <span className="font-normal text-muted-foreground"> − {booking.uncharged}</span> : null}
+                            </td>
                             <td className="py-2 text-right tabular-nums">{formatCurrency(booking.costPence)}</td>
                           </tr>
                         </tfoot>

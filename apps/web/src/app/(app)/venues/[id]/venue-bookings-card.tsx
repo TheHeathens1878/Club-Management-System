@@ -19,7 +19,7 @@ import { Select, Textarea } from "@/components/ui/field";
 import { Input, Label } from "@/components/ui/input";
 import { SHARE_OPTIONS, WEEKDAYS, shareWord, timeRange, weekdayLabel } from "@/lib/training-plan";
 import { formatCurrency } from "@/lib/utils";
-import { bookingCost, slotCost } from "@/lib/venue-hire";
+import { bookingCost, slotCost, type DateRange } from "@/lib/venue-hire";
 
 import {
   addVenueBooking,
@@ -342,10 +342,12 @@ function BookingSlots({
   venueId,
   booking,
   pitches,
+  uncharged,
 }: {
   venueId: string;
   booking: VenueBookingRow;
   pitches: PitchChoice[];
+  uncharged: DateRange[];
 }) {
   const [adding, setAdding] = useState(false);
   const slots = slotOrder(booking.slots);
@@ -373,7 +375,9 @@ function BookingSlots({
               title={
                 slot.pricePence === null
                   ? "No price yet"
-                  : `${slotCost(booking, slot).sessions} sessions · ${formatCurrency(slotCost(booking, slot).costPence ?? 0)}`
+                  : `${slotCost(booking, slot, uncharged).sessions} sessions${
+                      slotCost(booking, slot, uncharged).uncharged > 0 ? ` (${slotCost(booking, slot, uncharged).uncharged} not charged)` : ""
+                    } · ${formatCurrency(slotCost(booking, slot, uncharged).costPence ?? 0)}`
               }
             >
               {slot.pricePence === null ? "unpriced" : formatCurrency(slot.pricePence)}
@@ -436,12 +440,15 @@ export function VenueBookingsCard({
   bookings,
   seasons,
   pitches,
+  uncharged = [],
 }: {
   venueId: string;
   bookings: VenueBookingRow[];
   seasons: SeasonOption[];
   /** The venue's pitches (active), for "which pitch" on a slot. */
   pitches: PitchChoice[];
+  /** Dates off the venue does not charge for — off the booking totals. */
+  uncharged?: DateRange[];
 }) {
   const [open, setOpen] = useState(bookings.length === 0);
   const [state, action] = useActionState(addVenueBooking, {});
@@ -551,14 +558,16 @@ export function VenueBookingsCard({
                         {bookingSpanLabel(booking.startsOn, booking.endsOn)}
                         {booking.slots.length > 0 ? (
                           <span className="font-normal text-muted-foreground">
-                            {" "}· {bookingCost(booking).sessions} sessions · {formatCurrency(bookingCost(booking).costPence)}
-                            {bookingCost(booking).unpricedSlots > 0
-                              ? ` (${bookingCost(booking).unpricedSlots} ${bookingCost(booking).unpricedSlots === 1 ? "slot" : "slots"} unpriced)`
+                            {" "}· {bookingCost(booking, uncharged).sessions} sessions
+                            {bookingCost(booking, uncharged).uncharged > 0 ? ` (${bookingCost(booking, uncharged).uncharged} not charged)` : ""} ·{" "}
+                            {formatCurrency(bookingCost(booking, uncharged).costPence)}
+                            {bookingCost(booking, uncharged).unpricedSlots > 0
+                              ? ` (${bookingCost(booking, uncharged).unpricedSlots} ${bookingCost(booking, uncharged).unpricedSlots === 1 ? "slot" : "slots"} unpriced)`
                               : ""}
                           </span>
                         ) : null}
                       </p>
-                      <BookingSlots venueId={venueId} booking={booking} pitches={pitches} />
+                      <BookingSlots venueId={venueId} booking={booking} pitches={pitches} uncharged={uncharged} />
                       {booking.reference ? <p className="text-xs text-muted-foreground">Ref {booking.reference}</p> : null}
                       {booking.notes ? <p className="whitespace-pre-line text-xs text-muted-foreground">{booking.notes}</p> : null}
                     </div>

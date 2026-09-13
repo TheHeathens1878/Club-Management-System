@@ -47,7 +47,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
     .maybeSingle();
   if (!venue) notFound();
 
-  const [{ data: pitchRows }, { data: groupId }, { data: staffRows }, { data: bookingRows }, { data: seasonRows }] =
+  const [{ data: pitchRows }, { data: groupId }, { data: staffRows }, { data: bookingRows }, { data: seasonRows }, { data: breakRows }] =
     await Promise.all([
     supabase
       .from("resources")
@@ -66,6 +66,12 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
       .eq("venue_id", id)
       .order("starts_on", { ascending: false }),
     supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
+    // Dates off the venue does not charge for, from every block that lists it.
+    supabase
+      .from("training_blackouts")
+      .select("starts_on,ends_on,training_blocks!inner(training_block_venues!inner(venue_id))")
+      .eq("charged", false)
+      .eq("training_blocks.training_block_venues.venue_id", id),
   ]);
 
   const pitches = pitchRows ?? [];
@@ -114,6 +120,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
         a.startsOn.localeCompare(b.startsOn),
     );
   const seasons: SeasonOption[] = (seasonRows ?? []).map((s) => ({ id: s.id, name: s.name, isCurrent: s.is_current }));
+  const uncharged = (breakRows ?? []).map((b) => ({ startsOn: b.starts_on, endsOn: b.ends_on }));
 
   return (
     <>
@@ -171,6 +178,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
             bookings={bookings}
             seasons={seasons}
             pitches={here.filter((pitch) => pitch.active).map((pitch) => ({ id: pitch.id, name: pitch.name }))}
+            uncharged={uncharged}
           />
         ) : null}
 
