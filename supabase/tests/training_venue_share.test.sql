@@ -78,8 +78,11 @@ $$, 'with the whole pitch ours again, the other two quarters go');
 -- Beta out again (2 parts), so the slot holds 2 and the club's share can drop to 3.
 delete from public.training_allocations where team_id = '7b7b7b7b-0913-4111-8111-000000000002';
 update public.training_slots set club_parts = 3 where id = '530f0000-0913-4111-8111-000000000001';
-select is((select club_parts from public.training_slots
-            where id = public.clone_training_slot('530f0000-0913-4111-8111-000000000001', 4, '18:00', '19:00', false)),
+-- Call the function first: a volatile function in a WHERE clause runs inside
+-- the scan, and the row it inserts is not visible to that scan.
+select set_config('ts.clone',
+  public.clone_training_slot('530f0000-0913-4111-8111-000000000001', 4, '18:00', '19:00', false)::text, true);
+select is((select club_parts from public.training_slots where id = current_setting('ts.clone')::uuid),
   3::smallint, 'a clone has the same share of the pitch');
 
 
