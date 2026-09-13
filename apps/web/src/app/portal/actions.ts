@@ -7,6 +7,7 @@ import { getSiteUrl } from "@/lib/utils";
 import { createSumUpCheckout, recordSumUpPaymentIfPaid } from "@/lib/sumup";
 import { instantToLocal } from "@/lib/booking-time";
 import { requestOrigin } from "@/lib/request-origin";
+import { sumHirePaid, sumSecurityPaid, type PaymentPurpose } from "@/lib/hire-terms";
 
 // Verify the booking belongs to the signed-in booker; returns the booking row.
 async function ownedBooking(bookingId: string) {
@@ -15,7 +16,7 @@ async function ownedBooking(bookingId: string) {
   const admin = createAdminClient();
   const { data: booking } = await admin
     .from("bookings")
-    .select("id,booker_profile_id,starts_at,status,kind,total_pence,deposit_pence,resources(name)")
+    .select("id,booker_profile_id,starts_at,status,kind,total_pence,deposit_pence,security_deposit_pence,resources(name)")
     .eq("id", bookingId)
     .maybeSingle();
   if (!booking || booking.booker_profile_id !== session.userId) return { error: "Booking not found." as const };
@@ -24,24 +25,35 @@ async function ownedBooking(bookingId: string) {
 
 /**
  * What the booker may pay now, decided here and not in the browser: the
- * deposit still owed, or the whole balance — capped at what is outstanding.
- * Until 2026-09-12 the amount came from the client, so a booker could pay
- * any figure of £1 or more and have it stamped "deposit paid".
+ * deposit still owed, the whole balance, or the security deposit — each
+ * capped at what is outstanding of it. Until 2026-09-12 the amount came from
+ * the client, so a booker could pay any figure of £1 or more and have it
+ * stamped "deposit paid". The security deposit (2026-09-13) is held apart
+ * from the hire: paying it never counts towards the balance, and vice versa.
  */
 function amountDue(
-  booking: { total_pence: number | null; deposit_pence: number | null },
-  paidPence: number,
-  purpose: "deposit" | "balance",
+  booking: { total_pence: number | null; deposit_pence: number | null; security_deposit_pence: number | null },
+  paid: { hire: number; security: number },
+  purpose: PaymentPurpose,
 ): number {
   const total = Number(booking.total_pence ?? 0);
   const deposit = Number(booking.deposit_pence ?? 0);
-  const outstanding = Math.max(0, total - paidPence);
+  const outstanding = Math.max(0, total - paid.hire);
+  if (purpose === "security_deposit") {
+    return Math.max(0, Number(booking.security_deposit_pence ?? 0) - paid.security);
+  }
   if (purpose === "deposit") {
-    const depositLeft = Math.max(0, deposit - paidPence);
+    const depositLeft = Math.max(0, deposit - paid.hire);
     return total > 0 ? Math.min(depositLeft, outstanding) : depositLeft;
   }
   return outstanding;
 }
+
+const PURPOSE_LABEL: Record<PaymentPurpose, string> = {
+  deposit: "Deposit",
+  balance: "Balance",
+  security_deposit: "Security deposit",
+};
 
 // Create a SumUp checkout for a booking payment. The client mounts the SumUp
 // card widget with the returned checkout id. `amountPence` is what the
@@ -50,7 +62,7 @@ function amountDue(
 export async function createCheckoutForBooking(
   bookingId: string,
   amountPence: number,
-  purpose: "deposit" | "balance",
+  purpose: PaymentPurpose,
   termsAccepted = false,
 ): Promise<{ checkoutId?: string; error?: string }> {
   const owned = await ownedBooking(bookingId);
@@ -64,13 +76,10 @@ export async function createCheckoutForBooking(
   }
   const { data: paidRows } = await owned.admin
     .from("payments")
-    .select("amount_pence,refunded_pence")
+    .select("amount_pence,refunded_pence,purpose")
     .eq("booking_id", bookingId);
-  const paidPence = (paidRows ?? []).reduce(
-    (acc, p) => acc + Number(p.amount_pence ?? 0) - Number(p.refunded_pence ?? 0),
-    0,
-  );
-  const due = amountDue(owned.booking, paidPence, purpose);
+  const paid = { hire: sumHirePaid(paidRows ?? []), security: sumSecurityPaid(paidRows ?? []) };
+  const due = amountDue(owned.booking, paid, purpose);
   if (due <= 0) return { error: "Nothing is outstanding on this booking." };
   if (due !== amountPence) {
     return { error: "The amount due has changed since this page was opened. Please reload and try again." };
@@ -92,7 +101,7 @@ export async function createCheckoutForBooking(
     const checkout = await createSumUpCheckout({
       amountPence,
       reference: `${bookingId}:${purpose}:${Date.now()}`,
-      description: `${purpose === "deposit" ? "Deposit" : "Balance"} — ${roomName} ${instantToLocal(owned.booking.starts_at).date}`,
+      description: `${PURPOSE_LABEL[purpose]} — ${roomName} ${instantToLocal(owned.booking.starts_at).date}`,
       // The booker comes back from their bank to the host they are signed
       // in on — not the canonical address, where no session cookie waits.
       returnUrl: `${(await requestOrigin()) || getSiteUrl()}/portal/pay/return`,

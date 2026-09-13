@@ -66,10 +66,12 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "start_time", label: "Start time", example: "19:00" },
       { key: "end_time", label: "End time", example: "23:00" },
       { key: "occasion", label: "Occasion / event type", example: "Birthday party" },
-      { key: "payment_status", label: "Payment / deposit terms", example: "Subject to a £100 deposit by 14 June 2026." },
+      { key: "payment_status", label: "Payment terms, as they apply to this booking", example: "A non-refundable deposit of £100.00 secures the room and is due by 14 June 2026; the booking is confirmed subject to it. The balance of £250.00 is due by 1 July 2026, at least two weeks before your event." },
       { key: "total_cost", label: "Total cost", example: "£350.00" },
-      { key: "deposit_amount", label: "Deposit required", example: "£100.00" },
+      { key: "deposit_amount", label: "Non-refundable deposit", example: "£100.00" },
       { key: "deposit_due_date", label: "Deposit due date", example: "14 June 2026" },
+      { key: "balance_due_date", label: "Balance (and security deposit) due date", example: "1 July 2026" },
+      { key: "security_deposit", label: "Refundable security deposit (— if none)", example: "£200.00" },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — your room booking is confirmed`,
@@ -82,8 +84,8 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
 <li><strong>Occasion:</strong> {{occasion}}</li>
 <li><strong>Total cost:</strong> {{total_cost}}</li>
 </ul>
-<p>{{payment_status}}</p>
-<p>You can pay your deposit or balance and view your booking any time in your portal:</p>
+<p><strong>How paying works:</strong> {{payment_status}}</p>
+<p>The deposit is non-refundable and secures the room; the balance, plus any refundable security deposit, is due at least two weeks before your event. You can pay each of them and view your booking any time in your portal:</p>
 <p><a href="{{portal_url}}">Open your booking portal</a></p>
 <p>If you have any questions or need to make changes, please contact us directly.</p>
 <p>We look forward to welcoming you to the club.</p>`,
@@ -149,6 +151,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "end_time", label: "End time", example: "23:00" },
       { key: "total_cost", label: "Quoted total", example: "£350.00" },
       { key: "message", label: "Personal message typed by staff when sending (blank if none)", example: "We can also do a later finish if you need it." },
+      { key: "deposit_terms", label: "The club's payment terms, in a sentence", example: "To secure the room a non-refundable deposit of half the room hire, up to £100.00 is paid first. The balance, plus any refundable security deposit, is due at least two weeks before the event." },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — your quote`,
@@ -156,6 +159,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
 <p>Thank you for your interest in hiring the {{room_name}} at ${c}. For {{booking_date}}, {{start_time}} – {{end_time}}, the price would be <strong>{{total_cost}}</strong>.</p>
 {{message}}
 <p>Please note the date is <strong>not held</strong> by this quote — it stays open to other bookings until you confirm one with us.</p>
+<p>{{deposit_terms}}</p>
 <p>To go ahead, just reply to this email or contact the club, and we will confirm the booking with you.</p>
 <p><a href="{{portal_url}}">View this in your portal</a></p>`,
   },
@@ -245,17 +249,17 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "name", label: "Booker name", example: "Jane Smith" },
       { key: "room_name", label: "Room name", example: "Main Function Room" },
       { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
-      { key: "deposit_amount", label: "Deposit required", example: "£100.00" },
+      { key: "deposit_amount", label: "Non-refundable deposit required", example: "£100.00" },
       { key: "deposit_due_date", label: "Deposit due date", example: "7 June 2026" },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — deposit reminder`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
-<p>This is a friendly reminder that the deposit for your booking at ${c} is due.</p>
+<p>This is a friendly reminder that the deposit for your booking at ${c} is due. It is what secures the room for you — until it is paid the booking is confirmed subject to it, and a deposit not received by its due date cancels the booking.</p>
 <ul>
 <li><strong>Room:</strong> {{room_name}}</li>
 <li><strong>Date:</strong> {{booking_date}}</li>
-<li><strong>Deposit:</strong> {{deposit_amount}} due by {{deposit_due_date}}</li>
+<li><strong>Non-refundable deposit:</strong> {{deposit_amount}} due by {{deposit_due_date}}</li>
 </ul>
 <p>Please pay your deposit to secure your booking:</p>
 <p><a href="{{portal_url}}">Pay your deposit</a></p>
@@ -270,19 +274,22 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "room_name", label: "Room name", example: "Main Function Room" },
       { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
       { key: "outstanding", label: "Balance outstanding", example: "£250.00" },
-      { key: "balance_due_date", label: "Balance due date", example: "31 May 2026" },
+      { key: "security_deposit", label: "Refundable security deposit still to pay (— if none)", example: "£200.00" },
+      { key: "security_deposit_line", label: "A ready-made list line for the security deposit (blank if none)", example: "<li><strong>Refundable security deposit still to pay:</strong> £200.00</li>" },
+      { key: "balance_due_date", label: "Due date — at least two weeks before the event", example: "31 May 2026" },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — balance due for your upcoming booking`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
-<p>Your event at ${c} is coming up and there is a balance outstanding on your booking.</p>
+<p>Your event at ${c} is coming up. The balance, plus any refundable security deposit, is due at least two weeks before the event — and here is what is still outstanding on your booking.</p>
 <ul>
 <li><strong>Room:</strong> {{room_name}}</li>
 <li><strong>Date:</strong> {{booking_date}}</li>
 <li><strong>Balance outstanding:</strong> {{outstanding}}</li>
+{{security_deposit_line}}
 <li><strong>Due by:</strong> {{balance_due_date}}</li>
 </ul>
-<p>Please settle the remaining balance:</p>
+<p>Please settle what is outstanding:</p>
 <p><a href="{{portal_url}}">Pay your balance</a></p>
 <p>If you have already paid in full, please disregard this message.</p>`,
   },

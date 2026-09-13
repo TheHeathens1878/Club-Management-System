@@ -3,6 +3,7 @@ import { extrasSummary } from "@/lib/booking-extras";
 import { getSessionProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { formatCurrency } from "@/lib/utils";
+import { sumHirePaid, sumSecurityPaid } from "@/lib/hire-terms";
 import { isSumUpConfigured, recordSumUpPaymentIfPaid } from "@/lib/sumup";
 import { PayButton } from "./pay-button";
 import { PaymentPendingBanner } from "./payment-pending-banner";
@@ -68,19 +69,18 @@ export default async function PortalPage({
 
   // Payments for all of this booker's bookings
   const ids = list.map((b) => b.id);
-  const paidByBooking = new Map<string, number>();
+  // Net of refunds: a refunded deposit is owed again. The hire (deposit and
+  // balance) and the security deposit are counted apart — the security
+  // deposit is held, not earned, and never pays for the room.
+  const paidByBooking = new Map<string, { hire: number; security: number }>();
   if (ids.length > 0) {
     const { data: payments } = await admin
       .from("payments")
-      .select("booking_id,amount_pence,refunded_pence")
+      .select("booking_id,amount_pence,refunded_pence,purpose")
       .in("booking_id", ids);
-    for (const p of payments ?? []) {
-      if (!p.booking_id) continue;
-      // Net of refunds: a refunded deposit is owed again.
-      paidByBooking.set(
-        p.booking_id,
-        (paidByBooking.get(p.booking_id) ?? 0) + p.amount_pence - (p.refunded_pence ?? 0),
-      );
+    for (const id of ids) {
+      const rows = (payments ?? []).filter((p) => p.booking_id === id);
+      paidByBooking.set(id, { hire: sumHirePaid(rows), security: sumSecurityPaid(rows) });
     }
   }
 
@@ -88,7 +88,9 @@ export default async function PortalPage({
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">Your bookings</h1>
-        <p className="text-sm text-muted-foreground">View your bookings and pay your deposit or balance.</p>
+        <p className="text-sm text-muted-foreground">
+          View your bookings and pay your deposit, your balance and any security deposit.
+        </p>
       </div>
 
       {pendingCheckoutId && <PaymentPendingBanner checkoutId={pendingCheckoutId} />}
@@ -112,9 +114,12 @@ export default async function PortalPage({
           {list.map((b) => {
             const total = b.total_pence ?? 0;
             const deposit = b.deposit_pence ?? 0;
-            const paid = paidByBooking.get(b.id) ?? 0;
+            const paidBoth = paidByBooking.get(b.id) ?? { hire: 0, security: 0 };
+            const paid = paidBoth.hire;
             const outstanding = Math.max(0, total - paid);
             const depositRemaining = Math.max(0, deposit - paid);
+            const securityDeposit = b.security_deposit_pence ?? 0;
+            const securityRemaining = Math.max(0, securityDeposit - paidBoth.security);
             const status = b.status;
             const confirmed = status === "confirmed";
             const cancelled = status === "cancelled";
@@ -149,10 +154,10 @@ export default async function PortalPage({
                     Extras: {extrasSummary(b.selected_extras)}
                   </p>
                 )}
-                {(b.security_deposit_pence ?? 0) > 0 && (
+                {securityDeposit > 0 && !confirmed && (
                   <p className="mt-2 text-sm text-muted-foreground">
-                    A refundable £{((b.security_deposit_pence ?? 0) / 100).toFixed(0)} security
-                    deposit applies (18th birthday), payable before the event.
+                    A refundable {formatCurrency(securityDeposit)} security deposit applies to this
+                    booking, due two weeks before the event and returned after it if all is well.
                   </p>
                 )}
                 {status === "enquiry" && (
@@ -179,18 +184,49 @@ export default async function PortalPage({
                       </div>
                     </div>
 
-                    {b.deposit_due_date && depositRemaining > 0 && (
-                      <p className="mt-2 text-xs text-amber-700">
-                        Deposit of {formatCurrency(deposit)} due by {formatBookingDate(b.deposit_due_date)}.
-                      </p>
-                    )}
-                    {b.balance_due_date && outstanding > 0 && depositRemaining === 0 && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        Balance due by {formatBookingDate(b.balance_due_date)}.
-                      </p>
-                    )}
+                    {/* How paying works, for this booking (Adam, 2026-09-13):
+                        the non-refundable deposit first, which secures the
+                        room; then the balance plus any refundable security
+                        deposit, two weeks before. */}
+                    <ol className="mt-3 space-y-1.5 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                      <li className="flex gap-2">
+                        <span className={depositRemaining === 0 ? "font-semibold text-green-700" : "font-semibold text-amber-700"}>1.</span>
+                        <span>
+                          {deposit > 0 ? (
+                            depositRemaining === 0 ? (
+                              <>Your non-refundable deposit of {formatCurrency(deposit)} has been received — the room is secured for you.</>
+                            ) : (
+                              <>
+                                A <strong>non-refundable</strong> deposit of {formatCurrency(depositRemaining)} secures the room
+                                {b.deposit_due_date ? <> — due by <strong>{formatBookingDate(b.deposit_due_date)}</strong></> : null}.
+                                The booking is confirmed subject to it.
+                              </>
+                            )
+                          ) : (
+                            <>No deposit is required for this booking.</>
+                          )}
+                        </span>
+                      </li>
+                      <li className="flex gap-2">
+                        <span className={outstanding === 0 && securityRemaining === 0 ? "font-semibold text-green-700" : "font-semibold"}>2.</span>
+                        <span>
+                          {outstanding === 0 && securityRemaining === 0 ? (
+                            <>The balance{securityDeposit > 0 ? " and the security deposit have" : " has"} been paid.</>
+                          ) : (
+                            <>
+                              The balance of {formatCurrency(Math.max(0, total - Math.max(paid, deposit)))}
+                              {securityDeposit > 0 ? (
+                                <>, plus a <strong>refundable</strong> security deposit of {formatCurrency(securityDeposit)} (returned after the event if all is well),</>
+                              ) : null}{" "}
+                              is due {b.balance_due_date ? <>by <strong>{formatBookingDate(b.balance_due_date)}</strong>, </> : null}
+                              at least two weeks before your event.
+                            </>
+                          )}
+                        </span>
+                      </li>
+                    </ol>
 
-                    {outstanding > 0 ? (
+                    {outstanding > 0 || securityRemaining > 0 ? (
                       <div className="mt-4 flex flex-wrap gap-2">
                         {depositRemaining > 0 && depositRemaining < outstanding && (
                           <PayButton
@@ -201,17 +237,31 @@ export default async function PortalPage({
                             sumupEnabled={sumupEnabled}
                           />
                         )}
-                        <PayButton
-                          bookingId={b.id}
-                          amountPence={outstanding}
-                          label={depositRemaining > 0 ? "Pay in full" : "Pay balance"}
-                          variant={depositRemaining > 0 ? "outline" : "default"}
-                          purpose="balance"
-                          sumupEnabled={sumupEnabled}
-                        />
+                        {outstanding > 0 && (
+                          <PayButton
+                            bookingId={b.id}
+                            amountPence={outstanding}
+                            label={depositRemaining > 0 ? (depositRemaining < outstanding ? "Pay in full" : "Pay deposit") : "Pay balance"}
+                            variant={depositRemaining > 0 && depositRemaining < outstanding ? "outline" : "default"}
+                            purpose={depositRemaining > 0 && depositRemaining >= outstanding ? "deposit" : "balance"}
+                            sumupEnabled={sumupEnabled}
+                          />
+                        )}
+                        {securityRemaining > 0 && (
+                          <PayButton
+                            bookingId={b.id}
+                            amountPence={securityRemaining}
+                            label="Pay security deposit"
+                            variant={depositRemaining > 0 ? "outline" : "default"}
+                            purpose="security_deposit"
+                            sumupEnabled={sumupEnabled}
+                          />
+                        )}
                       </div>
                     ) : (
-                      <p className="mt-4 text-sm font-medium text-green-700">Paid in full — thank you.</p>
+                      <p className="mt-4 text-sm font-medium text-green-700">
+                        Paid in full{securityDeposit > 0 ? ", security deposit held" : ""} — thank you.
+                      </p>
                     )}
                   </>
                 )}

@@ -18,11 +18,16 @@ flow, **SumUp** online payments, and scheduled reminder emails.
 4. **Booker portal + SumUp**:
    - Booker books a room → an **account is created** for them (new `booker` role).
    - Staff **confirm** the room and set the **total cost**.
-   - Booker receives confirmation **subject to a £100 deposit within 7 days**
-     (deposit amount **and** window must be editable).
+   - Booker receives confirmation **subject to a non-refundable deposit within 7 days**
+     — half the room hire, capped at £100 (Adam, 2026-09-13; the percent, cap
+     **and** window are editable). The deposit secures the room.
    - Booker logs into their **portal** and pays deposit / full amount (SumUp).
-   - **14 days before** the booking they get a **balance reminder** email if not
-     paid in full (the 14 days must be editable).
+   - The **balance, plus any refundable security deposit**, is due **14 days
+     before** the booking; that day they get a **balance reminder** email if
+     either is still outstanding (the 14 days must be editable). The security
+     deposit is paid in the portal like the rest but is held apart in the ledger
+     (`payments.purpose = 'security_deposit'`, 20260913140000) and never counts
+     towards the hire being paid.
 
 ---
 
@@ -83,7 +88,8 @@ New `site_settings` keys, surfaced in a new **Settings → Payments** tab:
 
 | Key | Default | Meaning |
 |---|---|---|
-| `deposit_default_pence` | `10000` | default deposit (£100) |
+| `deposit_default_pence` | `10000` | the deposit CAP (£100) — since 2026-09-13 |
+| `deposit_percent` | `50` | the deposit as a share of the room hire |
 | `deposit_window_days` | `7` | days after confirmation the deposit is due |
 | `balance_reminder_days` | `14` | days before booking the balance reminder fires |
 | `currency` | `GBP` | fixed for now |
@@ -137,7 +143,9 @@ Notes:
 ### 4.2 Staff confirmation (sets total + deposit)
 
 On the booking detail page, the confirm action gains **Total cost** and
-**Deposit** inputs (deposit prefilled from `deposit_default_pence`). Confirming:
+**Deposit** inputs (deposit prefilled as `deposit_percent` of the room hire, capped at
+`deposit_default_pence` — `bookingDepositPence()` in `lib/hire-terms.ts`) and a
+**Refundable security deposit** input. Confirming:
 
 - sets `status='confirmed'`, `total_pence`, `deposit_pence`,
   `deposit_due_date = today + deposit_window_days`,

@@ -4,6 +4,7 @@ import { notifyRoomDesk } from "@/lib/room-desk-notify";
 import { renderEmailTemplate } from "@/lib/template-engine";
 import { sendEmail } from "@/lib/email";
 import { formatCurrency } from "@/lib/utils";
+import { isPaymentPurpose, sumHirePaid } from "@/lib/hire-terms";
 import { formatBookingDate, instantToLocal } from "@/lib/booking-time";
 import type { BookingPaymentStatus } from "@/lib/booking-types";
 
@@ -174,6 +175,8 @@ export async function recordSumUpPaymentIfPaid(
     sumup_checkout_id: checkoutId,
     sumup_txn_code: txnCode,
     note: "Paid online (SumUp)",
+    // What it was for, from the reference this app minted (20260913140000).
+    purpose: isPaymentPurpose(purpose) ? purpose : null,
   });
   if (insertErr) {
     // 23505 on sumup_checkout_id: recorded by a concurrent caller. Fine.
@@ -196,14 +199,16 @@ export async function recordSumUpPaymentIfPaid(
   // the payment row and which used to be ignored here.
   const [{ data: totalsRow }, { data: payments }] = await Promise.all([
     admin.from("bookings").select("status,total_pence,deposit_pence,booker_name,booker_email,starts_at,resources(name)").eq("id", bookingId).maybeSingle(),
-    admin.from("payments").select("amount_pence,refunded_pence").eq("booking_id", bookingId),
+    admin.from("payments").select("amount_pence,refunded_pence,purpose").eq("booking_id", bookingId),
   ]);
 
   // The desk's bell: money has arrived (Adam, 2026-09-12).
   if (totalsRow) {
     await notifyRoomDesk(admin, {
       subject: `${formatCurrency(amountPence)} paid online — ${totalsRow.booker_name}, ${formatBookingDate(instantToLocal(totalsRow.starts_at).date)}`,
-      body: `${totalsRow.resources?.name ?? "Function room"} · ${purpose === "deposit" ? "deposit" : "balance"} by card${
+      body: `${totalsRow.resources?.name ?? "Function room"} · ${
+        purpose === "deposit" ? "deposit" : purpose === "security_deposit" ? "security deposit" : "balance"
+      } by card${
         totalsRow.status === "cancelled" ? " · ON A CANCELLED BOOKING" : ""
       }`,
       bookingId,
@@ -235,7 +240,8 @@ export async function recordSumUpPaymentIfPaid(
   }
   const totalPence = totalsRow?.total_pence ?? 0;
   const depositPence = totalsRow?.deposit_pence ?? 0;
-  const paidPence = (payments ?? []).reduce((acc, p) => acc + p.amount_pence - (p.refunded_pence ?? 0), 0);
+  // Hire money only: the security deposit is held, not earned (20260913140000).
+  const paidPence = sumHirePaid(payments ?? []);
   let status: BookingPaymentStatus = "unpaid";
   if (totalPence > 0 && paidPence >= totalPence) status = "paid";
   else if (paidPence > 0 && (depositPence === 0 || paidPence >= depositPence)) status = "deposit_paid";

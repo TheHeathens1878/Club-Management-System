@@ -5,6 +5,7 @@ import { Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { formatCurrency } from "@/lib/utils";
+import { sumHirePaid, sumSecurityPaid, type PaymentPurpose } from "@/lib/hire-terms";
 import { addPayment, deletePayment } from "./actions";
 
 export type PaymentRow = {
@@ -16,6 +17,14 @@ export type PaymentRow = {
   source: string;
   authorised_by_name: string | null;
   note: string | null;
+  /** deposit | balance | security_deposit | null (hire, unlabelled). */
+  purpose: string | null;
+};
+
+const PURPOSE_LABELS: Record<string, string> = {
+  deposit: "Deposit",
+  balance: "Balance",
+  security_deposit: "Security deposit",
 };
 
 const METHOD_LABELS: Record<string, string> = {
@@ -35,12 +44,14 @@ export function PaymentsPanel({
   payments,
   totalPence,
   depositPence,
+  securityDepositPence = 0,
   canDelete,
 }: {
   bookingId: string;
   payments: PaymentRow[];
   totalPence: number;
   depositPence: number;
+  securityDepositPence?: number;
   canDelete: boolean;
 }) {
   const [adding, setAdding] = useState(false);
@@ -50,10 +61,14 @@ export function PaymentsPanel({
   const [reference, setReference] = useState("");
   const [note, setNote] = useState("");
   const [sendEmail, setSendEmail] = useState(true);
+  const [purpose, setPurpose] = useState<"hire" | PaymentPurpose>("hire");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const paidPence = payments.reduce((acc, p) => acc + p.amount_pence, 0);
+  // Hire money and the security deposit are counted apart (20260913140000):
+  // the security deposit is held for the event, not paid for the room.
+  const paidPence = sumHirePaid(payments);
+  const securityPaid = sumSecurityPaid(payments);
   const outstanding = Math.max(0, totalPence - paidPence);
   const depositSatisfied = depositPence > 0 && paidPence >= depositPence;
 
@@ -73,6 +88,7 @@ export function PaymentsPanel({
         reference: reference.trim() || null,
         note: note.trim() || null,
         send_email: sendEmail,
+        purpose: purpose === "hire" ? null : purpose,
       });
       if (result?.error) {
         setError(result.error);
@@ -110,10 +126,21 @@ export function PaymentsPanel({
 
       {depositPence > 0 && (
         <p className="text-xs text-muted-foreground">
-          Deposit {formatCurrency(depositPence)} —{" "}
+          Non-refundable deposit {formatCurrency(depositPence)} —{" "}
           {depositSatisfied
             ? <span className="text-green-700 font-medium">paid</span>
             : <span className="text-amber-700 font-medium">outstanding</span>}
+        </p>
+      )}
+      {securityDepositPence > 0 && (
+        <p className="text-xs text-muted-foreground">
+          Refundable security deposit {formatCurrency(securityDepositPence)} —{" "}
+          {securityPaid >= securityDepositPence
+            ? <span className="text-green-700 font-medium">held</span>
+            : securityPaid > 0
+              ? <span className="text-amber-700 font-medium">{formatCurrency(securityPaid)} held, {formatCurrency(securityDepositPence - securityPaid)} to come</span>
+              : <span className="text-amber-700 font-medium">not yet paid</span>}
+          {" "}(due with the balance; not counted in the total)
         </p>
       )}
 
@@ -125,6 +152,11 @@ export function PaymentsPanel({
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{formatCurrency(p.amount_pence)}</span>
+                  {p.purpose ? (
+                    <span className={"rounded px-1.5 py-0.5 text-[10px] font-medium " + (p.purpose === "security_deposit" ? "bg-amber-100 text-amber-900" : "bg-secondary text-muted-foreground")}>
+                      {PURPOSE_LABELS[p.purpose] ?? p.purpose}
+                    </span>
+                  ) : null}
                   <span className="text-muted-foreground">{METHOD_LABELS[p.method ?? ""] ?? p.method ?? "—"}</span>
                   {p.source === "sumup" && (
                     <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">SumUp</span>
@@ -192,9 +224,24 @@ export function PaymentsPanel({
               <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" />
             </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground uppercase">Note</label>
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" />
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground uppercase">What for</label>
+              <select
+                value={purpose}
+                onChange={(e) => setPurpose(e.target.value as "hire" | PaymentPurpose)}
+                className="h-10 min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
+              >
+                <option value="hire">Room hire (deposit or balance)</option>
+                <option value="deposit">Deposit</option>
+                <option value="balance">Balance</option>
+                <option value="security_deposit">Security deposit (held, refundable)</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground uppercase">Note</label>
+              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" />
+            </div>
           </div>
           <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
             <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />

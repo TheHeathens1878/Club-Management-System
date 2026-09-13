@@ -112,7 +112,11 @@ export default async function BookingConfirmationPage({
                   <span className="text-muted-foreground">Estimated total</span>
                   <span className="font-semibold">{formatCurrency(booking.total_pence)}</span>
                 </div>
-                <p className="mt-1 text-xs text-muted-foreground">Payment will be arranged upon confirmation.</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Payment is arranged on confirmation: a non-refundable deposit (half the room hire, up
+                  to £100) secures the room, and the balance plus any security deposit is due two weeks
+                  before the event.
+                </p>
               </div>
             )}
           </div>

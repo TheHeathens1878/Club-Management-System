@@ -8,6 +8,7 @@ import { deleteCalendarEvent } from "@/lib/calendar";
 import { writeAudit } from "@/lib/audit";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
 import { addDays, formatBookingDate, instantsToLocalWindow, londonToday } from "@/lib/booking-time";
+import { sumHirePaid, sumSecurityPaid } from "@/lib/hire-terms";
 
 export const dynamic = "force-dynamic";
 
@@ -28,6 +29,7 @@ type Booking = {
   deposit_pence: number | null;
   deposit_due_date: string | null;
   balance_due_date: string | null;
+  security_deposit_pence: number | null;
   resources: { name: string } | null;
 };
 
@@ -35,24 +37,31 @@ function roomNameOf(booking: Booking): string {
   return booking.resources?.name ?? "Function room";
 }
 
+// Net of refunds: a refunded deposit is not a paid one. The hire (deposit
+// and balance) is counted apart from the security deposit, which is held,
+// not earned (20260913140000).
 async function paidMap(admin: ReturnType<typeof createAdminClient>, ids: string[]) {
-  const map = new Map<string, number>();
+  const map = new Map<string, { hire: number; security: number }>();
   if (ids.length === 0) return map;
-  const { data } = await admin.from("payments").select("booking_id,amount_pence,refunded_pence").in("booking_id", ids);
-  for (const p of data ?? []) {
-    if (!p.booking_id) continue; // ledger rows for subscriptions carry no booking
-    // Net of refunds: a refunded deposit is not a paid one.
-    map.set(p.booking_id, (map.get(p.booking_id) ?? 0) + p.amount_pence - (p.refunded_pence ?? 0));
+  const { data } = await admin
+    .from("payments")
+    .select("booking_id,amount_pence,refunded_pence,purpose")
+    .in("booking_id", ids);
+  for (const id of ids) {
+    // Ledger rows for subscriptions carry no booking and are never here.
+    const rows = (data ?? []).filter((p) => p.booking_id === id);
+    map.set(id, { hire: sumHirePaid(rows), security: sumSecurityPaid(rows) });
   }
   return map;
 }
+const NOTHING = { hire: 0, security: 0 };
 
 // One string literal each: supabase-js derives the row type from the select
 // text, and a concatenation would collapse it to `string`.
 const SELECT =
-  "id,booker_name,booker_email,starts_at,ends_at,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources(name)";
+  "id,booker_name,booker_email,starts_at,ends_at,total_pence,deposit_pence,deposit_due_date,balance_due_date,security_deposit_pence,resources(name)";
 const SELECT_WITH_CALENDAR =
-  "id,booker_name,booker_email,starts_at,ends_at,total_pence,deposit_pence,deposit_due_date,balance_due_date,resources(name),calendar_event_id";
+  "id,booker_name,booker_email,starts_at,ends_at,total_pence,deposit_pence,deposit_due_date,balance_due_date,security_deposit_pence,resources(name),calendar_event_id";
 
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
@@ -87,7 +96,7 @@ export async function GET(request: Request) {
 
   for (const b of depBookings) {
     const deposit = Number(b.deposit_pence ?? 0);
-    const paid = depPaid.get(b.id) ?? 0;
+    const paid = (depPaid.get(b.id) ?? NOTHING).hire;
     if (paid >= deposit) continue; // deposit already satisfied
     if (!b.booker_email) continue;
     try {
@@ -116,7 +125,7 @@ export async function GET(request: Request) {
     }
   }
 
-  // --- Balance reminders: within the reminder window (balance_due_date reached), not paid in full ---
+  // --- Balance reminders: the due date reached, the balance or the security deposit still owed ---
   const { data: balanceCandidates } = await admin
     .from("bookings")
     .select(SELECT)
@@ -124,7 +133,6 @@ export async function GET(request: Request) {
     .eq("kind", "hire")
     .gt("starts_at", new Date().toISOString())
     .is("balance_reminder_sent_at", null)
-    .gt("total_pence", 0)
     .not("balance_due_date", "is", null)
     .lte("balance_due_date", today);
 
@@ -133,9 +141,10 @@ export async function GET(request: Request) {
 
   for (const b of balBookings) {
     const total = Number(b.total_pence ?? 0);
-    const paid = balPaid.get(b.id) ?? 0;
-    const outstanding = total - paid;
-    if (outstanding <= 0) continue; // paid in full
+    const paid = balPaid.get(b.id) ?? NOTHING;
+    const outstanding = Math.max(0, total - paid.hire);
+    const securityOutstanding = Math.max(0, Number(b.security_deposit_pence ?? 0) - paid.security);
+    if (outstanding <= 0 && securityOutstanding <= 0) continue; // paid in full, deposit held
     if (!b.booker_email) continue;
     try {
       const tpl = await renderEmailTemplate("balance_reminder", {
@@ -143,6 +152,11 @@ export async function GET(request: Request) {
         room_name: roomNameOf(b),
         booking_date: formatBookingDate(instantsToLocalWindow(b.starts_at, b.ends_at).date),
         outstanding: formatCurrency(outstanding),
+        security_deposit: securityOutstanding > 0 ? formatCurrency(securityOutstanding) : "—",
+        security_deposit_line:
+          securityOutstanding > 0
+            ? `<li><strong>Refundable security deposit still to pay:</strong> ${formatCurrency(securityOutstanding)} (returned after the event if all is well)</li>`
+            : "",
         balance_due_date: b.balance_due_date ? formatBookingDate(b.balance_due_date) : "—",
         portal_url: portalUrl,
       }, brandColor);
@@ -185,11 +199,11 @@ export async function GET(request: Request) {
 
     for (const b of cancelBookings) {
       const deposit = Number(b.deposit_pence ?? 0);
-      const paid = cancelPaid.get(b.id) ?? 0;
+      const paid = (cancelPaid.get(b.id) ?? NOTHING).hire;
       if (paid >= deposit) continue; // deposit satisfied — leave it alone
 
       const dueStr = b.deposit_due_date ? formatBookingDate(b.deposit_due_date) : "the deadline";
-      const reason = `The required deposit of ${formatCurrency(deposit)} was not received by ${dueStr}, so this booking has been cancelled.`;
+      const reason = `The non-refundable deposit of ${formatCurrency(deposit)} that secures the room was not received by ${dueStr}, so this booking has been cancelled and the date is open again.`;
 
       await admin
         .from("bookings")
