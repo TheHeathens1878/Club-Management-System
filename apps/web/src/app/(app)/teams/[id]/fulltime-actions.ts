@@ -7,7 +7,7 @@
  * file runs on the server: the parser and the club's Full-Time identifiers
  * never reach the browser bundle.
  *
- * What the admin pastes is the team's Full-Time **widget snippet** (the
+ * What the coach or admin pastes is the team's Full-Time **widget snippet** (the
  * "add to your website" code, whose `lrcode` names the team's fixtures-and-
  * results feed), a bare code, or the widget URL. A league/division page URL
  * is still accepted as the older, weaker form of link. Either way the fetch
@@ -22,7 +22,6 @@
  */
 
 import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import {
   buildFixturesUrl,
   fetchViaPgNet,
@@ -42,8 +41,8 @@ import {
   type ParsedPage,
 } from "@club/fulltime";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { writeAudit } from "@/lib/audit";
+import { requireTeamManager } from "@/lib/team-staff";
 import { formatBookingDateShort } from "@/lib/booking-time";
 
 /** Preview tables are for confirmation, not for reading a whole season. */
@@ -112,12 +111,6 @@ export type SaveFullTimeLinkInput = {
   ftTeamName: string;
   enabled: boolean;
 };
-
-async function requireCommittee() {
-  const session = await getSessionProfile();
-  if (!session || !isCommittee(session.profile?.role)) redirect("/lobby");
-  return session;
-}
 
 /**
  * The default Full-Time team name: the club's name as Full-Time prints it
@@ -225,7 +218,7 @@ export async function previewFullTimeLink(
   input: string,
   ftTeamNameOverride?: string,
 ): Promise<PreviewResult> {
-  await requireCommittee();
+  await requireTeamManager(teamId);
   const admin = createAdminClient();
 
   const { data: team } = await admin.from("teams").select("id,name").eq("id", teamId).maybeSingle();
@@ -351,7 +344,7 @@ export async function saveFullTimeLink(
   teamId: string,
   input: SaveFullTimeLinkInput,
 ): Promise<{ error?: string }> {
-  const session = await requireCommittee();
+  const session = await requireTeamManager(teamId);
   const admin = createAdminClient();
   // A blank name still stores the full default — "Ashton On Mersey FC U14
   // Mavericks" — because the importer matches on it and a bare team name
@@ -447,7 +440,7 @@ export async function setFullTimeLinkEnabled(
   teamId: string,
   enabled: boolean,
 ): Promise<{ error?: string }> {
-  const session = await requireCommittee();
+  const session = await requireTeamManager(teamId);
   const admin = createAdminClient();
 
   const { error } = await admin
@@ -471,7 +464,7 @@ export async function setFullTimeLinkEnabled(
 
 /** Remove the link. Fixtures already imported are deliberately left alone. */
 export async function removeFullTimeLink(teamId: string): Promise<{ error?: string }> {
-  const session = await requireCommittee();
+  const session = await requireTeamManager(teamId);
   const admin = createAdminClient();
 
   const { error } = await admin.from("team_fulltime_links").delete().eq("team_id", teamId);

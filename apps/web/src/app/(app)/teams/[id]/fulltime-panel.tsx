@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * The admin's Full-Time link panel: paste the team's Full-Time widget snippet
+ * The team's Full-Time link panel (coach or admin): paste the Full-Time code snippet
  * (or a page address), test-fetch it, confirm the fixtures the parser read,
  * then save.
  *
@@ -318,13 +318,37 @@ export function FullTimePanel({
             placeholder={'<div id="lrep728576966">…</div>\n<script>var lrcode = \'728576966\'</script>\n<script src="https://fulltime.thefa.com/client/api/cs1.js"></script>'}
             className="w-full break-all rounded-md border border-input bg-card px-3 py-2 font-mono text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           />
-          <p className="text-xs text-muted-foreground">
-            On fulltime.thefa.com open the team&apos;s league, pick the team and choose{" "}
-            <span className="font-medium">Add to your website</span> (the &ldquo;team fixtures&rdquo; widget).
-            Paste the whole snippet, or just the number from <span className="font-mono">var lrcode</span>.
-            The widget carries the team&apos;s fixtures and results for the season. A Full-Time page address
-            still works as a fallback.
-          </p>
+          <div className="space-y-1.5 rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground">
+            <p className="font-medium text-foreground">Where to find the code snippet</p>
+            <ol className="list-decimal space-y-1 pl-4">
+              <li>
+                Sign in at{" "}
+                <a
+                  href="https://fulltime-admin.thefa.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-medium text-primary underline underline-offset-2"
+                >
+                  fulltime-admin.thefa.com
+                </a>{" "}
+                with your FA account.
+              </li>
+              <li>
+                Open <span className="font-medium text-foreground">Media</span>, then{" "}
+                <span className="font-medium text-foreground">Code Snippets</span>.
+              </li>
+              <li>
+                Choose <span className="font-medium text-foreground">Fixtures / Results (Team)</span> and
+                pick your team.
+              </li>
+              <li>Copy the whole snippet and paste it above, then press Test &amp; preview.</li>
+            </ol>
+            <p>
+              Just the number from <span className="font-mono">var lrcode</span> works too. The snippet
+              carries the team&apos;s fixtures and results for the season; a Full-Time page address still
+              works as a fallback.
+            </p>
+          </div>
         </div>
 
         <div className="space-y-1.5">

@@ -34,6 +34,7 @@ import {
 import type { Json } from "@club/db";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { requireTeamManager } from "@/lib/team-staff";
 import { writeAudit } from "@/lib/audit";
 import { formatBookingDateShort } from "@/lib/booking-time";
 
@@ -379,7 +380,7 @@ export async function runManualImport(
  * deployed yet — that is a message, not a crash.
  */
 export async function triggerScheduledImport(teamId: string): Promise<EdgeFunctionResult> {
-  await requireCommittee();
+  await requireTeamManager(teamId);
 
   const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
