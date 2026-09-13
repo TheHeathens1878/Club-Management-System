@@ -3,10 +3,13 @@
 /**
  * The editable half of a venue, shared by the add form and the edit form.
  *
- * A venue is a GROUND: a name, where it is, and what somebody arriving for the
- * first time needs to know. It carries no booking settings of its own —
- * buffers, capacity and pricing all live on the pitch, because a booking is
- * made against a pitch and never against a ground.
+ * A venue is a GROUND: a name, where it is, what somebody arriving for the
+ * first time needs to know — and, since 2026-09-13, what it is FOR: the
+ * club's matches (the grounds with our pitches, or a central venue), its
+ * training (a hired 3G or school pitch the winter blocks are planned at), or
+ * both. It carries no booking settings of its own — buffers, capacity and
+ * pricing all live on the pitch, because a booking is made against a pitch
+ * and never against a ground.
  */
 
 import { Input, Label } from "@/components/ui/input";
@@ -17,6 +20,8 @@ export type VenueFieldValues = {
   address: string | null;
   notes: string | null;
   sortOrder: number;
+  forMatches: boolean;
+  forTraining: boolean;
 };
 
 export const EMPTY_VENUE_FIELDS: VenueFieldValues = {
@@ -24,6 +29,8 @@ export const EMPTY_VENUE_FIELDS: VenueFieldValues = {
   address: null,
   notes: null,
   sortOrder: 0,
+  forMatches: true,
+  forTraining: false,
 };
 
 export function VenueFields({
@@ -50,6 +57,35 @@ export function VenueFields({
           name from this, so renaming here renames the group.
         </p>
       </div>
+
+      <fieldset className="space-y-2 sm:col-span-2">
+        <legend className="text-sm font-medium leading-none text-foreground">Used for</legend>
+        <div className="flex flex-wrap gap-x-6 gap-y-2">
+          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+            <input
+              type="checkbox"
+              name="for_matches"
+              defaultChecked={values.forMatches}
+              className="h-4 w-4 rounded border-input"
+            />
+            Matches
+          </label>
+          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+            <input
+              type="checkbox"
+              name="for_training"
+              defaultChecked={values.forTraining}
+              className="h-4 w-4 rounded border-input"
+            />
+            Training
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          A ground with our pitches is for matches; a hired 3G or school pitch the winter blocks
+          are planned at is for training. Some are both. A venue a training slot names becomes a
+          training venue on its own.
+        </p>
+      </fieldset>
 
       <div className="space-y-1.5 sm:col-span-2">
         <Label htmlFor={`${idPrefix}-address`}>

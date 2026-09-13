@@ -12,6 +12,7 @@ import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { resolveRoleView } from "@/lib/role-view";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
+import { weekdayLabel } from "@/lib/training-plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
@@ -77,6 +78,8 @@ type TeamCard = {
   homeResourceId: string | null;
   /** "10:30", or null when the team has no standing kick-off. */
   homeKickoff: string | null;
+  /** 0 = Sunday … 6 = Saturday — the evening the team usually trains (20260913110000). */
+  trainingDay: number | null;
   /** A venue the club does not manage — no pitch booking is ever made. */
   centralVenue: string | null;
   /** `teams.playing_format` — the club's own answer, over the age group's. */
@@ -302,7 +305,7 @@ export default async function TeamsPage({
   // enough — the admin client is kept for the two admin-only reads below.
   let teamsQuery = supabase
     .from("teams")
-    .select("id,name,age_group,gender,active,home_resource_id,home_kickoff_time,central_venue_name,playing_format,league,division");
+    .select("id,name,age_group,gender,active,home_resource_id,home_kickoff_time,central_venue_name,playing_format,league,division,default_training_day");
   if (!canAdmin) teamsQuery = teamsQuery.in("id", staffTeamIds);
 
   const [teamsResult, seasonsResult] = await Promise.all([
@@ -495,6 +498,7 @@ export default async function TeamsPage({
         homePitch: team.home_resource_id ? pitchNames.get(team.home_resource_id) ?? null : null,
         homeResourceId: team.home_resource_id,
         homeKickoff: team.home_kickoff_time ? String(team.home_kickoff_time).slice(0, 5) : null,
+        trainingDay: team.default_training_day,
         centralVenue: team.central_venue_name,
         playingFormat: team.playing_format,
         league: team.league,
@@ -656,6 +660,7 @@ export default async function TeamsPage({
               // Its own column since 2026-09-04 ("Venue needs to be a column").
               { label: "Venue", filterKey: "venue", allLabel: "All venues" },
               { label: "Home pitch", sub: "and kick-off", filterKey: "pitch", allLabel: "All pitches" },
+              { label: "Trains", sub: "default day", filterKey: "trains", allLabel: "Any day" },
               { label: "Staff", filterKey: "staff" },
               { label: "Squad", filterKey: "squad" },
               { label: "Next out", filterKey: "next" },
@@ -736,6 +741,7 @@ export default async function TeamsPage({
                   : team.homePitch
                     ? splitVenue(team.homePitch).pitch
                     : "No home pitch",
+                trains: team.trainingDay === null ? "Not set" : weekdayLabel(team.trainingDay),
                 staff: team.lead ?? (team.others > 0 ? "No manager" : "No staff"),
                 squad: team.players === 0 ? "No players yet" : "Has players",
                 next: !team.nextOut
@@ -831,6 +837,13 @@ export default async function TeamsPage({
                     />
                   </td>
                   <td className="px-4 py-3 align-top">
+                    {team.trainingDay === null ? (
+                      <span className="text-muted-foreground">—</span>
+                    ) : (
+                      weekdayLabel(team.trainingDay)
+                    )}
+                  </td>
+                  <td className="px-4 py-3 align-top">
                     {team.lead !== null || team.others > 0 ? (
                       <>
                         {team.lead !== null ? (
@@ -915,6 +928,7 @@ export default async function TeamsPage({
                         : team.homePitch
                           ? `${team.homePitch}${team.homeKickoff ? ` · ${team.homeKickoff}` : ""}`
                           : "No home pitch"}
+                      {team.trainingDay !== null ? ` · trains ${weekdayLabel(team.trainingDay, true)}` : ""}
                     </span>
                     <span className="mt-1.5 block text-xs">
                       {team.lead !== null ? (

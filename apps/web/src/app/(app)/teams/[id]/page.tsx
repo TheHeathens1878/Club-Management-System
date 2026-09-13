@@ -42,6 +42,7 @@ import { ManageMatchesPanel } from "../../matches/manage-matches-panel";
 import { fixtureHref, lineupHref } from "./fixtures-shared";
 import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
+import { TrainingDayCard } from "./training-day-card";
 import { formatBookingDateShort } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
 import { fixtureDayLabel, fixtureWhenLabel, type AvailabilityStatus } from "@/lib/squad-cards";
@@ -1587,6 +1588,24 @@ export default async function TeamPage({
                 />
               </CardContent>
             </Card>
+
+            {/* Which evening the team trains (2026-09-13): what the training
+                planner offers first for that day. The club's to set, like the
+                home pitch; the bulk version is the ticks bar on the Teams table. */}
+            {committeeTools && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Training</CardTitle>
+                <p className="text-sm text-muted-foreground">
+                  The evening this team usually trains. The winter training planner offers a
+                  day&apos;s teams first, so a Tuesday team lands on a Tuesday slot.
+                </p>
+              </CardHeader>
+              <CardContent>
+                <TrainingDayCard teamId={team.id} trainingDay={team.default_training_day} />
+              </CardContent>
+            </Card>
+            )}
 
             {/* The whole season in one go: every future home fixture onto one
                 pitch at one kick-off — or, for a central-venue team, every

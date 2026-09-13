@@ -7,8 +7,9 @@ import { createClient } from "@/lib/supabase/server";
 import { dateSpanLabel, slotOrder, type SyncCounts } from "@/lib/training-plan";
 
 import { BlackoutsCard } from "./blackouts-card";
+import { DayPlanner } from "./day-planner";
 import { DetailsCard } from "./details-card";
-import { SlotsSection, type SlotRow, type TeamOption } from "./slots-section";
+import { SlotsSection, type SlotRow, type TeamOption, type VenueOption } from "./slots-section";
 import { SyncCard } from "./sync-card";
 
 export const metadata = { title: "Training block" };
@@ -42,7 +43,7 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
   const { id } = await params;
   const supabase = await createClient();
 
-  const [{ data: block }, { data: blackouts }, { data: slotRows }, { data: teamRows }, dryRun] =
+  const [{ data: block }, { data: blackouts }, { data: slotRows }, { data: teamRows }, { data: venueRows }, dryRun] =
     await Promise.all([
       supabase
         .from("training_blocks")
@@ -57,10 +58,19 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
       supabase
         .from("training_slots")
         .select(
-          "id,venue_name,venue_address,weekday,start_time,end_time,parts,notes,training_allocations(id,team_id,shares,teams(name,age_group))",
+          "id,venue_id,venue_name,venue_address,weekday,start_time,end_time,parts,notes,training_allocations(id,team_id,shares,teams(name,age_group))",
         )
         .eq("block_id", id),
-      supabase.from("teams").select("id,name,age_group").eq("active", true).order("name"),
+      supabase.from("teams").select("id,name,age_group,default_training_day").eq("active", true).order("name"),
+      // The venues a slot may be at: training venues first, then every
+      // match ground (picking one makes it a training venue too).
+      supabase
+        .from("venues")
+        .select("id,name,for_training")
+        .eq("active", true)
+        .order("for_training", { ascending: false })
+        .order("sort_order")
+        .order("name"),
       supabase.rpc("sync_training_block", { p_block_id: id, p_dry_run: true }),
     ]);
   if (!block) notFound();
@@ -70,6 +80,7 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
   const slots: SlotRow[] = slotOrder(
     (slotRows ?? []).map((row) => ({
       id: row.id,
+      venueId: row.venue_id,
       venueName: row.venue_name,
       venueAddress: row.venue_address,
       weekday: row.weekday,
@@ -88,7 +99,13 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
         .sort((a, b) => a.teamName.localeCompare(b.teamName)),
     })),
   );
-  const teams: TeamOption[] = (teamRows ?? []).map((t) => ({ id: t.id, name: t.name, ageGroup: t.age_group }));
+  const teams: TeamOption[] = (teamRows ?? []).map((t) => ({
+    id: t.id,
+    name: t.name,
+    ageGroup: t.age_group,
+    trainingDay: t.default_training_day,
+  }));
+  const venueOptions: VenueOption[] = (venueRows ?? []).map((v) => ({ id: v.id, name: v.name, forTraining: v.for_training }));
   const venues = Array.from(new Set(slots.map((s) => s.venueName)));
 
   return (
@@ -120,7 +137,9 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
           }))}
         />
 
-        <SlotsSection blockId={block.id} slots={slots} teams={teams} />
+        <DayPlanner blockId={block.id} slots={slots} teams={teams} />
+
+        <SlotsSection blockId={block.id} slots={slots} teams={teams} venues={venueOptions} />
 
         <DetailsCard
           block={{

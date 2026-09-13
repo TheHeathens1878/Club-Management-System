@@ -47,7 +47,14 @@ function refuse(error: PostgrestError, duplicate?: string): VenueActionState {
 }
 
 /** Name, address, notes and order — the fields both forms share. */
-function fieldsFrom(formData: FormData): { name: string; address: string | null; notes: string | null; sortOrder: number } | { error: string } {
+function fieldsFrom(formData: FormData): {
+  name: string;
+  address: string | null;
+  notes: string | null;
+  sortOrder: number;
+  forMatches: boolean;
+  forTraining: boolean;
+} | { error: string } {
   const name = text(formData, "name", 120);
   if (!name) return { error: "A venue needs a name — the ground as people call it." };
   const rawOrder = text(formData, "sort_order", 6);
@@ -55,11 +62,20 @@ function fieldsFrom(formData: FormData): { name: string; address: string | null;
   if (!Number.isInteger(sortOrder) || sortOrder < 0 || sortOrder > 9999) {
     return { error: "The order must be a whole number between 0 and 9999." };
   }
+  // What the ground is for (20260913110000). Unticked boxes send nothing, so
+  // absence is "no" — and a venue for nothing at all is not a venue.
+  const forMatches = formData.get("for_matches") === "on";
+  const forTraining = formData.get("for_training") === "on";
+  if (!forMatches && !forTraining) {
+    return { error: "Tick what the venue is used for — matches, training, or both." };
+  }
   return {
     name,
     address: text(formData, "address", 300) || null,
     notes: text(formData, "notes", 4000) || null,
     sortOrder,
+    forMatches,
+    forTraining,
   };
 }
 
@@ -78,6 +94,8 @@ export async function createVenue(
       address: fields.address,
       notes: fields.notes,
       sort_order: fields.sortOrder,
+      for_matches: fields.forMatches,
+      for_training: fields.forTraining,
     })
     .select("id")
     .single();
@@ -107,6 +125,8 @@ export async function updateVenue(
       address: fields.address,
       notes: fields.notes,
       sort_order: fields.sortOrder,
+      for_matches: fields.forMatches,
+      for_training: fields.forTraining,
     })
     .eq("id", id);
   if (error) return refuse(error, `The club already has a venue called ${fields.name}.`);
