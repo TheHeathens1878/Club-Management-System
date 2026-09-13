@@ -10,25 +10,17 @@ import { joinContactName } from "@/lib/person-name";
 import { sendEmail } from "@/lib/email";
 import { emailLayout, renderEmailTemplate } from "@/lib/template-engine";
 import { getEmailBrandColor, getSettings, getRecipientEmails } from "@/lib/settings";
-import { createCalendarEvent, deleteCalendarEvent } from "@/lib/calendar";
+import { deleteCalendarEvent } from "@/lib/calendar";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
+import { confirmRoomBooking, type ConfirmRoomBookingOpts } from "@/lib/room-confirm";
+import { depositRuleFrom, hireTermsSummary, sumHirePaid, type PaymentPurpose } from "@/lib/hire-terms";
 import {
-  bookingDepositPence,
-  depositRuleFrom,
-  hireTermsSummary,
-  paymentTermsText,
-  sumHirePaid,
-  type PaymentPurpose,
-} from "@/lib/hire-terms";
-import {
-  addDays,
   formatBookingDate,
   instantToLocal,
   instantsToLocalWindow,
   isValidDateString,
   isValidTimeString,
   legacyWindowToInstants,
-  londonToday,
 } from "@/lib/booking-time";
 import {
   bookingPeriod,
@@ -59,160 +51,11 @@ async function requireCommittee() {
 
 export async function confirmBooking(
   bookingId: string,
-  opts?: {
-    totalPence?: number | null;
-    depositPence?: number | null;
-    memberDiscountPence?: number | null;
-    /** The refundable security deposit held for the event; null = keep what the booking carries. */
-    securityDepositPence?: number | null;
-  },
+  opts?: ConfirmRoomBookingOpts,
 ): Promise<{ error?: string }> {
   const session = await requireStaff();
   const admin = createAdminClient();
-
-  const { data: booking, error: fetchErr } = await admin
-    .from("bookings")
-    .select(
-      "booker_name,booker_email,starts_at,ends_at,occasion,estimated_guests,total_pence,base_hire_pence,security_deposit_pence,payment_status,resources(name)",
-    )
-    .eq("id", bookingId)
-    .maybeSingle();
-
-  if (fetchErr || !booking) return { error: "Booking not found." };
-
-  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
-
-  const settings = await getSettings();
-  const depositWindow = Number(settings.deposit_window_days) || 7;
-  const balanceDays = Number(settings.balance_reminder_days) || 14;
-
-  // A blank price box keeps the price the booking already carries — a quote,
-  // or an earlier confirmation. Writing NULL over it meant the booking could
-  // never reach "paid" and no balance reminder would ever go.
-  const totalPence = opts?.totalPence ?? booking.total_pence ?? null;
-  // The deposit rule (Adam, 2026-09-13): half the room hire, capped at £100,
-  // non-refundable. The desk may type another figure for this booking.
-  const defaultDeposit = bookingDepositPence(
-    { base_hire_pence: booking.base_hire_pence, total_pence: totalPence },
-    depositRuleFrom(settings),
-  );
-  const depositPence = opts?.depositPence ?? defaultDeposit;
-  const securityDepositPence = Math.max(0, opts?.securityDepositPence ?? booking.security_deposit_pence ?? 0);
-
-  // Deposit due = today + window; balance due = booking date − reminder lead
-  // time. "Today" is the London date: the server runs in UTC, and between
-  // midnight and 1am BST the UTC date is still yesterday, which used to hand
-  // out a deadline a day early.
-  const depositDueStr = addDays(londonToday(), depositWindow);
-  const depositDue = new Date(`${depositDueStr}T12:00:00Z`);
-
-  const balanceDueStr = addDays(window.date, -balanceDays);
-
-  // Create calendar event before status update so we can store the event ID
-  const roomName = booking.resources?.name ?? "Function Room";
-  const calEventId = await createCalendarEvent({
-    date: window.date,
-    start_time: window.startTime,
-    end_time: window.endTime,
-    room_name: roomName,
-    booker_name: booking.booker_name,
-    occasion: booking.occasion,
-    estimated_guests: booking.estimated_guests,
-  }).catch(() => null);
-
-  const { error } = await admin
-    .from("bookings")
-    .update({
-      status: "confirmed",
-      total_pence: totalPence,
-      deposit_pence: depositPence,
-      security_deposit_pence: securityDepositPence,
-      // The club-family discount, once the desk has checked the claimed
-      // child against the members list (Adam, 2026-09-03: "the child and
-      // child's team was for member discount"). Informational beside the
-      // total the staff typed, which is already the discounted price.
-      ...(opts?.memberDiscountPence != null ? { member_discount_pence: opts.memberDiscountPence } : {}),
-      deposit_due_date: depositDueStr,
-      balance_due_date: balanceDueStr,
-      ...(calEventId ? { calendar_event_id: calEventId } : {}),
-    })
-    .eq("id", bookingId);
-
-  // Promoting an enquiry/quote to `confirmed` brings it under
-  // `bookings_no_overlap` for the first time, so this update can collide.
-  if (error) return { error: conflictOrMessage(error, "Failed to confirm booking.") };
-
-  await writeAudit({
-    actorId: session.userId,
-    actorEmail: session.email,
-    action: "confirm",
-    entity: "room_booking",
-    entityId: bookingId,
-    detail: { total_pence: totalPence, deposit_pence: depositPence, security_deposit_pence: securityDepositPence },
-  });
-
-  // Send confirmation email to booker
-  if (booking.booker_email && booking.booker_email !== "—") {
-    (async () => {
-      try {
-        const brandColor = await getEmailBrandColor().catch(() => "#1249bf");
-        const dateFormatted = formatBookingDate(window.date);
-        const depositDueFormatted = depositDue.toLocaleDateString("en-GB", {
-          day: "numeric", month: "long", year: "numeric",
-        });
-
-        // The terms as they apply to THIS booking: the deposit that secures
-        // the room (non-refundable, paid first), then the balance plus any
-        // refundable security deposit two weeks before. A re-confirmation
-        // after the deposit has been paid says so rather than asking again.
-        const { data: paidRows } = await admin
-          .from("payments")
-          .select("amount_pence,refunded_pence,purpose")
-          .eq("booking_id", bookingId);
-        const hirePaid = sumHirePaid(paidRows ?? []);
-        const balanceDueFormatted = new Date(`${balanceDueStr}T12:00:00Z`).toLocaleDateString("en-GB", {
-          day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
-        });
-        let paymentStatusText = paymentTermsText({
-          depositPence,
-          depositDueLabel: depositDueFormatted,
-          depositPaid: depositPence > 0 && hirePaid >= depositPence,
-          // What is left once the deposit is in: the total less the larger of
-          // what has been paid and the deposit itself.
-          balancePence: Math.max(0, (totalPence ?? 0) - Math.max(hirePaid, depositPence)),
-          balanceDueLabel: balanceDueFormatted,
-          securityDepositPence,
-        });
-        if (!paymentStatusText) {
-          paymentStatusText = totalPence
-            ? `The total cost is ${formatCurrency(totalPence)}. Please pay via your booking portal.`
-            : "No payment is required at this stage.";
-        }
-
-        const tpl = await renderEmailTemplate("room_booking_confirmed", {
-          name: booking.booker_name,
-          room_name: roomName,
-          booking_date: dateFormatted,
-          start_time: window.startTime,
-          end_time: window.endTime,
-          occasion: booking.occasion ?? "Private hire",
-          payment_status: paymentStatusText,
-          total_cost: totalPence ? formatCurrency(totalPence) : "—",
-          deposit_amount: depositPence > 0 ? formatCurrency(depositPence) : "—",
-          deposit_due_date: depositPence > 0 ? depositDueFormatted : "—",
-          balance_due_date: balanceDueFormatted,
-          security_deposit: securityDepositPence > 0 ? formatCurrency(securityDepositPence) : "—",
-          portal_url: `${getSiteUrl()}/portal`,
-        }, brandColor);
-
-        await sendEmail({ to: booking.booker_email, ...tpl });
-      } catch (e) {
-        console.error("[room-booking] Confirmation email failed:", e);
-      }
-    })();
-  }
-
-  return {};
+  return confirmRoomBooking(admin, bookingId, opts ?? {}, { id: session.userId, email: session.email ?? "staff" });
 }
 
 export async function cancelBooking(

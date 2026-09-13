@@ -904,6 +904,8 @@ export type Database = {
           payment_status: Database["public"]["Enums"]["payment_status"]
           post_buffer_minutes: number
           pre_buffer_minutes: number
+          /** When the booker accepted the quote in their portal (20260913190000). */
+          quote_accepted_at: string | null
           quote_followup_sent_at: string | null
           recurrence_group_id: string | null
           resource_id: string
@@ -975,6 +977,7 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status"]
           post_buffer_minutes?: number
           pre_buffer_minutes?: number
+          quote_accepted_at?: string | null
           quote_followup_sent_at?: string | null
           recurrence_group_id?: string | null
           resource_id: string
@@ -1046,6 +1049,7 @@ export type Database = {
           payment_status?: Database["public"]["Enums"]["payment_status"]
           post_buffer_minutes?: number
           pre_buffer_minutes?: number
+          quote_accepted_at?: string | null
           quote_followup_sent_at?: string | null
           recurrence_group_id?: string | null
           resource_id?: string

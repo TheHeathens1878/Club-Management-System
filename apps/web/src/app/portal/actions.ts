@@ -8,6 +8,10 @@ import { createSumUpCheckout, recordSumUpPaymentIfPaid } from "@/lib/sumup";
 import { instantToLocal } from "@/lib/booking-time";
 import { requestOrigin } from "@/lib/request-origin";
 import { sumHirePaid, sumSecurityPaid, type PaymentPurpose } from "@/lib/hire-terms";
+import { confirmRoomBooking } from "@/lib/room-confirm";
+import { notifyRoomDesk } from "@/lib/room-desk-notify";
+import { formatBookingDate } from "@/lib/booking-time";
+import { formatCurrency } from "@/lib/utils";
 
 // Verify the booking belongs to the signed-in booker; returns the booking row.
 async function ownedBooking(bookingId: string) {
@@ -111,6 +115,52 @@ export async function createCheckoutForBooking(
     console.error("[portal] SumUp checkout creation failed:", e);
     return { error: "Could not start payment. Please try again." };
   }
+}
+
+/**
+ * The booker accepts the quote (2026-09-13: Leanne Minto signed in five times
+ * to "confirm the booking" and the portal gave her nothing to press). The
+ * booking is confirmed exactly as if the desk had pressed Confirm — the quoted
+ * total, the deposit by the club's rule, the deadlines, the calendar event,
+ * the confirmation email with the terms — with the booker as the actor and
+ * the moment kept on the row. The desk hears the bell.
+ */
+export async function acceptQuote(bookingId: string, termsAccepted: boolean): Promise<{ error?: string }> {
+  const owned = await ownedBooking(bookingId);
+  if ("error" in owned) return { error: owned.error };
+  if (owned.booking.kind !== "hire") return { error: "Booking not found." };
+  if (owned.booking.status !== "quoted") {
+    return { error: "This booking is not waiting on a quote — reload the page to see where it is." };
+  }
+  if (!owned.booking.total_pence || owned.booking.total_pence <= 0) {
+    return { error: "The quote has no price on it yet. Please contact the club." };
+  }
+  if (!termsAccepted) return { error: "Please tick to accept the booking terms first." };
+
+  const { data: current } = await owned.admin
+    .from("bookings")
+    .select("booker_email,starts_at,resources(name)")
+    .eq("id", bookingId)
+    .maybeSingle();
+  const result = await confirmRoomBooking(
+    owned.admin,
+    bookingId,
+    {},
+    { id: owned.session.userId, email: current?.booker_email ?? owned.session.email ?? "booker", byBooker: true },
+  );
+  if (result.error) return result;
+
+  if (current) {
+    await notifyRoomDesk(owned.admin, {
+      subject: `Quote accepted — ${current.resources?.name ?? "Function room"}, ${formatBookingDate(instantToLocal(current.starts_at).date)}`,
+      body: `${current.booker_email} accepted the ${formatCurrency(owned.booking.total_pence)} quote in their portal. The booking is confirmed subject to the deposit; the confirmation and the terms have gone to them.`,
+      bookingId,
+    });
+  }
+  revalidatePath("/portal");
+  revalidatePath("/room-bookings");
+  revalidatePath(`/room-bookings/${bookingId}`);
+  return {};
 }
 
 // Called by the widget after a successful response. Verifies with SumUp and
