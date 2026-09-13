@@ -62,7 +62,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
     // for winter training is both.
     supabase
       .from("venue_bookings")
-      .select("id,season_id,starts_on,ends_on,reference,notes,seasons(name,is_current,starts_on),venue_booking_slots(id,weekday,start_time,end_time,pitch_id,parts,shares,resources(name))")
+      .select("id,season_id,starts_on,ends_on,reference,notes,seasons(name,is_current,starts_on),venue_booking_slots(id,weekday,start_time,end_time,pitch_id,parts,shares,price_pence,resources(name))")
       .eq("venue_id", id)
       .order("starts_on", { ascending: false }),
     supabase.from("seasons").select("id,name,is_current").order("starts_on", { ascending: false }),
@@ -104,6 +104,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
         pitchName: slot.resources?.name ?? null,
         parts: slot.parts,
         shares: slot.shares,
+        pricePence: slot.price_pence,
       })),
     }))
     .sort(

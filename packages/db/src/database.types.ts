@@ -5649,6 +5649,8 @@ export type Database = {
           parts: number
           /** Which of the venue's pitches (a resources row); null = the only one (20260913160000). */
           pitch_id: string | null
+          /** What one session costs the club, in pence; null = not priced (20260913170000). */
+          price_pence: number | null
           /** How many of parts the club has booked (20260913160000). */
           shares: number
           start_time: string
@@ -5661,6 +5663,7 @@ export type Database = {
           id?: string
           parts?: number
           pitch_id?: string | null
+          price_pence?: number | null
           shares?: number
           start_time: string
           weekday: number
@@ -5672,6 +5675,7 @@ export type Database = {
           id?: string
           parts?: number
           pitch_id?: string | null
+          price_pence?: number | null
           shares?: number
           start_time?: string
           weekday?: number
