@@ -63,6 +63,7 @@ export default async function FinanceDashboardPage() {
     { href: "/finance/charges", title: "Charges & enrolments", text: "Enrol households (monthly or up front), raise one-offs, waive, collect stored cards." },
     { href: "/finance/payments", title: "Payments ledger", text: "Everything collected — SumUp, cash, bank transfer — with refunds." },
     { href: "/finance/reports", title: "Reports", text: "Arrears aging, income by month and plan, SumUp reconciliation." },
+    { href: "/finance/venue-hire", title: "Venue hire", text: "What the club pays for its training venues, by season, venue and slot." },
     { href: "/finance/export", title: "Xero export", text: "Sales invoices and bank statement CSVs, ready for Xero's importer." },
     { href: "/finance/settings", title: "Settings", text: "Xero account codes, tax type, cards on file." },
   ];

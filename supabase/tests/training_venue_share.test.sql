@@ -16,7 +16,7 @@
 
 begin;
 
-select plan(25);
+select plan(27);
 
 insert into public.teams (id, name, age_group) values
   ('7b7b7b7b-0913-4111-8111-000000000001', 'TS Alpha', 'U10'),
@@ -146,6 +146,15 @@ select throws_ok($$
   insert into public.venue_booking_slots (booking_id, pitch_id, weekday, start_time, end_time, parts, shares) values
     ('b0b0b0b0-0913-4111-8111-000000000001', '9c9c0000-0913-4111-8111-000000000001', 1, '19:00', '20:00', 2, 3)
 $$, '23514', null, 'the club cannot have three halves of a booked slot');
+-- A slot carries what one session costs (20260913170000).
+select lives_ok($$
+  update public.venue_booking_slots set price_pence = 4500
+   where booking_id = 'b0b0b0b0-0913-4111-8111-000000000001' and pitch_id = '9c9c0000-0913-4111-8111-000000000001'
+$$, 'a booked slot is priced per session');
+select throws_ok($$
+  update public.venue_booking_slots set price_pence = -1
+   where booking_id = 'b0b0b0b0-0913-4111-8111-000000000001' and pitch_id = '9c9c0000-0913-4111-8111-000000000001'
+$$, '23514', null, 'a price below nothing is refused');
 select is((select count(*)::int from public.venue_bookings where venue_id = 'e4e4e4e4-0913-4111-8111-000000000002'),
   1, 'a booking is noted against the venue for the season');
 select throws_ok($$

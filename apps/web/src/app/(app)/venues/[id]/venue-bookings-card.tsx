@@ -18,6 +18,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, Textarea } from "@/components/ui/field";
 import { Input, Label } from "@/components/ui/input";
 import { SHARE_OPTIONS, WEEKDAYS, shareWord, timeRange, weekdayLabel } from "@/lib/training-plan";
+import { formatCurrency } from "@/lib/utils";
+import { bookingCost, slotCost } from "@/lib/venue-hire";
 
 import {
   addVenueBooking,
@@ -37,6 +39,8 @@ export type VenueBookingSlotRow = {
   pitchName: string | null;
   parts: number;
   shares: number;
+  /** Per session, in pence; null = not priced yet. */
+  pricePence: number | null;
 };
 
 export type PitchChoice = { id: string; name: string };
@@ -106,11 +110,11 @@ function PitchSelect({ id, pitches, value, onChange, defaultValue }: {
 // The slot rows of the add form — day, from, until; add and take away
 // ---------------------------------------------------------------------------
 
-type DraftSlot = { key: number; pitch: string; weekday: string; start: string; end: string; share: string };
+type DraftSlot = { key: number; pitch: string; weekday: string; start: string; end: string; share: string; price: string };
 
 function SlotRowsEditor({ prefix, pitches }: { prefix: string; pitches: PitchChoice[] }) {
   const [rows, setRows] = useState<DraftSlot[]>([
-    { key: 1, pitch: pitches[0]?.id ?? "", weekday: "2", start: "19:00", end: "20:00", share: "1:1" },
+    { key: 1, pitch: pitches[0]?.id ?? "", weekday: "2", start: "19:00", end: "20:00", share: "1:1", price: "" },
   ]);
   const [nextKey, setNextKey] = useState(2);
 
@@ -122,13 +126,14 @@ function SlotRowsEditor({ prefix, pitches }: { prefix: string; pitches: PitchCho
     <fieldset className="space-y-2">
       <legend className="text-sm font-medium leading-none text-foreground">Slots booked</legend>
       <p className="text-xs text-muted-foreground">
-        One row per weekly slot: which pitch, the day, the hours and how much of the pitch is ours —
-        Pitch 1 Mondays 18:00 to 19:00, half a pitch; Pitch 2 the same hour, the full pitch.
+        One row per weekly slot: which pitch, the day, the hours, how much of the pitch is ours and
+        what one session costs — Pitch 1 Mondays 18:00 to 19:00, half a pitch, £45. The Finance
+        report adds the sessions up.
         {pitches.length === 0 ? " Add the venue's pitches above to name them here." : ""}
       </p>
       <div className="space-y-2">
         {rows.map((row, index) => (
-          <div key={row.key} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_minmax(0,1fr)_auto]">
+          <div key={row.key} className="grid grid-cols-2 items-end gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto_minmax(0,1fr)_6rem_auto]">
             <div className="space-y-1">
               {index === 0 ? <Label htmlFor={`${prefix}-pitch-${row.key}`} className="text-xs">Pitch</Label> : null}
               <PitchSelect
@@ -190,6 +195,20 @@ function SlotRowsEditor({ prefix, pitches }: { prefix: string; pitches: PitchCho
                 ))}
               </Select>
             </div>
+            <div className="space-y-1">
+              {index === 0 ? <Label htmlFor={`${prefix}-price-${row.key}`} className="text-xs">£ a session</Label> : null}
+              <Input
+                id={`${prefix}-price-${row.key}`}
+                name="slot_price"
+                type="number"
+                min={0}
+                step="0.01"
+                inputMode="decimal"
+                value={row.price}
+                onChange={(event) => update(row.key, { price: event.target.value })}
+                placeholder="45.00"
+              />
+            </div>
             <Button
               type="button"
               variant="ghost"
@@ -219,6 +238,7 @@ function SlotRowsEditor({ prefix, pitches }: { prefix: string; pitches: PitchCho
               start: last?.end ?? "19:00",
               end: last?.end ?? "20:00",
               share: last?.share ?? "1:1",
+              price: last?.price ?? "",
             },
           ]);
           setNextKey((k) => k + 1);
@@ -303,6 +323,10 @@ function AddSlot({
           ))}
         </Select>
       </div>
+      <div className="w-24 space-y-1">
+        <Label htmlFor={`${prefix}-price`} className="text-xs">£ a session</Label>
+        <Input id={`${prefix}-price`} name="slot_price" type="number" min={0} step="0.01" inputMode="decimal" placeholder="45.00" />
+      </div>
       <SubmitButton size="sm" variant="outline" className="min-h-[44px] lg:min-h-0" pendingLabel="Adding…">
         Add
       </SubmitButton>
@@ -343,6 +367,16 @@ function BookingSlots({
               }
             >
               {shareWord(slot.parts, slot.shares)}
+            </span>
+            <span
+              className={"font-normal " + (slot.pricePence === null ? "text-amber-700" : "text-muted-foreground")}
+              title={
+                slot.pricePence === null
+                  ? "No price yet"
+                  : `${slotCost(booking, slot).sessions} sessions · ${formatCurrency(slotCost(booking, slot).costPence ?? 0)}`
+              }
+            >
+              {slot.pricePence === null ? "unpriced" : formatCurrency(slot.pricePence)}
             </span>
             <RemoveSlot venueId={venueId} slot={slot} />
           </li>
@@ -513,7 +547,17 @@ export function VenueBookingsCard({
                 {group.rows.map((booking) => (
                   <li key={booking.id} className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
                     <div className="min-w-0 flex-1 space-y-1.5">
-                      <p className="text-sm font-medium">{bookingSpanLabel(booking.startsOn, booking.endsOn)}</p>
+                      <p className="text-sm font-medium">
+                        {bookingSpanLabel(booking.startsOn, booking.endsOn)}
+                        {booking.slots.length > 0 ? (
+                          <span className="font-normal text-muted-foreground">
+                            {" "}· {bookingCost(booking).sessions} sessions · {formatCurrency(bookingCost(booking).costPence)}
+                            {bookingCost(booking).unpricedSlots > 0
+                              ? ` (${bookingCost(booking).unpricedSlots} ${bookingCost(booking).unpricedSlots === 1 ? "slot" : "slots"} unpriced)`
+                              : ""}
+                          </span>
+                        ) : null}
+                      </p>
                       <BookingSlots venueId={venueId} booking={booking} pitches={pitches} />
                       {booking.reference ? <p className="text-xs text-muted-foreground">Ref {booking.reference}</p> : null}
                       {booking.notes ? <p className="whitespace-pre-line text-xs text-muted-foreground">{booking.notes}</p> : null}

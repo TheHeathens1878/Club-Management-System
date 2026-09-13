@@ -46,6 +46,7 @@ type SlotInput = {
   pitch_id: string | null;
   parts: number;
   shares: number;
+  price_pence: number | null;
 };
 
 /**
@@ -60,6 +61,7 @@ function readSlots(formData: FormData): { error: string } | { slots: SlotInput[]
   const ends = formData.getAll("slot_end").map((v) => String(v).trim());
   const pitches = formData.getAll("slot_pitch").map((v) => String(v).trim());
   const sharesKeys = formData.getAll("slot_share").map((v) => String(v).trim());
+  const prices = formData.getAll("slot_price").map((v) => String(v).trim());
   const slots: SlotInput[] = [];
   for (let i = 0; i < Math.max(days.length, starts.length, ends.length); i += 1) {
     const day = days[i] ?? "";
@@ -74,6 +76,12 @@ function readSlots(formData: FormData): { error: string } | { slots: SlotInput[]
     if (endTime <= startTime) return { error: "A slot must end after it starts." };
     const share = parseShareKey(sharesKeys[i] ?? "1:1");
     const pitchRaw = pitches[i] ?? "";
+    // The price per session, typed in pounds; blank = not priced yet.
+    const priceRaw = prices[i] ?? "";
+    const pricePounds = priceRaw === "" ? null : Number(priceRaw);
+    if (pricePounds !== null && (!Number.isFinite(pricePounds) || pricePounds < 0 || pricePounds > 100000)) {
+      return { error: "The price per session must be a figure in pounds." };
+    }
     slots.push({
       weekday,
       start_time: startTime,
@@ -81,6 +89,7 @@ function readSlots(formData: FormData): { error: string } | { slots: SlotInput[]
       pitch_id: UUID_RE.test(pitchRaw) ? pitchRaw : null,
       parts: share.parts,
       shares: share.shares,
+      price_pence: pricePounds === null ? null : Math.round(pricePounds * 100),
     });
   }
   if (slots.length > 20) return { error: "That is more than twenty slots — split the booking." };
