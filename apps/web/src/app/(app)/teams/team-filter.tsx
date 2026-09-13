@@ -31,6 +31,7 @@ import { Select } from "@/components/ui/field";
 import { Card, CardContent } from "@/components/ui/card";
 
 import { BulkHomeVenueBar, type BulkPitch } from "./bulk-home-venue-bar";
+import { BulkTrainingDayBar } from "./bulk-training-day-bar";
 import { ClubsPortalExportBar } from "./clubs-portal-export-bar";
 
 export type TeamFilterColumn = {
@@ -277,6 +278,9 @@ export function TeamFilterGrid({
           pitches={pitches}
           onDone={() => setSelected(new Set())}
         />
+      )}
+      {canTick && selected.size > 0 && (
+        <BulkTrainingDayBar teamIds={[...selected]} onDone={() => setSelected(new Set())} />
       )}
       {canTick && canExportPortal && selected.size > 0 && (
         <ClubsPortalExportBar teamIds={[...selected]} />

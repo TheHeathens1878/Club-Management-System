@@ -10,10 +10,16 @@
  * ⅓"). "Add team" sits on the row and offers only the parts still free; the
  * database's own guard has the last word if two administrators race for the
  * same third. Editing a slot opens its fields in place.
+ *
+ * A slot is AT a venue (2026-09-13): the picker lists the club's training
+ * venues first and the match grounds after — pick a match ground and it
+ * becomes a training venue too. "Clone" copies a slot, teams and all, to
+ * another day or hour (Adam: "clone a training slot — to a different hour /
+ * time and also to another day").
  */
 
 import { useActionState, useState } from "react";
-import { LandPlot, Pencil, Plus, X } from "lucide-react";
+import { Copy, LandPlot, Pencil, Plus, X } from "lucide-react";
 
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +38,7 @@ import {
   weekdayLabel,
 } from "@/lib/training-plan";
 
-import { addAllocation, addSlot, removeAllocation, removeSlot, updateSlot } from "../actions";
+import { addAllocation, addSlot, cloneSlot, removeAllocation, removeSlot, updateSlot } from "../actions";
 import { EMPTY_PLAN_STATE, PlanFeedback } from "../plan-feedback";
 
 export type AllocationRow = {
@@ -45,6 +51,7 @@ export type AllocationRow = {
 
 export type SlotRow = {
   id: string;
+  venueId: string | null;
   venueName: string;
   venueAddress: string | null;
   weekday: number;
@@ -55,7 +62,9 @@ export type SlotRow = {
   allocations: AllocationRow[];
 };
 
-export type TeamOption = { id: string; name: string; ageGroup: string | null };
+export type TeamOption = { id: string; name: string; ageGroup: string | null; trainingDay: number | null };
+
+export type VenueOption = { id: string; name: string; forTraining: boolean };
 
 // ---------------------------------------------------------------------------
 // The slot's fields — shared by "add" and "edit"
@@ -65,39 +74,53 @@ function SlotFields({
   prefix,
   slot,
   venues,
-  defaultVenue,
+  defaultVenueId,
 }: {
   prefix: string;
   slot?: SlotRow;
-  venues: string[];
-  defaultVenue?: string;
+  venues: VenueOption[];
+  defaultVenueId?: string;
 }) {
+  const training = venues.filter((venue) => venue.forTraining);
+  const grounds = venues.filter((venue) => !venue.forTraining);
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
       <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
         <Label htmlFor={`${prefix}-venue`}>Venue</Label>
-        <Input
-          id={`${prefix}-venue`}
-          name="venue_name"
-          list={`${prefix}-venues`}
-          defaultValue={slot?.venueName ?? defaultVenue ?? ""}
-          placeholder="Sale Grammar 3G"
-          maxLength={120}
-          required
-        />
-        <datalist id={`${prefix}-venues`}>
-          {venues.map((venue) => (
-            <option key={venue} value={venue} />
-          ))}
-        </datalist>
+        <Select id={`${prefix}-venue`} name="venue_id" defaultValue={slot?.venueId ?? defaultVenueId ?? ""} required>
+          <option value="" disabled>
+            Choose a venue…
+          </option>
+          {training.length > 0 ? (
+            <optgroup label="Training venues">
+              {training.map((venue) => (
+                <option key={venue.id} value={venue.id}>
+                  {venue.name}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+          {grounds.length > 0 ? (
+            <optgroup label="Match grounds">
+              {grounds.map((venue) => (
+                <option key={venue.id} value={venue.id}>
+                  {venue.name}
+                </option>
+              ))}
+            </optgroup>
+          ) : null}
+        </Select>
+        <p className="text-xs text-muted-foreground">
+          Not listed? Add it under Venues. A match ground picked here becomes a training venue too.
+        </p>
       </div>
       <div className="space-y-1.5 sm:col-span-2 lg:col-span-3">
-        <Label htmlFor={`${prefix}-address`}>Address (optional)</Label>
+        <Label htmlFor={`${prefix}-address`}>Address for this slot (optional)</Label>
         <Input
           id={`${prefix}-address`}
           name="venue_address"
           defaultValue={slot?.venueAddress ?? ""}
-          placeholder="For the maps link on each session"
+          placeholder="Only if it differs from the venue's — a side gate for the evening"
           maxLength={300}
         />
       </div>
@@ -130,6 +153,58 @@ function SlotFields({
         </Select>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Clone a slot to another day or hour
+// ---------------------------------------------------------------------------
+
+function CloneForm({ blockId, slot, onDone }: { blockId: string; slot: SlotRow; onDone: () => void }) {
+  const [state, action] = useActionState(cloneSlot, EMPTY_PLAN_STATE);
+  const prefix = `clone-${slot.id}`;
+  return (
+    <form action={action} className="space-y-3 rounded-xl border bg-secondary/40 p-4">
+      <PlanFeedback state={state} />
+      <input type="hidden" name="block_id" value={blockId} />
+      <input type="hidden" name="slot_id" value={slot.id} />
+      <p className="text-sm">
+        Copy <span className="font-medium">{slot.venueName}</span>, {partsLabel(slot.parts).toLowerCase()}
+        {slot.allocations.length > 0 ? ` and its ${slot.allocations.length} ${slot.allocations.length === 1 ? "team" : "teams"}` : ""}, to:
+      </p>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-weekday`}>Day</Label>
+          <Select id={`${prefix}-weekday`} name="weekday" defaultValue={String(slot.weekday)} required>
+            {WEEKDAYS.map((day) => (
+              <option key={day.value} value={day.value}>
+                {day.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-start`}>From</Label>
+          <Input id={`${prefix}-start`} type="time" name="start_time" defaultValue={slot.endTime.slice(0, 5)} required />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor={`${prefix}-end`}>Until</Label>
+          <Input id={`${prefix}-end`} type="time" name="end_time" defaultValue={slot.endTime.slice(0, 5)} required />
+        </div>
+      </div>
+      <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+        <input type="checkbox" name="copy_teams" defaultChecked className="h-4 w-4 rounded border-input" />
+        Copy the teams and their shares too
+      </label>
+      <div className="flex flex-wrap gap-2">
+        <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0" pendingLabel="Cloning…">
+          <Copy className="h-4 w-4" aria-hidden /> Clone the slot
+        </SubmitButton>
+        <Button type="button" variant="ghost" size="sm" onClick={onDone} className="min-h-[44px] lg:min-h-0">
+          Cancel
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -192,6 +267,7 @@ function AddTeam({ blockId, slot, teams }: { blockId: string; slot: SlotRow; tea
             <option key={team.id} value={team.id}>
               {team.name}
               {team.ageGroup && !team.name.includes(team.ageGroup) ? ` (${team.ageGroup})` : ""}
+              {team.trainingDay === slot.weekday ? " · trains this day" : ""}
             </option>
           ))}
         </Select>
@@ -233,9 +309,9 @@ function SlotCard({
   blockId: string;
   slot: SlotRow;
   teams: TeamOption[];
-  venues: string[];
+  venues: VenueOption[];
 }) {
-  const [editing, setEditing] = useState(false);
+  const [mode, setMode] = useState<"view" | "edit" | "clone">("view");
   const [editState, editAction] = useActionState(updateSlot, EMPTY_PLAN_STATE);
   const [removeState, removeAction, removing] = useActionState(removeSlot, EMPTY_PLAN_STATE);
   const free = partsFree(slot.parts, slot.allocations);
@@ -261,7 +337,18 @@ function SlotCard({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setEditing((v) => !v)}
+            onClick={() => setMode((m) => (m === "clone" ? "view" : "clone"))}
+            aria-label="Clone this slot to another day or hour"
+            title="Clone to another day or hour"
+            className="min-h-[44px] lg:min-h-0"
+          >
+            <Copy className="h-4 w-4" aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setMode((m) => (m === "edit" ? "view" : "edit"))}
             aria-label="Edit this slot"
             className="min-h-[44px] lg:min-h-0"
           >
@@ -290,7 +377,7 @@ function SlotCard({
       </div>
       {removeState.error ? <p className="text-xs text-destructive">{removeState.error}</p> : null}
 
-      {editing ? (
+      {mode === "edit" ? (
         <form action={editAction} className="space-y-3 rounded-xl border bg-secondary/40 p-4">
           <PlanFeedback state={editState} />
           <input type="hidden" name="block_id" value={blockId} />
@@ -300,12 +387,14 @@ function SlotCard({
             <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0">
               Save slot
             </SubmitButton>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(false)} className="min-h-[44px] lg:min-h-0">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setMode("view")} className="min-h-[44px] lg:min-h-0">
               Done
             </Button>
           </div>
         </form>
       ) : null}
+
+      {mode === "clone" ? <CloneForm blockId={blockId} slot={slot} onDone={() => setMode("view")} /> : null}
 
       {slot.allocations.length > 0 ? (
         <div className="flex flex-wrap gap-2">
@@ -324,15 +413,26 @@ function SlotCard({
 // The section: venues, each with its slots, and "Add a slot"
 // ---------------------------------------------------------------------------
 
-export function SlotsSection({ blockId, slots, teams }: { blockId: string; slots: SlotRow[]; teams: TeamOption[] }) {
+export function SlotsSection({
+  blockId,
+  slots,
+  teams,
+  venues,
+}: {
+  blockId: string;
+  slots: SlotRow[];
+  teams: TeamOption[];
+  venues: VenueOption[];
+}) {
   const [adding, setAdding] = useState(slots.length === 0);
   const [state, action] = useActionState(addSlot, EMPTY_PLAN_STATE);
-  const venues = Array.from(new Set(slots.map((s) => s.venueName)));
-  const byVenue = venues.map((venue) => ({
+  const venueNames = Array.from(new Set(slots.map((s) => s.venueName)));
+  const byVenue = venueNames.map((venue) => ({
     venue,
     address: slots.find((s) => s.venueName === venue)?.venueAddress ?? null,
     slots: slots.filter((s) => s.venueName === venue),
   }));
+  const lastVenueId = slots.length > 0 ? slots[slots.length - 1]?.venueId ?? undefined : undefined;
 
   return (
     <section className="space-y-3">
@@ -351,10 +451,10 @@ export function SlotsSection({ blockId, slots, teams }: { blockId: string; slots
             <form action={action} className="space-y-3">
               <PlanFeedback state={state} />
               <input type="hidden" name="block_id" value={blockId} />
-              <SlotFields prefix="new-slot" venues={venues} defaultVenue={venues[venues.length - 1]} />
+              <SlotFields prefix="new-slot" venues={venues} defaultVenueId={lastVenueId} />
               <p className="text-xs text-muted-foreground">
                 A slot is one weekly space: the venue, the day, the hour, and how many ways the pitch is
-                divided. Teams are added to it once it exists.
+                divided. Teams are added to it once it exists, or dragged onto it in the day planner above.
               </p>
               <div className="flex flex-wrap gap-2">
                 <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0" pendingLabel="Adding…">

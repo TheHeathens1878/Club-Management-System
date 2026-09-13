@@ -5184,6 +5184,8 @@ export type Database = {
           created_at: string
           default_post_buffer_minutes: number | null
           default_pre_buffer_minutes: number | null
+          /** 0 = Sunday … 6 = Saturday; the evening the team usually trains (20260913110000). */
+          default_training_day: number | null
           division: string | null
           gender: string | null
           half_length_minutes: number | null
@@ -5215,6 +5217,7 @@ export type Database = {
           created_at?: string
           default_post_buffer_minutes?: number | null
           default_pre_buffer_minutes?: number | null
+          default_training_day?: number | null
           division?: string | null
           gender?: string | null
           half_length_minutes?: number | null
@@ -5246,6 +5249,7 @@ export type Database = {
           created_at?: string
           default_post_buffer_minutes?: number | null
           default_pre_buffer_minutes?: number | null
+          default_training_day?: number | null
           division?: string | null
           gender?: string | null
           half_length_minutes?: number | null
@@ -5523,6 +5527,8 @@ export type Database = {
           start_time: string
           updated_at: string
           venue_address: string | null
+          /** The venue the slot is at (20260913110000); the text columns follow it by trigger. */
+          venue_id: string | null
           venue_name: string
           weekday: number
         }
@@ -5536,7 +5542,8 @@ export type Database = {
           start_time: string
           updated_at?: string
           venue_address?: string | null
-          venue_name: string
+          venue_id?: string | null
+          venue_name?: string
           weekday: number
         }
         Update: {
@@ -5549,6 +5556,7 @@ export type Database = {
           start_time?: string
           updated_at?: string
           venue_address?: string | null
+          venue_id?: string | null
           venue_name?: string
           weekday?: number
         }
@@ -5560,6 +5568,13 @@ export type Database = {
             referencedRelation: "training_blocks"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "training_slots_venue_id_fkey"
+            columns: ["venue_id"]
+            isOneToOne: false
+            referencedRelation: "venues"
+            referencedColumns: ["id"]
+          },
         ]
       }
       venues: {
@@ -5567,6 +5582,10 @@ export type Database = {
           active: boolean
           address: string | null
           created_at: string
+          /** The club plays matches here (20260913110000). */
+          for_matches: boolean
+          /** The club trains here — a hired 3G or school pitch (20260913110000). */
+          for_training: boolean
           id: string
           name: string
           notes: string | null
@@ -5577,6 +5596,8 @@ export type Database = {
           active?: boolean
           address?: string | null
           created_at?: string
+          for_matches?: boolean
+          for_training?: boolean
           id?: string
           name: string
           notes?: string | null
@@ -5587,6 +5608,8 @@ export type Database = {
           active?: boolean
           address?: string | null
           created_at?: string
+          for_matches?: boolean
+          for_training?: boolean
           id?: string
           name?: string
           notes?: string | null
@@ -6448,6 +6471,16 @@ export type Database = {
           team_id: string
           team_name: string
         }[]
+      }
+      clone_training_slot: {
+        Args: {
+          p_copy_teams?: boolean
+          p_end_time: string
+          p_slot_id: string
+          p_start_time: string
+          p_weekday: number
+        }
+        Returns: string
       }
       club_lobby_posts: {
         Args: { p_limit?: number }

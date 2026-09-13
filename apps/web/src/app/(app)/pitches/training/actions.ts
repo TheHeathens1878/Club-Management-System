@@ -192,7 +192,7 @@ export async function removeBlackout(_prev: PlanActionState, formData: FormData)
 // ---------------------------------------------------------------------------
 
 function readSlot(formData: FormData): { error: string } | {
-  venueName: string;
+  venueId: string;
   venueAddress: string | null;
   weekday: number;
   startTime: string;
@@ -200,7 +200,7 @@ function readSlot(formData: FormData): { error: string } | {
   parts: number;
   notes: string | null;
 } {
-  const venueName = text(formData, "venue_name", 120);
+  const venueId = uuid(formData, "venue_id");
   const venueAddress = text(formData, "venue_address", 300);
   const weekday = integer(formData, "weekday", 0, 6);
   const startRaw = text(formData, "start_time", 8);
@@ -208,7 +208,7 @@ function readSlot(formData: FormData): { error: string } | {
   const parts = integer(formData, "parts", 1, 6);
   const notes = text(formData, "notes", 500);
 
-  if (!venueName) return { error: "Name the venue — “Sale Grammar 3G”." };
+  if (!venueId) return { error: "Choose the venue — add it under Venues first if it is not listed." };
   if (weekday === null) return { error: "Choose the day of the week." };
   if (!isValidTimeString(startRaw) || !isValidTimeString(endRaw)) return { error: "Choose a start and an end time." };
   const startTime = normaliseTime(startRaw);
@@ -216,7 +216,7 @@ function readSlot(formData: FormData): { error: string } | {
   if (endTime <= startTime) return { error: "The slot must end after it starts." };
   if (parts === null) return { error: "Say how the pitch is divided." };
 
-  return { venueName, venueAddress: venueAddress || null, weekday, startTime, endTime, parts, notes: notes || null };
+  return { venueId, venueAddress: venueAddress || null, weekday, startTime, endTime, parts, notes: notes || null };
 }
 
 export async function addSlot(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {
@@ -226,9 +226,10 @@ export async function addSlot(_prev: PlanActionState, formData: FormData): Promi
   if ("error" in slot) return slot;
 
   const supabase = await createClient();
+  // venue_name is filled from the venue by trigger (20260913110000).
   const { error } = await supabase.from("training_slots").insert({
     block_id: blockId,
-    venue_name: slot.venueName,
+    venue_id: slot.venueId,
     venue_address: slot.venueAddress,
     weekday: slot.weekday,
     start_time: slot.startTime,
@@ -253,7 +254,7 @@ export async function updateSlot(_prev: PlanActionState, formData: FormData): Pr
   const { data, error } = await supabase
     .from("training_slots")
     .update({
-      venue_name: slot.venueName,
+      venue_id: slot.venueId,
       venue_address: slot.venueAddress,
       weekday: slot.weekday,
       start_time: slot.startTime,
@@ -290,9 +291,93 @@ export async function removeSlot(_prev: PlanActionState, formData: FormData): Pr
   return { notice: "Slot removed. Update the calendar to take its sessions off." };
 }
 
+/**
+ * Clone a slot — venue, division, notes and (by default) its teams — to
+ * another day or hour (Adam, 2026-09-13). One call to
+ * `clone_training_slot()`: SECURITY INVOKER, so the planning policies decide.
+ */
+export async function cloneSlot(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {
+  const blockId = uuid(formData, "block_id");
+  const slotId = uuid(formData, "slot_id");
+  if (!blockId || !slotId) return { error: "No slot given." };
+  const weekday = integer(formData, "weekday", 0, 6);
+  const startRaw = text(formData, "start_time", 8);
+  const endRaw = text(formData, "end_time", 8);
+  if (weekday === null) return { error: "Choose the day of the week." };
+  if (!isValidTimeString(startRaw) || !isValidTimeString(endRaw)) return { error: "Choose a start and an end time." };
+  const startTime = normaliseTime(startRaw);
+  const endTime = normaliseTime(endRaw);
+  if (endTime <= startTime) return { error: "The slot must end after it starts." };
+  const copyTeams = formData.get("copy_teams") === "on";
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("clone_training_slot", {
+    p_slot_id: slotId,
+    p_weekday: weekday,
+    p_start_time: startTime,
+    p_end_time: endTime,
+    p_copy_teams: copyTeams,
+  });
+  if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
+
+  revalidateBlock(blockId);
+  return { notice: copyTeams ? "Slot cloned, teams and all. Update the calendar to add its sessions." : "Slot cloned — now put teams in it." };
+}
+
 // ---------------------------------------------------------------------------
 // Teams in slots
 // ---------------------------------------------------------------------------
+
+/**
+ * The day planner's drop: a team onto a slot, one part of it. Plain arguments
+ * rather than a form — the planner calls it from a drag, not a submit — and
+ * the same guard answers as for "Add team".
+ */
+export async function allocateTeamToSlot(input: {
+  blockId: string;
+  slotId: string;
+  teamId: string;
+  shares: number;
+}): Promise<PlanActionState> {
+  if (!UUID_RE.test(input.blockId) || !UUID_RE.test(input.slotId) || !UUID_RE.test(input.teamId)) {
+    return { error: "No slot or team given." };
+  }
+  const shares = Number.isInteger(input.shares) && input.shares >= 1 && input.shares <= 6 ? input.shares : 1;
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("training_allocations")
+    .insert({ slot_id: input.slotId, team_id: input.teamId, shares });
+  if (error) {
+    if (error.code === "23505") return { error: "That team is already in this slot." };
+    return { error: friendlyDbError(error, NOT_ALLOWED) };
+  }
+  revalidateBlock(input.blockId);
+  return { notice: "Team placed." };
+}
+
+/** The day planner's other drop: a team already in a slot, dragged to another. */
+export async function moveAllocation(input: {
+  blockId: string;
+  allocationId: string;
+  slotId: string;
+}): Promise<PlanActionState> {
+  if (!UUID_RE.test(input.blockId) || !UUID_RE.test(input.allocationId) || !UUID_RE.test(input.slotId)) {
+    return { error: "No slot or team given." };
+  }
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("training_allocations")
+    .update({ slot_id: input.slotId })
+    .eq("id", input.allocationId)
+    .select("id");
+  if (error) {
+    if (error.code === "23505") return { error: "That team is already in that slot." };
+    return { error: friendlyDbError(error, NOT_ALLOWED) };
+  }
+  if ((data ?? []).length === 0) return { error: NOT_ALLOWED };
+  revalidateBlock(input.blockId);
+  return { notice: "Team moved." };
+}
 
 export async function addAllocation(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {
   const blockId = uuid(formData, "block_id");

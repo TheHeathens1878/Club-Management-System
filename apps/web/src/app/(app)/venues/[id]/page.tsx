@@ -40,7 +40,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
 
   const { data: venue } = await supabase
     .from("venues")
-    .select("id,name,address,notes,active,sort_order")
+    .select("id,name,address,notes,active,sort_order,for_matches,for_training")
     .eq("id", id)
     .maybeSingle();
   if (!venue) notFound();
@@ -111,6 +111,8 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
                 address: venue.address,
                 notes: venue.notes,
                 sortOrder: venue.sort_order,
+                forMatches: venue.for_matches,
+                forTraining: venue.for_training,
               }}
             />
           </CardContent>
