@@ -212,13 +212,13 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
         <Planner blockId={block.id} slots={slots} teams={teams} venues={venueOptions} blockVenueIds={blockVenueIds} />
 
         <div className="space-y-2 pt-2">
-          <FoldCard icon={CalendarOff} title="Dates off" summary={blackoutSummary}>
+          <FoldCard icon={<CalendarOff className="h-4 w-4" aria-hidden />} title="Dates off" summary={blackoutSummary}>
             <BlackoutsCard blockId={block.id} startsOn={block.starts_on} endsOn={block.ends_on} blackouts={blackoutRows} />
           </FoldCard>
-          <FoldCard icon={LandPlot} title="Venues in this block" summary={venueSummary}>
+          <FoldCard icon={<LandPlot className="h-4 w-4" aria-hidden />} title="Venues in this block" summary={venueSummary}>
             <BlockVenuesCard blockId={block.id} venues={venueOptions} blockVenueIds={blockVenueIds} slotsByVenue={slotsByVenue} />
           </FoldCard>
-          <FoldCard icon={Settings2} title="The block" summary={`${block.session_title} · ${dateSpanLabel(block.starts_on, block.ends_on)}`}>
+          <FoldCard icon={<Settings2 className="h-4 w-4" aria-hidden />} title="The block" summary={`${block.session_title} · ${dateSpanLabel(block.starts_on, block.ends_on)}`}>
             <DetailsCard
               block={{
                 id: block.id,
