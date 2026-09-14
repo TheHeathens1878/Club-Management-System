@@ -119,9 +119,14 @@ export default async function MatchesPage({
       .order("sort_order")
       .order("name"),
   ]);
-  const fixtures = (data ?? []).filter(
-    (row) => inView(row.team_id) && (period === "results" ? true : row.status === "scheduled"),
-  );
+  // Every status stays on the desk (Adam, 2026-09-14: "I need the ability to
+  // delete matches (as admin) which also deletes the event" — the matches he
+  // had cancelled that morning had vanished from the upcoming views, so there
+  // was nothing left to tick). A cancelled or postponed match shows its
+  // status and can be ticked and deleted like any other; only the attention
+  // counts below are scheduled-only, because a cancelled match needs neither
+  // a pitch nor a squad.
+  const fixtures = (data ?? []).filter((row) => inView(row.team_id));
 
   const centralVenue = new Map(
     (teamVenuesResult.data ?? []).map((team) => [team.id, (team.central_venue_name ?? "").trim()]),
@@ -148,10 +153,15 @@ export default async function MatchesPage({
 
   const needPitch = fixtures.filter(
     (row) =>
-      period !== "results" && row.is_home && !row.allocated && playsCentrally(row.team_id) === "",
+      period !== "results" &&
+      row.status === "scheduled" &&
+      row.is_home &&
+      !row.allocated &&
+      playsCentrally(row.team_id) === "",
   ).length;
   const shortOfPlayers = fixtures.filter(
-    (row) => period !== "results" && row.squad > 0 && row.accepted * 2 < row.squad,
+    (row) =>
+      period !== "results" && row.status === "scheduled" && row.squad > 0 && row.accepted * 2 < row.squad,
   ).length;
 
   // The desk's rows, formatted once on the server: London wall clock for the

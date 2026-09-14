@@ -97,8 +97,9 @@ const NO_FILTERS: Filters = {
   replies: "all",
 };
 
+// A cancelled or postponed match is short of nobody.
 function shortOfReplies(row: DeskRow): boolean {
-  return row.squad > 0 && row.accepted * 2 < row.squad;
+  return row.status === "scheduled" && row.squad > 0 && row.accepted * 2 < row.squad;
 }
 
 function applyFilters(rows: DeskRow[], f: Filters): DeskRow[] {
@@ -255,6 +256,8 @@ export function MatchesDesk({
     }
     return filtered;
   }, [filtered, sort]);
+  // The first match still on, in kick-off order — where "Next up" points.
+  const nextUp = ordered.findIndex((row) => row.status === "scheduled");
 
   const teamOptions = useMemo(() => distinct(rows.map((r) => r.teamName)), [rows]);
   const competitionOptions = useMemo(() => distinct(rows.map((r) => r.competition)), [rows]);
@@ -528,8 +531,9 @@ export function MatchesDesk({
         </details>
 
         {ordered.map((row, index) => {
-          // "Next up" only means anything in kick-off order.
-          const focus = focusFirst && !filtering && sort === "kickoff" && index === 0;
+          // "Next up" only means anything in kick-off order — and only of a
+          // match still on: a cancelled one at the top of the list is not it.
+          const focus = focusFirst && !filtering && sort === "kickoff" && index === nextUp;
           return (
             <div
               key={row.id}
