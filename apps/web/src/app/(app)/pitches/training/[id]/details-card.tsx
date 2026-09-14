@@ -3,15 +3,14 @@
 /**
  * The block itself — name, dates, the sessions' title — and, at the very
  * bottom, its deletion. Two clicks for that, like every other delete in the
- * app: the first says what goes, the second does it.
+ * app: the first says what goes, the second does it. Drawn inside a FoldCard
+ * on the block page (2026-09-14), so this is the content only.
  */
 
 import { useActionState, useState } from "react";
-import { Settings2 } from "lucide-react";
 
 import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/field";
 import { Input, Label } from "@/components/ui/input";
 
@@ -80,13 +79,7 @@ export function DetailsCard({ block, sessionsOnCalendar }: { block: BlockDetails
   const [state, action] = useActionState(updateBlock, EMPTY_PLAN_STATE);
 
   return (
-    <Card>
-      <CardHeader className="p-4 lg:p-6">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Settings2 className="h-4 w-4 text-primary" aria-hidden /> The block
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
+    <div className="space-y-4">
         <form action={action} className="space-y-4">
           <PlanFeedback state={state} />
           <input type="hidden" name="block_id" value={block.id} />
@@ -118,7 +111,6 @@ export function DetailsCard({ block, sessionsOnCalendar }: { block: BlockDetails
         </form>
 
         <DeleteBlock blockId={block.id} sessionsOnCalendar={sessionsOnCalendar} />
-      </CardContent>
-    </Card>
+    </div>
   );
 }

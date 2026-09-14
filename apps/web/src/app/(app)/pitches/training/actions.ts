@@ -30,6 +30,8 @@ export type PlanActionState = {
   notice?: string;
   /** Set after a real sync, so the card can say what happened. */
   synced?: SyncCounts;
+  /** The slot a write made, so the timetable can open it. */
+  slotId?: string;
 };
 
 const NOT_ALLOWED = "The database refused that. Only a club administrator can plan training.";
@@ -252,7 +254,7 @@ export async function addSlot(_prev: PlanActionState, formData: FormData): Promi
 
   const supabase = await createClient();
   // venue_name is filled from the venue by trigger (20260913110000).
-  const { error } = await supabase.from("training_slots").insert({
+  const { data, error } = await supabase.from("training_slots").insert({
     block_id: blockId,
     venue_id: slot.venueId,
     venue_address: slot.venueAddress,
@@ -263,11 +265,11 @@ export async function addSlot(_prev: PlanActionState, formData: FormData): Promi
     parts: slot.parts,
     club_parts: slot.clubParts,
     notes: slot.notes,
-  });
+  }).select("id").single();
   if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
 
   revalidateBlock(blockId);
-  return { notice: "Slot added — now put teams in it." };
+  return { notice: "Slot added — now put teams in it.", slotId: data.id };
 }
 
 export async function updateSlot(_prev: PlanActionState, formData: FormData): Promise<PlanActionState> {
@@ -318,6 +320,54 @@ export async function removeSlot(_prev: PlanActionState, formData: FormData): Pr
 
   revalidateBlock(blockId);
   return { notice: "Slot removed. Update the calendar to take its sessions off." };
+}
+
+/**
+ * A booked slot becomes a training slot in one click (Adam, 2026-09-14:
+ * "minimising clicks"). The timetable shows what the club has booked at
+ * the block's venues but not planned yet; pressing it writes the slot with
+ * the booking's pitch, day, hours and the club's share. Plain arguments,
+ * like the drops — there is no form to fill in.
+ */
+export async function addSlotFromBooking(input: {
+  blockId: string;
+  venueId: string;
+  pitchId: string | null;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  parts: number;
+  shares: number;
+}): Promise<PlanActionState> {
+  if (!UUID_RE.test(input.blockId) || !UUID_RE.test(input.venueId)) return { error: "No venue given." };
+  if (input.pitchId !== null && !UUID_RE.test(input.pitchId)) return { error: "No pitch given." };
+  if (!Number.isInteger(input.weekday) || input.weekday < 0 || input.weekday > 6) return { error: "No day given." };
+  if (!isValidTimeString(input.startTime) || !isValidTimeString(input.endTime)) return { error: "No hours given." };
+  const startTime = normaliseTime(input.startTime);
+  const endTime = normaliseTime(input.endTime);
+  if (endTime <= startTime) return { error: "The slot must end after it starts." };
+  const parts = Number.isInteger(input.parts) && input.parts >= 1 && input.parts <= 6 ? input.parts : 1;
+  const shares = Number.isInteger(input.shares) && input.shares >= 1 ? Math.min(input.shares, parts) : parts;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("training_slots")
+    .insert({
+      block_id: input.blockId,
+      venue_id: input.venueId,
+      pitch_id: input.pitchId,
+      weekday: input.weekday,
+      start_time: startTime,
+      end_time: endTime,
+      parts,
+      club_parts: shares < parts ? shares : null,
+    })
+    .select("id")
+    .single();
+  if (error) return { error: friendlyDbError(error, NOT_ALLOWED) };
+
+  revalidateBlock(input.blockId);
+  return { notice: "Slot added from the booking — now put teams in it.", slotId: data.id };
 }
 
 /**

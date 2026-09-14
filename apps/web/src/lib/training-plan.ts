@@ -197,3 +197,142 @@ export function oursLabel(slot: { parts: number; clubParts: number | null }): st
   if (slot.parts <= 1 || slot.clubParts === null || slot.clubParts >= slot.parts) return null;
   return `${slot.clubParts} of ${slot.parts} ours`;
 }
+
+// ---------------------------------------------------------------------------
+// The timetable (Adam, 2026-09-14: "you should only see the venues where we
+// have slots … clicking on the slot card … taking you to that slot details …
+// minimising clicks and scrolling")
+// ---------------------------------------------------------------------------
+
+/** What the timetable needs of a slot. */
+export type TimetableSlot = {
+  id: string;
+  venueId: string | null;
+  venueName: string;
+  pitchId: string | null;
+  pitchName: string | null;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+};
+
+/** What the timetable needs of a booked slot at a venue. */
+export type TimetableBooking = {
+  pitchId: string | null;
+  pitchName: string | null;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+  parts: number;
+  shares: number;
+};
+
+export type TimetableRow<S extends TimetableSlot, B extends TimetableBooking> = {
+  /** venue id (or name, for a slot at no venue) + pitch id. */
+  key: string;
+  venueId: string | null;
+  venueName: string;
+  pitchId: string | null;
+  pitchName: string | null;
+  /** The row's slots, in day-then-time order. */
+  slots: S[];
+  /** Booked at this venue and pitch for the block's dates, with no slot planned yet. */
+  unplanned: B[];
+};
+
+const dayRank = (weekday: number): number => (weekday === 0 ? 7 : weekday);
+
+/**
+ * The booked slots at a venue that the plan has not used yet: no training
+ * slot at the same venue, pitch, day and hours. Each is one click from being
+ * a slot.
+ */
+export function unplannedBookings<B extends TimetableBooking>(
+  venueId: string,
+  booked: readonly B[],
+  slots: readonly TimetableSlot[],
+): B[] {
+  return booked.filter(
+    (b) =>
+      !slots.some(
+        (s) =>
+          s.venueId === venueId &&
+          (s.pitchId ?? "") === (b.pitchId ?? "") &&
+          s.weekday === b.weekday &&
+          s.startTime.slice(0, 5) === b.startTime.slice(0, 5) &&
+          s.endTime.slice(0, 5) === b.endTime.slice(0, 5),
+      ),
+  );
+}
+
+/**
+ * The timetable's rows: one per venue AND pitch that has a slot in the block
+ * or a booking the block could use — never a venue with neither, however
+ * many are on the club's list. Venues in name order, then a venue's pitches
+ * in the order given, a slot on no named pitch last.
+ */
+export function timetableRows<S extends TimetableSlot, B extends TimetableBooking>(
+  slots: readonly S[],
+  venues: readonly { id: string; name: string; pitches: readonly { id: string; name: string }[]; bookedSlots: readonly B[] }[],
+  blockVenueIds: readonly string[],
+): TimetableRow<S, B>[] {
+  const rows = new Map<string, TimetableRow<S, B>>();
+  const rowFor = (venueId: string | null, venueName: string, pitchId: string | null, pitchName: string | null) => {
+    const key = `${venueId ?? venueName}|${pitchId ?? ""}`;
+    let row = rows.get(key);
+    if (!row) {
+      row = { key, venueId, venueName, pitchId, pitchName, slots: [], unplanned: [] };
+      rows.set(key, row);
+    }
+    return row;
+  };
+  for (const slot of slots) rowFor(slot.venueId, slot.venueName, slot.pitchId, slot.pitchName).slots.push(slot);
+  for (const venue of venues) {
+    if (!blockVenueIds.includes(venue.id)) continue;
+    for (const booking of unplannedBookings(venue.id, venue.bookedSlots, slots)) {
+      rowFor(venue.id, venue.name, booking.pitchId, booking.pitchName).unplanned.push(booking);
+    }
+  }
+  const pitchRank = (row: TimetableRow<S, B>): number => {
+    if (!row.pitchId) return Number.MAX_SAFE_INTEGER;
+    const venue = venues.find((v) => v.id === row.venueId);
+    const i = venue ? venue.pitches.findIndex((p) => p.id === row.pitchId) : -1;
+    return i === -1 ? Number.MAX_SAFE_INTEGER - 1 : i;
+  };
+  const byTime = (a: { weekday: number; startTime: string }, b: { weekday: number; startTime: string }) =>
+    dayRank(a.weekday) - dayRank(b.weekday) || a.startTime.localeCompare(b.startTime);
+  return Array.from(rows.values())
+    .map((row) => ({ ...row, slots: [...row.slots].sort(byTime), unplanned: [...row.unplanned].sort(byTime) }))
+    .sort(
+      (a, b) =>
+        a.venueName.localeCompare(b.venueName) ||
+        pitchRank(a) - pitchRank(b) ||
+        (a.pitchName ?? "").localeCompare(b.pitchName ?? ""),
+    );
+}
+
+/** The days the timetable shows, Monday first: any with a slot or an unused booking. */
+export function timetableDays(rows: readonly TimetableRow<TimetableSlot, TimetableBooking>[]): number[] {
+  const days = new Set<number>();
+  for (const row of rows) {
+    for (const slot of row.slots) days.add(slot.weekday);
+    for (const booking of row.unplanned) days.add(booking.weekday);
+  }
+  return [1, 2, 3, 4, 5, 6, 0].filter((day) => days.has(day));
+}
+
+/** The day with the most slots — the one being planned — else Monday. */
+export function busiestDay(slots: readonly { weekday: number }[]): number {
+  const counts = new Map<number, number>();
+  for (const slot of slots) counts.set(slot.weekday, (counts.get(slot.weekday) ?? 0) + 1);
+  let best = 1;
+  let bestCount = -1;
+  for (const day of [1, 2, 3, 4, 5, 6, 0]) {
+    const n = counts.get(day) ?? 0;
+    if (n > bestCount) {
+      best = day;
+      bestCount = n;
+    }
+  }
+  return best;
+}

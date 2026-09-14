@@ -4,26 +4,27 @@
  * The venues this block plans at (Adam, 2026-09-13: "for each training block,
  * I need to be able to select which venues apply to that training block").
  *
- * Each one is a column in the day planner, slot or no slot. A venue a slot
- * names is put here by the database on its own; one with slots in the block
- * cannot be taken off until they are moved or removed, and the guard says so.
- * The chips carry the club's share of each venue, because that is what the
- * planner is about to hand out.
+ * A venue a slot names is put here by the database on its own; one with
+ * slots in the block cannot be taken off until they are moved or removed,
+ * and the guard says so. Being on the block is what lets the timetable offer
+ * the venue's bookings as slots to use (2026-09-14) — the timetable itself
+ * draws only venues with a slot or a booking. The chips carry the club's
+ * share of each venue, because that is what the planner hands out. Drawn
+ * inside a FoldCard on the block page, so this is the content only.
  */
 
 import { useActionState } from "react";
-import { LandPlot, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { SubmitButton } from "@/components/submit-button";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select } from "@/components/ui/field";
 import { Label } from "@/components/ui/input";
 import { shareChip } from "@/lib/training-plan";
 
 import { addBlockVenue, removeBlockVenue } from "../actions";
 import { EMPTY_PLAN_STATE, PlanFeedback } from "../plan-feedback";
-import type { VenueOption } from "./slots-section";
+import type { VenueOption } from "./types";
 
 function venueShare(venue: VenueOption): string {
   if (venue.trainingParts <= 1 || venue.trainingShares >= venue.trainingParts) return "whole pitch";
@@ -74,17 +75,12 @@ export function BlockVenuesCard({
   const grounds = venues.filter((venue) => !on.has(venue.id) && !venue.forTraining);
 
   return (
-    <Card>
-      <CardHeader className="p-4 lg:p-6">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <LandPlot className="h-4 w-4 text-primary" aria-hidden /> Venues in this block
-        </CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Where this block trains. Each venue is a column in the day planner; a slot added at a venue
-          puts it here on its own. The share is what the club has of the pitch, set under Venues.
-        </p>
-      </CardHeader>
-      <CardContent className="space-y-3 p-4 pt-0 lg:p-6 lg:pt-0">
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Where this block trains. A slot added at a venue puts it here on its own; a venue on the block
+        has its bookings offered on the timetable. The share is what the club has of the pitch, set
+        under Venues.
+      </p>
         {chosen.length === 0 ? (
           <p className="text-sm text-muted-foreground">No venues yet — pick the ones this block trains at.</p>
         ) : (
@@ -141,7 +137,6 @@ export function BlockVenuesCard({
             </SubmitButton>
           </form>
         ) : null}
-      </CardContent>
-    </Card>
+    </div>
   );
 }
