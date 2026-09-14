@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import {
   blackoutLabel,
+  busiestDay,
+  timetableDays,
+  timetableRows,
+  unplannedBookings,
   calendarSummary,
   dateSpanLabel,
   oursLabel,
@@ -92,5 +96,85 @@ describe("slots", () => {
     expect(oursLabel({ parts: 4, clubParts: null })).toBeNull();
     expect(oursLabel({ parts: 4, clubParts: 4 })).toBeNull();
     expect(oursLabel({ parts: 1, clubParts: 1 })).toBeNull();
+  });
+});
+
+describe("the timetable", () => {
+  const slot = (
+    id: string,
+    venueId: string,
+    venueName: string,
+    pitchId: string | null,
+    weekday: number,
+    start: string,
+    end: string,
+  ) => ({ id, venueId, venueName, pitchId, pitchName: pitchId ? `Pitch ${pitchId.slice(-1)}` : null, weekday, startTime: `${start}:00`, endTime: `${end}:00` });
+  const booked = (pitchId: string | null, weekday: number, start: string, end: string, parts = 1, shares = 1) => ({
+    pitchId,
+    pitchName: pitchId ? `Pitch ${pitchId.slice(-1)}` : null,
+    weekday,
+    startTime: `${start}:00`,
+    endTime: `${end}:00`,
+    parts,
+    shares,
+  });
+  const partington = {
+    id: "v-part",
+    name: "Partington Sports Village",
+    pitches: [
+      { id: "p-1", name: "Pitch 1" },
+      { id: "p-2", name: "Pitch 2" },
+    ],
+    bookedSlots: [booked("p-1", 1, "18:00", "19:00", 2, 1), booked("p-1", 1, "19:00", "20:00"), booked("p-2", 1, "18:00", "19:00")],
+  };
+  const sale = { id: "v-sale", name: "Sale Grammar", pitches: [], bookedSlots: [booked(null, 4, "18:00", "19:00")] };
+  const ashton = { id: "v-ash", name: "Ashton", pitches: [], bookedSlots: [booked(null, 2, "18:00", "19:00")] };
+
+  it("shows only the venues with a slot or a booking the block can use", () => {
+    const slots = [slot("s1", "v-part", "Partington Sports Village", "p-1", 1, "18:00", "19:00")];
+    const rows = timetableRows(slots, [ashton, partington, sale], ["v-part", "v-sale"]);
+    // Ashton has a booking but is not on the block; Sale is on the block with a booking only.
+    expect(rows.map((r) => `${r.venueName}${r.pitchName ? ` · ${r.pitchName}` : ""}`)).toEqual([
+      "Partington Sports Village · Pitch 1",
+      "Partington Sports Village · Pitch 2",
+      "Sale Grammar",
+    ]);
+    expect(rows[0]?.slots.map((s) => s.id)).toEqual(["s1"]);
+    // The 18:00 Pitch 1 booking is planned; the 19:00 one is not.
+    expect(rows[0]?.unplanned.map((b) => b.startTime)).toEqual(["19:00:00"]);
+    expect(rows[1]?.slots).toEqual([]);
+    expect(rows[1]?.unplanned).toHaveLength(1);
+    expect(timetableDays(rows)).toEqual([1, 4]);
+  });
+
+  it("matches a booking to a slot by venue, pitch, day and hours", () => {
+    const slots = [
+      slot("s1", "v-part", "Partington Sports Village", "p-1", 1, "18:00", "19:00"),
+      slot("s2", "v-part", "Partington Sports Village", "p-2", 1, "18:00", "19:00"),
+      slot("s3", "v-part", "Partington Sports Village", "p-1", 2, "19:00", "20:00"),
+    ];
+    const left = unplannedBookings("v-part", partington.bookedSlots, slots);
+    expect(left.map((b) => `${b.pitchId} ${b.weekday} ${b.startTime}`)).toEqual(["p-1 1 19:00:00"]);
+  });
+
+  it("orders a venue's rows by its pitches, a slot on no pitch last, and the days Monday first", () => {
+    const slots = [
+      slot("s0", "v-part", "Partington Sports Village", null, 0, "10:00", "11:00"),
+      slot("s2", "v-part", "Partington Sports Village", "p-2", 3, "18:00", "19:00"),
+      slot("s1b", "v-part", "Partington Sports Village", "p-1", 1, "19:00", "20:00"),
+      slot("s1a", "v-part", "Partington Sports Village", "p-1", 1, "18:00", "19:00"),
+    ];
+    const rows = timetableRows(slots, [partington], []);
+    expect(rows.map((r) => r.pitchName)).toEqual(["Pitch 1", "Pitch 2", null]);
+    expect(rows[0]?.slots.map((s) => s.id)).toEqual(["s1a", "s1b"]);
+    expect(timetableDays(rows)).toEqual([1, 3, 0]);
+    // Not on the block: its bookings are not offered.
+    expect(rows.every((r) => r.unplanned.length === 0)).toBe(true);
+  });
+
+  it("opens on the busiest day", () => {
+    expect(busiestDay([])).toBe(1);
+    expect(busiestDay([{ weekday: 4 }, { weekday: 4 }, { weekday: 2 }])).toBe(4);
+    expect(busiestDay([{ weekday: 0 }, { weekday: 3 }])).toBe(3);
   });
 });

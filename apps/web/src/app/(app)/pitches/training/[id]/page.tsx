@@ -1,39 +1,41 @@
 import { notFound, redirect } from "next/navigation";
+import { CalendarOff, LandPlot, Settings2 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
-import { dateSpanLabel, slotOrder, type SyncCounts } from "@/lib/training-plan";
+import { blackoutLabel, dateSpanLabel, slotOrder, type SyncCounts } from "@/lib/training-plan";
 
 import { BlackoutsCard } from "./blackouts-card";
 import { BlockVenuesCard } from "./block-venues-card";
-import { DayPlanner } from "./day-planner";
 import { DetailsCard } from "./details-card";
-import { SlotsSection, type SlotRow, type TeamOption, type VenueOption } from "./slots-section";
+import { FoldCard } from "./fold-card";
+import { Planner } from "./planner";
 import { SyncCard } from "./sync-card";
+import type { SlotRow, TeamOption, VenueOption } from "./types";
 
 export const metadata = { title: "Training block" };
 
 export const dynamic = "force-dynamic";
 
 /**
- * `/pitches/training/[id]` — one block, top to bottom the way it is planned
- * (Adam, 2026-09-06):
+ * `/pitches/training/[id]` — one block, as a timetable (Adam, 2026-09-14:
+ * "tidy it up and make it much easier to navigate … minimising clicks and
+ * scrolling"):
  *
- *   1. THE CALENDAR — what the plan would do if applied now ("8 to add, 2 to
- *      change, 3 to remove"), and the one button that does it. A dry run of
- *      `sync_training_block()` on every load, so the administrator always
- *      sees the plan and the calendar side by side.
- *   2. DATES OFF — Christmas, half-term.
- *   3. THE DAY PLANNER — a column per venue in the block, drag the teams on.
- *   4. THE BLOCK'S VENUES — which grounds it trains at (2026-09-13).
- *   5. VENUES AND SLOTS — grouped by venue; each slot shows its day, its
- *      time, how it is divided, how much is ours and the teams in it, with
- *      "Add team" on the row. This is where the allocating happens.
- *   6. THE BLOCK — name, dates, title; delete at the bottom, armed.
+ *   1. THE CALENDAR BAR — what the plan would do if applied now ("8 to add,
+ *      2 to change, 3 to remove"), and the one button that does it. A dry
+ *      run of `sync_training_block()` on every load.
+ *   2. THE TIMETABLE — a row for every venue and pitch with a slot (or a
+ *      booking the block has not used yet), a column per day; every team on
+ *      its card; drag or tap a team onto a card; click a card for the slot
+ *      panel (teams, add, edit, clone, remove); an empty cell's "+" or a
+ *      booking's "Use it" adds a slot in one press.
+ *   3. FOLDED BENEATH — dates off, the block's venues, the block itself with
+ *      its delete. Each row says what it holds; one press opens it.
  *
- * Everything is read through the caller's own client. The four tables are
+ * Everything is read through the caller's own client. The tables are
  * readable by anyone signed in; the guard here matches the write policies
  * (`can_plan_training()`) so a coach who types the URL gets the lobby, not a
  * page of buttons the database would refuse.
@@ -167,23 +169,38 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
     bookedSlots: bookedFor(v.id),
   }));
   const blockVenueIds = (blockVenueRows ?? []).map((row) => row.venue_id);
-  // The block's venues in the club's order — the planner's columns.
   const blockVenues = venueOptions.filter((venue) => blockVenueIds.includes(venue.id));
   const slotsByVenue = new Map<string, number>();
   for (const slot of slots) {
     if (slot.venueId) slotsByVenue.set(slot.venueId, (slotsByVenue.get(slot.venueId) ?? 0) + 1);
   }
-  const venues = Array.from(new Set([...blockVenues.map((v) => v.name), ...slots.map((s) => s.venueName)]));
+  // The venues the timetable shows: those with a slot.
+  const venuesWithSlots = Array.from(new Set(slots.map((s) => s.venueName)));
+  const teamPlaces = slots.reduce((sum, slot) => sum + slot.allocations.length, 0);
+
+  const blackoutRows = (blackouts ?? []).map((b) => ({
+    id: b.id,
+    label: b.label,
+    startsOn: b.starts_on,
+    endsOn: b.ends_on,
+    charged: b.charged,
+  }));
+  const blackoutSummary =
+    blackoutRows.length === 0
+      ? "None yet — Christmas and half-term go here"
+      : blackoutRows.map((b) => `${b.label} ${blackoutLabel(b.startsOn, b.endsOn)}`).join(" · ");
+  const venueSummary =
+    blockVenues.length === 0 ? "None yet — a slot's venue joins on its own" : blockVenues.map((v) => v.name).join(" · ");
 
   return (
     <>
       <PageHeader
         title={block.name}
-        subtitle={`${dateSpanLabel(block.starts_on, block.ends_on)} · ${venues.length} venue${venues.length === 1 ? "" : "s"} · ${slots.length} slot${slots.length === 1 ? "" : "s"}`}
+        subtitle={`${dateSpanLabel(block.starts_on, block.ends_on)} · ${venuesWithSlots.length} venue${venuesWithSlots.length === 1 ? "" : "s"} · ${slots.length} slot${slots.length === 1 ? "" : "s"} · ${teamPlaces} team place${teamPlaces === 1 ? "" : "s"}`}
         back={{ href: "/pitches/training", label: "Training blocks" }}
       />
 
-      <div className="space-y-6 p-4 lg:p-6">
+      <div className="space-y-4 p-4 lg:p-6">
         <SyncCard
           blockId={block.id}
           counts={counts}
@@ -192,47 +209,29 @@ export default async function TrainingBlockPage({ params }: { params: Promise<{ 
           hasPlan={slots.some((s) => s.allocations.length > 0)}
         />
 
-        <BlackoutsCard
-          blockId={block.id}
-          startsOn={block.starts_on}
-          endsOn={block.ends_on}
-          blackouts={(blackouts ?? []).map((b) => ({
-            id: b.id,
-            label: b.label,
-            startsOn: b.starts_on,
-            endsOn: b.ends_on,
-            charged: b.charged,
-          }))}
-        />
+        <Planner blockId={block.id} slots={slots} teams={teams} venues={venueOptions} blockVenueIds={blockVenueIds} />
 
-        <DayPlanner blockId={block.id} slots={slots} teams={teams} venues={blockVenues} />
-
-        <BlockVenuesCard
-          blockId={block.id}
-          venues={venueOptions}
-          blockVenueIds={blockVenueIds}
-          slotsByVenue={slotsByVenue}
-        />
-
-        <SlotsSection
-          blockId={block.id}
-          slots={slots}
-          teams={teams}
-          venues={venueOptions}
-          blockVenueIds={blockVenueIds}
-        />
-
-        <DetailsCard
-          block={{
-            id: block.id,
-            name: block.name,
-            startsOn: block.starts_on,
-            endsOn: block.ends_on,
-            sessionTitle: block.session_title,
-            notes: block.notes,
-          }}
-          sessionsOnCalendar={counts ? counts.unchanged + counts.updated : 0}
-        />
+        <div className="space-y-2 pt-2">
+          <FoldCard icon={CalendarOff} title="Dates off" summary={blackoutSummary}>
+            <BlackoutsCard blockId={block.id} startsOn={block.starts_on} endsOn={block.ends_on} blackouts={blackoutRows} />
+          </FoldCard>
+          <FoldCard icon={LandPlot} title="Venues in this block" summary={venueSummary}>
+            <BlockVenuesCard blockId={block.id} venues={venueOptions} blockVenueIds={blockVenueIds} slotsByVenue={slotsByVenue} />
+          </FoldCard>
+          <FoldCard icon={Settings2} title="The block" summary={`${block.session_title} · ${dateSpanLabel(block.starts_on, block.ends_on)}`}>
+            <DetailsCard
+              block={{
+                id: block.id,
+                name: block.name,
+                startsOn: block.starts_on,
+                endsOn: block.ends_on,
+                sessionTitle: block.session_title,
+                notes: block.notes,
+              }}
+              sessionsOnCalendar={counts ? counts.unchanged + counts.updated : 0}
+            />
+          </FoldCard>
+        </div>
       </div>
     </>
   );

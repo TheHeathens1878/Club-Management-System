@@ -2,17 +2,16 @@
 
 /**
  * Dates off — Christmas, half-term, a tournament weekend. A list with a
- * remove on each row and an add form that opens beneath it, iOS-style: the
- * list is the screen, the form is a sheet.
+ * remove on each row and an add form that opens beneath it. Drawn inside a
+ * FoldCard on the block page (2026-09-14), so this is the content only.
  */
 
 import { useActionState, useState } from "react";
-import { CalendarOff, Plus, X } from "lucide-react";
+import { Plus, X } from "lucide-react";
 
 import { SubmitButton } from "@/components/submit-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input, Label } from "@/components/ui/input";
 import { blackoutLabel } from "@/lib/training-plan";
 
@@ -64,11 +63,9 @@ export function BlackoutsCard({
   const [state, action] = useActionState(addBlackout, EMPTY_PLAN_STATE);
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 p-4 lg:p-6">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <CalendarOff className="h-4 w-4 text-primary" aria-hidden /> Dates off
-        </CardTitle>
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground">No session is created on a date off.</p>
         <Button
           type="button"
           variant="outline"
@@ -78,9 +75,8 @@ export function BlackoutsCard({
         >
           <Plus className="h-4 w-4" aria-hidden /> Add dates off
         </Button>
-      </CardHeader>
-      <CardContent className="space-y-3 p-4 pt-0 lg:p-6 lg:pt-0">
-        <PlanFeedback state={state} />
+      </div>
+      <PlanFeedback state={state} />
 
         {blackouts.length === 0 ? (
           <p className="text-sm text-muted-foreground">
@@ -134,7 +130,6 @@ export function BlackoutsCard({
             </p>
           </form>
         ) : null}
-      </CardContent>
-    </Card>
+    </div>
   );
 }
