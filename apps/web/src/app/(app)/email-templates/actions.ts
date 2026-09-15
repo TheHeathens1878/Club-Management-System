@@ -117,7 +117,9 @@ export async function previewTemplate(
 
   const settings = await getSettings();
   const exampleVars = Object.fromEntries(def.variables.map((v) => [v.key, v.example]));
-  const renderedBody = substituteVars(bodyHtml, exampleVars);
+  // A placeholder the template does not know stays visible here, so the
+  // person editing sees the typo; a real send blanks it (lib/template-engine).
+  const renderedBody = substituteVars(bodyHtml, exampleVars, "keep");
   const styledBody = styleBodyHtml(renderedBody);
   return emailLayout(styledBody, brandColor, settings.club_name);
 }
