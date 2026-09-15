@@ -25,8 +25,10 @@ export type SiteSettings = {
   deposit_default_pence: string;
   /** The deposit as a share of the room hire, whole percent. */
   deposit_percent: string;
-  /** £ off room hire for players, club families and social members. */
+  /** £ off room hire for players, club families and social members (Adam, 2026-09-15: £50 by default). */
   room_member_discount_pence: string;
+  /** The refundable security deposit the desk is offered at confirmation, in pence (Adam, 2026-09-15: £100). */
+  security_deposit_default_pence: string;
   deposit_window_days: string;
   balance_reminder_days: string;
   auto_cancel_unpaid: string;            // "true" | "false"
@@ -57,7 +59,8 @@ const DEFAULTS: SiteSettings = {
   home_benefit_3_desc: "Membership is by proposal from an existing member. Apply online and we'll guide you through the process step by step.",
   deposit_default_pence: "10000",
   deposit_percent: "50",
-  room_member_discount_pence: "0",
+  room_member_discount_pence: "5000",
+  security_deposit_default_pence: "10000",
   deposit_window_days: "7",
   balance_reminder_days: "14",
   auto_cancel_unpaid: "true",

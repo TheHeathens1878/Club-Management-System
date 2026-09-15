@@ -892,6 +892,10 @@ export type Database = {
           legacy_neon_ref: string | null
           legacy_room_booking_id: string | null
           member_discount_pence: number
+          /** Who checked the claimed membership before a member discount, and when (20260915120000). */
+          member_checked_at: string | null
+          member_checked_by: string | null
+          member_checked_by_email: string | null
           member_number: string | null
           membership_type: string | null
           notes: string | null
@@ -965,6 +969,9 @@ export type Database = {
           legacy_neon_ref?: string | null
           legacy_room_booking_id?: string | null
           member_discount_pence?: number
+          member_checked_at?: string | null
+          member_checked_by?: string | null
+          member_checked_by_email?: string | null
           member_number?: string | null
           membership_type?: string | null
           notes?: string | null
@@ -1037,6 +1044,9 @@ export type Database = {
           legacy_neon_ref?: string | null
           legacy_room_booking_id?: string | null
           member_discount_pence?: number
+          member_checked_at?: string | null
+          member_checked_by?: string | null
+          member_checked_by_email?: string | null
           member_number?: string | null
           membership_type?: string | null
           notes?: string | null

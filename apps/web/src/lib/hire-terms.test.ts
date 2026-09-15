@@ -13,15 +13,16 @@ import {
 const RULE = { percent: 50, capPence: 10000 };
 
 describe("bookingDepositPence", () => {
-  it("is half the room hire, capped at £100", () => {
-    expect(bookingDepositPence({ base_hire_pence: 15000, total_pence: 20000 }, RULE)).toBe(7500);
+  it("is half the total cost, capped at £100 (Adam, 2026-09-15)", () => {
+    expect(bookingDepositPence({ base_hire_pence: 15000, total_pence: 18000 }, RULE)).toBe(9000);
     expect(bookingDepositPence({ base_hire_pence: 30000, total_pence: 35000 }, RULE)).toBe(10000);
     expect(bookingDepositPence({ base_hire_pence: 20000, total_pence: 20000 }, RULE)).toBe(10000);
+    expect(bookingDepositPence({ base_hire_pence: null, total_pence: 12000 }, RULE)).toBe(6000);
   });
 
-  it("falls back to the total when the room hire was never split out", () => {
-    expect(bookingDepositPence({ base_hire_pence: 0, total_pence: 12000 }, RULE)).toBe(6000);
-    expect(bookingDepositPence({ base_hire_pence: null, total_pence: 50000 }, RULE)).toBe(10000);
+  it("falls back to the room hire while the booking has no total yet", () => {
+    expect(bookingDepositPence({ base_hire_pence: 12000, total_pence: 0 }, RULE)).toBe(6000);
+    expect(bookingDepositPence({ base_hire_pence: 50000, total_pence: null }, RULE)).toBe(10000);
     expect(bookingDepositPence({ base_hire_pence: null, total_pence: null }, RULE)).toBe(0);
   });
 
@@ -34,9 +35,9 @@ describe("bookingDepositPence", () => {
 
 describe("depositRuleLabel", () => {
   it("says the rule in words", () => {
-    expect(depositRuleLabel(RULE)).toBe("half the room hire, up to £100.00");
-    expect(depositRuleLabel({ percent: 25, capPence: 0 })).toBe("25% of the room hire");
-    expect(depositRuleLabel({ percent: 100, capPence: 5000 })).toBe("the room hire in full, up to £50.00");
+    expect(depositRuleLabel(RULE)).toBe("half the total cost, up to £100.00");
+    expect(depositRuleLabel({ percent: 25, capPence: 0 })).toBe("25% of the total cost");
+    expect(depositRuleLabel({ percent: 100, capPence: 5000 })).toBe("the total cost in full, up to £50.00");
   });
 });
 

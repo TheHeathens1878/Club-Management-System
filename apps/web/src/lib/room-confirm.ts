@@ -25,6 +25,13 @@ export type ConfirmRoomBookingOpts = {
   memberDiscountPence?: number | null;
   /** The refundable security deposit held for the event; null = keep what the booking carries. */
   securityDepositPence?: number | null;
+  /**
+   * The desk has checked the booker's claimed membership (Adam, 2026-09-15:
+   * a member discount goes on "with a date and person stamped confirmation
+   * they've checked it"). Required for any discount above zero; stamped on
+   * the booking with who and when.
+   */
+  memberChecked?: boolean;
 };
 
 export type ConfirmActor = {
@@ -69,14 +76,37 @@ export async function confirmRoomBooking(
   // or an earlier confirmation. Writing NULL over it meant the booking could
   // never reach "paid" and no balance reminder would ever go.
   const totalPence = opts?.totalPence ?? booking.total_pence ?? null;
-  // The deposit rule (Adam, 2026-09-13): half the room hire, capped at £100,
+  // The deposit rule (Adam, 2026-09-15): half the total cost, capped at £100,
   // non-refundable. The desk may type another figure for this booking.
   const defaultDeposit = bookingDepositPence(
     { base_hire_pence: booking.base_hire_pence, total_pence: totalPence },
     depositRuleFrom(settings),
   );
   const depositPence = opts?.depositPence ?? defaultDeposit;
-  const securityDepositPence = Math.max(0, opts?.securityDepositPence ?? booking.security_deposit_pence ?? 0);
+  // The refundable security deposit: what the desk typed; else what the
+  // booking carries (an 18th's £200 from the public form); else the club's
+  // default (Adam, 2026-09-15: £100) — so a booker accepting a quote gets the
+  // same terms the desk would have set.
+  const securityDefault = Number(settings.security_deposit_default_pence) || 0;
+  const securityDepositPence = Math.max(
+    0,
+    opts?.securityDepositPence ?? (Number(booking.security_deposit_pence ?? 0) > 0 ? Number(booking.security_deposit_pence) : securityDefault),
+  );
+
+  // A member discount needs the membership checked first, and the check is
+  // stamped with who and when. Only the desk can tick; a booker accepting a
+  // quote sends no discount and no tick.
+  const discountPence = opts?.memberDiscountPence ?? null;
+  if (discountPence != null && discountPence > 0 && !opts?.memberChecked) {
+    return { error: "Tick to confirm you have checked their membership before applying a member discount." };
+  }
+  const memberCheckStamp = opts?.memberChecked
+    ? {
+        member_checked_at: new Date().toISOString(),
+        member_checked_by: actor.id,
+        member_checked_by_email: actor.email,
+      }
+    : {};
 
   // Deposit due = today + window; balance due = booking date − reminder lead
   // time. "Today" is the London date: the server runs in UTC, and between
@@ -111,7 +141,8 @@ export async function confirmRoomBooking(
       // child against the members list (Adam, 2026-09-03: "the child and
       // child's team was for member discount"). Informational beside the
       // total the staff typed, which is already the discounted price.
-      ...(opts?.memberDiscountPence != null ? { member_discount_pence: opts.memberDiscountPence } : {}),
+      ...(discountPence != null ? { member_discount_pence: discountPence } : {}),
+      ...memberCheckStamp,
       deposit_due_date: depositDueStr,
       balance_due_date: balanceDueStr,
       ...(calEventId ? { calendar_event_id: calEventId } : {}),
@@ -132,6 +163,7 @@ export async function confirmRoomBooking(
       total_pence: totalPence,
       deposit_pence: depositPence,
       security_deposit_pence: securityDepositPence,
+      ...(discountPence != null ? { member_discount_pence: discountPence, member_checked: opts?.memberChecked === true } : {}),
       by_booker: actor.byBooker === true,
     },
   });
