@@ -125,7 +125,7 @@ export default async function RoomBookingDetailPage({
   const depositPence = booking.deposit_pence ?? 0;
   const settings = await getSettings();
   const memberDiscountDefault = Number(settings.room_member_discount_pence) || 0;
-  // The deposit rule (Adam, 2026-09-13): half the room hire, capped — worked
+  // The deposit rule (Adam, 2026-09-15): half the total cost, capped — worked
   // out for this booking, and offered to the desk as the prefill.
   const depositRule = depositRuleFrom(settings);
   const defaultDepositPence = bookingDepositPence(booking, depositRule);
@@ -204,6 +204,12 @@ export default async function RoomBookingDetailPage({
               {booking.estimated_guests !== null && <Detail label="Estimated guests" value={String(booking.estimated_guests)} />}
               {(booking.member_discount_pence ?? 0) > 0 && (
                 <Detail label="Member discount" value={`−${formatCurrency(booking.member_discount_pence ?? 0)}`} />
+              )}
+              {booking.member_checked_at && (
+                <Detail
+                  label="Membership checked"
+                  value={`${booking.member_checked_by_email ?? "staff"}, ${new Date(booking.member_checked_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" })}`}
+                />
               )}
               {booking.team_name && <Detail label="Plays for" value={booking.team_name} />}
               {booking.child_name && (
@@ -423,6 +429,10 @@ export default async function RoomBookingDetailPage({
                   currentDepositPence={depositPence || null}
                   currentSecurityDepositPence={booking.security_deposit_pence}
                   depositRuleLabel={depositRuleLabel(depositRule)}
+                  depositRule={depositRule}
+                  defaultSecurityDepositPence={Number(settings.security_deposit_default_pence) || 0}
+                  isMember={booking.is_member}
+                  memberLabel={[booking.membership_type, booking.member_number].filter(Boolean).join(" · ") || null}
                   chaserSentAt={booking.chaser_sent_at}
                   finalChaserSentAt={booking.final_chaser_sent_at}
                   finalChaserDiscountPence={booking.final_chaser_discount_pence}

@@ -1,7 +1,7 @@
 /**
  * The club's room-hire payment terms, in one place (Adam, 2026-09-13):
  *
- *   1. A NON-REFUNDABLE deposit secures the room: half the room hire, capped
+ *   1. A NON-REFUNDABLE deposit secures the room: half the total cost, capped
  *      (£100 by default). It is paid first — the confirmation is subject to
  *      it, and a confirmed booking whose deposit is not paid by its deadline
  *      is cancelled.
@@ -55,38 +55,39 @@ export function sumSecurityPaid(rows: readonly LedgerRow[]): number {
 }
 
 export type DepositRule = {
-  /** Share of the room hire the deposit is, in whole percent (50 = half). */
+  /** Share of the total cost the deposit is, in whole percent (50 = half). */
   percent: number;
   /** The most the deposit can be, in pence (10000 = £100). 0 = no cap. */
   capPence: number;
 };
 
 /**
- * The deposit for a booking: `percent` of the room hire, no more than the
- * cap. The room hire is `base_hire_pence` where the public form recorded it;
- * an older row, or one the desk priced by hand, has only a total, and that
- * stands in. Whole pence, never negative.
+ * The deposit for a booking: `percent` of the total cost, no more than the
+ * cap (Adam, 2026-09-15: "50% of the total cost, max £100" — until then it
+ * was half the room hire alone, before extras). The total is what the desk
+ * confirms; an enquiry not yet priced has only the room hire the public form
+ * worked out, and that stands in. Whole pence, never negative.
  */
 export function bookingDepositPence(
   booking: { base_hire_pence?: number | null; total_pence?: number | null },
   rule: DepositRule,
 ): number {
   const hire =
-    Number(booking.base_hire_pence ?? 0) > 0 ? Number(booking.base_hire_pence) : Number(booking.total_pence ?? 0);
+    Number(booking.total_pence ?? 0) > 0 ? Number(booking.total_pence) : Number(booking.base_hire_pence ?? 0);
   if (hire <= 0) return 0;
   const pct = Number.isFinite(rule.percent) ? Math.min(100, Math.max(0, rule.percent)) : 0;
   const share = Math.round((hire * pct) / 100);
   return rule.capPence > 0 ? Math.min(share, rule.capPence) : share;
 }
 
-/** "half the room hire, up to £100" — the rule in words. */
+/** "half the total cost, up to £100" — the rule in words. */
 export function depositRuleLabel(rule: DepositRule): string {
   const share =
     rule.percent === 50
-      ? "half the room hire"
+      ? "half the total cost"
       : rule.percent === 100
-        ? "the room hire in full"
-        : `${rule.percent}% of the room hire`;
+        ? "the total cost in full"
+        : `${rule.percent}% of the total cost`;
   return rule.capPence > 0 ? `${share}, up to ${formatCurrency(rule.capPence)}` : share;
 }
 

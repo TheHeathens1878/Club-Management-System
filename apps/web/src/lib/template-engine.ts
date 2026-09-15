@@ -152,7 +152,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "end_time", label: "End time", example: "23:00" },
       { key: "total_cost", label: "Quoted total", example: "£350.00" },
       { key: "message", label: "Personal message typed by staff when sending (blank if none)", example: "We can also do a later finish if you need it." },
-      { key: "deposit_terms", label: "The club's payment terms, in a sentence", example: "To secure the room a non-refundable deposit of half the room hire, up to £100.00 is paid first. The balance, plus any refundable security deposit, is due at least two weeks before the event." },
+      { key: "deposit_terms", label: "The club's payment terms, in a sentence", example: "To secure the room a non-refundable deposit of half the total cost, up to £100.00 is paid first. The balance, plus any refundable security deposit, is due at least two weeks before the event." },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — your quote`,

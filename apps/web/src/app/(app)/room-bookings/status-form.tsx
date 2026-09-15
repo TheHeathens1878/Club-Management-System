@@ -6,6 +6,7 @@ import { Loader2, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { confirmBooking, cancelBooking, sendChaser, sendFinalChaser, sendQuote } from "./actions";
+import { bookingDepositPence, type DepositRule } from "@/lib/hire-terms";
 
 function whenSent(iso: string): string {
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" });
@@ -20,7 +21,11 @@ export function StatusForm({
   currentDepositPence = null,
   currentSecurityDepositPence = null,
   depositRuleLabel,
+  depositRule = null,
+  defaultSecurityDepositPence = 0,
   defaultMemberDiscountPence = null,
+  isMember = false,
+  memberLabel = null,
   chaserSentAt = null,
   finalChaserSentAt = null,
   finalChaserDiscountPence = null,
@@ -33,10 +38,18 @@ export function StatusForm({
   currentDepositPence?: number | null;
   /** The refundable security deposit the booking carries (an 18th birthday's £200). */
   currentSecurityDepositPence?: number | null;
-  /** The deposit rule in words — "half the room hire, up to £100". */
+  /** The deposit rule in words — "half the total cost, up to £100". */
   depositRuleLabel?: string;
+  /** The rule itself, so the deposit box follows the total as it is typed. */
+  depositRule?: DepositRule | null;
+  /** The club's default security deposit (Adam, 2026-09-15: £100), offered when the booking carries none. */
+  defaultSecurityDepositPence?: number;
   /** The club's configured discount — prefilled when a claim is on the booking. */
   defaultMemberDiscountPence?: number | null;
+  /** The booker said they are a member; the discount needs the membership checked and the check stamped. */
+  isMember?: boolean;
+  /** What they claimed — "Social · 00123" — so the desk knows what to check. */
+  memberLabel?: string | null;
   /** The chasers (Adam, 2026-09-11): when each last went, and what the final one took off. */
   chaserSentAt?: string | null;
   finalChaserSentAt?: string | null;
@@ -53,12 +66,29 @@ export function StatusForm({
   const [depositPounds, setDepositPounds] = useState(
     String((currentDepositPence ?? defaultDepositPence) / 100 || ""),
   );
+  // Until the desk types a deposit of its own, the box follows the total by
+  // the club's rule (half, up to £100) — a total typed at confirmation is the
+  // one the rule should apply to, not the enquiry's estimate.
+  const [depositTouched, setDepositTouched] = useState(currentDepositPence != null && currentDepositPence > 0);
   const [securityPounds, setSecurityPounds] = useState(
-    currentSecurityDepositPence ? String(currentSecurityDepositPence / 100) : "",
+    currentSecurityDepositPence
+      ? String(currentSecurityDepositPence / 100)
+      : defaultSecurityDepositPence > 0
+        ? String(defaultSecurityDepositPence / 100)
+        : "",
   );
   const [discountPounds, setDiscountPounds] = useState(
     defaultMemberDiscountPence ? (defaultMemberDiscountPence / 100).toFixed(2) : "",
   );
+  const [memberChecked, setMemberChecked] = useState(false);
+
+  function onTotalChange(value: string) {
+    setTotalPounds(value);
+    if (depositTouched || !depositRule) return;
+    const totalPence = value ? Math.round(Number(value) * 100) : 0;
+    const suggested = bookingDepositPence({ total_pence: totalPence }, depositRule);
+    setDepositPounds(suggested > 0 ? String(suggested / 100) : "");
+  }
 
   const [quotePounds, setQuotePounds] = useState(
     currentTotalPence ? String(currentTotalPence / 100) : "",
@@ -100,12 +130,18 @@ export function StatusForm({
 
   async function runConfirm() {
     setError(null);
+    const memberDiscountPence = discountPounds ? Math.round(Number(discountPounds) * 100) : null;
+    if (memberDiscountPence != null && memberDiscountPence > 0 && !memberChecked) {
+      setError("Tick to confirm you have checked their membership before applying a member discount.");
+      return;
+    }
     setLoading("confirm");
     const result = await confirmBooking(bookingId, {
       totalPence: totalPounds ? Math.round(Number(totalPounds) * 100) : null,
       depositPence: depositPounds ? Math.round(Number(depositPounds) * 100) : 0,
-      memberDiscountPence: discountPounds ? Math.round(Number(discountPounds) * 100) : null,
+      memberDiscountPence,
       securityDepositPence: securityPounds ? Math.round(Number(securityPounds) * 100) : 0,
+      memberChecked,
     });
     setLoading(null);
     if (result.error) setError(result.error);
@@ -269,7 +305,7 @@ export function StatusForm({
                   <Input
                     type="number" min="0" step="0.01"
                     value={totalPounds}
-                    onChange={(e) => setTotalPounds(e.target.value)}
+                    onChange={(e) => onTotalChange(e.target.value)}
                     placeholder="0.00"
                     autoFocus
                   />
@@ -279,16 +315,16 @@ export function StatusForm({
                   <Input
                     type="number" min="0" step="0.01"
                     value={depositPounds}
-                    onChange={(e) => setDepositPounds(e.target.value)}
+                    onChange={(e) => { setDepositTouched(true); setDepositPounds(e.target.value); }}
                     placeholder="0.00"
                   />
                   <p className="text-xs text-muted-foreground">
-                    Secures the room, paid first. Prefilled as {depositRuleLabel ?? "the club's rule"}.
+                    Secures the room, paid first. Follows the total as {depositRuleLabel ?? "the club's rule"} until you type your own.
                   </p>
                 </div>
               </div>
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground uppercase">Refundable security deposit (£, optional)</label>
+                <label className="text-xs font-medium text-muted-foreground uppercase">Refundable security deposit (£)</label>
                 <Input
                   type="number" min="0" step="0.01"
                   value={securityPounds}
@@ -297,7 +333,7 @@ export function StatusForm({
                 />
                 <p className="text-xs text-muted-foreground">
                   Held for the event and returned after it if all is well; due with the balance, two
-                  weeks before. An 18th birthday carries £200 from the form.
+                  weeks before. £{(defaultSecurityDepositPence / 100).toFixed(0)} by default; an 18th birthday carries £200 from the form. Clear it for none.
                 </p>
               </div>
               <div className="space-y-1">
@@ -309,9 +345,24 @@ export function StatusForm({
                   placeholder="0.00"
                 />
                 <p className="text-xs text-muted-foreground">
-                  Check any claimed club child on the booking first; the total above should already
-                  include the discount — this records how much of it there was.
+                  {isMember
+                    ? <>They said they are a member{memberLabel ? <> ({memberLabel})</> : null}, so the club&apos;s discount is offered. </>
+                    : <>Check any claimed club child on the booking first. </>}
+                  The total above should already include the discount — this records how much of it there was.
                 </p>
+                {(isMember || Number(discountPounds) > 0) && (
+                  <label className="mt-1 flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={memberChecked}
+                      onChange={(e) => { setMemberChecked(e.target.checked); setError(null); }}
+                      className="mt-0.5 h-4 w-4"
+                    />
+                    <span>
+                      I have checked their membership. <span className="text-xs text-muted-foreground">Stamped on the booking with your name and today&apos;s date; required for a discount.</span>
+                    </span>
+                  </label>
+                )}
               </div>
               <p className="text-xs text-muted-foreground">
                 The booker is emailed a confirmation with the total and the terms — the non-refundable

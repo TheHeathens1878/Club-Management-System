@@ -697,7 +697,7 @@ export function BookClient({
                     </span>
                     <span className="text-xs text-muted-foreground">
                       We&apos;ll confirm availability and the total with you. The date is secured once
-                      it&apos;s confirmed and the non-refundable deposit (half the room hire, up to £100)
+                      it&apos;s confirmed and the non-refundable deposit (half the total cost, up to £100)
                       is paid; the balance, plus any security deposit, is due two weeks before.
                     </span>
                   </label>
@@ -725,7 +725,7 @@ export function BookClient({
               <p className="text-xs text-muted-foreground text-center">
                 {intent === "enquiry"
                   ? "We'll reply with availability and prices. Nothing is booked and nothing is held."
-                  : "Your request will be reviewed by our team. We'll be in touch to confirm availability and the total; a non-refundable deposit of half the room hire (up to £100) then secures the room, and the balance plus any security deposit is due two weeks before your event."}
+                  : "Your request will be reviewed by our team. We'll be in touch to confirm availability and the total; a non-refundable deposit of half the total cost (up to £100) then secures the room, and the balance plus any security deposit is due two weeks before your event."}
               </p>
             </form>
           </CardContent>
