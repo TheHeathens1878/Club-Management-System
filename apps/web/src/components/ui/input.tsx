@@ -3,6 +3,12 @@ import { cn } from "@/lib/utils";
 
 export type InputProps = React.InputHTMLAttributes<HTMLInputElement>;
 
+// A number box that has focus steps its value when the mouse wheel passes
+// over it — one scroll of the page turned a £150 total into £149.99 on the
+// confirm form (Adam, 2026-09-15). Wheel over a number box drops focus
+// instead, so the page scrolls and the figure stays.
+const blurOnWheel = (e: React.WheelEvent<HTMLInputElement>) => e.currentTarget.blur();
+
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, ...props }, ref) => (
     <input
@@ -13,6 +19,7 @@ const Input = React.forwardRef<HTMLInputElement, InputProps>(
         className
       )}
       {...props}
+      onWheel={type === "number" ? (e) => { props.onWheel?.(e); blurOnWheel(e); } : props.onWheel}
     />
   )
 );
