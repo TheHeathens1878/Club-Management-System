@@ -1,5 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { SumUpAuthError, alarmDue, isSumUpAuthStatus } from "./sumup";
+import { SumUpAuthError, SumUpMerchantMismatchError, alarmDue, isSumUpAuthStatus, merchantMismatch } from "./sumup";
+
+describe("merchantMismatch", () => {
+  it("is a mismatch when SumUp names a different merchant — a sandbox key", () => {
+    expect(merchantMismatch("MMDY39LR", "MSANDBOX1")).toBe(true);
+  });
+  it("is fine when the codes agree", () => {
+    expect(merchantMismatch("MMDY39LR", "MMDY39LR")).toBe(false);
+  });
+  it("cannot judge when either side is missing, so it does not refuse", () => {
+    expect(merchantMismatch("MMDY39LR", undefined)).toBe(false);
+    expect(merchantMismatch("MMDY39LR", null)).toBe(false);
+    expect(merchantMismatch("MMDY39LR", "")).toBe(false);
+    expect(merchantMismatch("", "MSANDBOX1")).toBe(false);
+  });
+});
+
+describe("SumUpMerchantMismatchError", () => {
+  it("names both merchants", () => {
+    const e = new SumUpMerchantMismatchError("MMDY39LR", "MSANDBOX1");
+    expect(e.name).toBe("SumUpMerchantMismatchError");
+    expect(e.expected).toBe("MMDY39LR");
+    expect(e.actual).toBe("MSANDBOX1");
+    expect(e.message).toContain("MSANDBOX1");
+    expect(e.message).toContain("MMDY39LR");
+  });
+});
 
 describe("isSumUpAuthStatus", () => {
   it("treats 401 and 403 as the credential being refused", () => {

@@ -69,6 +69,7 @@ export type SumUpCheckout = {
   amount: number;
   currency: string;
   checkout_reference: string;
+  merchant_code?: string;
   purpose?: string;
   customer_id?: string;
   transaction_code?: string;
@@ -99,6 +100,31 @@ export function isSumUpAuthStatus(status: number): boolean {
   return status === 401 || status === 403;
 }
 
+/**
+ * The key opened SumUp's door, but onto the wrong merchant: the checkout (or
+ * the profile) belongs to a merchant code other than the club's. In practice
+ * that is a SANDBOX key — SumUp's test mode is a separate merchant account
+ * with its own keys and code (Adam, 2026-09-15: the widget said "payments
+ * are currently in test mode"). A test card would then stamp a real booking
+ * "deposit paid" with no money behind it, so a mismatched checkout is never
+ * created and never recorded.
+ */
+export class SumUpMerchantMismatchError extends Error {
+  readonly expected: string;
+  readonly actual: string;
+  constructor(expected: string, actual: string) {
+    super(`SumUp key opens merchant ${actual || "(none)"}, but the app is configured for ${expected}`);
+    this.name = "SumUpMerchantMismatchError";
+    this.expected = expected;
+    this.actual = actual;
+  }
+}
+
+/** True when SumUp named a merchant and it is not the one the app is set up for. */
+export function merchantMismatch(configured: string, actual: string | null | undefined): boolean {
+  return !!configured && !!actual && actual !== configured;
+}
+
 export async function createSumUpCheckout(params: {
   amountPence: number;
   reference: string;
@@ -120,7 +146,11 @@ export async function createSumUpCheckout(params: {
   });
   if (isSumUpAuthStatus(res.status)) throw new SumUpAuthError(res.status, (await res.text()).slice(0, 300));
   if (!res.ok) throw new Error(`SumUp checkout failed (${res.status}): ${await res.text()}`);
-  return res.json();
+  const checkout = (await res.json()) as SumUpCheckout;
+  if (merchantMismatch(MERCHANT_CODE, checkout.merchant_code)) {
+    throw new SumUpMerchantMismatchError(MERCHANT_CODE, checkout.merchant_code ?? "");
+  }
+  return checkout;
 }
 
 /**
@@ -132,12 +162,34 @@ export async function createSumUpCheckout(params: {
  * the SumUp line, and nothing noticed for three weeks.
  */
 export async function checkSumUpCredentials(): Promise<
-  { ok: true } | { ok: false; status: number; detail: string }
+  | { ok: true }
+  | { ok: false; reason: "refused" | "failed"; status: number; detail: string }
+  | { ok: false; reason: "mismatch"; status: number; detail: string; merchantCode: string }
 > {
   const auth = await authHeader();
   const res = await fetch(`${BASE}/v0.1/me`, { headers: { Authorization: auth } });
-  if (res.ok) return { ok: true };
-  return { ok: false, status: res.status, detail: (await res.text()).slice(0, 300) };
+  if (!res.ok) {
+    return {
+      ok: false,
+      reason: isSumUpAuthStatus(res.status) ? "refused" : "failed",
+      status: res.status,
+      detail: (await res.text()).slice(0, 300),
+    };
+  }
+  // The right door, but is it the club's? A sandbox key answers 200 with the
+  // sandbox merchant's code, and would pass a bare status check.
+  const me = (await res.json().catch(() => null)) as { merchant_profile?: { merchant_code?: string } } | null;
+  const actual = me?.merchant_profile?.merchant_code ?? "";
+  if (merchantMismatch(MERCHANT_CODE, actual)) {
+    return {
+      ok: false,
+      reason: "mismatch",
+      status: res.status,
+      merchantCode: actual,
+      detail: `the key opens merchant ${actual}, but SUMUP_MERCHANT_CODE is ${MERCHANT_CODE} — a sandbox (test mode) key?`,
+    };
+  }
+  return { ok: true };
 }
 
 export const SUMUP_CREDENTIAL_ALARM_TEMPLATE = "sumup_credentials_rejected";
@@ -163,6 +215,8 @@ export async function raiseSumUpCredentialAlarm(input: {
   detail: string;
   source: string;
   bookingId?: string;
+  /** The wrong merchant rather than a refused key: a sandbox key, most likely. */
+  mismatch?: { expected: string; actual: string };
 }): Promise<boolean> {
   const admin = createAdminClient();
   try {
@@ -176,12 +230,20 @@ export async function raiseSumUpCredentialAlarm(input: {
     if (!alarmDue(last?.created_at)) return false;
 
     const where = input.bookingId ? "a hirer pressing Pay in their portal" : input.source;
-    const subject = `Online card payments are down — SumUp is rejecting the club's API key (${input.status})`;
-    const bodyText =
-      `SumUp answered ${input.status} to ${where}. The SUMUP_API_KEY on the server is not a valid SumUp ` +
-      `key — wrong, expired or revoked — and every online payment will fail until it is replaced. ` +
-      `Create a new API key in the SumUp dashboard (Developers → API keys), set it as SUMUP_API_KEY in ` +
-      `Vercel (Production) and redeploy. Nothing has been taken from anyone. SumUp said: ${input.detail}`;
+    const subject = input.mismatch
+      ? `Online card payments are in TEST MODE — the SumUp key opens merchant ${input.mismatch.actual}, not the club's`
+      : `Online card payments are down — SumUp is rejecting the club's API key (${input.status})`;
+    const bodyText = input.mismatch
+      ? `On ${where}, SumUp said the API key belongs to merchant ${input.mismatch.actual}, but the app is set up for ` +
+        `${input.mismatch.expected}. That is what a sandbox (test mode) key looks like: the widget offers test card ` +
+        `numbers and no real money moves, so the app refuses to open or record such a checkout. In the SumUp ` +
+        `dashboard's Developer Settings, switch from the sandbox to the live account before creating the API key, ` +
+        `set it as SUMUP_API_KEY in Vercel (Production) with SUMUP_MERCHANT_CODE ${input.mismatch.expected}, and ` +
+        `redeploy. Nothing has been taken from anyone.`
+      : `SumUp answered ${input.status} to ${where}. The SUMUP_API_KEY on the server is not a valid SumUp ` +
+        `key — wrong, expired or revoked — and every online payment will fail until it is replaced. ` +
+        `Create a new API key in the SumUp dashboard (Developers → API keys), set it as SUMUP_API_KEY in ` +
+        `Vercel (Production) and redeploy. Nothing has been taken from anyone. SumUp said: ${input.detail}`;
 
     const recipients = await getRecipientEmails("notify_booking_request").catch(() => []);
     if (recipients.length > 0) {
@@ -198,7 +260,9 @@ export async function raiseSumUpCredentialAlarm(input: {
     if (input.bookingId) {
       await notifyRoomDesk(admin, {
         subject,
-        body: "A hirer pressed Pay and SumUp refused the club's API key. Online payments are down until it is replaced.",
+        body: input.mismatch
+          ? "A hirer pressed Pay and the SumUp key turned out to be a sandbox (test mode) key. Online payments are off until a live key is set."
+          : "A hirer pressed Pay and SumUp refused the club's API key. Online payments are down until it is replaced.",
         bookingId: input.bookingId,
       });
     }
@@ -242,6 +306,19 @@ export async function recordSumUpPaymentIfPaid(
   if (!checkout) {
     console.warn("[sumup] checkout not found", checkoutId);
     return { recorded: false, present: false };
+  }
+  // A checkout under another merchant is not the club's money — a sandbox
+  // test card, most likely. Recording it would mark a real booking paid with
+  // nothing behind it. Not `failed`: a webhook retry cannot make it ours.
+  if (merchantMismatch(MERCHANT_CODE, checkout.merchant_code)) {
+    console.error("[sumup] checkout belongs to another merchant, not recorded", checkoutId, checkout.merchant_code);
+    await raiseSumUpCredentialAlarm({
+      status: 200,
+      detail: `checkout ${checkoutId} belongs to merchant ${checkout.merchant_code}`,
+      source: "recording a payment",
+      mismatch: { expected: MERCHANT_CODE, actual: checkout.merchant_code ?? "" },
+    });
+    return { recorded: false, present: false, status: checkout.status };
   }
 
   // After 3DS the checkout status can briefly lag behind a SUCCESSFUL

@@ -9,7 +9,7 @@ import { writeAudit } from "@/lib/audit";
 import { formatCurrency, getSiteUrl } from "@/lib/utils";
 import { addDays, formatBookingDate, instantsToLocalWindow, londonToday } from "@/lib/booking-time";
 import { sumHirePaid, sumSecurityPaid } from "@/lib/hire-terms";
-import { checkSumUpCredentials, isSumUpAuthStatus, isSumUpConfigured, raiseSumUpCredentialAlarm } from "@/lib/sumup";
+import { checkSumUpCredentials, isSumUpConfigured, raiseSumUpCredentialAlarm, sumupMerchantCode } from "@/lib/sumup";
 
 export const dynamic = "force-dynamic";
 
@@ -372,14 +372,22 @@ export async function GET(request: Request) {
   // --- SumUp credential probe: is the key on the server still a key SumUp
   // accepts? A hirer's "Pay" is otherwise the first thing to find out, and it
   // was (Leanne Minto, 2026-09-14). Once a day, alarm throttled in the lib.
-  let sumupCredentials: "ok" | "rejected" | "unreachable" | "not configured" = "not configured";
+  let sumupCredentials: "ok" | "rejected" | "wrong merchant" | "unreachable" | "not configured" = "not configured";
   if (isSumUpConfigured()) {
     try {
       const check = await checkSumUpCredentials();
       if (check.ok) sumupCredentials = "ok";
-      else if (isSumUpAuthStatus(check.status)) {
+      else if (check.reason === "refused") {
         sumupCredentials = "rejected";
         await raiseSumUpCredentialAlarm({ status: check.status, detail: check.detail, source: "the daily credential check" });
+      } else if (check.reason === "mismatch") {
+        sumupCredentials = "wrong merchant";
+        await raiseSumUpCredentialAlarm({
+          status: check.status,
+          detail: check.detail,
+          source: "the daily credential check",
+          mismatch: { expected: sumupMerchantCode(), actual: check.merchantCode },
+        });
       } else {
         sumupCredentials = "unreachable";
         console.error("[cron] SumUp credential check answered", check.status, check.detail);
