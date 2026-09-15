@@ -26,6 +26,7 @@ export function StatusForm({
   defaultMemberDiscountPence = null,
   isMember = false,
   memberLabel = null,
+  needsTerms = false,
   chaserSentAt = null,
   finalChaserSentAt = null,
   finalChaserDiscountPence = null,
@@ -50,6 +51,13 @@ export function StatusForm({
   isMember?: boolean;
   /** What they claimed — "Social · 00123" — so the desk knows what to check. */
   memberLabel?: string | null;
+  /**
+   * Confirmed, but never given its terms: no deposit deadline, so no
+   * confirmation email went, no reminder will, and no auto-cancel applies.
+   * The desk's own "add a booking" makes these (Lyndsey, September 2026).
+   * The confirm door opens for them too, and runs the whole thing from today.
+   */
+  needsTerms?: boolean;
   /** The chasers (Adam, 2026-09-11): when each last went, and what the final one took off. */
   chaserSentAt?: string | null;
   finalChaserSentAt?: string | null;
@@ -294,11 +302,21 @@ export function StatusForm({
 
       {/* Confirm booking — from an enquiry or a quote too: confirming is the
           act that takes the slot, and the constraint arbitrates any race. */}
-      {(currentStatus === "enquiry" || currentStatus === "quoted" || currentStatus === "pending") && (
+      {(currentStatus === "enquiry" || currentStatus === "quoted" || currentStatus === "pending" || needsTerms) && (
         <>
+          {needsTerms && confirm !== "confirm" && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
+              <p>
+                This booking is confirmed but has no payment terms — no deposit deadline, so no
+                confirmation email went and no reminders will. Set the price and terms below to send
+                the confirmation and start the reminders from today.
+              </p>
+            </div>
+          )}
           {confirm === "confirm" ? (
             <div className="space-y-3 rounded-lg border bg-muted/30 p-4">
-              <p className="text-sm font-medium">Confirm booking</p>
+              <p className="text-sm font-medium">{needsTerms ? "Set the price and terms" : "Confirm booking"}</p>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground uppercase">Total cost (£)</label>

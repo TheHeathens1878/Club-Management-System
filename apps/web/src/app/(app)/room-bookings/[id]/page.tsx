@@ -433,6 +433,7 @@ export default async function RoomBookingDetailPage({
                   defaultSecurityDepositPence={Number(settings.security_deposit_default_pence) || 0}
                   isMember={booking.is_member}
                   memberLabel={[booking.membership_type, booking.member_number].filter(Boolean).join(" · ") || null}
+                  needsTerms={booking.status === "confirmed" && !booking.deposit_due_date && booking.starts_at > new Date().toISOString()}
                   chaserSentAt={booking.chaser_sent_at}
                   finalChaserSentAt={booking.final_chaser_sent_at}
                   finalChaserDiscountPence={booking.final_chaser_discount_pence}
