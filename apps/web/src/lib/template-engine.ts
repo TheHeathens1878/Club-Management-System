@@ -10,6 +10,7 @@ export type TemplateKey =
   | "payment_received"
   | "deposit_reminder"
   | "balance_reminder"
+  | "balance_final_warning"
   | "room_booking_quote"
   | "quote_followup"
   | "room_booking_chaser"
@@ -269,7 +270,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
 
   balance_reminder: {
     name: "Balance Reminder",
-    description: "Sent automatically a set number of days before the event if the balance is not paid in full.",
+    description: "Sent automatically two weeks before the balance is due, and again one week before, while anything is still outstanding.",
     variables: [
       { key: "name", label: "Booker name", example: "Jane Smith" },
       { key: "room_name", label: "Room name", example: "Main Function Room" },
@@ -278,11 +279,12 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "security_deposit", label: "Refundable security deposit still to pay (— if none)", example: "£200.00" },
       { key: "security_deposit_line", label: "A ready-made list line for the security deposit (blank if none)", example: "<li><strong>Refundable security deposit still to pay:</strong> £200.00</li>" },
       { key: "balance_due_date", label: "Due date — at least two weeks before the event", example: "31 May 2026" },
+      { key: "due_in", label: "How far off the due date is — \"in two weeks\" or \"in one week\"", example: "in two weeks" },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
-    defaultSubject: (c) => `${c} — balance due for your upcoming booking`,
+    defaultSubject: (c) => `${c} — your balance is due {{due_in}}`,
     defaultBody: (c) => `<p>Dear {{name}},</p>
-<p>Your event at ${c} is coming up. The balance, plus any refundable security deposit, is due at least two weeks before the event — and here is what is still outstanding on your booking.</p>
+<p>Your event at ${c} is coming up. The balance, plus any refundable security deposit, is due {{due_in}} — by <strong>{{balance_due_date}}</strong>, at least two weeks before the event. Here is what is still outstanding on your booking.</p>
 <ul>
 <li><strong>Room:</strong> {{room_name}}</li>
 <li><strong>Date:</strong> {{booking_date}}</li>
@@ -292,7 +294,34 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
 </ul>
 <p>Please settle what is outstanding:</p>
 <p><a href="{{portal_url}}">Pay your balance</a></p>
-<p>If you have already paid in full, please disregard this message.</p>`,
+<p>A booking whose balance is not paid by the due date is cancelled. If you have already paid in full, please disregard this message.</p>`,
+  },
+
+  balance_final_warning: {
+    name: "Balance Final Warning",
+    description: "Sent automatically on the balance due date if anything is still outstanding: pay today, or the booking is cancelled.",
+    variables: [
+      { key: "name", label: "Booker name", example: "Jane Smith" },
+      { key: "room_name", label: "Room name", example: "Main Function Room" },
+      { key: "booking_date", label: "Date", example: "Saturday, 14 June 2026" },
+      { key: "outstanding", label: "Balance outstanding", example: "£250.00" },
+      { key: "security_deposit", label: "Refundable security deposit still to pay (— if none)", example: "£200.00" },
+      { key: "security_deposit_line", label: "A ready-made list line for the security deposit (blank if none)", example: "<li><strong>Refundable security deposit still to pay:</strong> £200.00</li>" },
+      { key: "balance_due_date", label: "Due date — today", example: "31 May 2026" },
+      { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
+    ],
+    defaultSubject: (c) => `${c} — FINAL NOTICE: your balance is due today`,
+    defaultBody: (c) => `<p>Dear {{name}},</p>
+<p>This is a final notice. The balance on your booking at ${c} is due <strong>today, {{balance_due_date}}</strong>, and it has not been received.</p>
+<ul>
+<li><strong>Room:</strong> {{room_name}}</li>
+<li><strong>Date:</strong> {{booking_date}}</li>
+<li><strong>Balance outstanding:</strong> {{outstanding}}</li>
+{{security_deposit_line}}
+</ul>
+<p><strong>If the balance is not paid today, your booking will be cancelled</strong> and the date released. The non-refundable deposit is not returned.</p>
+<p><a href="{{portal_url}}">Pay your balance now</a></p>
+<p>If you have paid today, thank you — please disregard this message. If something has gone wrong, contact the club straight away.</p>`,
   },
 
   fixture_reallocated: {
