@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache";
 import { getSessionProfile } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSiteUrl } from "@/lib/utils";
-import { SumUpAuthError, createSumUpCheckout, raiseSumUpCredentialAlarm, recordSumUpPaymentIfPaid } from "@/lib/sumup";
+import {
+  SumUpAuthError,
+  SumUpMerchantMismatchError,
+  createSumUpCheckout,
+  raiseSumUpCredentialAlarm,
+  recordSumUpPaymentIfPaid,
+} from "@/lib/sumup";
 import { instantToLocal } from "@/lib/booking-time";
 import { requestOrigin } from "@/lib/request-origin";
 import { sumHirePaid, sumSecurityPaid, type PaymentPurpose } from "@/lib/hire-terms";
@@ -113,10 +119,21 @@ export async function createCheckoutForBooking(
     return { checkoutId: checkout.id };
   } catch (e) {
     console.error("[portal] SumUp checkout creation failed:", e);
-    if (e instanceof SumUpAuthError) {
-      // The club's key, not the booker's card: no retry can help, so say so,
-      // and wake the desk before the next hirer finds the same wall.
-      await raiseSumUpCredentialAlarm({ status: e.status, detail: e.detail, source: "portal checkout", bookingId });
+    // The club's key, not the booker's card: no retry can help, so say so,
+    // and wake the desk before the next hirer finds the same wall. A refused
+    // key and a sandbox key end the same way for the booker.
+    if (e instanceof SumUpAuthError || e instanceof SumUpMerchantMismatchError) {
+      await raiseSumUpCredentialAlarm(
+        e instanceof SumUpAuthError
+          ? { status: e.status, detail: e.detail, source: "portal checkout", bookingId }
+          : {
+              status: 200,
+              detail: e.message,
+              source: "portal checkout",
+              bookingId,
+              mismatch: { expected: e.expected, actual: e.actual },
+            },
+      );
       return {
         error:
           "Online card payment is not working at the moment — this is a problem at the club's end, not with your card, and nothing has been taken. The club has been alerted; please contact them to pay another way or try again later.",
