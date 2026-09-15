@@ -2,11 +2,13 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getSessionProfile, isSuperUser } from "@/lib/auth";
 
-async function requireCommittee() {
+// The templates are the club's voice to every hirer and member; only a super
+// user edits them (Adam, 2026-09-15: "only super users can edit the form").
+async function requireSuperUser() {
   const session = await getSessionProfile();
-  if (!session || !isCommittee(session.profile?.role)) throw new Error("Not authorised");
+  if (!session || !isSuperUser(session.profile?.role)) throw new Error("Not authorised");
   return session;
 }
 import { createLegacyAdminClient } from "@/lib/supabase/legacy";
@@ -56,7 +58,7 @@ async function emailLayout(body: string, brandColor: string, clubName?: string):
 }
 
 export async function saveTemplate(key: TemplateKey, subject: string, bodyHtml: string) {
-  const session = await requireCommittee();
+  const session = await requireSuperUser();
   const admin = createLegacyAdminClient();
 
   if (!TEMPLATE_DEFINITIONS[key]) throw new Error("Invalid template key");
@@ -85,7 +87,7 @@ export async function saveTemplate(key: TemplateKey, subject: string, bodyHtml: 
 }
 
 export async function resetTemplate(key: TemplateKey) {
-  const session = await requireCommittee();
+  const session = await requireSuperUser();
   const admin = createLegacyAdminClient();
 
   if (!TEMPLATE_DEFINITIONS[key]) throw new Error("Invalid template key");
@@ -110,7 +112,7 @@ export async function previewTemplate(
   subject: string,
   bodyHtml: string,
 ): Promise<string> {
-  await requireCommittee();
+  await requireSuperUser();
   const brandColor = await getEmailBrandColor().catch(() => DEFAULT_COLOR);
   const def = TEMPLATE_DEFINITIONS[key];
   if (!def) throw new Error("Invalid template key");

@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getSessionProfile, isSuperUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { TEMPLATE_DEFINITIONS, type TemplateKey } from "@/lib/template-engine";
@@ -14,7 +14,7 @@ export const metadata = { title: "Email Templates" };
 export default async function EmailTemplatesPage() {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/lobby");
+  if (!isSuperUser(session.profile?.role)) redirect("/lobby");
 
   const admin = createAdminClient();
   const { data: saved } = await admin.from("email_templates").select("key,updated_at,updated_by");

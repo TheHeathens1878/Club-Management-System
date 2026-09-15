@@ -1,5 +1,5 @@
 import { notFound, redirect } from "next/navigation";
-import { getSessionProfile, isCommittee } from "@/lib/auth";
+import { getSessionProfile, isSuperUser } from "@/lib/auth";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSettings } from "@/lib/settings";
 import { PageHeader } from "@/components/page-header";
@@ -9,7 +9,7 @@ import { TemplateEditor } from "./template-editor";
 export default async function EditTemplatePage({ params }: { params: Promise<{ key: string }> }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
-  if (!isCommittee(session.profile?.role)) redirect("/lobby");
+  if (!isSuperUser(session.profile?.role)) redirect("/lobby");
 
   const { key } = await params;
   if (!(key in TEMPLATE_DEFINITIONS)) notFound();

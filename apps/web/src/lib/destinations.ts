@@ -624,7 +624,7 @@ const DRAWER_ITEMS: readonly NavItem[] = [
     icon: Mail,
     section: "Running the club",
     detail: "Templates, senders and reply-to addresses",
-    allowed: (c) => c.isCommittee,
+    allowed: (c) => c.isSuperUser,
     context: { view: "admin" },
     keywords: ["email templates", "comms templates"],
   },
