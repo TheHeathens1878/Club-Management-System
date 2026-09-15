@@ -75,6 +75,30 @@ export type SumUpCheckout = {
   transactions?: { transaction_code?: string; status?: string }[];
 };
 
+/**
+ * SumUp refused the credential itself — a 401 or 403 — as opposed to refusing
+ * the request. Nothing about the booking, the amount or the booker can make
+ * this succeed on a retry: the key on the server is wrong, expired or
+ * revoked, and only a person with the SumUp dashboard can put it right.
+ * Callers tell the booker that plainly and raise the alarm, rather than
+ * saying "please try again" to someone whose every try will fail (Leanne
+ * Minto, 2026-09-14: six presses, six 401s, one message that blamed nothing).
+ */
+export class SumUpAuthError extends Error {
+  readonly status: number;
+  readonly detail: string;
+  constructor(status: number, detail: string) {
+    super(`SumUp rejected the credential (${status}): ${detail}`);
+    this.name = "SumUpAuthError";
+    this.status = status;
+    this.detail = detail;
+  }
+}
+
+export function isSumUpAuthStatus(status: number): boolean {
+  return status === 401 || status === 403;
+}
+
 export async function createSumUpCheckout(params: {
   amountPence: number;
   reference: string;
@@ -94,8 +118,96 @@ export async function createSumUpCheckout(params: {
       redirect_url: params.returnUrl,
     }),
   });
+  if (isSumUpAuthStatus(res.status)) throw new SumUpAuthError(res.status, (await res.text()).slice(0, 300));
   if (!res.ok) throw new Error(`SumUp checkout failed (${res.status}): ${await res.text()}`);
   return res.json();
+}
+
+/**
+ * Does the credential on the server open SumUp's door? `/v0.1/me` is the
+ * cheapest authenticated read there is: it takes nothing and changes nothing.
+ * The reminder cron asks once a day, so a dead key is found the morning after
+ * it dies rather than the day a hirer tries to pay. The key that went onto the
+ * new Vercel project on 2026-08-23 was another service's secret pasted into
+ * the SumUp line, and nothing noticed for three weeks.
+ */
+export async function checkSumUpCredentials(): Promise<
+  { ok: true } | { ok: false; status: number; detail: string }
+> {
+  const auth = await authHeader();
+  const res = await fetch(`${BASE}/v0.1/me`, { headers: { Authorization: auth } });
+  if (res.ok) return { ok: true };
+  return { ok: false, status: res.status, detail: (await res.text()).slice(0, 300) };
+}
+
+export const SUMUP_CREDENTIAL_ALARM_TEMPLATE = "sumup_credentials_rejected";
+
+/** One alarm a day is a warning; one a press is a siren nobody reads. */
+export function alarmDue(lastSentAt: string | null | undefined, now: Date = new Date()): boolean {
+  if (!lastSentAt) return true;
+  const last = new Date(lastSentAt).getTime();
+  if (Number.isNaN(last)) return true;
+  return now.getTime() - last >= 24 * 60 * 60 * 1000;
+}
+
+/**
+ * Tell the club that SumUp is refusing the credential: an email to whoever
+ * hears about booking requests — the people who will be asked "why can't I
+ * pay?" — and, when a hirer was the one refused, the desk's bell on their
+ * booking. Throttled to once in 24 hours across every caller, using the
+ * club's own record of what it sent. Never throws: the booker's error message
+ * is the thing that must reach the screen. Answers whether it sent.
+ */
+export async function raiseSumUpCredentialAlarm(input: {
+  status: number;
+  detail: string;
+  source: string;
+  bookingId?: string;
+}): Promise<boolean> {
+  const admin = createAdminClient();
+  try {
+    const { data: last } = await admin
+      .from("outbound_messages")
+      .select("created_at")
+      .eq("template", SUMUP_CREDENTIAL_ALARM_TEMPLATE)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (!alarmDue(last?.created_at)) return false;
+
+    const where = input.bookingId ? "a hirer pressing Pay in their portal" : input.source;
+    const subject = `Online card payments are down — SumUp is rejecting the club's API key (${input.status})`;
+    const bodyText =
+      `SumUp answered ${input.status} to ${where}. The SUMUP_API_KEY on the server is not a valid SumUp ` +
+      `key — wrong, expired or revoked — and every online payment will fail until it is replaced. ` +
+      `Create a new API key in the SumUp dashboard (Developers → API keys), set it as SUMUP_API_KEY in ` +
+      `Vercel (Production) and redeploy. Nothing has been taken from anyone. SumUp said: ${input.detail}`;
+
+    const recipients = await getRecipientEmails("notify_booking_request").catch(() => []);
+    if (recipients.length > 0) {
+      await sendEmail({
+        to: recipients,
+        subject,
+        html: `<p>${bodyText.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</p>`,
+        text: bodyText,
+        template: SUMUP_CREDENTIAL_ALARM_TEMPLATE,
+        entity: input.bookingId ? "bookings" : undefined,
+        entityId: input.bookingId,
+      });
+    }
+    if (input.bookingId) {
+      await notifyRoomDesk(admin, {
+        subject,
+        body: "A hirer pressed Pay and SumUp refused the club's API key. Online payments are down until it is replaced.",
+        bookingId: input.bookingId,
+      });
+    }
+    console.error("[sumup] credential alarm raised:", input.source, input.status, input.detail);
+    return true;
+  } catch (e) {
+    console.error("[sumup] could not raise the credential alarm", e);
+    return false;
+  }
 }
 
 // A checkout by id: null when SumUp has never heard of it, an exception when
