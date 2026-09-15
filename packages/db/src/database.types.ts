@@ -856,6 +856,9 @@ export type Database = {
           anonymised_at: string | null
           balance_due_date: string | null
           balance_reminder_sent_at: string | null
+          /** The one-week balance reminder and the due-date final warning (20260915130000). */
+          balance_reminder_1w_sent_at: string | null
+          balance_final_warning_sent_at: string | null
           base_hire_pence: number
           blocked_from: string
           blocked_until: string
@@ -933,6 +936,8 @@ export type Database = {
           anonymised_at?: string | null
           balance_due_date?: string | null
           balance_reminder_sent_at?: string | null
+          balance_reminder_1w_sent_at?: string | null
+          balance_final_warning_sent_at?: string | null
           base_hire_pence?: number
           blocked_from: string
           blocked_until: string
@@ -1008,6 +1013,8 @@ export type Database = {
           anonymised_at?: string | null
           balance_due_date?: string | null
           balance_reminder_sent_at?: string | null
+          balance_reminder_1w_sent_at?: string | null
+          balance_final_warning_sent_at?: string | null
           base_hire_pence?: number
           blocked_from?: string
           blocked_until?: string

@@ -126,53 +126,81 @@ export async function GET(request: Request) {
     }
   }
 
-  // --- Balance reminders: the due date reached, the balance or the security deposit still owed ---
-  const { data: balanceCandidates } = await admin
-    .from("bookings")
-    .select(SELECT)
-    .eq("status", "confirmed")
-    .eq("kind", "hire")
-    .gt("starts_at", new Date().toISOString())
-    .is("balance_reminder_sent_at", null)
-    .not("balance_due_date", "is", null)
-    .lte("balance_due_date", today);
+  // --- Balance: chased three times (Adam, 2026-09-15) ---
+  // Two weeks before the due date, one week before, and a final warning on
+  // the day; each once, while the balance or the security deposit is still
+  // owed. The bands do not overlap, so a booking confirmed late gets only the
+  // reminders its remaining time allows — never all three in one morning —
+  // and a paused cron loses nothing but the earlier band. Until now one
+  // reminder went, on the due date, and nothing followed it.
+  const BALANCE_PASSES = [
+    { stamp: "balance_reminder_sent_at", template: "balance_reminder", after: 7, until: 14, dueIn: "in two weeks" },
+    { stamp: "balance_reminder_1w_sent_at", template: "balance_reminder", after: 0, until: 7, dueIn: "in one week" },
+    { stamp: "balance_final_warning_sent_at", template: "balance_final_warning", after: null, until: 0, dueIn: "today" },
+  ] as const;
+  let balanceFinalSent = 0;
 
-  const balBookings: Booking[] = balanceCandidates ?? [];
-  const balPaid = await paidMap(admin, balBookings.map((b) => b.id));
+  for (const pass of BALANCE_PASSES) {
+    let query = admin
+      .from("bookings")
+      .select(SELECT)
+      .eq("status", "confirmed")
+      .eq("kind", "hire")
+      .gt("starts_at", new Date().toISOString())
+      .is(pass.stamp, null)
+      .not("balance_due_date", "is", null)
+      .lte("balance_due_date", dayOffset(pass.until));
+    if (pass.after !== null) query = query.gt("balance_due_date", dayOffset(pass.after));
+    const { data: candidates } = await query;
 
-  for (const b of balBookings) {
-    const total = Number(b.total_pence ?? 0);
-    const paid = balPaid.get(b.id) ?? NOTHING;
-    const outstanding = Math.max(0, total - paid.hire);
-    const securityOutstanding = Math.max(0, Number(b.security_deposit_pence ?? 0) - paid.security);
-    if (outstanding <= 0 && securityOutstanding <= 0) continue; // paid in full, deposit held
-    if (!b.booker_email) continue;
-    try {
-      const tpl = await renderEmailTemplate("balance_reminder", {
-        name: b.booker_name || "there",
-        room_name: roomNameOf(b),
-        booking_date: formatBookingDate(instantsToLocalWindow(b.starts_at, b.ends_at).date),
-        outstanding: formatCurrency(outstanding),
-        security_deposit: securityOutstanding > 0 ? formatCurrency(securityOutstanding) : "—",
-        security_deposit_line:
-          securityOutstanding > 0
-            ? `<li><strong>Refundable security deposit still to pay:</strong> ${formatCurrency(securityOutstanding)} (returned after the event if all is well)</li>`
-            : "",
-        balance_due_date: b.balance_due_date ? formatBookingDate(b.balance_due_date) : "—",
-        portal_url: portalUrl,
-      }, brandColor);
-      await sendEmail({
-        to: b.booker_email,
-        ...tpl,
-        category: "reminder",
-        template: "balance_reminder",
-        entity: "bookings",
-        entityId: b.id,
-      });
-      await admin.from("bookings").update({ balance_reminder_sent_at: new Date().toISOString() }).eq("id", b.id);
-      balanceSent++;
-    } catch (e) {
-      console.error("[cron] balance reminder failed for", b.id, e);
+    const passBookings: Booking[] = candidates ?? [];
+    const passPaid = await paidMap(admin, passBookings.map((b) => b.id));
+
+    for (const b of passBookings) {
+      const total = Number(b.total_pence ?? 0);
+      const paid = passPaid.get(b.id) ?? NOTHING;
+      const outstanding = Math.max(0, total - paid.hire);
+      const securityOutstanding = Math.max(0, Number(b.security_deposit_pence ?? 0) - paid.security);
+      if (outstanding <= 0 && securityOutstanding <= 0) continue; // paid in full, deposit held
+      if (!b.booker_email) continue;
+      try {
+        const tpl = await renderEmailTemplate(pass.template, {
+          name: b.booker_name || "there",
+          room_name: roomNameOf(b),
+          booking_date: formatBookingDate(instantsToLocalWindow(b.starts_at, b.ends_at).date),
+          outstanding: formatCurrency(outstanding),
+          security_deposit: securityOutstanding > 0 ? formatCurrency(securityOutstanding) : "—",
+          security_deposit_line:
+            securityOutstanding > 0
+              ? `<li><strong>Refundable security deposit still to pay:</strong> ${formatCurrency(securityOutstanding)} (returned after the event if all is well)</li>`
+              : "",
+          balance_due_date: b.balance_due_date ? formatBookingDate(b.balance_due_date) : "—",
+          due_in: pass.dueIn,
+          portal_url: portalUrl,
+        }, brandColor);
+        await sendEmail({
+          to: b.booker_email,
+          ...tpl,
+          // The final warning is not a nudge the hirer may switch off: it is
+          // the notice before their booking goes.
+          category: pass.template === "balance_final_warning" ? "transactional" : "reminder",
+          template: pass.template,
+          entity: "bookings",
+          entityId: b.id,
+        });
+        const stampedAt = new Date().toISOString();
+        const stamp =
+          pass.stamp === "balance_reminder_sent_at"
+            ? { balance_reminder_sent_at: stampedAt }
+            : pass.stamp === "balance_reminder_1w_sent_at"
+              ? { balance_reminder_1w_sent_at: stampedAt }
+              : { balance_final_warning_sent_at: stampedAt };
+        await admin.from("bookings").update(stamp).eq("id", b.id);
+        if (pass.template === "balance_final_warning") balanceFinalSent++;
+        else balanceSent++;
+      } catch (e) {
+        console.error("[cron] balance reminder failed for", b.id, pass.stamp, e);
+      }
     }
   }
 
@@ -248,6 +276,79 @@ export async function GET(request: Request) {
         detail: { auto: true, reason: "deposit unpaid" },
       });
       autoCancelled++;
+    }
+  }
+
+  // --- Auto-cancel: balance due date passed and the hire balance still unpaid ---
+  // The final warning said "cancelled if not paid today", so the morning after
+  // the due date it is (Adam, 2026-09-15). The hire balance only: a security
+  // deposit still owed on its own is chased, not cancelled for — it is the
+  // club's to hold, not the hirer's to lose the party over.
+  let balanceCancelled = 0;
+  if (settings.auto_cancel_unpaid !== "false") {
+    const { data: lateCandidates } = await admin
+      .from("bookings")
+      .select(SELECT_WITH_CALENDAR)
+      .eq("status", "confirmed")
+      .eq("kind", "hire")
+      .gt("starts_at", new Date().toISOString())
+      .gt("total_pence", 0)
+      .not("balance_due_date", "is", null)
+      .lt("balance_due_date", today); // due date strictly in the past
+
+    const lateBookings: (Booking & { calendar_event_id: string | null })[] = lateCandidates ?? [];
+    const latePaid = await paidMap(admin, lateBookings.map((b) => b.id));
+    const ccLate = await getRecipientEmails("notify_auto_cancellation").catch(() => []);
+
+    for (const b of lateBookings) {
+      const total = Number(b.total_pence ?? 0);
+      const paid = (latePaid.get(b.id) ?? NOTHING).hire;
+      const outstanding = Math.max(0, total - paid);
+      if (outstanding <= 0) continue; // balance settled — leave it alone
+
+      const dueStr = b.balance_due_date ? formatBookingDate(b.balance_due_date) : "the due date";
+      const reason = `The balance of ${formatCurrency(outstanding)} was not received by ${dueStr}, at least two weeks before the event, so this booking has been cancelled and the date is open again. The non-refundable deposit is not returned.`;
+
+      await admin
+        .from("bookings")
+        .update({ status: "cancelled", internal_notes: `Auto-cancelled: balance not paid by ${b.balance_due_date}` })
+        .eq("id", b.id);
+
+      if (b.calendar_event_id) deleteCalendarEvent(b.calendar_event_id).catch(() => {});
+
+      if (b.booker_email) {
+        try {
+          const window = instantsToLocalWindow(b.starts_at, b.ends_at);
+          const tpl = await renderEmailTemplate("room_booking_cancelled", {
+            name: b.booker_name || "there",
+            room_name: roomNameOf(b),
+            booking_date: formatBookingDate(window.date),
+            start_time: window.startTime,
+            end_time: window.endTime,
+            cancellation_reason: reason,
+          }, brandColor);
+          await sendEmail({
+            to: b.booker_email,
+            cc: ccLate,
+            ...tpl,
+            template: "room_booking_cancelled",
+            entity: "bookings",
+            entityId: b.id,
+          });
+        } catch (e) {
+          console.error("[cron] balance auto-cancel email failed for", b.id, e);
+        }
+      }
+
+      await writeAudit({
+        actorId: null,
+        actorEmail: "system (auto-cancel)",
+        action: "cancel",
+        entity: "room_booking",
+        entityId: b.id,
+        detail: { auto: true, reason: "balance unpaid", outstanding_pence: outstanding },
+      });
+      balanceCancelled++;
     }
   }
 
@@ -402,7 +503,9 @@ export async function GET(request: Request) {
     ok: true,
     depositSent,
     balanceSent,
+    balanceFinalSent,
     autoCancelled,
+    balanceCancelled,
     quoteFollowups,
     thankYous,
     securityNudges,
