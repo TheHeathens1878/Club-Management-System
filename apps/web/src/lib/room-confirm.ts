@@ -11,7 +11,7 @@ import { conflictOrMessage } from "@/lib/booking-conflict";
 import { addDays, formatBookingDate, instantsToLocalWindow, londonToday } from "@/lib/booking-time";
 import { createCalendarEvent } from "@/lib/calendar";
 import { sendEmail } from "@/lib/email";
-import { bookingDepositPence, depositRuleFrom, paymentTermsText, sumHirePaid } from "@/lib/hire-terms";
+import { bookingDepositPence, depositRuleFrom, memberInfoText, paymentTermsText, sumHirePaid } from "@/lib/hire-terms";
 import { getEmailBrandColor, getSettings } from "@/lib/settings";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { renderEmailTemplate } from "@/lib/template-engine";
@@ -52,7 +52,7 @@ export async function confirmRoomBooking(
   const { data: booking, error: fetchErr } = await admin
     .from("bookings")
     .select(
-      "booker_name,booker_email,starts_at,ends_at,occasion,estimated_guests,total_pence,base_hire_pence,security_deposit_pence,payment_status,resources(name)",
+      "booker_name,booker_email,starts_at,ends_at,occasion,estimated_guests,total_pence,base_hire_pence,security_deposit_pence,payment_status,is_member,membership_type,member_number,member_discount_pence,resources(name)",
     )
     .eq("id", bookingId)
     .maybeSingle();
@@ -187,6 +187,15 @@ export async function confirmRoomBooking(
           deposit_due_date: depositPence > 0 ? depositDueFormatted : "—",
           balance_due_date: balanceDueFormatted,
           security_deposit: securityDepositPence > 0 ? formatCurrency(securityDepositPence) : "—",
+          // The club's customised template (2026-08-20) carries {{member_info}}
+          // from the old room app; nothing here filled it, so the hirer read
+          // the placeholder itself (Adam, 2026-09-15). Blank for a non-member.
+          member_info: memberInfoText({
+            is_member: booking.is_member,
+            membership_type: booking.membership_type,
+            member_number: booking.member_number,
+            member_discount_pence: opts?.memberDiscountPence ?? booking.member_discount_pence,
+          }),
           portal_url: `${getSiteUrl()}/portal`,
         }, brandColor);
 

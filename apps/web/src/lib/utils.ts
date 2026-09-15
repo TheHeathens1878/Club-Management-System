@@ -1,8 +1,30 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
+/** The club's own address: where every emailed link is meant to land. */
+export const CANONICAL_SITE_URL = "https://portal.aomsportsclub.co.uk";
+
+/**
+ * The address links are built on where there is no request to read — an
+ * email, a cron. `NEXT_PUBLIC_SITE_URL` names it, except that on production
+ * a `*.vercel.app` value is the project's raw address, not the club's: the
+ * variable has said that since the project was rebuilt on 2026-08-23, so
+ * every confirmation email's "Open your booking portal" landed on a host
+ * where the reader had no session and was asked to sign in again (Adam,
+ * 2026-09-15). Production ignores such a value and uses the club's address.
+ * Previews keep whatever they are given, so a preview's links stay on the
+ * preview.
+ */
+export function siteUrlFrom(configured: string | undefined, vercelEnv: string | undefined): string | null {
+  const url = (configured ?? "").trim().replace(/\/+$/, "");
+  if (vercelEnv === "production" && (!url || /^https?:\/\/[^/]*\.vercel\.app$/i.test(url))) {
+    return CANONICAL_SITE_URL;
+  }
+  return url || null;
+}
+
 export function getSiteUrl(): string {
-  const url = process.env.NEXT_PUBLIC_SITE_URL;
+  const url = siteUrlFrom(process.env.NEXT_PUBLIC_SITE_URL, process.env.VERCEL_ENV);
   if (!url) {
     throw new Error(
       "NEXT_PUBLIC_SITE_URL is not configured. Add it to your Vercel environment variables (e.g. https://portal.aomsportsclub.co.uk)."

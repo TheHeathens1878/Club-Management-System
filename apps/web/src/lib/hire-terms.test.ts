@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   bookingDepositPence,
   depositRuleLabel,
+  memberInfoText,
   isPaymentPurpose,
   paymentTermsText,
   sumHirePaid,
@@ -101,5 +102,21 @@ describe("paymentTermsText", () => {
         securityDepositPence: 0,
       }),
     ).toBe("");
+  });
+});
+
+describe("memberInfoText", () => {
+  it("is blank for a non-member, so the template paragraph says nothing", () => {
+    expect(memberInfoText({ is_member: false })).toBe("");
+    expect(memberInfoText({ is_member: null, member_discount_pence: 2500 })).toBe("");
+  });
+  it("names the membership and the discount applied", () => {
+    expect(memberInfoText({ is_member: true, membership_type: "Social", member_number: "00123", member_discount_pence: 2500 })).toBe(
+      "This is a member booking (Social, 00123): a member discount of £25.00 has been applied.",
+    );
+  });
+  it("copes with a member who has no type, number or discount", () => {
+    expect(memberInfoText({ is_member: true })).toBe("This is a member booking.");
+    expect(memberInfoText({ is_member: true, member_number: " 42 ", member_discount_pence: 0 })).toBe("This is a member booking (42).");
   });
 });

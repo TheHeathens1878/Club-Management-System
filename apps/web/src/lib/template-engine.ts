@@ -72,6 +72,7 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
       { key: "deposit_due_date", label: "Deposit due date", example: "14 June 2026" },
       { key: "balance_due_date", label: "Balance (and security deposit) due date", example: "1 July 2026" },
       { key: "security_deposit", label: "Refundable security deposit (— if none)", example: "£200.00" },
+      { key: "member_info", label: "Member booking note (blank for a non-member)", example: "This is a member booking (Social, 00123): a member discount of £25.00 has been applied." },
       { key: "portal_url", label: "Booker portal link", example: "https://portal.aomsportsclub.co.uk/portal" },
     ],
     defaultSubject: (c) => `${c} — your room booking is confirmed`,
@@ -329,8 +330,25 @@ export const TEMPLATE_DEFINITIONS: Record<TemplateKey, TemplateDef> = {
   },
 };
 
-export function substituteVars(template: string, vars: Record<string, string>): string {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
+/**
+ * Fill a template's {{placeholders}}. One the caller did not supply comes out
+ * blank, not as the placeholder itself: a hirer's confirmation used to arrive
+ * with "{{member_info}}" printed in it, a variable the club's customised
+ * template asked for and the confirm path did not know (Adam, 2026-09-15). A
+ * blank is a gap only staff notice; the log names the gap so it gets filled.
+ */
+export function substituteVars(
+  template: string,
+  vars: Record<string, string>,
+  /** "keep" leaves an unknown placeholder visible — for the editor's preview, where a typo should show. */
+  onMissing: "blank" | "keep" = "blank",
+): string {
+  return template.replace(/\{\{(\w+)\}\}/g, (match: string, key: string) => {
+    if (key in vars) return vars[key] ?? "";
+    if (onMissing === "keep") return match;
+    console.warn(`[template] no value for {{${key}}} — rendered blank`);
+    return "";
+  });
 }
 
 /**

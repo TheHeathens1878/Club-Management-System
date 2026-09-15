@@ -3,10 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 import type { EmailOtpType } from "@supabase/supabase-js";
 import { safeRelativePath } from "@/lib/auth-email-hook";
 import { isBookerRole } from "@/lib/types";
+import { originFromHeaders } from "@/lib/request-origin";
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const origin = process.env.NEXT_PUBLIC_SITE_URL ?? new URL(request.url).origin;
+  // The session cookie this handler is about to set belongs to the host the
+  // link was opened on, so that is where the browser must be sent next. Until
+  // 2026-09-15 the redirect went to NEXT_PUBLIC_SITE_URL — the raw Vercel
+  // address on production — and a magic link opened on the club's own domain
+  // signed the person in there and then dropped them, cookieless, on the
+  // Vercel host's login page (Adam, 2026-09-15: "taking me to the sign in
+  // page"). Only the club's hosts are honoured; anything else falls back.
+  const origin = originFromHeaders(request.headers) || new URL(request.url).origin;
   const code = searchParams.get("code");
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;

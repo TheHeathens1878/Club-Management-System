@@ -146,3 +146,26 @@ export function paymentTermsText(input: {
   }
   return parts.map((s) => s.charAt(0).toUpperCase() + s.slice(1)).join(" ");
 }
+
+/**
+ * The confirmation email's note about a member booking — the club's own
+ * customised template asks for it as {{member_info}}. Blank for a non-member,
+ * so the paragraph that holds it simply says nothing.
+ */
+export function memberInfoText(booking: {
+  is_member?: boolean | null;
+  membership_type?: string | null;
+  member_number?: string | null;
+  member_discount_pence?: number | null;
+}): string {
+  if (!booking.is_member) return "";
+  const who = [booking.membership_type, booking.member_number]
+    .map((s) => (s ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+  const discount = Number(booking.member_discount_pence ?? 0);
+  const head = `This is a member booking${who ? ` (${who})` : ""}`;
+  return discount > 0
+    ? `${head}: a member discount of ${formatCurrency(discount)} has been applied.`
+    : `${head}.`;
+}
