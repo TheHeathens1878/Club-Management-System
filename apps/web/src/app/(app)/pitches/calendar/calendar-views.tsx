@@ -25,6 +25,7 @@ import { CalendarX2, ChevronLeft, ChevronRight, Repeat2, Users } from "lucide-re
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Textarea } from "@/components/ui/field";
 import { Sheet } from "@/components/ui/sheet";
 import type { PitchOption } from "@/lib/pitch-booking";
@@ -40,9 +41,11 @@ import {
   entriesByDate,
   HOUR_HEIGHT,
   hourLabel,
+  matchSlotLabel,
   type CalendarEntry,
 } from "@/lib/pitch-calendar";
 
+import { MatchSlotPanel } from "./match-slot-panel";
 import {
   cancelPitchBooking,
   confirmPitchBooking,
@@ -60,6 +63,13 @@ export type CalendarPermissions = {
   isAdmin: boolean;
   /** Teams the caller is coach / assistant coach / manager of. */
   staffTeamIds: string[];
+  /**
+   * May this caller cancel or delete a MATCH from here — the club-admin
+   * capability AND the admin hat (`isAdminHat`), computed on the server page
+   * exactly as the fixture desk computes its own. Without it the refusal keeps
+   * the server's words, which name where the work is done.
+   */
+  canManageMatches: boolean;
 };
 
 /** Where a block's "manage this" link should point, or null for read-only. */
@@ -107,14 +117,14 @@ function EntryMeta({ entry }: { entry: CalendarEntry }) {
         </p>
       )}
       {entry.internalMatch && (
-        <p className="rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-xs text-emerald-800">
+        <Callout tone="success" className="text-xs">
           🟢 Internal match — two of the club&apos;s own teams.
-        </p>
+        </Callout>
       )}
       {entry.consecutiveWeeks && (
-        <p className="rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-xs text-amber-900">
+        <Callout tone="warning" className="text-xs">
           ⚠️ This team has this pitch two or more weeks in a row.
-        </p>
+        </Callout>
       )}
     </>
   );
@@ -176,10 +186,30 @@ function EntryPopover({
     permissions.staffTeamIds.includes(entry.teamId) &&
     entry.group !== "fixture";
 
-  const feedback = [closureState, confirmState, declineState, cancelState, deleteState];
+  const router = useRouter();
+
+  // "You want the match, not the booking": the delete came back refused and
+  // named the fixture, so the panel takes over from the plain error line and
+  // carries the two doors (Adam, 2026-09-16).
+  const matchSlot =
+    deleteState.error && (deleteState.fixtureId || deleteState.fixtureHref)
+      ? {
+          message: deleteState.error,
+          fixtureId: deleteState.fixtureId ?? entry.fixtureId,
+          fixtureHref: deleteState.fixtureHref ?? null,
+        }
+      : null;
+
+  const feedback = [
+    closureState,
+    confirmState,
+    declineState,
+    cancelState,
+    // The refusal is the panel's to say; saying it twice helps nobody.
+    ...(matchSlot ? [] : [deleteState]),
+  ];
   const error = feedback.map((s) => s.error).find(Boolean);
   const notice = feedback.map((s) => s.notice).find(Boolean);
-  const fixtureHref = deleteState.fixtureHref;
 
   return (
     <Sheet
@@ -201,18 +231,18 @@ function EntryPopover({
           <EntryMeta entry={entry} />
         </div>
 
-        {error && <p className="text-xs text-destructive">{error}</p>}
-        {/* "You want the match, not the booking" — the refusal that names the
-            match links straight to it (Adam, 2026-09-02). */}
-        {fixtureHref && (
-          <Link
-            href={fixtureHref}
-            className="inline-block text-xs font-medium text-primary underline underline-offset-2"
-          >
-            Open the match
-          </Link>
+        {error && <Callout tone="danger">{error}</Callout>}
+        {matchSlot && (
+          <MatchSlotPanel
+            message={matchSlot.message}
+            fixtureId={matchSlot.fixtureId}
+            fixtureHref={matchSlot.fixtureHref}
+            matchLabel={matchSlotLabel(entry)}
+            canManageMatches={permissions.canManageMatches}
+            onDone={() => router.refresh()}
+          />
         )}
-        {notice && <p className="text-xs text-success">{notice}</p>}
+        {notice && <Callout tone="success">{notice}</Callout>}
 
         {/* Every action in the sheet is a 44px target on a phone. */}
         <div className="flex flex-wrap items-center gap-2 pt-1 [&_a]:h-11 [&_button]:h-11 sm:[&_a]:h-9 sm:[&_button]:h-9">
@@ -304,7 +334,8 @@ function EntryPopover({
             <input type="hidden" name="team_id" value={entry.teamId ?? ""} />
             <p className="text-xs text-muted-foreground">
               Deleting removes the booking and its history outright — cancelling is the everyday
-              path. A fixture&apos;s slot cannot be deleted here; unallocate it on Pitches.
+              path. A match&apos;s slot cannot go on its own; pressing this on one offers to cancel
+              or delete the match instead, which gives the pitch back at the same time.
             </p>
             <div className="flex gap-2 [&_button]:h-11 sm:[&_button]:h-9">
               <Button type="submit" variant="destructive" size="sm" disabled={deleting}>

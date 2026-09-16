@@ -13,6 +13,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { buttonVariants } from "@/components/ui/button";
 import { getSessionProfile } from "@/lib/auth";
 import { addDays, isValidDateString, londonToday } from "@/lib/booking-time";
+import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
+import { isAdminHat, resolveRoleView } from "@/lib/role-view";
 import {
   clubNameSet,
   consecutiveWeekIds,
@@ -242,6 +244,15 @@ export default async function PitchCalendarPage({
   });
   const canAllocate = context.isAdmin;
   const canBook = context.isAdmin || context.staffTeamIds.length > 0;
+
+  // Cancelling or deleting a MATCH from the entry sheet (Adam, 2026-09-16).
+  // The capability AND the hat, exactly as the fixture desk computes it: the
+  // two match actions demand `is_club_admin()`, and `isAdminHat` is the hat
+  // half #365 named after the referee and function-room hats slipped through a
+  // looser spelling of it. This only decides what the SHEET offers — every
+  // action re-checks for itself and RLS has the last word.
+  const canManageMatches =
+    context.isAdmin && isAdminHat(resolveRoleView(await getStoredRoleView(), await getCapabilities()));
 
   // Week/list show Sat+Sun unless all days asked for; day shows the anchor.
   const weekDays =
@@ -562,6 +573,7 @@ export default async function PitchCalendarPage({
                       permissions={{
                         isAdmin: context.isAdmin,
                         staffTeamIds: context.staffTeamIds,
+                        canManageMatches,
                       }}
                       canBook={canBook}
                       mode={view === "list" ? "list" : "auto"}
