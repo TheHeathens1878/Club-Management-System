@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import { buildMonthRange, parseYm, statusTag } from "./bookings-calendar";
 import {
+  awaySummary,
   bookingSwatch,
   deskCellMode,
   deskClashes,
   deskSummary,
+  filterSummary,
   openingWeek,
   shiftWeek,
   weekDays,
@@ -190,6 +192,61 @@ describe("deskSummary", () => {
     expect(summary.tone).toBe("done");
     expect(summary.oldestId).toBeNull();
     expect(summary.status).toBe("Nothing is waiting on the desk");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// What the folds say while they are shut
+// ---------------------------------------------------------------------------
+
+describe("awaySummary", () => {
+  const today = "2026-11-10";
+
+  it("names the first absence still to come, and how many follow", () => {
+    expect(
+      awaySummary(
+        [
+          { staffName: "Lyndsey", fromDate: "2026-11-12", toDate: "2026-11-19" },
+          { staffName: "Adam", fromDate: "2026-11-20", toDate: "2026-11-21" },
+        ],
+        today,
+      ),
+    ).toBe("Lyndsey away 12–19 Nov · 1 more");
+  });
+
+  it("says one day as one day", () => {
+    expect(awaySummary([{ staffName: "Adam", fromDate: "2026-11-11", toDate: "2026-11-11" }], today)).toBe(
+      "Adam away 11 Nov",
+    );
+  });
+
+  it("forgets a holiday that is over", () => {
+    expect(awaySummary([{ staffName: "Lyndsey", fromDate: "2026-10-01", toDate: "2026-10-08" }], today)).toBe(
+      "Nobody is away — every shift is covered",
+    );
+  });
+});
+
+describe("filterSummary", () => {
+  it("says the diary is never filtered", () => {
+    expect(filterSummary({ period: "upcoming", calendar: true })).toBe(
+      "Calendar · the whole diary, every room",
+    );
+  });
+
+  it("names the view, the window, the status and the room", () => {
+    expect(
+      filterSummary({
+        period: "upcoming",
+        status: "open",
+        statusCount: 4,
+        roomName: undefined,
+        calendar: false,
+      }),
+    ).toBe("List · Upcoming · Waiting (4) · All rooms");
+    expect(
+      filterSummary({ period: "past", status: "cancelled", roomName: "The Lounge", calendar: false }),
+    ).toBe("List · Past · Cancelled · The Lounge");
   });
 });
 

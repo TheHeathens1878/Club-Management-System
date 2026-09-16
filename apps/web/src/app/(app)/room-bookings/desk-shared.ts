@@ -202,6 +202,62 @@ function dayMonth(iso: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// What the folds say while they are shut
+// ---------------------------------------------------------------------------
+
+/** A staff absence, as the desk holds it. */
+export type AwaySpan = { staffName: string; fromDate: string; toDate: string };
+
+/**
+ * "Lyndsey away 12–19 Sep" — the staff fold's closed summary.
+ *
+ * A fold is only worth folding if its shut row still answers the question, and
+ * the question this one answers is "is anybody off when this booking is on".
+ * Only current and future absences count; a holiday in March is history.
+ */
+export function awaySummary(entries: readonly AwaySpan[], today: string): string {
+  const live = entries
+    .filter((entry) => entry.toDate >= today)
+    .sort((a, b) => a.fromDate.localeCompare(b.fromDate));
+  if (live.length === 0) return "Nobody is away — every shift is covered";
+
+  const first = live[0];
+  if (!first) return "Nobody is away — every shift is covered";
+  const span =
+    first.fromDate === first.toDate
+      ? dayMonth(`${first.fromDate}T12:00:00`)
+      : `${Number(first.fromDate.slice(8, 10))}–${dayMonth(`${first.toDate}T12:00:00`)}`;
+  const rest = live.length - 1;
+  return `${first.staffName} away ${span}${rest > 0 ? ` · ${rest} more` : ""}`;
+}
+
+/**
+ * "List · Upcoming · Waiting (4) · All rooms" — the filter fold's closed row.
+ *
+ * It names the view first because the fold holds the view switch, and a fold
+ * that hides which of two views you are looking at is a fold nobody trusts.
+ * The diary is never filtered — it is the whole month, on every room — so it
+ * says that instead of listing filters that would not bite.
+ */
+export function filterSummary(input: {
+  period: string;
+  status?: string | undefined;
+  statusCount?: number | undefined;
+  roomName?: string | undefined;
+  calendar: boolean;
+}): string {
+  if (input.calendar) return "Calendar · the whole diary, every room";
+  const period =
+    input.period === "past" ? "Past" : input.period === "all" ? "All dates" : "Upcoming";
+  const status = !input.status
+    ? "Everything"
+    : input.status === "open"
+      ? `Waiting${input.statusCount === undefined ? "" : ` (${input.statusCount})`}`
+      : input.status.charAt(0).toUpperCase() + input.status.slice(1);
+  return `List · ${period} · ${status} · ${input.roomName ?? "All rooms"}`;
+}
+
+// ---------------------------------------------------------------------------
 // The calendar's colours, as data
 // ---------------------------------------------------------------------------
 

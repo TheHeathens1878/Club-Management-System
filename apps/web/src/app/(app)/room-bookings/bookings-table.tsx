@@ -7,9 +7,10 @@
  * stack of cards for a phone, each with its own tick column, its own empty
  * state and its own idea of what a row says — is now `DataListFrame`, which
  * owns the chrome and is handed the cells. What is left in this file is the
- * three things the frame does not know about bookings: what a row says, what
- * the bulk bar does to the ticked ones, and which columns the desk has chosen
- * to see.
+ * two things the frame does not know about bookings: what a row says, and what
+ * the bulk bar does to the ticked ones. Which columns are on is handed in: the
+ * picker moved into the Filters fold beneath the list (P8.2b), because choosing
+ * columns is a setting and the rows are the work.
  *
  * A row opens the SAME sheet the calendar opens, on the same door, so the desk
  * never has to leave the list to answer an enquiry. The date is still a link
@@ -22,16 +23,14 @@
  * always applied — and every server action re-checks them for itself.
  */
 
-import { useState, useEffect, useRef, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarDays, Trash2, Columns, ChevronDown, Repeat } from "lucide-react";
+import { CalendarDays, Trash2, Repeat } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChipStrip } from "@/components/ui/chip-strip";
 import { DataListFrame, type DataColumn, type DataItem } from "@/components/ui/data-list";
 import { TD } from "@/components/ui/table";
-import { ToggleChipLink } from "@/components/ui/toggle-chip";
 import { formatCurrency } from "@/lib/utils";
 import {
   declineAndDeleteSeries,
@@ -39,7 +38,6 @@ import {
   deleteBookings,
   deleteBookingsByGroup,
 } from "./actions";
-import { BookingsExportButtons } from "./bookings-export";
 import { formatBookingDateShort } from "@/lib/booking-time";
 import type { BookingKind, BookingListItem } from "@/lib/booking-types";
 
@@ -79,7 +77,7 @@ export function BookingsTable({
   canDelete,
   canDecline,
   onOpen,
-  chipGroups = [],
+  visible = DEFAULT_VISIBLE,
   initialQuery = "",
 }: {
   bookings: BookingListItem[];
@@ -89,42 +87,18 @@ export function BookingsTable({
   canDecline: boolean;
   /** A press on a row. Without one the row is a link to the record page. */
   onOpen?: (booking: BookingListItem) => void;
-  /** The page's `?status=&room=&period=` filters, as chips above the list. */
-  chipGroups?: ChipGroup[];
+  /**
+   * The columns the desk has chosen to see. The picker itself lives in the
+   * Filters fold beneath the list (P8.2b), because choosing columns is a
+   * setting and the rows are the work.
+   */
+  visible?: ColKey[];
   /** What `?q=` held when the page was drawn. */
   initialQuery?: string;
 }) {
   const router = useRouter();
-  const [visible, setVisible] = useState<ColKey[]>(DEFAULT_VISIBLE);
-  const [pickerOpen, setPickerOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const pickerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem(COLUMN_STORAGE_KEY);
-      if (stored) setVisible(JSON.parse(stored));
-    } catch { /* ignore */ }
-  }, []);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
-        setPickerOpen(false);
-      }
-    }
-    if (pickerOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [pickerOpen]);
-
-  function toggleCol(key: ColKey) {
-    setVisible((prev) => {
-      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
-      localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }
 
   const show = (k: ColKey) => visible.includes(k);
 
@@ -349,63 +323,6 @@ export function BookingsTable({
         items={items}
         columns={columns}
         search={{ param: "q", placeholder: "Search bookings", initial: initialQuery }}
-        chips={
-          chipGroups.length > 0 ? (
-            <div className="space-y-1.5">
-              {chipGroups.map((group) => (
-                <ChipStrip key={group.key} aria-label={group.label}>
-                  {group.options.map((option) => (
-                    <ToggleChipLink
-                      key={option.key}
-                      href={option.href}
-                      active={option.active}
-                      count={option.count}
-                      size="sm"
-                    >
-                      {option.label}
-                    </ToggleChipLink>
-                  ))}
-                </ChipStrip>
-              ))}
-            </div>
-          ) : undefined
-        }
-        actions={
-          <div className="flex w-full flex-wrap items-center gap-2 lg:w-auto">
-            <BookingsExportButtons bookings={bookings} roomName={roomName} visibleCols={visible} />
-
-            {/* Column picker — governs the table columns on lg+ and the export
-                column set everywhere. */}
-            <div className="relative" ref={pickerRef}>
-              <Button variant="outline" size="touch" onClick={() => setPickerOpen((v) => !v)}>
-                <Columns className="h-3.5 w-3.5" aria-hidden /> Columns{" "}
-                <ChevronDown className="ml-0.5 h-3 w-3 opacity-60" aria-hidden />
-              </Button>
-              {pickerOpen && (
-                <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-lg border bg-popover shadow-lg">
-                  <p className="px-3 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Toggle columns
-                  </p>
-                  {TOGGLE_COLS.map(({ key, label }) => (
-                    <label
-                      key={key}
-                      className="flex cursor-pointer items-center gap-2.5 px-3 py-1.5 text-sm hover:bg-accent"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={visible.includes(key)}
-                        onChange={() => toggleCol(key)}
-                        className="h-3.5 w-3.5 accent-primary"
-                      />
-                      {label}
-                    </label>
-                  ))}
-                  <div className="h-1.5" />
-                </div>
-              )}
-            </div>
-          </div>
-        }
         select={
           canTick
             ? {

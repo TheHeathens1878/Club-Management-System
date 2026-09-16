@@ -4,15 +4,20 @@ import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
-import { ChipStrip } from "@/components/ui/chip-strip";
-import { ToggleChipLink } from "@/components/ui/toggle-chip";
-import { ExternalLink, Settings, Plus, LayoutList, CalendarDays } from "lucide-react";
+import { FoldCard } from "@/components/ui/fold-card";
+import { DoorOpen, ExternalLink, Settings, Plus, UserX } from "lucide-react";
 import { BlockBookingForm } from "./block-booking-form";
 import { BookingsDesk } from "./bookings-desk";
 import { StaffAwayPanel } from "./staff-away-panel";
 import type { StaffMember, AwayEntry } from "./staff-away-panel";
 import type { ChipGroup } from "./bookings-table";
-import { deskClashes, deskSummary, type DeskBooking } from "./desk-shared";
+import {
+  awaySummary,
+  deskClashes,
+  deskSummary,
+  filterSummary,
+  type DeskBooking,
+} from "./desk-shared";
 import { bookingMoney, bookingNeedsTerms, bookingNextAction } from "@/lib/booking-next-action";
 import {
   FUNCTION_ROOM,
@@ -142,6 +147,14 @@ export default async function RoomBookingsPage({
   const roomNameRecord: Record<string, string> = Object.fromEntries(
     (rooms ?? []).map((r) => [r.id, r.name])
   );
+
+  // What the rooms fold says while it is shut: which rooms are on the books,
+  // and that the public form is where a hirer starts.
+  const roomList = (rooms ?? []).map((r) => r.name);
+  const roomsSummary =
+    roomList.length === 0
+      ? "No rooms set up yet — nothing can be hired until there is one"
+      : `${roomList.join(" · ")} · the public page takes enquiries`;
 
   // The club's terms, read once: the same deposit rule the record page offers
   // at confirmation, so the desk's sheet prefills what the record's would.
@@ -287,6 +300,14 @@ export default async function RoomBookingsPage({
   // URL, so a narrowed desk can be sent to a colleague.
   const chipGroups: ChipGroup[] = [
     {
+      key: "view",
+      label: "How to read it",
+      options: [
+        { key: "calendar", href: filterHref({ view: undefined }), label: "Calendar", active: isCalendar },
+        { key: "list", href: filterHref({ view: "list" }), label: "List", active: !isCalendar },
+      ],
+    },
+    {
       key: "period",
       label: "When",
       options: (["upcoming", "past", "all"] as const).map((p) => ({
@@ -342,50 +363,19 @@ export default async function RoomBookingsPage({
         title="Room Bookings"
         subtitle="Function room hire requests"
         action={
-          /* Phone: the header actions become a 2-up grid of 44px targets — the
-             block form takes a full row because it expands into a card. */
-          <div className="grid w-full grid-cols-2 gap-2 lg:flex lg:w-auto">
-            <Link
-              href="/book"
-              target="_blank"
-              className={buttonVariants({ variant: "outline", size: "touch" })}
-            >
-              <ExternalLink className="h-4 w-4" aria-hidden /> Public page
-            </Link>
-            <Link href="/room-bookings/new" className={buttonVariants({ size: "touch" })}>
-              <Plus className="h-4 w-4" aria-hidden /> New booking
-            </Link>
-            {isCommittee(session.profile?.role) && (
-              <>
-                <div className="col-span-2 lg:col-span-1 [&>button]:touch [&>button]:w-full lg:[&>button]:w-auto">
-                  <BlockBookingForm rooms={rooms ?? []} />
-                </div>
-                <Link
-                  href="/room-bookings/rooms"
-                  className={
-                    buttonVariants({ variant: "outline", size: "touch" }) + " col-span-2 lg:col-span-1"
-                  }
-                >
-                  <Settings className="h-4 w-4" aria-hidden /> Manage rooms
-                </Link>
-              </>
-            )}
-          </div>
+          /* One door in the header (P8.2b). Blocking a night, the public page
+             and the rooms themselves are settings about the room rather than
+             work on a booking, so they fold beneath the diary. */
+          <Link
+            href="/room-bookings/new"
+            className={buttonVariants({ size: "touch", className: "w-full lg:w-auto" })}
+          >
+            <Plus className="h-4 w-4" aria-hidden /> New booking
+          </Link>
         }
       />
 
       <div className="space-y-3 p-4 lg:p-6">
-        {/* The diary or the list. Two chips, and the choice lives in the URL:
-            the calendar is the default, so only `view=list` is ever stored. */}
-        <ChipStrip aria-label="How to read the desk">
-          <ToggleChipLink href={filterHref({ view: undefined })} active={isCalendar}>
-            <CalendarDays className="h-3.5 w-3.5" aria-hidden /> Calendar
-          </ToggleChipLink>
-          <ToggleChipLink href={filterHref({ view: "list" })} active={!isCalendar}>
-            <LayoutList className="h-3.5 w-3.5" aria-hidden /> List
-          </ToggleChipLink>
-        </ChipStrip>
-
         <BookingsDesk
           bookings={desk}
           calendarItems={allBookings}
@@ -396,6 +386,13 @@ export default async function RoomBookingsPage({
           isCalendar={isCalendar}
           summary={summary}
           chipGroups={chipGroups}
+          filterSummary={filterSummary({
+            period: effectivePeriod,
+            status: statusFilter,
+            statusCount: statusFilter === "open" ? counts.open : undefined,
+            roomName: roomFilter ? roomNameRecord[roomFilter] : undefined,
+            calendar: isCalendar,
+          })}
           initialQuery={q ?? ""}
           canDelete={canDelete}
           canDecline={canDecline}
@@ -404,12 +401,58 @@ export default async function RoomBookingsPage({
           sheetCanEditBooking={isSuperUser(session.profile?.role)}
         />
 
-        <StaffAwayPanel
-          staffList={staffList}
-          awayEntries={awayEntries}
-          currentUserId={session.userId}
-          isCommittee={isCommittee(session.profile?.role)}
-        />
+        {/* Folded beneath the diary: who is off, and the room itself. Each row
+            says what it holds while it is shut, worked out here on the server
+            (the benchmark's fifth rule). */}
+        <FoldCard
+          icon={<UserX className="h-4 w-4" aria-hidden />}
+          title="Staff away"
+          summary={awaySummary(awayEntries, todayStr)}
+          className="cal-no-print"
+        >
+          <StaffAwayPanel
+            staffList={staffList}
+            awayEntries={awayEntries}
+            currentUserId={session.userId}
+            isCommittee={isCommittee(session.profile?.role)}
+          />
+        </FoldCard>
+
+        <FoldCard
+          icon={<DoorOpen className="h-4 w-4" aria-hidden />}
+          title="Rooms and the public page"
+          summary={roomsSummary}
+          className="cal-no-print"
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              What the club hires out, what a hirer sees, and how to take a night off the market
+              before anybody asks for it.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href="/book"
+                target="_blank"
+                className={buttonVariants({ variant: "outline", size: "touch" })}
+              >
+                <ExternalLink className="h-4 w-4" aria-hidden /> The public page
+              </Link>
+              {isCommittee(session.profile?.role) && (
+                <>
+                  <Link
+                    href="/room-bookings/rooms"
+                    className={buttonVariants({ variant: "outline", size: "touch" })}
+                  >
+                    <Settings className="h-4 w-4" aria-hidden /> Manage rooms
+                  </Link>
+                  <div className="[&>button]:touch">
+                    <BlockBookingForm rooms={rooms ?? []} />
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </FoldCard>
       </div>
     </>
   );
