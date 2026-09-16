@@ -37,3 +37,7 @@ ds-bundle/
 .design-sync/learnings/
 .design-sync/node_modules
 apps/web/.ds-css/
+
+# render check (tools/render) — screenshots and bundles are local evidence,
+# pasted into a PR body, never committed
+tools/render/out/

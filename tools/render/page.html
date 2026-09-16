@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Render check</title>
+    <!--
+      The app's own compiled Tailwind, built by `node .design-sync/build-css.mjs`.
+      If a utility only a fixture uses comes back unstyled, the content scan in
+      that script has not been told about tools/render/fixtures — see the README.
+    -->
+    <link rel="stylesheet" href="../../apps/web/.ds-css/styles.css" />
+    <style>
+      /* The app sets these on <body> through next/font; the harness has no
+         Next runtime, so the two families are named here the way the design
+         bundle names them. */
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+      }
+    </style>
+  </head>
+  <body class="bg-background text-foreground font-sans antialiased">
+    <div id="root"></div>
+  </body>
+</html>
