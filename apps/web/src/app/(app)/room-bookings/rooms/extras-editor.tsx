@@ -167,7 +167,7 @@ export function ExtrasEditor({ roomId, config }: { roomId: string; config: Extra
         <Button type="button" size="sm" onClick={() => void save()} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save extras"}
         </Button>
-        {savedTick && <span className="text-sm text-emerald-700">Saved.</span>}
+        {savedTick && <span className="text-sm text-success">Saved.</span>}
       </div>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
     </div>

@@ -47,7 +47,7 @@ export default async function RoomsSettingsPage({
       />
       <div className="max-w-3xl space-y-4 p-4 lg:space-y-6 lg:p-6">
         {saved === "discount" && (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <div className="flex items-center gap-2 rounded-lg border border-success/25 bg-success-tint px-4 py-3 text-sm text-success">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             Member discount saved.
           </div>
@@ -89,13 +89,13 @@ export default async function RoomsSettingsPage({
         </Card>
 
         {saved === "new" && (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <div className="flex items-center gap-2 rounded-lg border border-success/25 bg-success-tint px-4 py-3 text-sm text-success">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             Room created successfully.
           </div>
         )}
         {saved && saved !== "new" && (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <div className="flex items-center gap-2 rounded-lg border border-success/25 bg-success-tint px-4 py-3 text-sm text-success">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             Room saved successfully.
           </div>
@@ -177,12 +177,12 @@ export default async function RoomsSettingsPage({
           const isSaved = saved === room.id;
 
           return (
-            <Card key={room.id} className={isSaved ? "border-emerald-300" : ""}>
+            <Card key={room.id} className={isSaved ? "border-success/40" : ""}>
               <CardHeader>
                 <CardTitle className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <span className="flex min-w-0 items-center gap-2">
                     <span className="truncate">{room.name}</span>
-                    {isSaved && <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />}
+                    {isSaved && <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />}
                   </span>
                   <DeleteRoomButton roomId={room.id} roomName={room.name} />
                 </CardTitle>
