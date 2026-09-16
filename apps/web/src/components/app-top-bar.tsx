@@ -29,6 +29,7 @@ import { Avatar } from "@/components/avatar";
 import { SearchTrigger } from "@/components/command-palette";
 import { NavLink } from "@/components/nav-link";
 import type { RoleSwitcherOption } from "@/components/role-switcher";
+import { Popover } from "@/components/ui/popover";
 import { useRoleSwitcher } from "@/components/use-role-switcher";
 import { roleSwitchAnnouncement } from "@/lib/role-view";
 
@@ -82,16 +83,9 @@ export function AppTopBar({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pathname = usePathname();
 
-  // A navigation closes the drawer; so does Escape.
+  // A navigation closes the drawer. Escape and a press outside it are the
+  // Popover's.
   useEffect(() => setDrawerOpen(false), [pathname]);
-  useEffect(() => {
-    if (!drawerOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setDrawerOpen(false);
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [drawerOpen]);
 
   return (
     <>
@@ -151,20 +145,18 @@ export function AppTopBar({
         </div>
       </header>
 
+      {/* The drawer hangs off the crest, so the box it is positioned against is
+          inset to the crest's own margin. Its dim stops at the header: the
+          crest you pressed stays lit, which the generic scrim cannot do. */}
       {drawerOpen ? (
-        <div className="relative z-40">
+        <div id="crest-drawer" className="relative z-40 ml-3 lg:ml-[18px]">
           <button
             type="button"
             aria-label="Close the menu"
             onClick={() => setDrawerOpen(false)}
             className="fixed inset-x-0 bottom-0 top-[var(--mobile-header-h)] cursor-default bg-[hsl(20_18%_7%/0.35)]"
           />
-          <div
-            id="crest-drawer"
-            role="dialog"
-            aria-label="Menu"
-            className="absolute left-3 top-1.5 w-[292px] max-w-[calc(100vw-24px)] overflow-hidden rounded-xl border bg-card shadow-[0_12px_34px_hsl(20_18%_7%/0.24)] lg:left-[18px]"
-          >
+          <Popover open onClose={() => setDrawerOpen(false)} label="Menu" anchor="left" width={292}>
             <div className="flex items-start justify-between gap-3 border-b px-4 py-3.5">
               <div className="min-w-0">
                 <p className="font-display text-[13px] font-semibold uppercase leading-none tracking-[0.08em]">
@@ -178,7 +170,7 @@ export function AppTopBar({
                 type="button"
                 onClick={() => setDrawerOpen(false)}
                 aria-label="Close the menu"
-                className="-mr-1 inline-flex h-8 w-8 flex-none items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+                className="-mr-1 inline-flex h-11 w-11 flex-none items-center justify-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground lg:h-8 lg:w-8"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -261,7 +253,7 @@ export function AppTopBar({
                 </button>
               </form>
             </div>
-          </div>
+          </Popover>
         </div>
       ) : null}
     </>

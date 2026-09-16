@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Select } from "@/components/ui/field";
 import { Input, Label } from "@/components/ui/input";
+import { Sheet } from "@/components/ui/sheet";
 import {
   PARTS_OPTIONS,
   WEEKDAYS,
@@ -148,16 +149,16 @@ function SlotFields({
         <div className="col-span-2 space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">Booked at {venue.name} — tap one to fill the slot in:</p>
           <div className="flex flex-wrap gap-1.5">
-            {venue.bookedSlots.map((booked, i) => (
+            {venue.bookedSlots.map((booked) => (
               <button
-                key={i}
+                key={`${booked.pitchId ?? ""}|${booked.weekday}|${booked.startTime}|${booked.endTime}`}
                 type="button"
                 onClick={() => pickBooked(booked)}
                 className="inline-flex min-h-[32px] items-center gap-1.5 rounded-full border bg-card px-2.5 text-xs font-medium hover:border-primary/40 hover:bg-secondary"
               >
                 {booked.pitchName ? <span className="text-primary">{booked.pitchName} ·</span> : null}
                 {weekdayLabel(booked.weekday, true)} {timeRange(booked.startTime, booked.endTime)}
-                <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded-full bg-secondary px-1.5 py-0.5 text-2xs text-muted-foreground">
                   {booked.parts <= 1 || booked.shares >= booked.parts ? "full" : shareChip(booked.shares, booked.parts)}
                 </span>
               </button>
@@ -265,7 +266,7 @@ function NewSlotForm({
         A slot is one weekly space: the venue, the day, the hour, how the pitch is divided and how much of
         it is ours. Its teams come next.
       </p>
-      <SubmitButton className="min-h-[44px] w-full lg:min-h-0 lg:w-auto" pendingLabel="Adding…">
+      <SubmitButton className="touch w-full lg:w-auto" pendingLabel="Adding…">
         Add the slot
       </SubmitButton>
     </form>
@@ -307,15 +308,15 @@ function CloneForm({ blockId, slot, onDone }: { blockId: string; slot: SlotRow; 
           <Input id={`${prefix}-end`} type="time" name="end_time" defaultValue={slot.endTime.slice(0, 5)} required />
         </div>
       </div>
-      <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+      <label className="touch flex items-center gap-2 text-sm">
         <input type="checkbox" name="copy_teams" defaultChecked className="h-4 w-4 rounded border-input" />
         Copy the teams and their shares too
       </label>
       <div className="flex flex-wrap gap-2">
-        <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0" pendingLabel="Cloning…">
+        <SubmitButton size="sm" className="touch" pendingLabel="Cloning…">
           <Copy className="h-4 w-4" aria-hidden /> Clone
         </SubmitButton>
-        <Button type="button" variant="ghost" size="sm" onClick={onDone} className="min-h-[44px] lg:min-h-0">
+        <Button type="button" variant="ghost" size="sm" onClick={onDone} className="touch">
           Cancel
         </Button>
       </div>
@@ -337,7 +338,7 @@ function TeamRow({ blockId, slot, allocation }: { blockId: string; slot: SlotRow
   return (
     <li className="flex min-h-[44px] items-center gap-2 py-1.5">
       <span className="min-w-0 flex-1">
-        <span className="block truncate text-[14px] font-medium">{allocation.teamName}</span>
+        <span className="block truncate text-sm font-medium">{allocation.teamName}</span>
         {allocation.ageGroup && !allocation.teamName.includes(allocation.ageGroup) ? (
           <span className="block text-xs text-muted-foreground">{allocation.ageGroup}</span>
         ) : null}
@@ -354,7 +355,7 @@ function TeamRow({ blockId, slot, allocation }: { blockId: string; slot: SlotRow
             aria-label={`How much of the slot ${allocation.teamName} has`}
             defaultValue={String(allocation.shares)}
             onChange={() => shareForm.current?.requestSubmit()}
-            className="h-9 text-[13px]"
+            className="touch h-9 text-list"
           >
             {Array.from({ length: most }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
@@ -396,7 +397,7 @@ function AddTeam({ blockId, slot, teams }: { blockId: string; slot: SlotRow; tea
 
   if (free === 0) {
     return (
-      <p className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+      <p className="rounded-lg bg-success-tint px-3 py-2 text-sm text-success">
         {capacity < slot.parts ? "Full — the club's share of this slot is all allocated." : "Full — every part of this slot is allocated."}
       </p>
     );
@@ -441,7 +442,7 @@ function AddTeam({ blockId, slot, teams }: { blockId: string; slot: SlotRow; tea
       ) : (
         <input type="hidden" name="shares" value="1" />
       )}
-      <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0" pendingLabel="Adding…">
+      <SubmitButton size="sm" className="touch" pendingLabel="Adding…">
         <Plus className="h-4 w-4" aria-hidden /> Add
       </SubmitButton>
       {state.error ? <p className="basis-full text-xs text-destructive">{state.error}</p> : null}
@@ -501,10 +502,10 @@ function SlotDetail({
           <input type="hidden" name="slot_id" value={slot.id} />
           <SlotFields prefix={`slot-${slot.id}`} slot={slot} venues={venues} blockVenueIds={blockVenueIds} />
           <div className="flex flex-wrap gap-2">
-            <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0">
+            <SubmitButton size="sm" className="touch">
               Save slot
             </SubmitButton>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setMode("view")} className="min-h-[44px] lg:min-h-0">
+            <Button type="button" variant="ghost" size="sm" onClick={() => setMode("view")} className="touch">
               Cancel
             </Button>
           </div>
@@ -514,7 +515,7 @@ function SlotDetail({
       {mode === "clone" ? <CloneForm blockId={blockId} slot={slot} onDone={() => setMode("view")} /> : null}
 
       <section className="space-y-2">
-        <h3 className="font-display text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+        <h3 className="font-display text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
           Teams in this slot
         </h3>
         {slot.allocations.length === 0 ? (
@@ -531,20 +532,20 @@ function SlotDetail({
 
       <section className="space-y-2 border-t pt-4">
         <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => setMode((m) => (m === "edit" ? "view" : "edit"))} className="min-h-[44px] lg:min-h-0">
+          <Button type="button" variant="outline" size="sm" onClick={() => setMode((m) => (m === "edit" ? "view" : "edit"))} className="touch">
             <Pencil className="h-4 w-4" aria-hidden /> Edit slot
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={() => setMode((m) => (m === "clone" ? "view" : "clone"))} className="min-h-[44px] lg:min-h-0">
+          <Button type="button" variant="outline" size="sm" onClick={() => setMode((m) => (m === "clone" ? "view" : "clone"))} className="touch">
             <Copy className="h-4 w-4" aria-hidden /> Clone
           </Button>
           {armed ? (
             <form action={removeAction} className="flex flex-wrap items-center gap-2">
               <input type="hidden" name="block_id" value={blockId} />
               <input type="hidden" name="slot_id" value={slot.id} />
-              <Button type="submit" variant="destructive" size="sm" disabled={removing} className="min-h-[44px] lg:min-h-0">
+              <Button type="submit" variant="destructive" size="sm" disabled={removing} className="touch">
                 {removing ? "Removing…" : slot.allocations.length > 0 ? `Remove slot and its ${slot.allocations.length} team${slot.allocations.length === 1 ? "" : "s"}` : "Remove slot"}
               </Button>
-              <Button type="button" variant="ghost" size="sm" onClick={() => setArmed(false)} className="min-h-[44px] lg:min-h-0">
+              <Button type="button" variant="ghost" size="sm" onClick={() => setArmed(false)} className="touch">
                 Keep it
               </Button>
             </form>
@@ -554,7 +555,7 @@ function SlotDetail({
               variant="ghost"
               size="sm"
               onClick={() => setArmed(true)}
-              className="min-h-[44px] text-destructive hover:text-destructive lg:min-h-0"
+              className="touch text-destructive hover:text-destructive"
             >
               <Trash2 className="h-4 w-4" aria-hidden /> Remove
             </Button>
@@ -593,24 +594,6 @@ export function SlotSheet({
   onClose: () => void;
   onOpenSlot: (slotId: string) => void;
 }) {
-  const closeButton = useRef<HTMLButtonElement>(null);
-  const open = state !== null;
-
-  useEffect(() => {
-    if (!open) return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    closeButton.current?.focus();
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      document.body.style.overflow = previous;
-      window.removeEventListener("keydown", onKey);
-    };
-  }, [open, onClose]);
-
   if (!state) return null;
   // The slot was removed under the panel (or by someone else): nothing to show.
   if (state.kind === "slot" && !slot) return null;
@@ -625,35 +608,12 @@ export function SlotSheet({
       : `${slot!.venueName}${slot!.pitchName ? ` · ${slot!.pitchName}` : ""}`;
 
   return (
-    <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={title}>
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/40" />
-      <div className="absolute inset-x-0 bottom-0 flex max-h-[92dvh] flex-col rounded-t-2xl bg-card text-card-foreground shadow-2xl lg:inset-x-auto lg:inset-y-0 lg:right-0 lg:max-h-none lg:w-[460px] lg:rounded-none lg:border-l">
-        <div className="flex justify-center pt-2 lg:hidden">
-          <span className="h-1 w-10 rounded-full bg-foreground/20" />
-        </div>
-        <div className="flex items-start gap-3 border-b px-4 py-3 lg:px-5 lg:py-4">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[17px] font-semibold leading-tight">{title}</p>
-            <p className="mt-0.5 truncate text-[13px] text-muted-foreground">{subtitle}</p>
-          </div>
-          <button
-            ref={closeButton}
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="-mr-1 inline-flex h-10 w-10 flex-none items-center justify-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
-          >
-            <X className="h-5 w-5" aria-hidden />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto px-4 py-4 pb-[calc(env(safe-area-inset-bottom)+16px)] lg:px-5">
-          {state.kind === "new" ? (
-            <NewSlotForm blockId={blockId} prefill={state.prefill} venues={venues} blockVenueIds={blockVenueIds} onCreated={onOpenSlot} />
-          ) : (
-            <SlotDetail blockId={blockId} slot={slot!} teams={teams} venues={venues} blockVenueIds={blockVenueIds} />
-          )}
-        </div>
-      </div>
-    </div>
+    <Sheet open onClose={onClose} title={title} subtitle={subtitle} side="drawer" width={460}>
+      {state.kind === "new" ? (
+        <NewSlotForm blockId={blockId} prefill={state.prefill} venues={venues} blockVenueIds={blockVenueIds} onCreated={onOpenSlot} />
+      ) : (
+        <SlotDetail blockId={blockId} slot={slot!} teams={teams} venues={venues} blockVenueIds={blockVenueIds} />
+      )}
+    </Sheet>
   );
 }

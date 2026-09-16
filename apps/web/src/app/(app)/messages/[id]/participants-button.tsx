@@ -22,12 +22,13 @@
  * committee, who may open /people/[id], get one.
  */
 
-import { useActionState, useEffect, useRef, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { UserMinus, Users, X } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { Popover } from "@/components/ui/popover";
 import { removeGroupMember, type GroupActionState } from "../../groups/actions";
 
 export type ThreadParticipant = {
@@ -103,31 +104,12 @@ export function ParticipantsButton({
   canRemove?: boolean;
 }) {
   const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  // Click away and Escape both close it — a popover that can only be closed by
-  // the button that opened it is a trap on a touch screen.
-  useEffect(() => {
-    if (!open) return;
-    const onDown = (event: MouseEvent) => {
-      if (!wrapRef.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   // Somebody who has left is not "in this conversation" (Adam, 2026-09-04).
   const live = participants.filter((person) => !person.left);
 
   return (
-    <div ref={wrapRef} className="relative">
+    <div className="relative">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
@@ -144,19 +126,21 @@ export function ParticipantsButton({
         <span className="text-xs">({live.length})</span>
       </button>
 
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Members of this conversation"
-          className="absolute right-0 z-30 mt-1 w-[min(20rem,calc(100vw-2rem))] rounded-xl border bg-card p-3 shadow-lg"
-        >
+      <Popover
+        open={open}
+        onClose={() => setOpen(false)}
+        label="Members of this conversation"
+        anchor="right"
+        width={320}
+      >
+        <div className="p-3">
           <div className="mb-2 flex items-center justify-between gap-2">
             <p className="text-sm font-semibold">In this conversation</p>
             <button
               type="button"
               onClick={() => setOpen(false)}
               aria-label="Close"
-              className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary"
+              className="flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground hover:bg-secondary lg:h-8 lg:w-8"
             >
               <X className="h-4 w-4" />
             </button>
@@ -205,7 +189,7 @@ export function ParticipantsButton({
 
           {footer && <div className="mt-3 border-t pt-3">{footer}</div>}
         </div>
-      )}
+      </Popover>
     </div>
   );
 }

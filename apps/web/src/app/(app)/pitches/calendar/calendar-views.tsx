@@ -21,11 +21,12 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useActionState, useEffect, useState } from "react";
-import { CalendarX2, ChevronLeft, ChevronRight, Repeat2, Users, X } from "lucide-react";
+import { CalendarX2, ChevronLeft, ChevronRight, Repeat2, Users } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/field";
+import { Sheet } from "@/components/ui/sheet";
 import type { PitchOption } from "@/lib/pitch-booking";
 import {
   blockClasses,
@@ -181,34 +182,15 @@ function EntryPopover({
   const fixtureHref = deleteState.fixtureHref;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
-      <button
-        type="button"
-        aria-label="Close"
-        className="absolute inset-0 bg-foreground/20"
-        onClick={onClose}
-      />
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={entry.label}
-        className="relative w-full max-w-sm space-y-3 rounded-xl border bg-card p-4 shadow-lg"
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm font-semibold">{entry.label}</p>
-            <p className="text-xs text-muted-foreground">{dayHeadingLong(entry.date)}</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="flex h-11 w-11 items-center justify-center rounded-md text-muted-foreground hover:bg-secondary sm:h-auto sm:w-auto sm:p-1"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
+    <Sheet
+      open
+      onClose={onClose}
+      title={entry.label}
+      subtitle={dayHeadingLong(entry.date)}
+      side="modal"
+      width={384}
+    >
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge variant="muted">{CALENDAR_GROUP_LABELS[entry.group]}</Badge>
           {entry.status === "pending" && <Badge variant="warning">Not yet confirmed</Badge>}
@@ -230,7 +212,7 @@ function EntryPopover({
             Open the match
           </Link>
         )}
-        {notice && <p className="text-xs text-emerald-700">{notice}</p>}
+        {notice && <p className="text-xs text-success">{notice}</p>}
 
         {/* Every action in the sheet is a 44px target on a phone. */}
         <div className="flex flex-wrap items-center gap-2 pt-1 [&_a]:h-11 [&_button]:h-11 sm:[&_a]:h-9 sm:[&_button]:h-9">
@@ -358,7 +340,7 @@ function EntryPopover({
           </form>
         )}
       </div>
-    </div>
+    </Sheet>
   );
 }
 
