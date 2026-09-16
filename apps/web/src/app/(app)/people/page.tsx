@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Plus } from "lucide-react";
+import { ChevronRight, Plus, Users } from "lucide-react";
 
 import type { Enums } from "@club/db";
 
@@ -9,12 +9,12 @@ import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChipStrip } from "@/components/ui/chip-strip";
+import { DataListFrame } from "@/components/ui/data-list";
+import { TD } from "@/components/ui/table";
+import { ToggleChipLink } from "@/components/ui/toggle-chip";
 import { Label } from "@/components/ui/input";
-import {
-  parsePeopleColumns,
-  peopleColumn,
-  peopleGridTemplate,
-} from "@/lib/people-columns";
+import { parsePeopleColumns, peopleColumn } from "@/lib/people-columns";
 import { Select } from "@/components/ui/field";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { signPeoplePhotos } from "@/lib/avatars";
@@ -57,9 +57,18 @@ export const metadata = { title: "People" };
  * the same scoping the team filter has always used; with no current season set
  * the team-derived halves are empty and the card says so.
  *
- * The whole row is a link to `/people/[id]`, which is the only place a person
- * is edited. There are no inline actions: a contacts list that can also change
- * records is a list you cannot skim safely.
+ * The row leads to `/people/[id]`, which is the only place a person is edited:
+ * the phone card is one press, and on the desk the name carries the link,
+ * because a `<tr>` cannot be wrapped in an anchor. There are no inline actions
+ * either way — a contacts list that can also change records is a list you
+ * cannot skim safely.
+ *
+ * THE LIST IS `DataListFrame` (P8.0e), but with no search box and no column
+ * filters of its own: this list is paginated and RLS-scoped, so the frame's
+ * browser-side filtering would only ever search the twenty-five rows on screen
+ * and would quietly tell somebody a member does not exist. `PeopleControls`
+ * and the GET form below filter on the SERVER instead, and both live in the
+ * URL, so every list here is still something to bookmark or send.
  *
  * The minor badge is computed from `dob` with the same rule as
  * `public.is_minor_dob()` (SG-0: an unknown date of birth is a minor). It is a
@@ -186,7 +195,6 @@ export default async function PeoplePage({
   // Which columns this reader asked for (Adam, 2026-08-26). Held in the URL so
   // a list stays the same list when it is bookmarked or sent on.
   const columns = parsePeopleColumns(params.cols);
-  const gridTemplate = peopleGridTemplate(columns);
   const roleFilter = ROLES.includes(params.role as Enums<"app_role">)
     ? (params.role as Enums<"app_role">)
     : null;
@@ -542,7 +550,7 @@ export default async function PeoplePage({
               href="/people/export"
               className={
                 buttonVariants({ variant: "outline", size: "sm" }) +
-                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+                " touch flex-1 gap-2 lg:flex-none"
               }
             >
               Export CSV
@@ -551,7 +559,7 @@ export default async function PeoplePage({
               href="/people/new"
               className={
                 buttonVariants({ variant: "default", size: "sm" }) +
-                " min-h-[44px] flex-1 gap-2 lg:min-h-0 lg:flex-none"
+                " touch flex-1 gap-2 lg:flex-none"
               }
             >
               <Plus className="h-4 w-4" /> Add a person
@@ -561,7 +569,7 @@ export default async function PeoplePage({
       />
       <div className="space-y-6 p-4 lg:p-6">
         {params.purged && (
-          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          <p className="rounded-lg border border-warning/30 bg-warning-tint px-3 py-2 text-sm text-warning">
             {params.purged}
           </p>
         )}
@@ -569,24 +577,15 @@ export default async function PeoplePage({
           <CardHeader className="space-y-3 p-4 lg:p-6">
             <CardTitle className="text-base">Find someone</CardTitle>
             {/* The chips scroll sideways in their own lane on a phone rather
-                than wrapping into four lines. */}
-            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
+                than wrapping into four lines. Each is a URL, so a filtered
+                list can be sent to somebody and Back undoes a tap. */}
+            <ChipStrip className="lg:flex-wrap lg:overflow-visible">
               {chips.map((chip) => (
-                <Link
-                  key={chip.key}
-                  href={chip.href}
-                  aria-current={chip.active ? "true" : undefined}
-                  className={
-                    buttonVariants({
-                      variant: chip.active ? "default" : "outline",
-                      size: "sm",
-                    }) + " min-h-[44px] shrink-0 whitespace-nowrap lg:min-h-0"
-                  }
-                >
+                <ToggleChipLink key={chip.key} href={chip.href} active={chip.active}>
                   {chip.label}
-                </Link>
+                </ToggleChipLink>
               ))}
-            </div>
+            </ChipStrip>
           </CardHeader>
           <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
             <PeopleControls initialQuery={params.q ?? ""} />
@@ -608,7 +607,7 @@ export default async function PeoplePage({
                   id="team"
                   name="team"
                   defaultValue={teamFilter ?? ""}
-                  className="min-h-[44px] lg:min-h-0"
+                  className="touch"
                 >
                   <option value="">Any team</option>
                   {(teams ?? []).map((team) => (
@@ -624,7 +623,7 @@ export default async function PeoplePage({
                   id="role"
                   name="role"
                   defaultValue={roleFilter ?? ""}
-                  className="min-h-[44px] lg:min-h-0"
+                  className="touch"
                 >
                   <option value="">Any role</option>
                   {ROLES.map((role) => (
@@ -634,7 +633,7 @@ export default async function PeoplePage({
                   ))}
                 </Select>
               </div>
-              <label className="flex min-h-[44px] items-center gap-2 text-sm sm:col-span-4 lg:min-h-0">
+              <label className="touch flex items-center gap-2 text-sm sm:col-span-4">
                 <input type="checkbox" name="filter" value="no_dob" defaultChecked={noDob} />
                 Only people with no date of birth on file
               </label>
@@ -643,7 +642,7 @@ export default async function PeoplePage({
                   type="submit"
                   className={
                     buttonVariants({ variant: "default", size: "sm" }) +
-                    " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                    " touch flex-1 lg:flex-none"
                   }
                 >
                   Search
@@ -653,7 +652,7 @@ export default async function PeoplePage({
                     href="/people"
                     className={
                       buttonVariants({ variant: "outline", size: "sm" }) +
-                      " min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                      " touch flex-1 lg:flex-none"
                     }
                   >
                     Clear
@@ -664,289 +663,293 @@ export default async function PeoplePage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader className="p-4 lg:p-6">
-            <CardTitle className="text-base">
-              {total} {total === 1 ? "person" : "people"}
-              {!currentSeason && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  (no current season, so teams and the player/coach types are blank)
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
-            {error && (
-              <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                Could not load people. Your account may not hold the club_admin or safeguarding_lead
-                role that the `people` policies ask for.
-              </p>
+        <div className="space-y-3">
+          <h2 className="text-panel font-semibold">
+            {total} {total === 1 ? "person" : "people"}
+            {!currentSeason && (
+              <span className="ml-2 text-xs font-normal text-muted-foreground">
+                (no current season, so teams and the player/coach types are blank)
+              </span>
             )}
-            {!error && people.length === 0 && (
-              <p className="py-6 text-center text-sm text-muted-foreground">
-                Nobody matches those filters.
-              </p>
-            )}
-            {people.length > 0 && (
-              <div>
-                {/* A header, not a <table>: the whole row is one link, and a
-                    link cannot wrap a <tr>. */}
-                <div
-                  className="hidden border-b pb-2 text-xs text-muted-foreground lg:grid lg:gap-3"
-                  style={{ gridTemplateColumns: gridTemplate }}
-                >
-                  {columns.map((key) => (
-                    <span key={key}>{peopleColumn(key).label}</span>
-                  ))}
-                </div>
-                <ul className="space-y-2 lg:space-y-0 lg:divide-y">
-                  {people.map((person) => {
-                    const name = personLabel(person);
-                    const held = [...(typesByPerson.get(person.id) ?? [])];
-                    const heldTeams = teamsByPerson.get(person.id) ?? [];
-                    const extraTeams = heldTeams.length - TEAMS_SHOWN;
-                    const linked = withLogin.has(person.id);
-                    const minor = isMinorDob(person.dob);
-                    const guardian = minor
-                      ? guardianPeople.get(guardianOf.get(person.id) ?? "")
-                      : undefined;
-                    const shownTypes = TYPES.filter((type) => held.includes(type));
-                    const kind = membershipKind.get(person.id) ?? null;
-                    const leadName = membershipLead.get(person.id) ?? null;
-                    const teamsText =
-                      heldTeams.length === 0
-                        ? "—"
-                        : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
-                          (extraTeams > 0 ? ` +${extraTeams}` : "");
-                    // One status per person, so the card and the table row can
-                    // never drift apart.
-                    const status = needsReview.has(person.id)
-                      ? { label: "Needs review", variant: "destructive" as const }
-                      : minor
-                        ? { label: "Registered", variant: "success" as const }
-                        : linked
-                          ? { label: "Active", variant: "success" as const }
-                          : { label: "No login", variant: "muted" as const };
-                    const href = personHref(person.id, params, page);
-                    return (
-                      <li key={person.id}>
-                        {/* The phone's card: avatar, name, the muted role and
-                            contact lines, team and status down the right. */}
-                        <Link
-                          href={href}
-                          className="flex min-h-[44px] items-start gap-3 rounded-xl border bg-card p-3 lg:hidden"
-                        >
-                          <span className="relative inline-flex flex-none">
-                            <Avatar name={name} photoUrl={photoUrls.get(person.id)} />
-                            <span
-                              className={
-                                "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card " +
-                                (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
-                              }
-                            />
-                          </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex flex-wrap items-center gap-1.5">
-                              <span className="text-sm font-medium leading-tight">{name}</span>
-                              {minor && (
-                                <Badge variant="warning">
-                                  {person.dob ? "Minor" : "No DOB"}
-                                </Badge>
-                              )}
-                            </span>
-                            <span className="sr-only">
-                              {linked ? "Has a login." : "No login yet."}
-                            </span>
-                            <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
-                              {[
-                                shownTypes.length === 0
-                                  ? "No type recorded"
-                                  : shownTypes.map((type) => TYPE_LABELS[type]).join(" · "),
-                                membershipKindWord(kind),
-                              ]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </span>
-                            <span className="mt-0.5 block truncate text-[11.5px] leading-tight text-muted-foreground">
-                              {minor && guardian
-                                ? `via ${guardian.name} · ${guardian.phone ?? "No phone"}`
-                                : `${person.email ?? "No email"} · ${person.phone ?? "No phone"}`}
-                            </span>
-                          </span>
-                          <span className="flex max-w-[104px] flex-none flex-col items-end gap-1">
-                            <Badge variant={status.variant} className="whitespace-nowrap">
-                              {status.label}
+          </h2>
+          {error && (
+            <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              Could not load people. Your account may not hold the club_admin or safeguarding_lead
+              role that the `people` policies ask for.
+            </p>
+          )}
+          {!error && (
+            <DataListFrame
+              columns={columns.map((key) => {
+                const column = peopleColumn(key);
+                return {
+                  key: column.key,
+                  label: column.label,
+                  sub: column.hint,
+                  weight: column.weight,
+                };
+              })}
+              empty={{
+                icon: <Users className="h-5 w-5" aria-hidden />,
+                title: "Nobody matches those filters.",
+                body: filtersApplied
+                  ? "Try a different name, or clear the filters to see everybody."
+                  : "Nobody is on the club's books yet.",
+                action: filtersApplied ? { href: "/people", label: "Clear the filters" } : undefined,
+              }}
+              footerNote="Contact details for under-18s are shown through their guardian."
+              items={people.map((person) => {
+                const name = personLabel(person);
+                const held = [...(typesByPerson.get(person.id) ?? [])];
+                const heldTeams = teamsByPerson.get(person.id) ?? [];
+                const extraTeams = heldTeams.length - TEAMS_SHOWN;
+                const linked = withLogin.has(person.id);
+                const minor = isMinorDob(person.dob);
+                const guardian = minor
+                  ? guardianPeople.get(guardianOf.get(person.id) ?? "")
+                  : undefined;
+                const shownTypes = TYPES.filter((type) => held.includes(type));
+                const kind = membershipKind.get(person.id) ?? null;
+                const leadName = membershipLead.get(person.id) ?? null;
+                const teamsText =
+                  heldTeams.length === 0
+                    ? "—"
+                    : heldTeams.slice(0, TEAMS_SHOWN).join(", ") +
+                      (extraTeams > 0 ? ` +${extraTeams}` : "");
+                // One status per person, so the card and the table row can
+                // never drift apart.
+                const status = needsReview.has(person.id)
+                  ? { label: "Needs review", variant: "destructive" as const }
+                  : minor
+                    ? { label: "Registered", variant: "success" as const }
+                    : linked
+                      ? { label: "Active", variant: "success" as const }
+                      : { label: "No login", variant: "muted" as const };
+                const href = personHref(person.id, params, page);
+                return {
+                  key: person.id,
+                  // The server does the searching for this list, so nothing
+                  // reads the haystack; it is filled in honestly anyway, so
+                  // that the day a page-sized list wants the frame's own
+                  // box it already has something to match on.
+                  haystack: `${name} ${person.email ?? ""}`.toLocaleLowerCase("en-GB"),
+                  // The phone's card: avatar, name, the muted role and
+                  // contact lines, team and status down the right.
+                  card: (
+                    <Link href={href} className="touch flex items-start gap-3 px-4 py-3.5">
+                      <span className="relative inline-flex flex-none">
+                        <Avatar name={name} photoUrl={photoUrls.get(person.id)} />
+                        <span
+                          className={
+                            "absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card " +
+                            (linked ? "bg-success" : "bg-muted-foreground/30")
+                          }
+                        />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-sm font-medium leading-tight">{name}</span>
+                          {minor && (
+                            <Badge variant="warning">
+                              {person.dob ? "Minor" : "No DOB"}
                             </Badge>
-                            <span className="w-full truncate text-right text-[11px] leading-tight text-muted-foreground">
-                              {teamsText}
-                            </span>
-                          </span>
-                        </Link>
-
-                        {/* The desk row, one cell per chosen column. The
-                            widths come from the same registry the header and
-                            the picker read, so the three cannot drift. */}
-                        <Link
-                          href={href}
-                          className="hidden gap-x-3 gap-y-1 rounded-md px-2 py-3 text-sm transition-colors hover:bg-muted/60 focus-visible:bg-muted/60 focus-visible:outline-none lg:grid lg:items-center"
-                          style={{ gridTemplateColumns: gridTemplate }}
-                        >
-                          {columns.map((key) => {
-                            switch (key) {
-                              case "name":
-                                return (
-                                  <span key={key} className="flex flex-wrap items-center gap-2">
-                                    <span
-                                      aria-hidden="true"
-                                      title={linked ? "Has a login" : "No login yet"}
-                                      className={
-                                        "h-2 w-2 shrink-0 rounded-full " +
-                                        (linked ? "bg-emerald-500" : "bg-muted-foreground/30")
-                                      }
-                                    />
-                                    <span className="font-medium">{name}</span>
-                                    <span className="sr-only">
-                                      {linked ? "Has a login." : "No login yet."}
-                                    </span>
-                                    {minor && (
-                                      <Badge variant="warning">
-                                        {person.dob ? "Minor" : "No DOB — treated as a minor"}
+                          )}
+                        </span>
+                        <span className="sr-only">
+                          {linked ? "Has a login." : "No login yet."}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs leading-tight text-muted-foreground">
+                          {[
+                            shownTypes.length === 0
+                              ? "No type recorded"
+                              : shownTypes.map((type) => TYPE_LABELS[type]).join(" · "),
+                            membershipKindWord(kind),
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs leading-tight text-muted-foreground">
+                          {minor && guardian
+                            ? `via ${guardian.name} · ${guardian.phone ?? "No phone"}`
+                            : `${person.email ?? "No email"} · ${person.phone ?? "No phone"}`}
+                        </span>
+                      </span>
+                      <span className="flex max-w-[104px] flex-none flex-col items-end gap-1">
+                        <Badge variant={status.variant} className="whitespace-nowrap">
+                          {status.label}
+                        </Badge>
+                        <span className="w-full truncate text-right text-2xs leading-tight text-muted-foreground">
+                          {teamsText}
+                        </span>
+                      </span>
+                    </Link>
+                  ),
+                  // The desk row, one <td> per chosen column. The widths
+                  // come from the same registry the header and the picker
+                  // read, so the three cannot drift.
+                  //
+                  // The NAME carries the link now, rather than the whole
+                  // row: a <tr> cannot be wrapped in an anchor, and the
+                  // phone card — which is one press, as before — is where
+                  // a thumb reads this list anyway.
+                  cells: (
+                    <>
+                      {columns.map((key) => {
+                        switch (key) {
+                          case "name":
+                            return (
+                              <TD key={key}>
+                                <Link
+                                  href={href}
+                                  className="flex flex-wrap items-center gap-2 font-medium hover:underline"
+                                >
+                                  <span
+                                    aria-hidden="true"
+                                    title={linked ? "Has a login" : "No login yet"}
+                                    className={
+                                      "h-2 w-2 shrink-0 rounded-full " +
+                                      (linked ? "bg-success" : "bg-muted-foreground/30")
+                                    }
+                                  />
+                                  {name}
+                                  <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                </Link>
+                                <span className="sr-only">
+                                  {linked ? "Has a login." : "No login yet."}
+                                </span>
+                                {minor && (
+                                  <Badge variant="warning" className="mt-1">
+                                    {person.dob ? "Minor" : "No DOB — treated as a minor"}
+                                  </Badge>
+                                )}
+                              </TD>
+                            );
+                          case "type":
+                            return (
+                              <TD key={key}>
+                                <span className="flex flex-wrap gap-1">
+                                  {shownTypes.length === 0 ? (
+                                    <span className="text-xs text-muted-foreground">—</span>
+                                  ) : (
+                                    shownTypes.map((type) => (
+                                      <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
+                                        {TYPE_LABELS[type]}
                                       </Badge>
-                                    )}
+                                    ))
+                                  )}
+                                </span>
+                              </TD>
+                            );
+                          case "membership":
+                            // Adam, 2026-08-26: the membership type, and the
+                            // lead party it belongs to. The lead is named
+                            // rather than linked — the name beside it is
+                            // already an anchor, and an anchor cannot be
+                            // nested inside an anchor.
+                            return (
+                              <TD key={key}>
+                                {kind ? (
+                                  <span className="flex flex-col gap-1">
+                                    <Badge
+                                      variant={membershipKindVariant(kind)}
+                                      title={`${membershipKindWord(kind)} — the kind is worked out from the number of players on it`}
+                                      className="w-fit"
+                                    >
+                                      {membershipKindLabel(kind)}
+                                      <span className="sr-only"> membership</span>
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">
+                                      {leadName ? `Billed to ${leadName}` : "Lead contact"}
+                                    </span>
                                   </span>
-                                );
-                              case "type":
-                                return (
-                                  <span key={key} className="flex flex-wrap gap-1">
-                                    {shownTypes.length === 0 ? (
-                                      <span className="text-xs text-muted-foreground">—</span>
-                                    ) : (
-                                      shownTypes.map((type) => (
-                                        <Badge key={type} variant={TYPE_BADGE_VARIANT[type]}>
-                                          {TYPE_LABELS[type]}
-                                        </Badge>
-                                      ))
-                                    )}
-                                  </span>
-                                );
-                              case "membership":
-                                // Adam, 2026-08-26: the membership type, and the
-                                // lead party it belongs to. The row is already a
-                                // link, so the lead is named rather than linked —
-                                // an anchor cannot be nested inside an anchor.
-                                return (
-                                  <span key={key} className="flex flex-col gap-1">
-                                    {kind ? (
-                                      <>
-                                        <Badge
-                                          variant={membershipKindVariant(kind)}
-                                          title={`${membershipKindWord(kind)} — the kind is worked out from the number of players on it`}
-                                          className="w-fit"
-                                        >
-                                          {membershipKindLabel(kind)}
-                                          <span className="sr-only"> membership</span>
-                                        </Badge>
-                                        <span className="text-xs text-muted-foreground">
-                                          {leadName ? `Billed to ${leadName}` : "Lead contact"}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <span className="text-xs text-muted-foreground">—</span>
-                                    )}
-                                  </span>
-                                );
-                              case "teams":
-                                return (
-                                  <span key={key} className="text-xs text-muted-foreground">
-                                    {teamsText}
-                                  </span>
-                                );
-                              case "contact":
-                                return (
-                                  <span key={key} className="text-xs text-muted-foreground">
-                                    {/* The design's rule, stated on the page: an
-                                        under-18's contact goes through their
-                                        guardian. */}
-                                    {minor && guardian ? (
-                                      <>
-                                        <span className="block">via {guardian.name}</span>
-                                        <span className="block">
-                                          {guardian.phone ?? "No phone"}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <span className="block break-all">
-                                          {person.email ?? "No email"}
-                                        </span>
-                                        <span className="block">{person.phone ?? "No phone"}</span>
-                                      </>
-                                    )}
-                                  </span>
-                                );
-                              case "dob":
-                                return (
-                                  <span key={key} className="text-xs text-muted-foreground">
-                                    {person.dob ?? "Not on file"}
-                                  </span>
-                                );
-                              case "status":
-                                return (
-                                  <span key={key}>
-                                    <Badge variant={status.variant}>{status.label}</Badge>
-                                  </span>
-                                );
-                            }
-                          })}
-                        </Link>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
+                                ) : (
+                                  <span className="text-xs text-muted-foreground">—</span>
+                                )}
+                              </TD>
+                            );
+                          case "teams":
+                            return (
+                              <TD key={key} className="text-xs text-muted-foreground">
+                                {teamsText}
+                              </TD>
+                            );
+                          case "contact":
+                            return (
+                              <TD key={key} className="text-xs text-muted-foreground">
+                                {/* The design's rule, stated on the page: an
+                                    under-18's contact goes through their
+                                    guardian. */}
+                                {minor && guardian ? (
+                                  <>
+                                    <span className="block">via {guardian.name}</span>
+                                    <span className="block">
+                                      {guardian.phone ?? "No phone"}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <span className="block break-all">
+                                      {person.email ?? "No email"}
+                                    </span>
+                                    <span className="block">{person.phone ?? "No phone"}</span>
+                                  </>
+                                )}
+                              </TD>
+                            );
+                          case "dob":
+                            return (
+                              <TD key={key} className="text-xs text-muted-foreground">
+                                {person.dob ?? "Not on file"}
+                              </TD>
+                            );
+                          case "status":
+                            return (
+                              <TD key={key}>
+                                <Badge variant={status.variant}>{status.label}</Badge>
+                              </TD>
+                            );
+                        }
+                      })}
+                    </>
+                  ),
+                };
+              })}
+            />
+          )}
 
-            {people.length > 0 && (
-              <p className="mt-3 text-xs text-muted-foreground">
-                Contact details for under-18s are shown through their guardian. Family or
-                Individual is this season&apos;s membership, counted in players — two or more
-                players on one membership is a family. Open a record to see who else is on it.
-              </p>
-            )}
+          {people.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Family or Individual is this season&apos;s membership, counted in players — two or
+              more players on one membership is a family. Open a record to see who else is on it.
+            </p>
+          )}
 
-            {lastPage > 1 && (
-              <div className="mt-4 flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Page {page} of {lastPage}
-                </span>
-                <div className="flex gap-2">
-                  {page > 1 && (
-                    <Link
-                      href={buildHref(params, { page: String(page - 1) })}
-                      className={
-                        buttonVariants({ variant: "outline", size: "sm" }) +
-                        " min-h-[44px] lg:min-h-0"
-                      }
-                    >
-                      Previous
-                    </Link>
-                  )}
-                  {page < lastPage && (
-                    <Link
-                      href={buildHref(params, { page: String(page + 1) })}
-                      className={
-                        buttonVariants({ variant: "outline", size: "sm" }) +
-                        " min-h-[44px] lg:min-h-0"
-                      }
-                    >
-                      Next
-                    </Link>
-                  )}
-                </div>
+          {lastPage > 1 && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Page {page} of {lastPage}
+              </span>
+              <div className="flex gap-2">
+                {page > 1 && (
+                  <Link
+                    href={buildHref(params, { page: String(page - 1) })}
+                    className={buttonVariants({ variant: "outline", size: "sm" }) + " touch"}
+                  >
+                    Previous
+                  </Link>
+                )}
+                {page < lastPage && (
+                  <Link
+                    href={buildHref(params, { page: String(page + 1) })}
+                    className={buttonVariants({ variant: "outline", size: "sm" }) + " touch"}
+                  >
+                    Next
+                  </Link>
+                )}
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </div>
       </div>
     </>
   );

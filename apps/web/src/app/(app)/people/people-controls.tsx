@@ -105,7 +105,7 @@ export function PeopleControls({ initialQuery }: { initialQuery: string }) {
             onChange={(event) => setText(event.target.value)}
             placeholder="Start typing…"
             autoComplete="off"
-            className="min-h-[44px] pl-8 pr-9 lg:min-h-0"
+            className="touch pl-8 pr-9"
           />
           {pending && (
             <Loader2
@@ -124,7 +124,7 @@ export function PeopleControls({ initialQuery }: { initialQuery: string }) {
           type="button"
           variant="outline"
           size="sm"
-          className="min-h-[44px] lg:min-h-0"
+          className="touch"
           onClick={() => setPicking((open) => !open)}
           aria-expanded={picking}
         >
@@ -153,7 +153,7 @@ export function PeopleControls({ initialQuery }: { initialQuery: string }) {
                     disabled={column.fixed}
                     onClick={() => toggle(column.key)}
                     className={
-                      "flex min-h-[44px] w-full items-start gap-2 rounded-md px-3 py-2 text-left text-sm lg:min-h-0 " +
+                      "touch flex w-full items-start gap-2 rounded-md px-3 py-2 text-left text-sm " +
                       (column.fixed
                         ? "cursor-default text-muted-foreground"
                         : "hover:bg-muted/60")

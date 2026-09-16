@@ -16,6 +16,8 @@ import { weekdayLabel } from "@/lib/training-plan";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
+import type { DataColumn } from "@/components/ui/data-list";
+import { TD } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
@@ -33,7 +35,7 @@ import { createSeason, createTeam, setCurrentSeason } from "./actions";
 import { ClubWidgetsPanel } from "./club-widgets-panel";
 import { FormatsPanel } from "./formats-panel";
 import { HomeVenueCell } from "./home-venue-cell";
-import { TeamFilterGrid, type TeamFilterColumn, type TeamFilterItem } from "./team-filter";
+import { TeamList, type TeamListItem } from "./team-list";
 
 export const metadata = { title: "Teams" };
 
@@ -171,7 +173,7 @@ function fullTimeState(
       return { dot: "bg-muted-foreground/60", label: "Team FT link · paused", detail };
     }
     if (link.last_import_status === "ok") {
-      return { dot: "bg-emerald-500", label: "Team FT link", detail };
+      return { dot: "bg-success", label: "Team FT link", detail };
     }
     if (link.last_import_status === "error") {
       return {
@@ -181,9 +183,9 @@ function fullTimeState(
       };
     }
     if (link.last_import_status === "challenge") {
-      return { dot: "bg-amber-500", label: "Team FT link · blocked by Cloudflare", detail };
+      return { dot: "bg-warning", label: "Team FT link · blocked by Cloudflare", detail };
     }
-    return { dot: "bg-amber-500", label: "Team FT link · not imported yet", detail };
+    return { dot: "bg-warning", label: "Team FT link · not imported yet", detail };
   }
 
   if (clubRun) {
@@ -192,7 +194,7 @@ function fullTimeState(
       clubRun.created_at,
     )} · ${count} fixtures`;
     if (clubRun.status === "ok") {
-      return { dot: "bg-emerald-500", label: "Club FT link", detail };
+      return { dot: "bg-success", label: "Club FT link", detail };
     }
     if (clubRun.status === "error") {
       return {
@@ -202,9 +204,9 @@ function fullTimeState(
       };
     }
     if (clubRun.status === "challenge") {
-      return { dot: "bg-amber-500", label: "Club FT link · blocked by Cloudflare", detail };
+      return { dot: "bg-warning", label: "Club FT link · blocked by Cloudflare", detail };
     }
-    return { dot: "bg-amber-500", label: `Club FT link · ${clubRun.status}`, detail };
+    return { dot: "bg-warning", label: `Club FT link · ${clubRun.status}`, detail };
   }
 
   if (clubConfigured) {
@@ -613,7 +615,7 @@ export default async function TeamsPage({
           ))}
         </div>
         {saved && (
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <div className="flex items-center gap-2 rounded-lg border border-success/20 bg-success-tint px-4 py-3 text-sm text-success">
             <CheckCircle2 className="h-4 w-4 shrink-0" />
             {saved === "season" ? "Season saved." : "Team saved."}
           </div>
@@ -647,7 +649,7 @@ export default async function TeamsPage({
         {/* server-rendered cards), and the URL keeps up so the view shares. */}
         {/* ---------------------------------------------------------------- */}
         {!formatsTab && (
-        <TeamFilterGrid
+        <TeamList
           initialQuery={query}
           initialShowAll={showAll}
           canTick={canAdmin}
@@ -655,17 +657,26 @@ export default async function TeamsPage({
           pitches={allPitches}
           columns={
             [
-              { label: "Team", filterKey: "age", allLabel: "All ages" },
-              { label: "Format", sub: "from age group", filterKey: "format" },
+              { key: "team", label: "Team", weight: 3, filterKey: "age", allLabel: "All ages" },
+              { key: "format", label: "Format", sub: "from age group", weight: 2, filterKey: "format" },
               // Its own column since 2026-09-04 ("Venue needs to be a column").
-              { label: "Venue", filterKey: "venue", allLabel: "All venues" },
-              { label: "Home pitch", sub: "and kick-off", filterKey: "pitch", allLabel: "All pitches" },
-              { label: "Trains", sub: "default day", filterKey: "trains", allLabel: "Any day" },
-              { label: "Staff", filterKey: "staff" },
-              { label: "Squad", filterKey: "squad" },
-              { label: "Next out", filterKey: "next" },
-              ...(canAdmin ? [{ label: "Subs", filterKey: "subs" } satisfies TeamFilterColumn] : []),
-            ] satisfies TeamFilterColumn[]
+              { key: "venue", label: "Venue", weight: 2, filterKey: "venue", allLabel: "All venues" },
+              {
+                key: "pitch",
+                label: "Home pitch",
+                sub: "and kick-off",
+                weight: 2,
+                filterKey: "pitch",
+                allLabel: "All pitches",
+              },
+              { key: "trains", label: "Trains", sub: "default day", filterKey: "trains", allLabel: "Any day" },
+              { key: "staff", label: "Staff", weight: 2, filterKey: "staff" },
+              { key: "squad", label: "Squad", filterKey: "squad" },
+              { key: "next", label: "Next out", weight: 2, filterKey: "next" },
+              ...(canAdmin
+                ? [{ key: "subs", label: "Subs", filterKey: "subs" } satisfies DataColumn]
+                : []),
+            ] satisfies DataColumn[]
           }
           noTeamsMessage={
             canAdmin
@@ -708,7 +719,7 @@ export default async function TeamsPage({
             ) : null
           }
           footerNote="Format follows the age group unless the club has set one on the team"
-          items={allTeams.map((team): TeamFilterItem => {
+          items={allTeams.map((team): TeamListItem => {
             const ft = canAdmin
               ? fullTimeState(
                   linkByTeam.get(team.id),
@@ -764,7 +775,7 @@ export default async function TeamsPage({
               },
               cells: (
                 <>
-                  <td className="px-4 py-3 align-top">
+                  <TD>
                     <Link
                       href={`/teams/${team.id}`}
                       className="font-semibold leading-tight hover:underline"
@@ -790,8 +801,8 @@ export default async function TeamsPage({
                         </span>
                       )}
                     </p>
-                  </td>
-                  <td className="px-4 py-3 align-top">
+                  </TD>
+                  <TD>
                     {team.playingFormat ? (
                       <>
                         {/* The club's own answer, where it has given one
@@ -810,8 +821,8 @@ export default async function TeamsPage({
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
-                  </td>
-                  <td className="px-4 py-3 align-top">
+                  </TD>
+                  <TD>
                     {team.centralVenue ? (
                       <>
                         <p>{team.centralVenue}</p>
@@ -820,10 +831,10 @@ export default async function TeamsPage({
                     ) : venueName ? (
                       <p>{venueName}</p>
                     ) : (
-                      <p className="font-medium text-amber-700">No home pitch</p>
+                      <p className="font-medium text-warning">No home pitch</p>
                     )}
-                  </td>
-                  <td className="px-4 py-3 align-top">
+                  </TD>
+                  <TD>
                     <HomeVenueCell
                       teamId={team.id}
                       teamName={team.name}
@@ -835,15 +846,15 @@ export default async function TeamsPage({
                       canEdit={canAdmin}
                       pitchOnly
                     />
-                  </td>
-                  <td className="px-4 py-3 align-top">
+                  </TD>
+                  <TD>
                     {team.trainingDay === null ? (
                       <span className="text-muted-foreground">—</span>
                     ) : (
                       weekdayLabel(team.trainingDay)
                     )}
-                  </td>
-                  <td className="px-4 py-3 align-top">
+                  </TD>
+                  <TD>
                     {team.lead !== null || team.others > 0 ? (
                       <>
                         {team.lead !== null ? (
@@ -862,16 +873,16 @@ export default async function TeamsPage({
                     ) : (
                       <p className="font-medium text-primary">No staff</p>
                     )}
-                  </td>
-                  <td className="px-4 py-3 align-top">{team.players}</td>
-                  <td className="px-4 py-3 align-top">
+                  </TD>
+                  <TD>{team.players}</TD>
+                  <TD>
                     {team.nextOut ? (
                       <>
                         <p>{team.nextOut.when}</p>
                         <p className="text-xs text-muted-foreground">
                           v {team.nextOut.opponent}
                           {team.nextOut.unallocated ? (
-                            <span className="ml-1 font-medium text-amber-700">no pitch yet</span>
+                            <span className="ml-1 font-medium text-warning">no pitch yet</span>
                           ) : team.nextOut.home && team.nextOut.pitch ? (
                             <> · {team.nextOut.pitch}</>
                           ) : team.nextOut.home ? null : (
@@ -882,9 +893,9 @@ export default async function TeamsPage({
                     ) : (
                       <span className="text-muted-foreground">—</span>
                     )}
-                  </td>
+                  </TD>
                   {canAdmin && (
-                    <td className="px-4 py-3 align-top">
+                    <TD>
                       {team.subsOwing === null ? (
                         <span className="text-muted-foreground">—</span>
                       ) : team.subsOwing === 0 ? (
@@ -894,7 +905,7 @@ export default async function TeamsPage({
                       ) : (
                         <Badge variant="warning">{team.subsOwing} owing</Badge>
                       )}
-                    </td>
+                    </TD>
                   )}
                 </>
               ),
@@ -955,7 +966,7 @@ export default async function TeamsPage({
                         <span className="font-medium text-foreground">{team.nextOut.when}</span>
                         {` · v ${team.nextOut.opponent}`}
                         {team.nextOut.unallocated ? (
-                          <span className="ml-1 font-medium text-amber-700">no pitch yet</span>
+                          <span className="ml-1 font-medium text-warning">no pitch yet</span>
                         ) : team.nextOut.home && team.nextOut.pitch ? (
                           ` · ${team.nextOut.pitch}`
                         ) : team.nextOut.home ? null : (
@@ -975,7 +986,7 @@ export default async function TeamsPage({
                         )
                       )}
                       {ft && (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                        <span className="inline-flex items-center gap-1 text-2xs text-muted-foreground">
                           <span
                             className={`h-1.5 w-1.5 shrink-0 rounded-full ${ft.dot}`}
                             aria-hidden
