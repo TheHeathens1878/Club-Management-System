@@ -1,13 +1,28 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Clock } from "lucide-react";
+import {
+  AlertTriangle,
+  Clock,
+  FileText,
+  History,
+  IdCard,
+  ShieldCheck,
+  UserRoundCheck,
+} from "lucide-react";
 
 import type { Json } from "@club/db";
 
 import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { ActionBar } from "@/components/ui/action-bar";
+import { Callout } from "@/components/ui/callout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FoldCard } from "@/components/ui/fold-card";
+import { PersonFacts, type PersonFactKey } from "@/components/person/person-facts";
+import { PersonTeams, type PersonTeamRow } from "@/components/person/person-teams";
 import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
 import { signPeoplePhotos, signPersonPhotoPath } from "@/lib/avatars";
 import { signIdentityDocumentPaths } from "@/lib/identity-docs";
@@ -21,6 +36,11 @@ import {
   type PersonMembershipRow,
 } from "@/lib/membership-kind";
 import { isClubAdmin, resolveNames, nameOf } from "@/lib/person";
+import {
+  personNextAction,
+  type PersonActionKey,
+  type PersonSheetMode,
+} from "@/lib/person-record-state";
 import { idDocumentKindLabel } from "@/lib/registration-questions";
 import {
   RegistrationDetailsBody,
@@ -38,6 +58,7 @@ import {
   isMinorDob,
   personLabel,
 } from "@/lib/people-display";
+import { ageGroupFromDobString } from "@/lib/waiting-list";
 import { createClient } from "@/lib/supabase/server";
 import { FamilyTreeView } from "@/components/family-tree-view";
 import { parseFamilyTree, familyTreePersonIds, isFamilyTreeEmpty } from "@/lib/family-tree";
@@ -57,16 +78,29 @@ import {
   RolesPanel,
   type GuardianshipRow,
   type RoleRow,
-} from "./panels";
+} from "@/components/person/person-panels";
 
 /**
- * One person's record (gap 2).
+ * One person's record (gap 2), as one object with a status line (P8.3).
+ *
+ *   1. THE STATUS BAR — the ONE thing this record needs next, from
+ *      `personNextAction()`: imports the migration cannot apply, a missing
+ *      date of birth, a child with nobody to ring, an adult in a child-facing
+ *      role whose ID nobody has recorded seeing — or, when there is nothing
+ *      outstanding, "Record complete" and the ordinary door into the details.
+ *   2. THE FACTS BAND — the eight things an administrator opened the record to
+ *      find out, each one press from the place it is changed.
+ *   3. THE PANELS, then FOLDED BENEATH — the record itself, what the latest
+ *      registration said, and the proof of identity. Each fold's closed line
+ *      is real text, computed here, so it is worth reading shut.
  *
  * Everything is read through the caller's own client. Where a policy says no —
  * `registrations.form` is club_admin, safeguarding_lead, the subject or their
  * guardian, and nobody else — the read simply returns nothing and the section
  * is not rendered. That is the intended behaviour: the page shows what the
- * caller is entitled to see, and works out nothing for itself.
+ * caller is entitled to see, and works out nothing for itself. The facts band
+ * inherits the rule: an absent membership number is a reader who was not shown
+ * the billing row, not a person without one.
  *
  * THE CLUB MEMBERSHIP CARD (Adam, 2026-08-26) is the same rule: it reads
  * `person_memberships`, a security_invoker view over `memberships` and
@@ -81,13 +115,6 @@ import {
 // must not go there: a browser tab, a screen share and a history entry are all
 // places a member's name would travel further than the page itself.
 export const metadata = { title: "Member record" };
-
-const TEAM_ROLE_LABELS: Record<string, string> = {
-  player: "Player",
-  coach: "Coach",
-  assistant_coach: "Assistant coach",
-  manager: "Manager",
-};
 
 /** The queue payload `migrate_neon()` wrote, read defensively. */
 function payloadField(payload: Json | null, key: string): string | null {
@@ -108,6 +135,9 @@ function backHref(from: string | undefined): string {
   const text = query.toString();
   return text ? `/people?${text}` : "/people";
 }
+
+/** The two sections that live on the Membership and payments tab. */
+const MEMBERSHIP_TAB_SECTIONS = new Set(["membership", "money", "member-no"]);
 
 export default async function PersonPage({
   params,
@@ -135,6 +165,7 @@ export default async function PersonPage({
     { data: registration },
     { data: pendingRows },
     { data: profileRow },
+    { data: childFacingRows },
   ] = await Promise.all([
     supabase
       .from("person_roles")
@@ -166,6 +197,10 @@ export default async function PersonPage({
       .is("applied_at", null)
       .order("created_at"),
     supabase.from("profiles").select("id,full_name,role").eq("person_id", id).maybeSingle(),
+    // SG-6 keeps "which role works with children" in a lookup rather than in a
+    // trigger's hard-coded list, so the status bar asks the lookup rather than
+    // deciding for itself. Four rows, readable by anyone signed in.
+    supabase.from("child_facing_roles").select("role,child_facing").eq("child_facing", true),
   ]);
 
   const roles: RoleRow[] = (roleRows ?? []).map((row) => ({
@@ -196,6 +231,26 @@ export default async function PersonPage({
 
   const pending = pendingRows ?? [];
   const name = personLabel(person);
+
+  const teamRows: PersonTeamRow[] = (membershipRows ?? []).map((row) => ({
+    id: row.id,
+    teamId: row.team_id,
+    teamName: row.teams?.name ?? "Team",
+    seasonName: row.seasons?.name ?? "Season unknown",
+    seasonIsCurrent: !!row.seasons?.is_current,
+    role: row.role,
+    shirtNumber: row.shirt_number,
+    joinedAt: row.joined_at,
+    leftAt: row.left_at,
+  }));
+
+  // The child-facing roles this person holds RIGHT NOW, as the lookup
+  // designates them. A reader who is not shown `team_memberships` gets an
+  // empty list and is never asked for an ID they cannot judge.
+  const childFacing = new Set((childFacingRows ?? []).map((row) => row.role as string));
+  const childFacingRoles = Array.from(
+    new Set(teamRows.filter((row) => !row.leftAt && childFacing.has(row.role)).map((row) => row.role)),
+  );
 
   // The club membership this person is tagged with, and the rest of the family
   // on it. Two small reads of `person_memberships`; both carry the view's
@@ -324,72 +379,197 @@ export default async function PersonPage({
     ? await signIdentityDocumentPaths(documents.map((row) => row.storage_path))
     : new Map<string, string>();
 
+  // -------------------------------------------------------------------------
+  // What this record needs next, and where every tile goes
+  // -------------------------------------------------------------------------
+
+  const next = personNextAction({
+    person: { dob: person.dob, id_verified: person.id_verified, updated_at: person.updated_at },
+    pendingImports: pending.length,
+    emergencyContacts: emergencyContacts.length,
+    childFacingRoles,
+    identityDocuments: documents.length,
+  });
+
+  /**
+   * Every press on this page is a URL. A section on the tab already open is a
+   * plain anchor; one on the other tab carries `?tab=` so the press lands with
+   * the right half of the record on screen. `from` rides along so Back still
+   * returns to the list the reader came from.
+   *
+   * These become `?sheet=<mode>` when the sheet lands; the keys do not move.
+   */
+  function sectionHref(section: string): string {
+    const onMembershipTab = MEMBERSHIP_TAB_SECTIONS.has(section);
+    const query = new URLSearchParams();
+    if (onMembershipTab) query.set("tab", "membership");
+    if (from) query.set("from", from);
+    const text = query.toString();
+    return `/people/${id}${text ? `?${text}` : ""}#person-${section}`;
+  }
+
+  const FACT_SECTIONS: Record<PersonFactKey, string> = {
+    age: "details",
+    login: "details",
+    membership: "membership",
+    memberNo: "member-no",
+    roles: "roles",
+    guardianships: "guardianships",
+    teams: "teams",
+    identity: "identity",
+  };
+
+  const memberNo = billingRow?.billing_accounts
+    ? `${String(billingRow.billing_accounts.member_no).padStart(5, "0")}${billingRow.letter}`
+    : null;
+  const liveTeams = teamRows.filter((row) => !row.leftAt).length;
+
+  const idSummary =
+    documents.length > 0
+      ? documents
+          .map(
+            (document) =>
+              `${idDocumentKindLabel(document.kind)} uploaded ${formatStamp(document.created_at)} · destroyed ${document.purge_after}`,
+          )
+          .join(" · ")
+      : person.id_verified
+        ? `ID seen${person.id_verified_at ? ` ${formatStamp(person.id_verified_at)}` : ""} · no document held`
+        : "Nothing on file · nobody has recorded seeing an ID";
+
+  const recordSummary = `Created ${formatStamp(person.created_at)} · last changed ${formatStamp(person.updated_at)}${
+    person.dob ? ` · born ${formatDate(person.dob)}` : " · no date of birth"
+  }${person.deleted_at ? " · retired" : ""}`;
+
+  const registrationSummary = snapshot
+    ? `${registrationDetailsCaption(snapshot.seasonName, snapshot.updatedAt)}${registration?.status ? ` · ${registration.status}` : ""}`
+    : "";
+
+  // The bar's own vocabulary. `label` is the sentence the bar leads with and
+  // `why` the line under it — except when there is nothing to do, where the
+  // helper's `label` is already the button ("Edit details") and `why` is the
+  // sentence ("Record complete · last changed 4 Sep"), so the two swap over.
+  const NEXT_ICON: Record<PersonActionKey, ReactNode> = {
+    "apply-imports": <Clock className="h-4 w-4" aria-hidden />,
+    "add-dob": <AlertTriangle className="h-4 w-4" aria-hidden />,
+    "add-emergency-contact": <AlertTriangle className="h-4 w-4" aria-hidden />,
+    "record-id-seen": <IdCard className="h-4 w-4" aria-hidden />,
+    "record-complete": <UserRoundCheck className="h-4 w-4" aria-hidden />,
+  };
+  // A button says one thing. "Save a date of birth — 3 imports waiting" is the
+  // sentence, not the press.
+  const NEXT_BUTTON: Record<PersonActionKey, string> = {
+    "apply-imports": "Add the date of birth",
+    "add-dob": "Add a date of birth",
+    "add-emergency-contact": "Add a contact",
+    "record-id-seen": "Record ID seen",
+    "record-complete": "Edit details",
+  };
+  const quiet = next.key === "record-complete";
+  const NEXT_SECTION: Record<PersonSheetMode, string> = {
+    details: "details",
+    contacts: "contacts",
+    roles: "roles",
+    guardianships: "guardianships",
+    identity: "identity",
+    membership: "membership",
+    money: "money",
+    registration: "registration",
+    danger: "danger",
+  };
+
   return (
     <>
       <PageHeader
         title={name}
         subtitle={person.email ?? "No email on file"}
         back={{ href: backHref(from), label: "People" }}
+        /* The face goes beside the name rather than on a row of its own, and
+           only the EXCEPTIONS keep a badge: minor, login and membership kind
+           are tiles on the band below now, where each has room to say what it
+           means. That is most of the vertical space this page got back. */
+        action={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {person.deleted_at && <Badge variant="destructive">Retired</Badge>}
+            {person.legal_hold && <Badge variant="warning">Legal hold</Badge>}
+            <Avatar name={name} photoUrl={photoUrl} size="lg" />
+          </div>
+        }
       />
-      <div className="space-y-6 p-4 lg:p-6">
-        <div className="flex flex-wrap items-center gap-3">
-          <Avatar name={name} photoUrl={photoUrl} size="lg" />
-          {person.deleted_at && <Badge variant="destructive">Retired</Badge>}
-          {isMinorDob(person.dob) && (
-            <Badge variant="warning">{person.dob ? "Minor" : "No date of birth — treated as a minor"}</Badge>
-          )}
-          {person.legal_hold && <Badge variant="warning">Legal hold</Badge>}
-          {profileRow ? (
-            <Badge variant="default">Login linked · {profileRow.role}</Badge>
-          ) : (
-            <Badge variant="muted">No login linked</Badge>
-          )}
-          {clubMembership?.kind && (
-            <Badge variant={membershipKindVariant(clubMembership.kind)}>
-              {membershipKindWord(clubMembership.kind)}
-            </Badge>
-          )}
-        </div>
+      <div className="space-y-4 p-4 lg:p-6">
+        <ActionBar
+          icon={NEXT_ICON[next.key]}
+          tone={next.tone}
+          status={quiet ? next.why : next.label}
+          detail={quiet ? undefined : next.why}
+          action={
+            <Link
+              href={sectionHref(NEXT_SECTION[next.mode])}
+              className={buttonVariants({ size: "touch", variant: quiet ? "outline" : "default" })}
+            >
+              {NEXT_BUTTON[next.key]}
+            </Link>
+          }
+        />
+
+        <PersonFacts
+          facts={{
+            ageGroup: ageGroupFromDobString(person.dob),
+            isMinor: isMinorDob(person.dob),
+            hasDob: !!person.dob,
+            loginRole: profileRow?.role ?? null,
+            membershipWord: clubMembership?.kind ? membershipKindWord(clubMembership.kind) : null,
+            membershipSeason: clubMembership?.season_name ?? null,
+            memberNo,
+            memberNoStatus:
+              billingRow?.billing_accounts && billingRow.billing_accounts.status !== "active"
+                ? billingRow.billing_accounts.status
+                : null,
+            roles: roles.length,
+            guardians: guardianships.filter((link) => !link.personIsGuardian && !link.endedAt).length,
+            children: guardianships.filter((link) => link.personIsGuardian && !link.endedAt).length,
+            teams: teamRows.length,
+            liveTeams,
+            idSeen: person.id_verified,
+            idNeeded: childFacingRoles.length > 0 && !person.id_verified,
+            retired: !!person.deleted_at,
+          }}
+          hrefFor={(key) => sectionHref(FACT_SECTIONS[key])}
+        />
 
         <PersonTabs personId={person.id} active={tab} from={from} />
 
         {tab === "record" && (
         <>
         {pending.length > 0 && (
-          <Card className="border-amber-200">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base text-amber-900">
-                <Clock className="h-4 w-4" /> Waiting to be applied
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Records imported from the pitch-booking app that SG-4 and SG-6 will not accept until
-                this person&apos;s date of birth is known. Save a date of birth below and they are
-                applied straight away.
-              </p>
-            </CardHeader>
-            <CardContent>
-              <ul className="space-y-2 text-sm">
-                {pending.map((row) => (
-                  <li key={row.id}>
-                    <span className="font-medium capitalize">{row.kind}</span>
-                    <span className="text-muted-foreground">
-                      {payloadField(row.payload, "role") ? ` · ${payloadField(row.payload, "role")}` : ""}
-                      {` · queued ${formatStamp(row.created_at)}`}
-                      {row.attempts > 0
-                        ? ` · ${row.attempts} attempt${row.attempts === 1 ? "" : "s"}`
-                        : ""}
-                    </span>
-                    {row.last_error && (
-                      <p className="text-xs text-amber-900">{row.last_error}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
+          <Callout
+            tone="warning"
+            icon={<Clock className="h-4 w-4" aria-hidden />}
+            title="Waiting to be applied"
+          >
+            <p>
+              Records imported from the pitch-booking app that SG-4 and SG-6 will not accept until
+              this person&apos;s date of birth is known. Save a date of birth below and they are
+              applied straight away.
+            </p>
+            <ul className="mt-2 space-y-1">
+              {pending.map((row) => (
+                <li key={row.id}>
+                  <span className="font-medium capitalize">{row.kind}</span>
+                  <span>
+                    {payloadField(row.payload, "role") ? ` · ${payloadField(row.payload, "role")}` : ""}
+                    {` · queued ${formatStamp(row.created_at)}`}
+                    {row.attempts > 0
+                      ? ` · ${row.attempts} attempt${row.attempts === 1 ? "" : "s"}`
+                      : ""}
+                  </span>
+                  {row.last_error && <span className="block text-xs">{row.last_error}</span>}
+                </li>
+              ))}
+            </ul>
+          </Callout>
         )}
 
-        <Card>
+        <Card id="person-details" className="scroll-mt-20">
           <CardHeader>
             <CardTitle>Details</CardTitle>
           </CardHeader>
@@ -413,7 +593,7 @@ export default async function PersonPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="person-contacts" className="scroll-mt-20">
           <CardHeader>
             <CardTitle>Emergency contacts</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -432,7 +612,7 @@ export default async function PersonPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="person-roles" className="scroll-mt-20">
           <CardHeader>
             <CardTitle>Roles</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -446,7 +626,7 @@ export default async function PersonPage({
           </CardContent>
         </Card>
 
-        <Card>
+        <Card id="person-guardianships" className="scroll-mt-20">
           <CardHeader>
             <CardTitle>Guardianships</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -460,176 +640,138 @@ export default async function PersonPage({
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
+        {/* Every membership this person has held, in every season — the
+            season heads its own group, so the six-column table that used to
+            scroll sideways on a phone is gone. */}
+        <Card id="person-teams" className="scroll-mt-20">
+          <CardHeader className="pb-3">
             <CardTitle>Teams</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Every membership this person has held, in every season.
-            </p>
           </CardHeader>
           <CardContent>
-            {(membershipRows ?? []).length === 0 ? (
-              <p className="text-sm text-muted-foreground">No team memberships recorded.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead className="border-b text-xs text-muted-foreground">
-                    <tr>
-                      <th className="py-2 pr-3 font-medium">Team</th>
-                      <th className="py-2 pr-3 font-medium">Season</th>
-                      <th className="py-2 pr-3 font-medium">Role</th>
-                      <th className="py-2 pr-3 font-medium">Shirt</th>
-                      <th className="py-2 pr-3 font-medium">Joined</th>
-                      <th className="py-2 font-medium">Left</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(membershipRows ?? []).map((row) => (
-                      <tr key={row.id} className="border-b last:border-0">
-                        <td className="py-2 pr-3">
-                          <Link
-                            href={`/teams/${row.team_id}`}
-                            className="font-medium underline underline-offset-2"
-                          >
-                            {row.teams?.name ?? "Team"}
-                          </Link>
-                        </td>
-                        <td className="py-2 pr-3">
-                          {row.seasons?.name ?? "—"}
-                          {row.seasons?.is_current && (
-                            <Badge variant="success" className="ml-2">
-                              Current
-                            </Badge>
-                          )}
-                        </td>
-                        <td className="py-2 pr-3">{TEAM_ROLE_LABELS[row.role] ?? row.role}</td>
-                        <td className="py-2 pr-3">{row.shirt_number ?? "—"}</td>
-                        <td className="whitespace-nowrap py-2 pr-3">{formatStamp(row.joined_at)}</td>
-                        <td className="whitespace-nowrap py-2">
-                          {row.left_at ? formatStamp(row.left_at) : <Badge variant="success">Live</Badge>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            <PersonTeams rows={teamRows} />
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Proof of identity</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              A passport or birth certificate is asked for at registration unless a club
-              administrator has recorded that the club has already seen one. Documents are held for
-              three years and then destroyed automatically; the record that one was held survives.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {documents.length === 0 ? (
-              <p className="text-sm text-muted-foreground">Nothing on file.</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {documents.map((document) => {
-                  const url = document.storage_path
-                    ? documentUrls.get(document.storage_path)
-                    : undefined;
-                  return (
-                    <li key={document.id} className="flex flex-wrap items-center gap-2">
-                      {url ? (
-                        <a
-                          href={url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="font-medium text-primary hover:underline"
-                        >
-                          {idDocumentKindLabel(document.kind)}
-                        </a>
-                      ) : (
-                        <span className="font-medium">{idDocumentKindLabel(document.kind)}</span>
-                      )}
-                      <span className="text-xs text-muted-foreground">
-                        uploaded {formatStamp(document.created_at)} · destroyed {document.purge_after}
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-            {admin ? (
-              <IdVerifiedForm
+        {/* The settings and the history fold beneath the work, the way every
+            screen in the makeover ends. Each summary is real text, so the row
+            is worth reading without opening it. */}
+        <div className="space-y-2 pt-2">
+          <FoldCard
+            icon={<History className="h-4 w-4" aria-hidden />}
+            title="Record"
+            summary={recordSummary}
+            className="scroll-mt-20"
+          >
+            <div id="person-danger" className="scroll-mt-20">
+              <RetirePanel
                 personId={person.id}
-                verified={person.id_verified}
-                verifiedAt={person.id_verified_at}
-                verifiedByName={
-                  person.id_verified ? verifierName(verifierNames, person.id_verified_by) : null
-                }
+                personName={name}
+                deletedAt={person.deleted_at}
               />
-            ) : (
-              person.id_verified && (
-                <p className="text-sm text-emerald-700">
-                  ID seen and verified by {verifierName(verifierNames, person.id_verified_by)}
-                  {person.id_verified_at
-                    ? ` · ${formatStamp(person.id_verified_at)}`
-                    : ""}
+              {/* Adam, the club owner and sole super user, asked for a real
+                  delete for GDPR erasure and for test accounts. Nobody else is
+                  offered it, and `purge_person()` would refuse them anyway. */}
+              {isSuperUser(session.profile?.role) && (
+                <PurgePanel personId={person.id} personName={name} />
+              )}
+            </div>
+          </FoldCard>
+
+          {snapshot && (
+            <FoldCard
+              icon={<FileText className="h-4 w-4" aria-hidden />}
+              title="From the latest registration"
+              summary={registrationSummary}
+              className="scroll-mt-20"
+            >
+              <div id="person-registration" className="scroll-mt-20 space-y-3">
+                <p className="text-sm text-muted-foreground">
+                  Read-only here: each new registration overwrites these answers, and they are
+                  changed by registering again.
                 </p>
-              )
-            )}
-          </CardContent>
-        </Card>
+                <RegistrationDetailsBody
+                  details={snapshot.details}
+                  photoConsents={
+                    isMinorDob(person.dob) ? (photoConsents.get(id) ?? new Set<string>()) : undefined
+                  }
+                  questionLabels={questionLabels}
+                />
+              </div>
+            </FoldCard>
+          )}
 
-        {snapshot && (
-          <Card>
-            <CardHeader>
-              <CardTitle>From the latest registration</CardTitle>
+          <FoldCard
+            icon={<ShieldCheck className="h-4 w-4" aria-hidden />}
+            title="Proof of identity"
+            summary={idSummary}
+            defaultOpen={next.key === "record-id-seen"}
+            className="scroll-mt-20"
+          >
+            <div id="person-identity" className="scroll-mt-20 space-y-3">
               <p className="text-sm text-muted-foreground">
-                {registrationDetailsCaption(snapshot.seasonName, snapshot.updatedAt)}
-                {registration?.status ? ` · ${registration.status}` : ""}. Read-only here: each new
-                registration overwrites these answers, and they are changed by registering again.
+                A passport or birth certificate is asked for at registration unless a club
+                administrator has recorded that the club has already seen one. Documents are held
+                for three years and then destroyed automatically; the record that one was held
+                survives.
               </p>
-            </CardHeader>
-            <CardContent>
-              <RegistrationDetailsBody
-                details={snapshot.details}
-                photoConsents={
-                  isMinorDob(person.dob) ? (photoConsents.get(id) ?? new Set<string>()) : undefined
-                }
-                questionLabels={questionLabels}
-              />
-            </CardContent>
-          </Card>
-        )}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Record</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Created {formatStamp(person.created_at)} · last changed {formatStamp(person.updated_at)}
-              {person.dob ? ` · date of birth recorded (${formatDate(person.dob)})` : ""}
-            </p>
-          </CardHeader>
-          <CardContent>
-            <RetirePanel
-              personId={person.id}
-              personName={name}
-              deletedAt={person.deleted_at}
-            />
-            {/* Adam, the club owner and sole super user, asked for a real
-                delete for GDPR erasure and for test accounts. Nobody else is
-                offered it, and `purge_person()` would refuse them anyway. */}
-            {isSuperUser(session.profile?.role) && (
-              <PurgePanel personId={person.id} personName={name} />
-            )}
-          </CardContent>
-        </Card>
+              {documents.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Nothing on file.</p>
+              ) : (
+                <ul className="space-y-1 text-sm">
+                  {documents.map((document) => {
+                    const url = document.storage_path
+                      ? documentUrls.get(document.storage_path)
+                      : undefined;
+                    return (
+                      <li key={document.id} className="flex flex-wrap items-center gap-2">
+                        {url ? (
+                          <a
+                            href={url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="touch flex items-center font-medium text-primary hover:underline"
+                          >
+                            {idDocumentKindLabel(document.kind)}
+                          </a>
+                        ) : (
+                          <span className="font-medium">{idDocumentKindLabel(document.kind)}</span>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          uploaded {formatStamp(document.created_at)} · destroyed{" "}
+                          {document.purge_after}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {admin ? (
+                <IdVerifiedForm
+                  personId={person.id}
+                  verified={person.id_verified}
+                  verifiedAt={person.id_verified_at}
+                  verifiedByName={
+                    person.id_verified ? verifierName(verifierNames, person.id_verified_by) : null
+                  }
+                />
+              ) : (
+                person.id_verified && (
+                  <p className="text-sm text-success">
+                    ID seen and verified by {verifierName(verifierNames, person.id_verified_by)}
+                    {person.id_verified_at ? ` · ${formatStamp(person.id_verified_at)}` : ""}
+                  </p>
+                )
+              )}
+            </div>
+          </FoldCard>
+        </div>
         </>
         )}
 
         {tab === "membership" && (
           <>
         {billingRow?.billing_accounts && (
-          <Card>
+          <Card id="person-member-no" className="scroll-mt-20">
             <CardHeader>
               <CardTitle>Membership number</CardTitle>
               <p className="text-sm text-muted-foreground">
@@ -639,7 +781,7 @@ export default async function PersonPage({
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-2xl font-bold tabular-nums">
+                <span className="font-mono text-xl font-bold tabular-nums">
                   {String(billingRow.billing_accounts.member_no).padStart(5, "0")}
                   {billingRow.letter}
                 </span>
@@ -651,7 +793,7 @@ export default async function PersonPage({
                 ) : (
                   <Link
                     href={`/people/${billingRow.billing_accounts.lead_person_id}?tab=membership`}
-                    className="text-sm font-medium underline underline-offset-2"
+                    className="touch flex items-center text-sm font-medium underline underline-offset-2"
                   >
                     Billed to the lead member →
                   </Link>
@@ -671,7 +813,7 @@ export default async function PersonPage({
                     ) : (
                       <Link
                         href={`/people/${member.person_id}?tab=membership`}
-                        className="font-medium underline underline-offset-2"
+                        className="touch flex items-center font-medium underline underline-offset-2"
                       >
                         {member.people ? `${member.people.first_name} ${member.people.last_name}` : "(unknown)"}
                       </Link>
@@ -692,7 +834,7 @@ export default async function PersonPage({
           </Card>
         )}
 
-        <Card>
+        <Card id="person-membership" className="scroll-mt-20">
           <CardHeader>
             <CardTitle>Club membership</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -729,7 +871,7 @@ export default async function PersonPage({
                       <li key={row.person_id} className="flex flex-wrap items-center gap-2">
                         <Link
                           href={`/people/${row.person_id}`}
-                          className="font-medium underline underline-offset-2"
+                          className="touch flex items-center font-medium underline underline-offset-2"
                         >
                           {nameOf(familyNames, row.person_id)}
                         </Link>
@@ -778,7 +920,7 @@ export default async function PersonPage({
               </CardContent>
             </Card>
 
-            <Card>
+            <Card id="person-money" className="scroll-mt-20">
               <CardHeader>
                 <CardTitle>Subscriptions</CardTitle>
                 <p className="text-sm text-muted-foreground">
