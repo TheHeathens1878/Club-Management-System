@@ -241,6 +241,26 @@ export function isMemberView(view: RoleView | null): boolean {
   return view === "parent" || view === "player" || view === "me";
 }
 
+/**
+ * Is this person running the club RIGHT NOW — the admin hat, or no hat chosen
+ * yet (a fresh login before the first tile)?
+ *
+ * The other half of the rule above, named because two screens got it wrong
+ * in the same week. `/matches` and `/teams/[id]` gate pitch allocation on
+ * "not a member view and not the coach hat" (Adam, 2026-08-25: coaches cannot
+ * assign pitches), and when P8.4/P8.7 rewrote their longhand
+ * `view === "admin" || view === null` as `!isMemberView(view) && view !== "coach"`
+ * the referee and function-room hats slipped through. The database refused
+ * them anyway (the RPCs are club_admin-only), but a screen offering a door the
+ * database will slam is exactly the kind of lie the hat rule exists to stop.
+ *
+ * Like `isMemberView`, this never widens anything and is not a security
+ * boundary: the caller still needs the capability as well as the hat.
+ */
+export function isAdminHat(view: RoleView | null): boolean {
+  return view === "admin" || view === null;
+}
+
 // ---------------------------------------------------------------------------
 // The "Viewing as" dropdown — role–team combinations (Adam, 2026-08-25)
 // ---------------------------------------------------------------------------

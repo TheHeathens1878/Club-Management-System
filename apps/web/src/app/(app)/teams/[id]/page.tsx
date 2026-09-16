@@ -6,7 +6,7 @@ import { CalendarDays, ChevronLeft, Users } from "lucide-react";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { nameOf, resolveNames } from "@/lib/person";
-import { isMemberView, resolveRoleView } from "@/lib/role-view";
+import { isAdminHat, isMemberView, resolveRoleView } from "@/lib/role-view";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -125,7 +125,7 @@ export default async function TeamPage({
   // it is the named helper now, the same sentence `/matches` writes (P8.4),
   // so the rule lives in one place rather than being remembered screen by
   // screen. The coach carve-out is deliberate and is Adam's (2026-08-25).
-  const adminHat = !isMemberView(view) && view !== "coach";
+  const adminHat = isAdminHat(view);
   // Adam, 2026-08-25: "make sure coaches cannot assign pitches". Allocation
   // — the season in one go, and the team's home-pitch defaults the allocator
   // starts from — is the club admin's, and only while wearing the admin hat.
