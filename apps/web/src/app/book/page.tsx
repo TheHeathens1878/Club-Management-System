@@ -1,20 +1,42 @@
-import { createAdminClient } from "@/lib/supabase/admin";
-import { getSettings } from "@/lib/settings";
-import { BookClient } from "./book-client";
+import Link from "next/link";
+import { Clock, HelpCircle, Info, LayoutGrid, Users } from "lucide-react";
+
+import { FoldCard } from "@/components/ui/fold-card";
+import { getSessionProfile } from "@/lib/auth";
 import { parseExtrasConfig } from "@/lib/booking-extras";
-import { standardHireSentence } from "@/lib/room-pricing";
-import { formatCurrency } from "@/lib/utils";
-import { Users, Clock, Info } from "lucide-react";
 import { instantsToLocalWindow, localToInstant, londonToday } from "@/lib/booking-time";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
+import { standardHireSentence } from "@/lib/room-pricing";
+import { getSettings } from "@/lib/settings";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { formatCurrency } from "@/lib/utils";
+
+import { BookFlow } from "./book-calendar";
 
 export const metadata = { title: "Function room hire" };
 
 export const dynamic = "force-dynamic";
 
+/**
+ * `/book` — the club's shop window (P8.9). A visitor arrives from a search or
+ * a Facebook post on a phone, wanting to know one thing: is my date free, and
+ * what would it cost?
+ *
+ * So the calendar IS the page. A slim band above it carries the club and, for
+ * anybody already signed in, the way to their own bookings; the running
+ * answer and the one button that sends it are pinned under that; the rooms
+ * and their prices, and the FAQs, fold beneath — they are what you read once,
+ * not what you came for.
+ *
+ * This route is outside `(app)`: no shell, no nav, no `role-view`. Its header
+ * is local for that reason.
+ */
 export default async function BookPage() {
   const admin = createAdminClient();
   const settings = await getSettings();
+  // Only to decide whether to offer "Your bookings": a visitor who is not
+  // signed in is the normal case here and sees the page exactly as before.
+  const session = await getSessionProfile();
 
   const { data: rooms } = await admin
     .from("resources")
@@ -90,154 +112,151 @@ export default async function BookPage() {
   });
 
   const contactEmail = settings.contact_email || "bookings@aomsportsclub.co.uk";
+  const priceSummary =
+    roomList
+      .map((room) => standardHireSentence(room) || (room.price_pence_fixed ? formatCurrency(room.price_pence_fixed) : null))
+      .filter(Boolean)
+      .join(" · ") || "Ask us for a price";
 
   return (
-    <main className="min-h-screen bg-gradient-to-br from-primary/10 via-background to-accent/10">
-      <div className="mx-auto max-w-4xl px-0 sm:px-4 py-6 sm:py-12">
-        {/* Header */}
-        <div className="mb-10 text-center">
-          {settings.logo_url ? (
-            <div className="mb-5 flex justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
+    <div className="min-h-screen bg-muted/20">
+      <header className="sticky top-0 z-40 h-14 border-b bg-card">
+        <div className="mx-auto flex h-full max-w-3xl items-center justify-between gap-3 px-4">
+          <div className="flex min-w-0 items-center gap-2">
+            {settings.logo_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={settings.logo_url}
                 alt={settings.logo_alt || "Club logo"}
-                style={{
-                  height: Math.min(Number(settings.logo_height) || 80, 120),
-                  maxWidth: Number(settings.logo_max_width) || 300,
-                  objectFit: (settings.logo_object_fit as "contain" | "cover" | "fill") || "contain",
-                }}
+                style={{ height: 32, maxWidth: 120, objectFit: "contain" }}
               />
-            </div>
-          ) : (
-            <div className="mb-4 inline-flex items-center justify-center rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary">
-              {settings.club_name}
-            </div>
-          )}
-          <h1 className="text-3xl font-bold tracking-tight sm:text-4xl">Function Room Hire</h1>
-          <p className="mt-3 text-base text-muted-foreground max-w-xl mx-auto">
-            {settings.club_description || "Our function rooms are available to hire for private events, parties, meetings and celebrations."}
+            ) : null}
+            <span className="truncate text-row font-semibold">Function room hire</span>
+          </div>
+          {session ? (
+            <Link
+              href="/portal"
+              className="touch -mr-2 inline-flex flex-none items-center rounded-md px-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Your bookings
+            </Link>
+          ) : null}
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-3xl space-y-4 px-4 py-4 lg:py-6">
+        <p className="text-sm text-muted-foreground">
+          {settings.club_description ||
+            "Our function rooms are available to hire for private events, parties, meetings and celebrations."}
+        </p>
+
+        {roomList.length === 0 ? (
+          <p className="rounded-xl border bg-card p-8 text-center text-sm text-muted-foreground">
+            No rooms are currently available. Please contact us directly.
           </p>
-        </div>
-
-        {/* Room cards */}
-        <div className="mb-10 grid gap-4 sm:grid-cols-2">
-          {roomList.map((room) => (
-            <div key={room.id} className="rounded-xl border bg-card p-6 shadow-sm">
-              <h2 className="text-lg font-semibold">{room.name}</h2>
-              {room.description && (
-                <p className="mt-1 text-sm text-muted-foreground">{room.description}</p>
-              )}
-              <div className="mt-4 flex flex-wrap gap-4 text-sm">
-                {room.capacity && (
-                  <span className="flex items-center gap-1.5 text-muted-foreground">
-                    <Users className="h-4 w-4" />
-                    Up to {room.capacity} guests
-                  </span>
-                )}
-              </div>
-              {(standardHireSentence(room) || room.price_pence_fixed || room.price_pence_per_hour || room.price_pence_half_day || room.price_pence_full_day) && (
-                <div className="mt-4 space-y-1 border-t pt-4">
-                  <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground mb-2">Pricing</p>
-                  {standardHireSentence(room) && (
-                    <p className="flex items-start gap-1.5 text-sm font-medium">
-                      <Clock className="h-3.5 w-3.5 shrink-0 mt-1 text-muted-foreground" />
-                      {standardHireSentence(room)}
-                    </p>
-                  )}
-                  <div className="flex flex-wrap gap-x-6 gap-y-1 text-sm">
-                    {!standardHireSentence(room) && room.price_pence_fixed && (
-                      <span className="flex items-center gap-1.5 font-medium">
-                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                        {formatCurrency(room.price_pence_fixed)}
-                      </span>
-                    )}
-                    {room.price_pence_per_hour && (
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                        {formatCurrency(room.price_pence_per_hour)}/hour
-                      </span>
-                    )}
-                    {room.price_pence_half_day && (
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                        {formatCurrency(room.price_pence_half_day)} half day
-                      </span>
-                    )}
-                    {room.price_pence_full_day && (
-                      <span className="flex items-center gap-1.5">
-                        <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                        {formatCurrency(room.price_pence_full_day)} full day
-                      </span>
-                    )}
-                  </div>
-                  {room.price_note && (
-                    <p className="flex items-start gap-1.5 text-xs text-muted-foreground mt-2">
-                      <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                      {room.price_note}
-                    </p>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        {/* Availability calendar + booking form */}
-        <div className="overflow-hidden rounded-none border-y sm:rounded-xl sm:border bg-card sm:shadow-sm">
-          <div className="px-4 pt-5 pb-3 sm:px-6 sm:pt-6 sm:pb-0">
-            <h2 className="mb-1 text-xl font-semibold">Check availability &amp; request a booking</h2>
-            <p className="mb-6 text-sm text-muted-foreground">
-              Select a room, browse the calendar, then click a date to fill in your details.
-            </p>
-          </div>
-          <div className="px-0 pb-0 sm:px-6 sm:pb-6">
-            {roomList.length === 0 ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                No rooms are currently available. Please contact us directly.
-              </p>
-            ) : (
-              <BookClient
-                rooms={roomList}
-                bookedSlots={bookedSlots}
-                teamNames={(teamRows ?? []).map((t) => t.name)}
-                memberDiscountPence={Number(settings.room_member_discount_pence) || 0}
-              />
-            )}
-          </div>
-        </div>
-
-        {/* FAQs */}
-        {faqs.length > 0 && (
-          <div className="mt-10">
-            <h2 className="text-xl font-semibold mb-4">Frequently asked questions</h2>
-            <div className="space-y-2">
-              {faqs.map((faq) => (
-                <details key={faq.id} className="group rounded-lg border bg-card">
-                  <summary className="flex cursor-pointer select-none items-center justify-between px-5 py-4 text-sm font-medium hover:bg-muted/30 transition-colors">
-                    {faq.question}
-                    <span className="ml-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180">
-                      ▾
-                    </span>
-                  </summary>
-                  <div className="border-t px-5 py-4 text-sm text-muted-foreground whitespace-pre-wrap">
-                    {faq.answer}
-                  </div>
-                </details>
-              ))}
-            </div>
-          </div>
+        ) : (
+          <BookFlow
+            rooms={roomList}
+            bookedSlots={bookedSlots}
+            teamNames={(teamRows ?? []).map((t) => t.name)}
+            memberDiscountPence={Number(settings.room_member_discount_pence) || 0}
+          />
         )}
 
-        {/* Footer note */}
-        <p className="mt-8 text-center text-xs text-muted-foreground">
+        <div className="space-y-2 pt-2">
+          <FoldCard
+            icon={<LayoutGrid className="h-4 w-4" aria-hidden />}
+            title="Rooms and prices"
+            summary={priceSummary}
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              {roomList.map((room) => (
+                <div key={room.id} className="rounded-lg border bg-card p-4">
+                  <h2 className="text-row font-semibold">{room.name}</h2>
+                  {room.description ? (
+                    <p className="mt-1 text-sm text-muted-foreground">{room.description}</p>
+                  ) : null}
+                  {room.capacity ? (
+                    <p className="mt-2 flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <Users className="h-4 w-4 flex-none" aria-hidden />
+                      Up to {room.capacity} guests
+                    </p>
+                  ) : null}
+                  {standardHireSentence(room) ||
+                  room.price_pence_fixed ||
+                  room.price_pence_per_hour ||
+                  room.price_pence_half_day ||
+                  room.price_pence_full_day ? (
+                    <div className="mt-3 space-y-1 border-t pt-3 text-sm">
+                      {standardHireSentence(room) ? (
+                        <p className="flex items-start gap-1.5 font-medium">
+                          <Clock className="mt-0.5 h-3.5 w-3.5 flex-none text-muted-foreground" aria-hidden />
+                          {standardHireSentence(room)}
+                        </p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-x-6 gap-y-1">
+                        {!standardHireSentence(room) && room.price_pence_fixed ? (
+                          <span className="font-medium">{formatCurrency(room.price_pence_fixed)}</span>
+                        ) : null}
+                        {room.price_pence_per_hour ? (
+                          <span>{formatCurrency(room.price_pence_per_hour)}/hour</span>
+                        ) : null}
+                        {room.price_pence_half_day ? (
+                          <span>{formatCurrency(room.price_pence_half_day)} half day</span>
+                        ) : null}
+                        {room.price_pence_full_day ? (
+                          <span>{formatCurrency(room.price_pence_full_day)} full day</span>
+                        ) : null}
+                      </div>
+                      {room.price_note ? (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                          <Info className="mt-0.5 h-3.5 w-3.5 flex-none" aria-hidden />
+                          {room.price_note}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </FoldCard>
+
+          {faqs.length > 0 ? (
+            <FoldCard
+              icon={<HelpCircle className="h-4 w-4" aria-hidden />}
+              title="Frequently asked questions"
+              summary={faqs
+                .slice(0, 3)
+                .map((faq) => faq.question)
+                .join(" · ")}
+            >
+              <div className="space-y-2">
+                {faqs.map((faq) => (
+                  <details key={faq.id} className="group rounded-lg border bg-card">
+                    <summary className="touch flex cursor-pointer select-none items-center justify-between gap-3 px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/30">
+                      {faq.question}
+                      <span className="flex-none text-muted-foreground transition-transform group-open:rotate-180" aria-hidden>
+                        ▾
+                      </span>
+                    </summary>
+                    <div className="whitespace-pre-wrap border-t px-4 py-3 text-sm text-muted-foreground">
+                      {faq.answer}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </FoldCard>
+          ) : null}
+        </div>
+
+        <p className="text-center text-xs text-muted-foreground">
           Prefer to speak to someone? Contact us at{" "}
           <a href={`mailto:${contactEmail}`} className="text-primary hover:underline">
             {contactEmail}
           </a>{" "}
           or visit the club.
         </p>
-      </div>
-    </main>
+      </main>
+    </div>
   );
 }
