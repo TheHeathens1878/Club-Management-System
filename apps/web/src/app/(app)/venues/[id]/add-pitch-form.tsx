@@ -24,7 +24,7 @@ export function AddPitchForm({ venueId, forTraining }: { venueId: string; forTra
 
   if (!open) {
     return (
-      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)} className="min-h-[44px] gap-1.5 lg:min-h-0">
+      <Button type="button" variant="outline" size="sm" onClick={() => setOpen(true)} className="touch gap-1.5">
         <Plus className="h-3.5 w-3.5" /> New pitch here
       </Button>
     );
@@ -40,11 +40,11 @@ export function AddPitchForm({ venueId, forTraining }: { venueId: string; forTra
       <fieldset className="space-y-1.5">
         <legend className="text-sm font-medium leading-none">Used for</legend>
         <div className="flex flex-wrap gap-x-6 gap-y-1">
-          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+          <label className="touch flex items-center gap-2 text-sm">
             <input type="checkbox" name="for_matches" defaultChecked={!forTraining} className="h-4 w-4 rounded border-input" />
             Matches
           </label>
-          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+          <label className="touch flex items-center gap-2 text-sm">
             <input type="checkbox" name="for_training" defaultChecked className="h-4 w-4 rounded border-input" />
             Training
           </label>
@@ -52,10 +52,10 @@ export function AddPitchForm({ venueId, forTraining }: { venueId: string; forTra
       </fieldset>
       <VenueFeedback state={state} />
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
+        <Button type="submit" size="sm" disabled={pending} className="touch">
           {pending ? "Adding…" : "Add the pitch"}
         </Button>
-        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} className="min-h-[44px] lg:min-h-0">
+        <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)} className="touch">
           Cancel
         </Button>
       </div>

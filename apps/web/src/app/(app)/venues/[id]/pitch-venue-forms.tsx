@@ -60,7 +60,7 @@ export function AttachPitchForm({
       <Button
         type="submit"
         size="sm"
-        className="min-h-[44px] w-full gap-1.5 sm:w-auto lg:min-h-0"
+        className="touch w-full gap-1.5 sm:w-auto"
         disabled={pending}
       >
         <Plus className="h-3.5 w-3.5" /> {pending ? "Adding…" : "Add this pitch"}
@@ -82,7 +82,7 @@ export function DetachPitchForm({ venueId, pitch }: { venueId: string; pitch: Pi
           type="submit"
           variant="ghost"
           size="sm"
-          className="min-h-[44px] gap-1.5 lg:min-h-0"
+          className="touch gap-1.5"
           disabled={pending}
         >
           <Minus className="h-3.5 w-3.5" /> Take off

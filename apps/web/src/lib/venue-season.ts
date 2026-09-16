@@ -10,6 +10,13 @@
  * can never drift apart. Pure, no Supabase, no server-only imports.
  */
 
+import {
+  timetableDays,
+  timetableRows,
+  type TimetableBooking,
+  type TimetableRow,
+  type TimetableSlot,
+} from "@/lib/training-plan";
 import { bookingCost, type DateRange, type PricedSlot } from "@/lib/venue-hire";
 import { formatCurrency } from "@/lib/utils";
 
@@ -129,4 +136,169 @@ export function venueNextAction(
     seasonName,
     costPence,
   };
+}
+
+// ---------------------------------------------------------------------------
+// The ground as a grid — the same shape the training block page uses
+// ---------------------------------------------------------------------------
+
+/**
+ * The grid's rows: one per pitch on this ground, whether or not anything is
+ * booked on it, so every pitch has a row of cells to press.
+ *
+ * `timetableRows()` (lib/training-plan.ts) already builds rows of venue ×
+ * pitch out of anything slot-shaped, and this page's slots are slot-shaped,
+ * so the timetable and the ground read the same way and only ever have one
+ * implementation between them. The one thing it deliberately does NOT do is
+ * draw a pitch with nothing on it — on a block page an empty venue is noise.
+ * Here it is the opposite: a pitch with no slot is exactly where the next
+ * booking goes, so the empty pitches are added back and the rows put in the
+ * ground's own pitch order.
+ */
+export function venueGridRows<S extends TimetableSlot>(
+  slots: readonly S[],
+  venue: { id: string; name: string; pitches: readonly { id: string; name: string }[] },
+): TimetableRow<S, TimetableBooking>[] {
+  const rows = timetableRows<S, TimetableBooking>(
+    slots,
+    [{ id: venue.id, name: venue.name, pitches: venue.pitches, bookedSlots: [] }],
+    [venue.id],
+  );
+  for (const pitch of venue.pitches) {
+    if (rows.some((row) => row.pitchId === pitch.id)) continue;
+    rows.push({
+      key: `${venue.id}|${pitch.id}`,
+      venueId: venue.id,
+      venueName: venue.name,
+      pitchId: pitch.id,
+      pitchName: pitch.name,
+      slots: [],
+      unplanned: [],
+    });
+  }
+  // A ground with no pitches named still gets one row: the ground itself.
+  if (rows.length === 0) {
+    rows.push({
+      key: `${venue.id}|`,
+      venueId: venue.id,
+      venueName: venue.name,
+      pitchId: null,
+      pitchName: null,
+      slots: [],
+      unplanned: [],
+    });
+  }
+  const rank = (row: TimetableRow<S, TimetableBooking>): number => {
+    if (!row.pitchId) return Number.MAX_SAFE_INTEGER;
+    const i = venue.pitches.findIndex((pitch) => pitch.id === row.pitchId);
+    return i === -1 ? Number.MAX_SAFE_INTEGER - 1 : i;
+  };
+  return rows.sort((a, b) => rank(a) - rank(b) || (a.pitchName ?? "").localeCompare(b.pitchName ?? ""));
+}
+
+/** Monday to Friday — the columns a ground with nothing booked yet shows. */
+const WORKING_WEEK: readonly number[] = [1, 2, 3, 4, 5];
+
+/**
+ * The grid's columns: the days something is booked on, or the working week
+ * when nothing is. A season with no slots would otherwise be a grid with no
+ * columns, and there would be nowhere to press to make the first one.
+ */
+export function venueGridDays(
+  rows: readonly TimetableRow<TimetableSlot, TimetableBooking>[],
+  fallback: readonly number[] = WORKING_WEEK,
+): number[] {
+  const days = timetableDays(rows);
+  return days.length > 0 ? days : [...fallback];
+}
+
+/** "3 slots · £1,760" — a season's line when its rows are folded away. */
+export function venueSeasonLine(
+  bookings: readonly VenueSeasonBooking[],
+  blackoutsUncharged: readonly DateRange[] = [],
+): string {
+  let slots = 0;
+  let costPence = 0;
+  let unpricedSlots = 0;
+  for (const booking of bookings) {
+    const cost = venueSeasonTotal(booking.slots, blackoutsUncharged, booking);
+    slots += booking.slots.length;
+    costPence += cost.costPence;
+    unpricedSlots += cost.unpricedSlots;
+  }
+  const parts = [plural(slots, "slot", "slots")];
+  parts.push(costPence === 0 && unpricedSlots > 0 ? "no prices yet" : formatCurrency(costPence));
+  if (costPence > 0 && unpricedSlots > 0) parts.push(`${plural(unpricedSlots, "slot", "slots")} unpriced`);
+  return parts.join(" · ");
+}
+
+/**
+ * The bookings grouped by season, in the order they arrive — the page sorts
+ * them current-season-first already, so the first group is the one the grid
+ * opens on and the rest fold beneath it.
+ */
+export type VenueSeasonGroup<B> = {
+  /** The season's id, or "none" for a booking tied to no season. */
+  key: string;
+  name: string;
+  isCurrent: boolean;
+  bookings: B[];
+};
+
+export function venueSeasonGroups<
+  B extends { seasonId: string | null; seasonName: string | null },
+>(bookings: readonly B[], currentSeasonId: string | null): VenueSeasonGroup<B>[] {
+  const groups: VenueSeasonGroup<B>[] = [];
+  for (const booking of bookings) {
+    const key = booking.seasonId ?? "none";
+    let group = groups.find((g) => g.key === key);
+    if (!group) {
+      group = {
+        key,
+        name: booking.seasonName ?? "No season",
+        isCurrent: booking.seasonId !== null && booking.seasonId === currentSeasonId,
+        bookings: [],
+      };
+      groups.push(group);
+    }
+    group.bookings.push(booking);
+  }
+  return groups;
+}
+
+// ---------------------------------------------------------------------------
+// Which panel is open, in the URL
+// ---------------------------------------------------------------------------
+
+/**
+ * What the ground's sheet is showing. It lives in `?sheet=` so a refresh —
+ * and every server action on this page is a refresh — puts the panel back
+ * where it was, and so a half-finished booking can be handed to somebody as
+ * a link.
+ */
+export type VenueSheetState =
+  | { kind: "booking"; bookingId: string | null }
+  | { kind: "slot"; slotId: string }
+  | { kind: "add"; bookingId: string; pitchId: string | null; weekday: number };
+
+/** The `?sheet=` value for a state. Dots separate: a uuid has none. */
+export function venueSheetParam(state: VenueSheetState): string {
+  if (state.kind === "booking") return state.bookingId ? `booking.${state.bookingId}` : "booking";
+  if (state.kind === "slot") return `slot.${state.slotId}`;
+  return `add.${state.bookingId}.${state.pitchId ?? "-"}.${state.weekday}`;
+}
+
+/** `?sheet=` back into a state; anything unrecognised is no sheet at all. */
+export function parseVenueSheet(param: string | null | undefined): VenueSheetState | null {
+  if (!param) return null;
+  const [kind, ...rest] = param.split(".");
+  if (kind === "booking") return { kind: "booking", bookingId: rest[0] || null };
+  if (kind === "slot") return rest[0] ? { kind: "slot", slotId: rest[0] } : null;
+  if (kind === "add") {
+    const [bookingId, pitchId, weekday] = rest;
+    const day = Number.parseInt(weekday ?? "", 10);
+    if (!bookingId || !Number.isInteger(day) || day < 0 || day > 6) return null;
+    return { kind: "add", bookingId, pitchId: !pitchId || pitchId === "-" ? null : pitchId, weekday: day };
+  }
+  return null;
 }

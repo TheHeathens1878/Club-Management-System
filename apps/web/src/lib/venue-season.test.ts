@@ -1,6 +1,17 @@
 import { describe, expect, it } from "vitest";
 
-import { venueNextAction, venueSeasonTotal, type VenueSeasonBooking } from "@/lib/venue-season";
+import {
+  parseVenueSheet,
+  venueGridDays,
+  venueGridRows,
+  venueNextAction,
+  venueSeasonGroups,
+  venueSeasonLine,
+  venueSeasonTotal,
+  venueSheetParam,
+  type VenueSeasonBooking,
+  type VenueSheetState,
+} from "@/lib/venue-season";
 
 // 2026-10-05 and 2026-11-02 are both Mondays, so the span holds five
 // Mondays and four Wednesdays.
@@ -101,5 +112,109 @@ describe("what a ground is waiting for", () => {
       CURRENT,
     );
     expect(action.detail).toBe("2026/27 · 1 slot booked · no prices yet");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The grid, the folded seasons and the panel in the URL (P8.8)
+// ---------------------------------------------------------------------------
+
+const GROUND = {
+  id: "venue-1",
+  name: "Banky Lane",
+  pitches: [
+    { id: "pitch-1", name: "Pitch 1" },
+    { id: "pitch-2", name: "Pitch 2" },
+  ],
+};
+
+function gridSlot(over: Partial<GridSlot> = {}): GridSlot {
+  return {
+    id: "slot-1",
+    venueId: GROUND.id,
+    venueName: GROUND.name,
+    pitchId: "pitch-1",
+    pitchName: "Pitch 1",
+    weekday: MONDAY,
+    startTime: "18:00",
+    endTime: "19:00",
+    ...over,
+  };
+}
+
+type GridSlot = {
+  id: string;
+  venueId: string;
+  venueName: string;
+  pitchId: string | null;
+  pitchName: string | null;
+  weekday: number;
+  startTime: string;
+  endTime: string;
+};
+
+describe("the ground as a grid", () => {
+  it("gives every pitch a row, booked or not, in the ground's own order", () => {
+    const rows = venueGridRows([gridSlot({ pitchId: "pitch-2", pitchName: "Pitch 2" })], GROUND);
+    expect(rows.map((row) => row.pitchName)).toEqual(["Pitch 1", "Pitch 2"]);
+    expect(rows[0]!.slots).toHaveLength(0);
+    expect(rows[1]!.slots).toHaveLength(1);
+  });
+
+  it("gives a ground with no pitches named one row of its own", () => {
+    const rows = venueGridRows([], { ...GROUND, pitches: [] });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.pitchId).toBeNull();
+  });
+
+  it("puts a slot's own day in the columns, and the working week when there are none", () => {
+    expect(venueGridDays(venueGridRows([gridSlot({ weekday: 4 })], GROUND))).toEqual([4]);
+    expect(venueGridDays(venueGridRows([], GROUND))).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("says what a folded season held and what it cost", () => {
+    expect(venueSeasonLine([booking()])).toBe("2 slots · £220.00");
+    expect(venueSeasonLine([booking({ slots: [{ weekday: MONDAY, pricePence: null }] })])).toBe(
+      "1 slot · no prices yet",
+    );
+  });
+
+  it("groups the bookings by season, keeping the page's order", () => {
+    const groups = venueSeasonGroups(
+      [
+        booking(),
+        booking({ id: "b2" }),
+        booking({ id: "old", seasonId: "season-2526", seasonName: "2025/26" }),
+        booking({ id: "loose", seasonId: null, seasonName: null }),
+      ],
+      CURRENT.id,
+    );
+    expect(groups.map((g) => g.name)).toEqual(["2026/27", "2025/26", "No season"]);
+    expect(groups[0]!.isCurrent).toBe(true);
+    expect(groups[0]!.bookings).toHaveLength(2);
+    expect(groups[2]!.isCurrent).toBe(false);
+  });
+});
+
+describe("which panel is open, in the URL", () => {
+  it("survives the round trip", () => {
+    const states: VenueSheetState[] = [
+      { kind: "booking", bookingId: null },
+      { kind: "booking", bookingId: "b1" },
+      { kind: "slot", slotId: "s1" },
+      { kind: "add", bookingId: "b1", pitchId: "p1", weekday: 4 },
+      { kind: "add", bookingId: "b1", pitchId: null, weekday: 0 },
+    ];
+    for (const state of states) {
+      expect(parseVenueSheet(venueSheetParam(state))).toEqual(state);
+    }
+  });
+
+  it("reads nothing it does not recognise as no panel at all", () => {
+    expect(parseVenueSheet(null)).toBeNull();
+    expect(parseVenueSheet("")).toBeNull();
+    expect(parseVenueSheet("slot")).toBeNull();
+    expect(parseVenueSheet("add.b1.p1.9")).toBeNull();
+    expect(parseVenueSheet("whatever")).toBeNull();
   });
 });
