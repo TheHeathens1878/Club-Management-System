@@ -72,6 +72,11 @@ export type PitchBookingActionState = {
    * link, because a sentence naming another page is only half an answer.
    */
   fixtureHref?: string;
+  /**
+   * The same match as an id, so the screen can offer to cancel or delete it
+   * on the spot rather than only linking to it (Adam, 2026-09-16).
+   */
+  fixtureId?: string;
 };
 
 const NOT_ALLOWED =
@@ -755,6 +760,12 @@ export async function deletePitchBooking(
   // the sentence was useless — it named a screen, not the two things he could
   // actually do. So it now names both, and the caller shows the second as a
   // link straight to the match.
+  //
+  // Adam again, 2026-09-16: "I should be able to do this by deleting or
+  // cancelling the match at the same time." So the refusal also hands back the
+  // fixture's ID, and the calendar's panel offers both doors — through the
+  // match actions themselves, which is what keeps the pitch hand-back, the
+  // audit row and everybody's notifications exactly as they are.
   if (existing.kind === "fixture" || existing.fixture_id) {
     const { data: fixture } = existing.fixture_id
       ? await admin
@@ -770,6 +781,7 @@ export async function deletePitchBooking(
         fixture?.team_id && fixture.id
           ? `/teams/${fixture.team_id}/fixtures/${fixture.id}`
           : undefined,
+      fixtureId: existing.fixture_id ?? undefined,
     };
   }
 

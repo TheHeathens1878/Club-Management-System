@@ -456,3 +456,53 @@ export function consecutiveWeekIds(entries: CalendarEntry[]): Set<string> {
   }
   return flagged;
 }
+
+// ---------------------------------------------------------------------------
+// "You want the match, not the booking"
+// ---------------------------------------------------------------------------
+
+/**
+ * What the calendar shows when deleting a booking is refused because the slot
+ * belongs to a match.
+ *
+ * Adam, 2026-09-16: "I should be able to do this by deleting or cancelling the
+ * match at the same time." The refusal was right — a fixture's booking cannot
+ * go on its own — but the sentence sent him to another screen to do the thing
+ * the panel could offer him. So: whoever can manage matches gets the two doors
+ * here and a sentence that introduces them; whoever cannot still gets the
+ * server's own words, which name where the work is done.
+ */
+export type MatchSlotRefusal = {
+  /** The sentence above the panel. */
+  text: string;
+  /** Whether "cancel the match" and "delete the match" are offered here. */
+  doors: boolean;
+};
+
+export function matchSlotRefusal(input: {
+  /** What the server action said. Kept verbatim when there are no doors. */
+  message: string;
+  /** The match the slot belongs to, when the booking named one. */
+  fixtureId: string | null;
+  /** The screen's gate: the club-admin capability, and not a member's hat. */
+  canManageMatches: boolean;
+}): MatchSlotRefusal {
+  if (!input.canManageMatches || !input.fixtureId) {
+    return { text: input.message, doors: false };
+  }
+  return {
+    text:
+      "This slot belongs to a match, so the booking cannot go on its own — the match would be left with nowhere to play. Deal with the match instead and the pitch comes back with it.",
+    doors: true,
+  };
+}
+
+/** "U12 Reds v Broadheath · Sat 6 Sep · 10:00" — what the doors act on. */
+export function matchSlotLabel(
+  entry: Pick<CalendarEntry, "teamName" | "opponent" | "isHome" | "date" | "startTime" | "label">,
+): string {
+  const teams = entry.opponent
+    ? `${entry.teamName ?? "This team"} ${entry.isHome === false ? "away to" : "v"} ${entry.opponent}`
+    : entry.label;
+  return `${teams} · ${dayHeading(entry.date)} · ${entry.startTime}`;
+}
