@@ -35,7 +35,7 @@ export function AcceptQuoteButton({ bookingId, totalPence }: { bookingId: string
 
   return (
     <div className="space-y-2">
-      <label className="flex items-start gap-2 text-xs text-amber-900">
+      <label className="flex items-start gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
           checked={accepted}
@@ -50,7 +50,7 @@ export function AcceptQuoteButton({ bookingId, totalPence }: { bookingId: string
           the balance, plus any refundable security deposit, is due at least two weeks before the event.
         </span>
       </label>
-      <Button type="button" size="sm" onClick={go} disabled={pending || !accepted} className="min-h-[44px] lg:min-h-0">
+      <Button type="button" size="touch" onClick={go} disabled={pending || !accepted}>
         {pending ? "Confirming…" : `Accept the quote and book (${formatCurrency(totalPence)})`}
       </Button>
       {error ? <p className="text-xs text-destructive">{error}</p> : null}

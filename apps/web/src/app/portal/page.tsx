@@ -1,19 +1,57 @@
 import { redirect } from "next/navigation";
-import { extrasSummary } from "@/lib/booking-extras";
+import { CalendarDays, CalendarRange, ScrollText } from "lucide-react";
+
+import { EmptyState } from "@/components/empty-state";
+import { Callout } from "@/components/ui/callout";
+import { FoldCard } from "@/components/ui/fold-card";
 import { getSessionProfile } from "@/lib/auth";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { formatCurrency } from "@/lib/utils";
-import { depositRuleFrom, hireTermsSummary, sumHirePaid, sumSecurityPaid } from "@/lib/hire-terms";
+import { extrasSummary } from "@/lib/booking-extras";
+import {
+  bookingMoney,
+  bookingNextAction,
+  paymentRail,
+  type BookingFacts,
+  type BookingNextActionInput,
+} from "@/lib/booking-next-action";
+import { formatBookingDate, formatBookingDateShort, instantsToLocalWindow } from "@/lib/booking-time";
+import { depositRuleFrom, hireTermsSummary, type LedgerRow } from "@/lib/hire-terms";
 import { getSettings } from "@/lib/settings";
-import { AcceptQuoteButton } from "./accept-quote-button";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { isSumUpConfigured, recordSumUpPaymentIfPaid } from "@/lib/sumup";
-import { PayButton } from "./pay-button";
+
+import { PortalBookings, type PortalBooking } from "./booking-sheet";
 import { PaymentPendingBanner } from "./payment-pending-banner";
-import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
 
 export const metadata = { title: "Your bookings" };
 
 export const dynamic = "force-dynamic";
+
+/**
+ * `/portal` — the hirer's own page (P8.9). Hirers read this on a phone,
+ * usually because they have had an email asking them for money, so the page
+ * is: what this booking needs, what it costs, and the one button that pays
+ * it. Everything else folds.
+ *
+ * The page works nothing out for itself. `bookingNextAction()` in the
+ * booker's voice says what the booking needs and what a Pay button here would
+ * charge; `paymentRail()` says where each of the three steps stands;
+ * `bookingMoney()` says the figures. The desk's own screen asks the same
+ * functions in the desk's voice, which is what stops the two sides of the
+ * counter disagreeing about one booking.
+ *
+ * The status words, the "room is not held" wording, the SumUp flow, the £1
+ * card minimum and the terms sentence are all unchanged — they are the club's
+ * commercial commitments, not decoration.
+ */
+
+/** The status, said to the hirer, exactly as the portal has always said it. */
+const STATUS: Record<string, { label: string; tone: PortalBooking["statusTone"] }> = {
+  confirmed: { label: "Confirmed", tone: "success" },
+  cancelled: { label: "Cancelled", tone: "destructive" },
+  pending: { label: "Awaiting confirmation", tone: "warning" },
+  enquiry: { label: "Enquiry — room not held", tone: "warning" },
+  quoted: { label: "Quoted — waiting for you", tone: "warning" },
+};
 
 export default async function PortalPage({
   searchParams,
@@ -60,9 +98,12 @@ export default async function PortalPage({
   // Function-room hires only: pitch bookings (training a coach booked) also
   // carry the booker's profile id, but they are team business with no invoice
   // — they live on /pitches/mine, not in the hirer portal.
+  // `security_deposit_returned_at` joined the columns with the payment rail:
+  // without it the page would tell a hirer their deposit is still being held
+  // after the club had already sent it back.
   const { data: bookings } = await admin
     .from("bookings")
-    .select("id,starts_at,ends_at,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,selected_extras,security_deposit_pence,resources!inner(name,type)")
+    .select("id,starts_at,ends_at,occasion,status,payment_status,total_pence,deposit_pence,deposit_due_date,balance_due_date,selected_extras,security_deposit_pence,security_deposit_returned_at,resources!inner(name,type)")
     .eq("booker_profile_id", session.userId)
     .eq("resources.type", "function_room")
     .order("starts_at", { ascending: true });
@@ -70,245 +111,119 @@ export default async function PortalPage({
   const list = bookings ?? [];
   const termsSummary = hireTermsSummary(depositRuleFrom(await getSettings()));
 
-  // Payments for all of this booker's bookings
+  // Payments for all of this booker's bookings. The ledger rows go to the
+  // helpers whole: they know that a refunded deposit is owed again, and that
+  // the security deposit is held rather than earned and so never counts
+  // towards the hire being paid.
   const ids = list.map((b) => b.id);
-  // Net of refunds: a refunded deposit is owed again. The hire (deposit and
-  // balance) and the security deposit are counted apart — the security
-  // deposit is held, not earned, and never pays for the room.
-  const paidByBooking = new Map<string, { hire: number; security: number }>();
+  const ledger = new Map<string, LedgerRow[]>();
   if (ids.length > 0) {
     const { data: payments } = await admin
       .from("payments")
       .select("booking_id,amount_pence,refunded_pence,purpose")
       .in("booking_id", ids);
     for (const id of ids) {
-      const rows = (payments ?? []).filter((p) => p.booking_id === id);
-      paidByBooking.set(id, { hire: sumHirePaid(rows), security: sumSecurityPaid(rows) });
+      ledger.set(id, (payments ?? []).filter((p) => p.booking_id === id));
     }
   }
 
-  return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Your bookings</h1>
-        <p className="text-sm text-muted-foreground">
-          View your bookings and pay your deposit, your balance and any security deposit.
-        </p>
-      </div>
+  const now = new Date();
+  const rows: PortalBooking[] = list.map((b) => {
+    const window = instantsToLocalWindow(b.starts_at, b.ends_at);
+    const facts: BookingFacts = {
+      status: b.status,
+      starts_at: b.starts_at,
+      ends_at: b.ends_at,
+      total_pence: b.total_pence,
+      deposit_pence: b.deposit_pence,
+      deposit_due_date: b.deposit_due_date,
+      balance_due_date: b.balance_due_date,
+      security_deposit_pence: b.security_deposit_pence,
+      security_deposit_returned_at: b.security_deposit_returned_at,
+      // The desk's own paperwork, which changes nothing on this side of the
+      // counter: whether a chaser has gone out and whether the desk has
+      // stamped an acceptance both leave the hirer with the same one thing to
+      // do — accept the quote — so the portal does not read them.
+      quote_accepted_at: null,
+      chaser_sent_at: null,
+      final_chaser_sent_at: null,
+    };
+    // A clash is the desk's problem: the hirer cannot see other people's
+    // bookings and has nothing to do about one.
+    const input: BookingNextActionInput = { booking: facts, payments: ledger.get(b.id) ?? [], clashes: [] };
+    const money = bookingMoney(input);
+    const status = STATUS[b.status] ?? { label: b.status, tone: "muted" as const };
+    const priced = b.status === "confirmed" && money.totalPence > 0;
 
+    return {
+      id: b.id,
+      roomName: b.resources?.name ?? "Function room",
+      dateLabel: formatBookingDate(window.date),
+      shortDateLabel: formatBookingDateShort(window.date),
+      timeLabel: `${window.startTime}–${window.endTime}`,
+      occasion: b.occasion ?? null,
+      status: b.status,
+      statusLabel: status.label,
+      statusTone: status.tone,
+      extras: extrasSummary(b.selected_extras) || null,
+      roomNotHeld: b.status === "enquiry" || b.status === "quoted",
+      termsSummary,
+      action: bookingNextAction(input, { voice: "booker", now }),
+      money,
+      rail: paymentRail(input, now),
+      priced,
+      note:
+        b.status === "confirmed" && b.total_pence === 0
+          ? "No payment is required for this booking."
+          : null,
+    };
+  });
+
+  // One page, one object: the booking the hirer is here about is the next one
+  // still to happen, and the rest fold beneath it.
+  const nowIso = now.toISOString();
+  const nextId = (list.find((b) => b.ends_at >= nowIso) ?? list[list.length - 1])?.id;
+  const next = rows.filter((row) => row.id === nextId);
+  const others = rows.filter((row) => row.id !== nextId);
+
+  return (
+    <div className="space-y-4">
       {pendingCheckoutId && <PaymentPendingBanner checkoutId={pendingCheckoutId} />}
 
       {paymentFailed && (
-        <div className="rounded-lg border border-red-300 bg-red-50 p-4 text-sm text-red-800">
-          <p className="font-medium">Payment unsuccessful</p>
-          <p className="mt-0.5 text-xs">
-            Your card payment didn&apos;t go through and you have not been charged. Please try again
-            below, or contact the club if the problem continues. (Card payments have a minimum of £1.)
-          </p>
-        </div>
+        <Callout tone="danger" title="Payment unsuccessful">
+          Your card payment didn&apos;t go through and you have not been charged. Please try again
+          below, or contact the club if the problem continues. (Card payments have a minimum of £1.)
+        </Callout>
       )}
 
-      {list.length === 0 ? (
-        <div className="rounded-lg border bg-card p-8 text-center">
-          <p className="text-sm text-muted-foreground">You don&apos;t have any bookings yet.</p>
-        </div>
+      {rows.length === 0 ? (
+        <EmptyState icon={<CalendarDays className="h-5 w-5" aria-hidden />} title="You don't have any bookings yet.">
+          When the club takes an enquiry, a request or a booking in your name, it appears here with
+          everything you owe on it.
+        </EmptyState>
       ) : (
-        <div className="space-y-4">
-          {list.map((b) => {
-            const total = b.total_pence ?? 0;
-            const deposit = b.deposit_pence ?? 0;
-            const paidBoth = paidByBooking.get(b.id) ?? { hire: 0, security: 0 };
-            const paid = paidBoth.hire;
-            const outstanding = Math.max(0, total - paid);
-            const depositRemaining = Math.max(0, deposit - paid);
-            const securityDeposit = b.security_deposit_pence ?? 0;
-            const securityRemaining = Math.max(0, securityDeposit - paidBoth.security);
-            const status = b.status;
-            const confirmed = status === "confirmed";
-            const cancelled = status === "cancelled";
-            const window = instantsToLocalWindow(b.starts_at, b.ends_at);
+        <PortalBookings bookings={next} sumupEnabled={sumupEnabled} />
+      )}
 
-            return (
-              <div key={b.id} className="rounded-lg border bg-card p-5 shadow-sm">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-semibold">{b.resources?.name ?? "Function room"}</h2>
-                    <p className="text-sm text-muted-foreground">{formatBookingDate(window.date)}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {window.startTime}–{window.endTime}
-                      {b.occasion ? ` · ${b.occasion}` : ""}
-                    </p>
-                  </div>
-                  <span className={`rounded-full px-2.5 py-1 text-xs font-medium capitalize ${
-                    cancelled ? "bg-red-100 text-red-700"
-                      : confirmed ? "bg-green-100 text-green-700"
-                      : "bg-amber-100 text-amber-700"
-                  }`}>
-                    {status === "pending"
-                      ? "Awaiting confirmation"
-                      : status === "enquiry"
-                        ? "Enquiry — room not held"
-                        : status === "quoted"
-                          ? "Quoted — waiting for you"
-                          : status}
-                  </span>
-                </div>
-
-                {extrasSummary(b.selected_extras) && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    Extras: {extrasSummary(b.selected_extras)}
-                  </p>
-                )}
-                {securityDeposit > 0 && !confirmed && (
-                  <p className="mt-2 text-sm text-muted-foreground">
-                    A refundable {formatCurrency(securityDeposit)} security deposit applies to this
-                    booking, due two weeks before the event and returned after it if all is well.
-                  </p>
-                )}
-                {status === "enquiry" && (
-                  <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                    This is an enquiry only — the room is <strong>not held</strong> for you, and
-                    the date stays open to other bookings until the club confirms one with you.
-                  </p>
-                )}
-
-                {confirmed && total > 0 && (
-                  <>
-                    <div className="mt-4 grid grid-cols-3 gap-2 text-center text-sm">
-                      <div className="rounded-md border bg-muted/30 p-2">
-                        <p className="text-xs text-muted-foreground">Total</p>
-                        <p className="font-semibold">{formatCurrency(total)}</p>
-                      </div>
-                      <div className="rounded-md border bg-muted/30 p-2">
-                        <p className="text-xs text-muted-foreground">Paid</p>
-                        <p className="font-semibold text-green-700">{formatCurrency(paid)}</p>
-                      </div>
-                      <div className="rounded-md border bg-muted/30 p-2">
-                        <p className="text-xs text-muted-foreground">Outstanding</p>
-                        <p className="font-semibold">{formatCurrency(outstanding)}</p>
-                      </div>
-                    </div>
-
-                    {/* How paying works, for this booking (Adam, 2026-09-13):
-                        the non-refundable deposit first, which secures the
-                        room; then the balance plus any refundable security
-                        deposit, two weeks before. */}
-                    <ol className="mt-3 space-y-1.5 rounded-md border bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                      <li className="flex gap-2">
-                        <span className={depositRemaining === 0 ? "font-semibold text-green-700" : "font-semibold text-amber-700"}>1.</span>
-                        <span>
-                          {deposit > 0 ? (
-                            depositRemaining === 0 ? (
-                              <>Your non-refundable deposit of {formatCurrency(deposit)} has been received — the room is secured for you.</>
-                            ) : (
-                              <>
-                                A <strong>non-refundable</strong> deposit of {formatCurrency(depositRemaining)} secures the room
-                                {b.deposit_due_date ? <> — due by <strong>{formatBookingDate(b.deposit_due_date)}</strong></> : null}.
-                                The booking is confirmed subject to it.
-                              </>
-                            )
-                          ) : (
-                            <>No deposit is required for this booking.</>
-                          )}
-                        </span>
-                      </li>
-                      <li className="flex gap-2">
-                        <span className={outstanding === 0 && securityRemaining === 0 ? "font-semibold text-green-700" : "font-semibold"}>2.</span>
-                        <span>
-                          {outstanding === 0 && securityRemaining === 0 ? (
-                            <>The balance{securityDeposit > 0 ? " and the security deposit have" : " has"} been paid.</>
-                          ) : (
-                            <>
-                              The balance of {formatCurrency(Math.max(0, total - Math.max(paid, deposit)))}
-                              {securityDeposit > 0 ? (
-                                <>, plus a <strong>refundable</strong> security deposit of {formatCurrency(securityDeposit)} (returned after the event if all is well),</>
-                              ) : null}{" "}
-                              is due {b.balance_due_date ? <>by <strong>{formatBookingDate(b.balance_due_date)}</strong>, </> : null}
-                              at least two weeks before your event.
-                            </>
-                          )}
-                        </span>
-                      </li>
-                    </ol>
-
-                    {outstanding > 0 || securityRemaining > 0 ? (
-                      <div className="mt-4 flex flex-wrap gap-2">
-                        {depositRemaining > 0 && depositRemaining < outstanding && (
-                          <PayButton
-                            bookingId={b.id}
-                            amountPence={depositRemaining}
-                            label="Pay deposit"
-                            purpose="deposit"
-                            sumupEnabled={sumupEnabled}
-                          />
-                        )}
-                        {outstanding > 0 && (
-                          <PayButton
-                            bookingId={b.id}
-                            amountPence={outstanding}
-                            label={depositRemaining > 0 ? (depositRemaining < outstanding ? "Pay in full" : "Pay deposit") : "Pay balance"}
-                            variant={depositRemaining > 0 && depositRemaining < outstanding ? "outline" : "default"}
-                            purpose={depositRemaining > 0 && depositRemaining >= outstanding ? "deposit" : "balance"}
-                            sumupEnabled={sumupEnabled}
-                          />
-                        )}
-                        {securityRemaining > 0 && (
-                          <PayButton
-                            bookingId={b.id}
-                            amountPence={securityRemaining}
-                            label="Pay security deposit"
-                            variant={depositRemaining > 0 ? "outline" : "default"}
-                            purpose="security_deposit"
-                            sumupEnabled={sumupEnabled}
-                          />
-                        )}
-                      </div>
-                    ) : (
-                      <p className="mt-4 text-sm font-medium text-green-700">
-                        Paid in full{securityDeposit > 0 ? ", security deposit held" : ""} — thank you.
-                      </p>
-                    )}
-                  </>
-                )}
-
-                {confirmed && b.total_pence === null && (
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    We&apos;ll confirm the cost with you shortly; you&apos;ll be able to pay here once it is set.
-                  </p>
-                )}
-                {confirmed && b.total_pence === 0 && (
-                  <p className="mt-4 text-sm text-muted-foreground">No payment is required for this booking.</p>
-                )}
-
-                {status === "pending" && (
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    We&apos;ll confirm your booking and the total cost soon. You&apos;ll be able to pay here once confirmed.
-                  </p>
-                )}
-
-                {/* A quote waits on the booker (2026-09-13). The date is not
-                    held by a quote; accepting it confirms the booking subject
-                    to the deposit, and the deposit is what secures the room. */}
-                {status === "quoted" && (
-                  <div className="mt-4 space-y-3 rounded-md border border-amber-200 bg-amber-50 p-4">
-                    <p className="text-sm font-medium text-amber-900">
-                      {total > 0 ? `The club has quoted ${formatCurrency(total)} for this booking.` : "The club has sent you a quote for this booking."}
-                    </p>
-                    <p className="text-xs text-amber-900/80">
-                      The date is <strong>not held</strong> by a quote. To go ahead, accept it below: the booking is then
-                      confirmed subject to the deposit, and you can pay the deposit straight away.{" "}
-                      {termsSummary}
-                    </p>
-                    {total > 0 ? (
-                      <AcceptQuoteButton bookingId={b.id} totalPence={total} />
-                    ) : (
-                      <p className="text-xs text-amber-900/80">The quote has no price on it yet — please contact the club.</p>
-                    )}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {rows.length > 0 && (
+        <div className="space-y-2 pt-2">
+          {others.length > 0 && (
+            <FoldCard
+              icon={<CalendarRange className="h-4 w-4" aria-hidden />}
+              title="Your other bookings"
+              summary={others.map((row) => `${row.shortDateLabel} · ${row.statusLabel}`).join(" · ")}
+            >
+              <PortalBookings bookings={others} sumupEnabled={sumupEnabled} />
+            </FoldCard>
+          )}
+          <FoldCard
+            icon={<ScrollText className="h-4 w-4" aria-hidden />}
+            title="What you agreed"
+            summary="The deposit, the balance and any security deposit — the club's terms in one paragraph"
+          >
+            <p className="text-sm text-muted-foreground">{termsSummary}</p>
+          </FoldCard>
         </div>
       )}
     </div>

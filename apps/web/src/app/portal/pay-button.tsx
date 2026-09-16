@@ -123,7 +123,7 @@ export function PayButton({
           type="checkbox"
           checked={termsAccepted}
           onChange={(e) => { setTermsAccepted(e.target.checked); setError(null); }}
-          className="mt-0.5 h-4 w-4"
+          className="touch mt-0.5 h-4 w-4 flex-none accent-primary"
         />
         <span>
           I accept the deposit terms: the deposit secures the room for my booking and is{" "}
@@ -153,7 +153,7 @@ export function PayButton({
   if (!sumupEnabled) {
     return (
       <div className="space-y-1.5">
-        <Button size="sm" variant={variant} disabled>
+        <Button size="touch" variant={variant} disabled>
           {label} ({formatCurrency(amountPence)})
         </Button>
         <p className="text-xs text-muted-foreground">
@@ -167,7 +167,7 @@ export function PayButton({
     <div className="space-y-1.5">
       {termsTick}
       <Button
-        size="sm"
+        size="touch"
         variant={variant}
         disabled={isPending || stage === "loading" || (purpose === "deposit" && !termsAccepted)}
         onClick={startSumUp}
