@@ -3,6 +3,7 @@ import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatRow, StatTile } from "@/components/ui/stat-tile";
 import { requireFinance } from "@/lib/finance";
 import { createClient } from "@/lib/supabase/server";
 import { shareWord, timeRange, weekdayLabel } from "@/lib/training-plan";
@@ -187,25 +188,19 @@ export default async function VenueHireReportPage({
           ))}
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Season total</p>
-            <p className="text-2xl font-semibold tabular-nums">{formatCurrency(grand.costPence)}</p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Sessions booked</p>
-            <p className="text-2xl font-semibold tabular-nums">
-              {grand.sessions}
-              {grand.uncharged > 0 ? (
-                <span className="ml-2 text-sm font-normal text-muted-foreground">{grand.uncharged} not charged</span>
-              ) : null}
-            </p>
-          </div>
-          <div className="rounded-lg border bg-card p-3">
-            <p className="text-xs text-muted-foreground">Slots without a price</p>
-            <p className={"text-2xl font-semibold tabular-nums " + (grand.unpriced > 0 ? "text-amber-700" : "")}>{grand.unpriced}</p>
-          </div>
-        </div>
+        <StatRow className="sm:grid-cols-3 lg:grid-cols-3">
+          <StatTile label="Season total" value={formatCurrency(grand.costPence)} />
+          <StatTile
+            label="Sessions booked"
+            value={grand.sessions}
+            hint={grand.uncharged > 0 ? `${grand.uncharged} not charged` : undefined}
+          />
+          <StatTile
+            label="Slots without a price"
+            value={grand.unpriced}
+            tone={grand.unpriced > 0 ? "warning" : "default"}
+          />
+        </StatRow>
 
         {groups.length === 0 ? (
           <Card>

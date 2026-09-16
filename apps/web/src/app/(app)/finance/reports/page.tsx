@@ -1,5 +1,6 @@
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatRow, StatTile } from "@/components/ui/stat-tile";
 import { requireFinance, formatMemberNo, CHARGE_KIND_LABELS } from "@/lib/finance";
 import { isSumUpConfigured, listSumUpTransactions } from "@/lib/sumup-finance";
 import { formatCurrency } from "@/lib/utils";
@@ -140,20 +141,16 @@ export default async function FinanceReportsPage() {
               <p className="text-sm text-muted-foreground">SumUp is not configured in this environment.</p>
             ) : (
               <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">SumUp settled</p>
-                    <p className="text-lg font-semibold tabular-nums">{formatCurrency(sumupTotal)}</p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">Ledger (SumUp source)</p>
-                    <p className="text-lg font-semibold tabular-nums">{formatCurrency(ledgerTotal)}</p>
-                  </div>
-                  <div className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">Unmatched transactions</p>
-                    <p className={`text-lg font-semibold tabular-nums ${unmatched.length ? "text-destructive" : ""}`}>{unmatched.length}</p>
-                  </div>
-                </div>
+                <StatRow className="grid-cols-3 lg:grid-cols-3">
+                  <StatTile label="SumUp settled" value={formatCurrency(sumupTotal)} className="bg-transparent" />
+                  <StatTile label="Ledger (SumUp source)" value={formatCurrency(ledgerTotal)} className="bg-transparent" />
+                  <StatTile
+                    label="Unmatched transactions"
+                    value={unmatched.length}
+                    tone={unmatched.length ? "danger" : "default"}
+                    className="bg-transparent"
+                  />
+                </StatRow>
                 {unmatched.length > 0 && (
                   <ul className="space-y-1 text-sm">
                     {unmatched.map((t) => (

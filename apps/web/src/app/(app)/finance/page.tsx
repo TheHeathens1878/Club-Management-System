@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/page-header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatRow, StatTile } from "@/components/ui/stat-tile";
 import { requireFinance } from "@/lib/finance";
 import { formatCurrency } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/server";
@@ -72,14 +73,11 @@ export default async function FinanceDashboardPage() {
     <>
       <PageHeader title="Finance" subtitle="Subs, membership fees and everything the club collects" />
       <div className="space-y-4 p-4 lg:space-y-6 lg:p-6">
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        <StatRow className="md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-6">
           {kpis.map((kpi) => (
-            <Link key={kpi.label} href={kpi.href} className="rounded-lg border bg-card p-3 transition-colors hover:bg-secondary/50">
-              <p className="text-xs text-muted-foreground">{kpi.label}</p>
-              <p className="mt-1 text-lg font-semibold tabular-nums">{kpi.value}</p>
-            </Link>
+            <StatTile key={kpi.label} label={kpi.label} value={kpi.value} href={kpi.href} />
           ))}
-        </div>
+        </StatRow>
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {sections.map((section) => (

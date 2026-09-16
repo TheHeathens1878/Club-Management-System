@@ -1,5 +1,8 @@
 import Link from "next/link";
-import { ChevronRight, type LucideIcon } from "lucide-react";
+import { ChevronRight } from "lucide-react";
+
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * The hub pattern (P7.2): a destination's contents as grouped rows — the
@@ -9,11 +12,16 @@ import { ChevronRight, type LucideIcon } from "lucide-react";
  *
  * Rows are plain links. Whatever hat a row opens in is already baked into
  * its href by `linkHref` — this component knows nothing about roles.
+ *
+ * `icon` is a RENDERED element — `<Users className="h-4 w-4" aria-hidden />`
+ * — not a component. It was a `LucideIcon` until P8.0d, which meant every
+ * caller was one `"use client"` away from the "Functions cannot be passed
+ * directly to Client Components" 500 this app has already shipped twice.
  */
 export type HubRow = {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: React.ReactNode;
   detail?: string;
   badge?: number;
 };
@@ -25,42 +33,32 @@ export function HubList({ sections }: { sections: HubSection[] }) {
     <div className="space-y-5">
       {sections.map((section) => (
         <section key={section.section} aria-labelledby={`hub-${slug(section.section)}`}>
-          <h2
-            id={`hub-${slug(section.section)}`}
-            className="font-display mb-1.5 px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground"
-          >
+          <Eyebrow as="h2" id={`hub-${slug(section.section)}`} className="mb-1.5 px-1">
             {section.section}
-          </h2>
+          </Eyebrow>
           <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-            {section.rows.map((row) => {
-              const Icon = row.icon;
-              return (
-                <li key={`${row.href}|${row.label}`}>
-                  <Link
-                    href={row.href}
-                    className="flex min-h-[52px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-secondary/50 focus-visible:bg-secondary/50 focus-visible:outline-none"
-                  >
-                    <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Icon className="h-4 w-4" aria-hidden />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-[15px] font-medium leading-snug">{row.label}</span>
-                      {row.detail ? (
-                        <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">
-                          {row.detail}
-                        </span>
-                      ) : null}
-                    </span>
-                    {row.badge ? (
-                      <span className="rounded-full bg-accent px-2 py-0.5 text-[11px] font-semibold leading-none text-accent-foreground">
-                        {row.badge > 99 ? "99+" : row.badge}
-                      </span>
+            {section.rows.map((row) => (
+              <li key={`${row.href}|${row.label}`}>
+                <Link
+                  href={row.href}
+                  className="flex min-h-[52px] items-center gap-3 px-4 py-2.5 transition-colors hover:bg-secondary/50 focus-visible:bg-secondary/50 focus-visible:outline-none"
+                >
+                  <IconTile icon={row.icon} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-row font-medium leading-snug">{row.label}</span>
+                    {row.detail ? (
+                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">{row.detail}</span>
                     ) : null}
-                    <ChevronRight className="h-4 w-4 flex-none text-muted-foreground" aria-hidden />
-                  </Link>
-                </li>
-              );
-            })}
+                  </span>
+                  {row.badge ? (
+                    <span className="rounded-full bg-accent px-2 py-0.5 text-2xs font-semibold leading-none text-accent-foreground">
+                      {row.badge > 99 ? "99+" : row.badge}
+                    </span>
+                  ) : null}
+                  <ChevronRight className="h-4 w-4 flex-none text-muted-foreground" aria-hidden />
+                </Link>
+              </li>
+            ))}
           </ul>
         </section>
       ))}

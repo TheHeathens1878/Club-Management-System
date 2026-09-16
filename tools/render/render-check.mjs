@@ -391,18 +391,29 @@ function measureInPage({ palette, width }) {
 
   // An element pinned to the viewport is allowed to sit at the very edge, and
   // so is anything inside it: it is not what makes the page scroll sideways.
-  const fixedOrInside = new Set();
+  //
+  // The same goes for anything inside a strip that scrolls sideways on
+  // purpose — a row of day chips, a wide table in an `overflow-x-auto` box.
+  // Its content is MEANT to run past the edge; the strip itself is still
+  // measured, so a scroller that is genuinely too wide is still caught, and
+  // the page-level check below is unchanged (P8.0d: a ChipStrip of seven day
+  // chips at 390 failed this while the page itself never moved).
+  const skip = new Set();
   for (const el of all) {
-    const position = getComputedStyle(el).position;
-    if (position === "fixed" || position === "sticky") {
-      fixedOrInside.add(el);
-      if (position === "fixed") for (const kid of el.querySelectorAll("*")) fixedOrInside.add(kid);
+    const style = getComputedStyle(el);
+    if (style.position === "fixed" || style.position === "sticky") {
+      skip.add(el);
+      if (style.position === "fixed") for (const kid of el.querySelectorAll("*")) skip.add(kid);
+    }
+    const scrollsX = style.overflowX === "auto" || style.overflowX === "scroll";
+    if (scrollsX && el.scrollWidth > el.clientWidth) {
+      for (const kid of el.querySelectorAll("*")) skip.add(kid);
     }
   }
 
   const overflow = [];
   for (const el of all) {
-    if (fixedOrInside.has(el)) continue;
+    if (skip.has(el)) continue;
     const rect = el.getBoundingClientRect();
     if (rect.width === 0 && rect.height === 0) continue;
     if (rect.right > innerWidth + 1) {

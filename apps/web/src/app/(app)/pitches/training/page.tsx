@@ -6,6 +6,8 @@ import { EmptyState } from "@/components/empty-state";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { IconTile } from "@/components/ui/icon-tile";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
@@ -45,22 +47,18 @@ export default async function TrainingBlocksPage() {
         subtitle="Winter slots at the 3G venues, shared out between teams and put on every family's calendar"
         back={{ href: "/pitches", label: "Pitches" }}
         action={
-          <Link href="/pitches/training/new" className={buttonVariants({ size: "sm" }) + " min-h-[44px] lg:min-h-0"}>
+          <Link href="/pitches/training/new" className={buttonVariants({ size: "sm" }) + " touch"}>
             <Plus className="h-4 w-4" /> New block
           </Link>
         }
       />
 
       <div className="space-y-4 p-4 lg:p-6">
-        {error ? (
-          <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            Could not load the blocks: {error.message}
-          </p>
-        ) : null}
+        {error ? <Callout tone="danger">Could not load the blocks: {error.message}</Callout> : null}
 
         {(blocks ?? []).length === 0 && !error ? (
           <EmptyState
-            icon={CalendarRange}
+            icon={<CalendarRange className="h-5 w-5" aria-hidden />}
             title="No training blocks yet"
             action={{ href: "/pitches/training/new", label: "Plan a block" }}
           >
@@ -80,17 +78,15 @@ export default async function TrainingBlocksPage() {
                     href={`/pitches/training/${block.id}`}
                     className="flex min-h-[60px] items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/50"
                   >
-                    <span className="inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <CalendarRange className="h-4 w-4" aria-hidden />
-                    </span>
+                    <IconTile size="md" icon={<CalendarRange className="h-4 w-4" aria-hidden />} />
                     <span className="min-w-0 flex-1">
                       <span className="flex flex-wrap items-center gap-2">
-                        <span className="text-[15px] font-medium leading-snug">{block.name}</span>
+                        <span className="text-row font-medium leading-snug">{block.name}</span>
                         {live ? <Badge variant="success">Running</Badge> : null}
                         {over ? <Badge variant="muted">Finished</Badge> : null}
                         {!block.last_synced_at ? <Badge variant="warning">Not on the calendar yet</Badge> : null}
                       </span>
-                      <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">
+                      <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
                         {dateSpanLabel(block.starts_on, block.ends_on)} · {slots.length} slot
                         {slots.length === 1 ? "" : "s"} · {teams} team place{teams === 1 ? "" : "s"}
                       </span>

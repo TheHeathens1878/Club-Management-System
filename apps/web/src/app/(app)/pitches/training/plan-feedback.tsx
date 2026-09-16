@@ -7,23 +7,27 @@
  * forms use.
  */
 
+import { Callout } from "@/components/ui/callout";
+
 import type { PlanActionState } from "./actions";
 
 export const EMPTY_PLAN_STATE: PlanActionState = {};
 
 export function PlanFeedback({ state }: { state: PlanActionState }) {
+  // A guard's message can arrive as several lines — "3 slots are at this
+  // venue", each named — so the line breaks are kept.
   if (state.error) {
     return (
-      <p className="whitespace-pre-line rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      <Callout tone="danger" className="whitespace-pre-line" role="alert">
         {state.error}
-      </p>
+      </Callout>
     );
   }
   if (state.notice) {
     return (
-      <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+      <Callout tone="success" role="status">
         {state.notice}
-      </p>
+      </Callout>
     );
   }
   return null;
