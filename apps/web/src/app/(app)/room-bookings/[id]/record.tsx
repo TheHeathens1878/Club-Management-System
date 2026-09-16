@@ -42,13 +42,8 @@ import type { BookingMoney, BookingNextAction } from "@/lib/booking-next-action"
 import { type BookingWindow } from "@/lib/booking-time";
 
 import { BookingFacts, bookingActionIcon, type BookingFactsRow } from "../booking-facts";
-import {
-  deskSheetMode,
-  type BookingSheetBooking,
-  type BookingSheetMode,
-  type BookingSheetProps,
-  type BookingSheetTerms,
-} from "../booking-sheet";
+import { deskSheetMode, type BookingSheetMode } from "../booking-sheet-modes";
+import type { BookingSheetBooking, BookingSheetProps, BookingSheetTerms } from "../booking-sheet";
 import type { PaymentRow } from "../payments-panel";
 import { BookingSheetRoute } from "./sheet-route";
 
