@@ -55,13 +55,13 @@ export default async function BookingConfirmationPage({
             <div
               className={
                 "flex h-16 w-16 items-center justify-center rounded-full " +
-                (isEnquiry ? "bg-amber-100" : "bg-emerald-100")
+                (isEnquiry ? "bg-warning-tint" : "bg-success-tint")
               }
             >
               {isEnquiry ? (
-                <Clock className="h-8 w-8 text-amber-600" />
+                <Clock className="h-8 w-8 text-warning" />
               ) : (
-                <CheckCircle2 className="h-8 w-8 text-emerald-600" />
+                <CheckCircle2 className="h-8 w-8 text-success" />
               )}
             </div>
           </div>
@@ -122,11 +122,11 @@ export default async function BookingConfirmationPage({
           </div>
 
           {isEnquiry ? (
-            <div className="mt-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-left">
-              <p className="text-sm font-semibold text-amber-900">
+            <div className="mt-6 rounded-lg border border-warning/25 bg-warning-tint p-4 text-left">
+              <p className="text-sm font-semibold text-warning">
                 The room is not held for you.
               </p>
-              <p className="mt-1 text-sm text-amber-900">
+              <p className="mt-1 text-sm text-warning">
                 This is an enquiry only — the date stays open to other bookings until you confirm
                 one with us. We&apos;ll reply at{" "}
                 <span className="font-semibold">{maskEmail(booking.booker_email)}</span> with availability
