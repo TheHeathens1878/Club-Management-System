@@ -18,9 +18,14 @@
  */
 
 import { useEffect } from "react";
+import { DoorOpen, ExternalLink, Settings, UserX } from "lucide-react";
 
+import { BlockBookingForm } from "@/app/(app)/room-bookings/block-booking-form";
 import { BookingsDesk } from "@/app/(app)/room-bookings/bookings-desk";
-import { deskSummary, type DeskBooking } from "@/app/(app)/room-bookings/desk-shared";
+import { awaySummary, deskSummary, type DeskBooking } from "@/app/(app)/room-bookings/desk-shared";
+import { StaffAwayPanel } from "@/app/(app)/room-bookings/staff-away-panel";
+import { buttonVariants } from "@/components/ui/button";
+import { FoldCard } from "@/components/ui/fold-card";
 import { bookingMoney } from "@/lib/booking-next-action";
 import type { BookingListItem } from "@/lib/booking-types";
 
@@ -198,6 +203,14 @@ const SUMMARY = deskSummary(DESK);
 
 const CHIP_GROUPS = [
   {
+    key: "view",
+    label: "How to read it",
+    options: [
+      { key: "calendar", href: "/room-bookings", label: "Calendar", active: true },
+      { key: "list", href: "/room-bookings?view=list", label: "List", active: false },
+    ],
+  },
+  {
     key: "period",
     label: "When",
     options: [
@@ -232,7 +245,59 @@ const CHIP_GROUPS = [
   },
 ];
 
-function Desk({ isCalendar }: { isCalendar: boolean }) {
+const AWAY = [
+  {
+    id: "away-1",
+    staffId: "s1",
+    staffName: "Lyndsey",
+    fromDate: dateOn(12),
+    toDate: dateOn(19),
+    note: "Holiday",
+  },
+];
+
+const STAFF = [
+  { id: "s1", name: "Lyndsey", role: "bar", type: "profile" as const },
+  { id: "s2", name: "Adam Wareing", role: "super_user", type: "profile" as const },
+];
+
+/** The folds the page puts under the desk, as the page composes them. */
+function PageFolds() {
+  return (
+    <>
+      <FoldCard
+        icon={<UserX className="h-4 w-4" aria-hidden />}
+        title="Staff away"
+        summary={awaySummary(AWAY, dateOn(10))}
+      >
+        <StaffAwayPanel staffList={STAFF} awayEntries={AWAY} currentUserId="s2" isCommittee />
+      </FoldCard>
+
+      <FoldCard
+        icon={<DoorOpen className="h-4 w-4" aria-hidden />}
+        title="Rooms and the public page"
+        summary="Function Room · Lounge · the public page takes enquiries"
+      >
+        <div className="flex flex-wrap gap-2">
+          <a href="/book" className={buttonVariants({ variant: "outline", size: "touch" })}>
+            <ExternalLink className="h-4 w-4" aria-hidden /> The public page
+          </a>
+          <a
+            href="/room-bookings/rooms"
+            className={buttonVariants({ variant: "outline", size: "touch" })}
+          >
+            <Settings className="h-4 w-4" aria-hidden /> Manage rooms
+          </a>
+          <div className="[&>button]:touch">
+            <BlockBookingForm rooms={ROOMS} />
+          </div>
+        </div>
+      </FoldCard>
+    </>
+  );
+}
+
+function Desk({ isCalendar, folds = false }: { isCalendar: boolean; folds?: boolean }) {
   return (
     <div className="space-y-3 p-4 lg:p-6">
       <BookingsDesk
@@ -241,19 +306,15 @@ function Desk({ isCalendar }: { isCalendar: boolean }) {
         listItems={ITEMS}
         roomName={ROOM_NAME}
         rooms={ROOMS}
-        awayEntries={[
-          {
-            id: "away-1",
-            staffId: "s1",
-            staffName: "Lyndsey",
-            fromDate: dateOn(12),
-            toDate: dateOn(19),
-            note: "Holiday",
-          },
-        ]}
+        awayEntries={AWAY}
         isCalendar={isCalendar}
         summary={SUMMARY}
-        chipGroups={isCalendar ? [] : CHIP_GROUPS}
+        chipGroups={CHIP_GROUPS}
+        filterSummary={
+          isCalendar
+            ? "Calendar · the whole diary, every room"
+            : "List · Upcoming · Everything · All rooms"
+        }
         initialQuery=""
         canDelete
         canDecline
@@ -261,6 +322,7 @@ function Desk({ isCalendar }: { isCalendar: boolean }) {
         sheetCanDelete
         sheetCanEditBooking
       />
+      {folds ? <PageFolds /> : null}
     </div>
   );
 }
@@ -299,6 +361,22 @@ const fixture: Fixture = {
       <>
         <Desk isCalendar={false} />
         <ClickOnMount selector='#root input[type="checkbox"]' count={2} />
+      </>
+    ),
+
+    /** The three folds shut: what each row says without being opened. */
+    folds: () => <Desk isCalendar folds />,
+
+    /**
+     * The same three opened — the filter strips and the export, who is away
+     * and the add-absence form, and the room's own doors.
+     */
+    foldsOpen: () => (
+      <>
+        <Desk isCalendar={false} folds />
+        {/* `details.group` is `FoldCard`'s own element; the staff panel's
+            "past entries" disclosure inside it is a plain `<details>`. */}
+        <ClickOnMount selector="details.group > summary" count={3} />
       </>
     ),
   },

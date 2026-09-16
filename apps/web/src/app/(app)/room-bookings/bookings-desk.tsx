@@ -25,19 +25,30 @@
  * `[id]/sheet-route.tsx` — because there a link into a door is worth having.)
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { CalendarPlus } from "lucide-react";
+import { CalendarPlus, Check, SlidersHorizontal } from "lucide-react";
 
 import { ActionBar } from "@/components/ui/action-bar";
 import { buttonVariants, Button } from "@/components/ui/button";
+import { ChipStrip } from "@/components/ui/chip-strip";
+import { FoldCard } from "@/components/ui/fold-card";
+import { ToggleChip, ToggleChipLink } from "@/components/ui/toggle-chip";
 import type { BookingListItem } from "@/lib/booking-types";
 
 import { bookingActionIcon } from "./booking-facts";
 import { BookingSheet, type BookingSheetMode } from "./booking-sheet";
 import { BookingsCalendar } from "./bookings-calendar";
-import { BookingsTable, type ChipGroup } from "./bookings-table";
+import { BookingsExportButtons } from "./bookings-export";
+import {
+  BookingsTable,
+  COLUMN_STORAGE_KEY,
+  DEFAULT_VISIBLE,
+  TOGGLE_COLS,
+  type ChipGroup,
+  type ColKey,
+} from "./bookings-table";
 import { deskCellMode, type DeskBooking, type DeskSummary } from "./desk-shared";
 import type { AwayEntry } from "./staff-away-panel";
 
@@ -54,6 +65,7 @@ export function BookingsDesk({
   isCalendar,
   summary,
   chipGroups,
+  filterSummary,
   initialQuery,
   canDelete,
   canDecline,
@@ -72,7 +84,10 @@ export function BookingsDesk({
   awayEntries: AwayEntry[];
   isCalendar: boolean;
   summary: DeskSummary;
+  /** The view, period, status and room strips — every one of them a URL. */
   chipGroups: ChipGroup[];
+  /** What the Filters fold says while it is shut, worked out on the server. */
+  filterSummary: string;
   initialQuery: string;
   /** `isSuperUser` — delete a booking off the list. */
   canDelete: boolean;
@@ -87,6 +102,26 @@ export function BookingsDesk({
 }) {
   const router = useRouter();
   const [sheet, setSheet] = useState<SheetState | null>(null);
+  // Which columns the list shows. It is a per-browser preference, not a URL:
+  // a colleague opening a shared link wants their own columns, not yours.
+  const [visible, setVisible] = useState<ColKey[]>(DEFAULT_VISIBLE);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(COLUMN_STORAGE_KEY);
+      if (stored) setVisible(JSON.parse(stored));
+    } catch { /* ignore */ }
+  }, []);
+
+  function toggleCol(key: ColKey) {
+    setVisible((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      try {
+        localStorage.setItem(COLUMN_STORAGE_KEY, JSON.stringify(next));
+      } catch { /* ignore */ }
+      return next;
+    });
+  }
 
   const byId = new Map(bookings.map((b) => [b.id, b]));
   const open = sheet ? byId.get(sheet.id) : undefined;
@@ -143,11 +178,94 @@ export function BookingsDesk({
           roomName={roomName}
           canDelete={canDelete}
           canDecline={canDecline}
-          chipGroups={chipGroups}
+          visible={visible}
           initialQuery={initialQuery}
           onOpen={(booking) => openBooking(booking.id)}
         />
       )}
+
+      {/* ------------------------------------------- beneath: narrow it down */}
+      {/* The diary is the work; narrowing it, choosing columns and taking it
+          away are settings, so they are one row that says what it holds and
+          opens on a press (the benchmark's fifth rule). The strips are still
+          links, so a narrowed desk is still a URL somebody can be sent. */}
+      <FoldCard
+        icon={<SlidersHorizontal className="h-4 w-4" aria-hidden />}
+        title="Filters and export"
+        summary={filterSummary}
+        className="cal-no-print"
+      >
+        <div className="space-y-3">
+          {chipGroups.map((group) => (
+            <div key={group.key} className="space-y-1.5">
+              <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                {group.label}
+              </p>
+              <ChipStrip aria-label={group.label}>
+                {group.options.map((option) => (
+                  <ToggleChipLink
+                    key={option.key}
+                    href={option.href}
+                    active={option.active}
+                    count={option.count}
+                    size="sm"
+                  >
+                    {option.label}
+                  </ToggleChipLink>
+                ))}
+              </ChipStrip>
+            </div>
+          ))}
+
+          {isCalendar ? (
+            <p className="text-xs text-muted-foreground">
+              The diary shows every booking on every room, whatever is chosen above; the list is
+              where a filter narrows what you see, and what an export carries.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1.5 border-t pt-3">
+                <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Columns
+                </p>
+                {/* Chips, not tickboxes: a 16px checkbox is not a thumb
+                    target, which is what the render harness caught on the
+                    booking sheet's membership tick (#351). */}
+                <div className="flex flex-wrap gap-1.5">
+                  {TOGGLE_COLS.map(({ key, label }) => (
+                    <ToggleChip
+                      key={key}
+                      size="sm"
+                      on={visible.includes(key)}
+                      onClick={() => toggleCol(key)}
+                    >
+                      {visible.includes(key) && <Check className="h-3 w-3" aria-hidden />}
+                      {label}
+                    </ToggleChip>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The table's columns at a desk, and the columns an export carries everywhere.
+                </p>
+              </div>
+
+              <div className="space-y-1.5 border-t pt-3">
+                <p className="text-2xs font-medium uppercase tracking-wide text-muted-foreground">
+                  Export
+                </p>
+                <BookingsExportButtons
+                  bookings={listItems}
+                  roomName={roomName}
+                  visibleCols={visible}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Exactly the rows the filters show, in the order they are in — never more.
+                </p>
+              </div>
+            </>
+          )}
+        </div>
+      </FoldCard>
 
       {open && (
         <BookingSheet
