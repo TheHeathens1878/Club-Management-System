@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
+import { Callout } from "@/components/ui/callout";
+
 export function PaymentPendingBanner(_props: { checkoutId: string }) {
   const router = useRouter();
 
@@ -16,14 +18,13 @@ export function PaymentPendingBanner(_props: { checkoutId: string }) {
   }, [router]);
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-800">
-      <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-      <div>
-        <p className="font-medium">Payment processing…</p>
-        <p className="text-xs mt-0.5">
-          Your payment is being confirmed by SumUp. This page will update automatically — please don&apos;t close it.
-        </p>
-      </div>
-    </div>
+    <Callout
+      tone="warning"
+      title="Payment processing…"
+      icon={<Loader2 className="h-4 w-4 animate-spin" aria-hidden />}
+    >
+      Your payment is being confirmed by SumUp. This page will update automatically — please
+      don&apos;t close it.
+    </Callout>
   );
 }
