@@ -8,14 +8,26 @@
  * safeguarding explanation next to it rather than in a tooltip: the parent is
  * being asked for their child's DOB and is entitled to know why before typing
  * it.
+ *
+ * P8.6 took the CHROME off these and left the forms. Each one used to be its
+ * own card with its own "Edit details" button that revealed it, stacked four
+ * deep per child; now the sheet's mode is the reveal and the fold is the card,
+ * so the form is just the form. The one exception is `RegisterForm`, which
+ * `/my-registrations` also draws inline against a whole household — it keeps
+ * its button and takes `bare` to drop it.
+ *
+ * A save no longer closes anything, so the forms that hold a TICK-BOX remount
+ * themselves instead (see `ChildDetailsForm`). Nothing else about them moved:
+ * same seven actions, same field names, same arguments.
  */
 
 import { useActionState, useEffect, useState, useTransition } from "react";
-import { Pencil, Plus, UserPlus } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import { DateOfBirthInput } from "@/components/date-of-birth-input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Input, Label } from "@/components/ui/input";
 import { EmergencyContactsFields, type LeadContact } from "@/components/emergency-contacts-fields";
 import { TownCountyFields } from "@/components/town-county-fields";
@@ -64,46 +76,16 @@ export type ChildDetails = {
 };
 
 function Feedback({ state }: { state: FamilyActionState }) {
-  if (state.error) {
-    return (
-      <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-        {state.error}
-      </p>
-    );
-  }
-  if (state.notice) {
-    return (
-      <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-        {state.notice}
-      </p>
-    );
-  }
+  if (state.error) return <Callout tone="danger">{state.error}</Callout>;
+  if (state.notice) return <Callout tone="success">{state.notice}</Callout>;
   return null;
 }
 
 export function AddChildForm() {
   const [state, action, pending] = useActionState<FamilyActionState, FormData>(addChild, {});
-  const [open, setOpen] = useState(false);
-
-  if (!open) {
-    return (
-      <div className="space-y-3">
-        <Feedback state={state} />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
-        >
-          <UserPlus className="h-4 w-4" /> Add a child
-        </Button>
-      </div>
-    );
-  }
 
   return (
-    <form action={action} className="space-y-4">
+    <form action={action} className="touch-fields space-y-4">
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="child-first-name">
@@ -147,17 +129,8 @@ export function AddChildForm() {
       <Feedback state={state} />
 
       <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
+        <Button type="submit" size="sm" disabled={pending} className="touch">
           {pending ? "Adding…" : "Add child"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setOpen(false)}
-          className="min-h-[44px] lg:min-h-0"
-        >
-          Cancel
         </Button>
       </div>
     </form>
@@ -192,44 +165,27 @@ export function ChildDetailsForm({
     updateChildDetails,
     {},
   );
-  const [open, setOpen] = useState(false);
   const [sameAsLead, setSameAsLead] = useState(initial.sameAsLead && !!leadAddressLine);
+  /** Bumped on a successful save, which remounts the form. */
+  const [generation, setGeneration] = useState(0);
 
-  // A save closes the form (Adam, 2026-08-25: the tick "re-adds" itself after
-  // saving). React 19 resets a form once its action completes, and a reset
-  // snaps a checkbox back to the state it was MOUNTED with — ticked — while
-  // the address fields React had opened stayed open, so the screen showed
-  // the lead's address chosen over the one just typed. Closing on success
-  // means the reset lands on nothing, and reopening derives the tick from
-  // what the server now holds rather than from a stale mount.
+  // A save REMOUNTS the form (Adam, 2026-08-25: the tick "re-adds" itself
+  // after saving). React 19 resets a form once its action completes, and a
+  // reset snaps a checkbox back to the state it was MOUNTED with — ticked —
+  // while the address fields React had opened stayed open, so the screen
+  // showed the lead's address chosen over the one just typed. Until P8.6 the
+  // form closed itself to dodge that; in a sheet there is nothing to close
+  // into, so the `key` changes instead: every field takes its default from
+  // what the server now holds, and the tick is derived again rather than left
+  // over from a stale mount.
   useEffect(() => {
-    if (state.notice) setOpen(false);
-  }, [state]);
-
-  function openForm() {
+    if (!state.notice) return;
     setSameAsLead(initial.sameAsLead && !!leadAddressLine);
-    setOpen(true);
-  }
-
-  if (!open) {
-    return (
-      <div className="space-y-3">
-        <Feedback state={state} />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={openForm}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
-        >
-          <Pencil className="h-4 w-4" /> Edit details
-        </Button>
-      </div>
-    );
-  }
+    setGeneration((n) => n + 1);
+  }, [state, initial.sameAsLead, leadAddressLine]);
 
   return (
-    <form action={action} className="space-y-4 rounded-lg border bg-secondary/20 p-4">
+    <form key={generation} action={action} className="touch-fields space-y-4">
       <input type="hidden" name="child_person_id" value={childPersonId} />
 
       <p className="text-sm text-muted-foreground">
@@ -274,7 +230,7 @@ export function ChildDetailsForm({
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold">Home address</legend>
 
-        <label className="flex min-h-[44px] cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
+        <label className="touch flex cursor-pointer items-start gap-2 rounded-lg border bg-card px-3 py-2 text-sm">
           <input
             type="checkbox"
             name="same_as_lead"
@@ -335,17 +291,8 @@ export function ChildDetailsForm({
       <Feedback state={state} />
 
       <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
+        <Button type="submit" size="sm" disabled={pending} className="touch">
           {pending ? "Saving…" : "Save details"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setOpen(false)}
-          className="min-h-[44px] lg:min-h-0"
-        >
-          Cancel
         </Button>
       </div>
     </form>
@@ -378,6 +325,7 @@ export function RegisterForm({
   recordedSex,
   isAdmin,
   isSelf = false,
+  bare = false,
 }: {
   personId: string;
   personName: string;
@@ -399,6 +347,15 @@ export function RegisterForm({
   /** Only a club administrator is offered "show all teams". */
   isAdmin: boolean;
   isSelf?: boolean;
+  /**
+   * The caller is already the chrome — a sheet opened at Register, where a
+   * button that reveals the form would be a second press for nothing.
+   * `/my-registrations` draws this form against every member of a household
+   * at once and keeps the button, which is why this is a prop and not a
+   * rewrite. A sent registration replaces the form with what the server said,
+   * the way closing it used to.
+   */
+  bare?: boolean;
 }) {
   const [state, setState] = useState<FamilyActionState>({});
   const [pending, startTransition] = useTransition();
@@ -412,7 +369,11 @@ export function RegisterForm({
     );
   }
 
-  if (!open) {
+  if (bare && state.notice) {
+    return <Feedback state={state} />;
+  }
+
+  if (!bare && !open) {
     return (
       <div className="space-y-3">
         <Feedback state={state} />
@@ -421,7 +382,7 @@ export function RegisterForm({
           variant="outline"
           size="sm"
           onClick={() => setOpen(true)}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          className="touch w-full lg:w-auto"
         >
           <Plus className="h-4 w-4" /> Register for a team
         </Button>
@@ -454,7 +415,11 @@ export function RegisterForm({
   return (
     <form
       action={submit}
-      className="space-y-5 rounded-lg border bg-secondary/20 p-4"
+      className={
+        bare
+          ? "touch-fields space-y-5"
+          : "touch-fields space-y-5 rounded-lg border bg-secondary/20 p-4"
+      }
       onChange={() => {
         // Adam, 2026-09-01: a photo over 5MB was refused, "when I chose a
         // different file, the same error message remains". The message was only
@@ -484,14 +449,13 @@ export function RegisterForm({
       />
 
       {contactsOnRecord === 0 ? (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <Callout tone="warning">
           Add an emergency contact for {firstName} first — it is kept on their record, under
-          Contact details above, and the club will not take a registration without one.
-        </p>
+          Emergency contacts, and the club will not take a registration without one.
+        </Callout>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Emergency contacts on record: {contactsOnRecord}. Change them under Contact details
-          above.
+          Emergency contacts on record: {contactsOnRecord}. Change them under Emergency contacts.
         </p>
       )}
 
@@ -523,19 +487,21 @@ export function RegisterForm({
           type="submit"
           size="sm"
           disabled={pending || contactsOnRecord === 0}
-          className="min-h-[44px] lg:min-h-0"
+          className="touch"
         >
           {pending ? "Sending…" : "Send registration"}
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setOpen(false)}
-          className="min-h-[44px] lg:min-h-0"
-        >
-          Cancel
-        </Button>
+        {!bare && (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => setOpen(false)}
+            className="touch"
+          >
+            Cancel
+          </Button>
+        )}
       </div>
     </form>
   );
@@ -544,7 +510,7 @@ export function RegisterForm({
 /**
  * A child's emergency contacts (Adam, 2026-08-25): up to two, on the child's
  * record, with "I am the first emergency contact" for the signed-in guardian.
- * Closes on a successful save for the same reason the address form does — a
+ * Remounts on a successful save for the same reason the details form does — a
  * reset must never land on a live tick-box.
  */
 export function EmergencyContactsForm({
@@ -562,69 +528,45 @@ export function EmergencyContactsForm({
     updateChildEmergencyContacts,
     {},
   );
-  const [open, setOpen] = useState(false);
+  const [generation, setGeneration] = useState(0);
   useEffect(() => {
-    if (state.notice) setOpen(false);
+    if (state.notice) setGeneration((n) => n + 1);
   }, [state]);
 
-  if (!open) {
-    return (
-      <div className="space-y-2">
-        {initial.length === 0 ? (
-          <p className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-            No emergency contact on record yet — the club cannot register {childName} for a team
-            without one.
-          </p>
-        ) : (
-          <ul className="space-y-1 text-sm">
-            {initial.map((contact) => (
-              <li key={contact.position}>
-                <span className="text-muted-foreground">{contact.position}.</span>{" "}
-                {emergencyContactLine(contact)}
-              </li>
-            ))}
-          </ul>
-        )}
-        <Feedback state={state} />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setOpen(true)}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
-        >
-          <Pencil className="h-4 w-4" />{" "}
-          {initial.length === 0 ? "Add emergency contacts" : "Edit emergency contacts"}
-        </Button>
-      </div>
-    );
-  }
-
   return (
-    <form action={action} className="space-y-4 rounded-lg border bg-secondary/20 p-4">
-      <input type="hidden" name="child_person_id" value={childPersonId} />
-      <EmergencyContactsFields
-        idPrefix={`ec-${childPersonId}`}
-        initial={initial}
-        lead={lead}
-        personName={childName}
-      />
-      <Feedback state={state} />
-      <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
-        <Button type="submit" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
-          {pending ? "Saving…" : "Save contacts"}
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => setOpen(false)}
-          className="min-h-[44px] lg:min-h-0"
-        >
-          Cancel
-        </Button>
-      </div>
-    </form>
+    <div className="space-y-3">
+      {initial.length === 0 ? (
+        <Callout tone="warning">
+          No emergency contact on record yet — the club cannot register {childName} for a team
+          without one.
+        </Callout>
+      ) : (
+        <ul className="space-y-1 text-sm">
+          {initial.map((contact) => (
+            <li key={contact.position}>
+              <span className="text-muted-foreground">{contact.position}.</span>{" "}
+              {emergencyContactLine(contact)}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <form key={generation} action={action} className="touch-fields space-y-4">
+        <input type="hidden" name="child_person_id" value={childPersonId} />
+        <EmergencyContactsFields
+          idPrefix={`ec-${childPersonId}`}
+          initial={initial}
+          lead={lead}
+          personName={childName}
+        />
+        <Feedback state={state} />
+        <div className="flex flex-col items-stretch gap-2 lg:flex-row lg:flex-wrap lg:items-center">
+          <Button type="submit" size="sm" disabled={pending} className="touch">
+            {pending ? "Saving…" : "Save contacts"}
+          </Button>
+        </div>
+      </form>
+    </div>
   );
 }
 
@@ -637,13 +579,7 @@ export function WithdrawForm({ registrationId }: { registrationId: string }) {
   return (
     <form action={action} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="registration_id" value={registrationId} />
-      <Button
-        type="submit"
-        size="sm"
-        variant="outline"
-        disabled={pending}
-        className="min-h-[44px] lg:min-h-0"
-      >
+      <Button type="submit" size="sm" variant="outline" disabled={pending} className="touch">
         {pending ? "Withdrawing…" : "Withdraw"}
       </Button>
       {state.error && <span className="text-sm text-destructive">{state.error}</span>}
@@ -732,7 +668,7 @@ export function AppAccessForm({
               size="sm"
               variant="outline"
               disabled={revoking}
-              className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+              className="touch w-full lg:w-auto"
             >
               {revoking ? "Withdrawing…" : "Withdraw"}
             </Button>
@@ -749,7 +685,7 @@ export function AppAccessForm({
                 size="sm"
                 variant="outline"
                 disabled={granting || notYet}
-                className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+                className="touch w-full lg:w-auto"
               >
                 {granting ? "Recording…" : "Allow app access"}
               </Button>
@@ -758,7 +694,7 @@ export function AppAccessForm({
           {/* The sentence sits UNDER the button, which is where somebody who has
               just tried to press it is looking. */}
           {notYet ? (
-            <p className="text-sm text-amber-800">
+            <p className="text-sm text-warning">
               Not yet — {childName} can have their own login from{" "}
               <span className="font-medium">{eligibleLabel}</span>, their {minAccountAge}th
               birthday. Allowing it before then would record a permission that cannot take effect,
