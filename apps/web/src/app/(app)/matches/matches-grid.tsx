@@ -33,7 +33,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, Check, LandPlot, ListChecks, Plus, SlidersHorizontal } from "lucide-react";
+import { CalendarPlus, Check, Download, LandPlot, ListChecks, Plus, SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
 
 import { FixtureSheet, type FixtureSheetFixture, type FixtureSheetMode } from "@/components/fixtures/fixture-sheet";
@@ -41,6 +41,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { ChipStrip } from "@/components/ui/chip-strip";
 import { Eyebrow } from "@/components/ui/eyebrow";
+import { FoldCard } from "@/components/ui/fold-card";
 import { ActionBar } from "@/components/ui/action-bar";
 import { ToggleChip } from "@/components/ui/toggle-chip";
 import { compareAgeGroups } from "@/lib/age-group";
@@ -54,15 +55,18 @@ import {
 } from "@/lib/fixture-grid";
 
 import { AddFixtureSheet, type AddFixturePrefill } from "./add-fixture-form";
-import { exportCsv, exportPdf } from "./matches-export";
 import {
-  MatchesFilters,
   NO_FILTERS,
   applyFilters,
+  exportSummary,
   filterOptions,
   filtersActive,
+  filtersSummary,
   type Filters,
-} from "./matches-filters";
+  type MatchesOrder,
+} from "./filters";
+import { exportCsv, exportPdf } from "./matches-export";
+import { MatchesFilters } from "./matches-filters";
 import { PrintTable } from "./print-table";
 import type { DeskRow } from "./types";
 
@@ -116,7 +120,7 @@ export function MatchesGrid({
 }) {
   const router = useRouter();
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
-  const [sort, setSort] = useState<"kickoff" | "age" | "venue">("kickoff");
+  const [sort, setSort] = useState<MatchesOrder>("kickoff");
   const [day, setDay] = useState<string | null>(null);
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
@@ -353,47 +357,59 @@ export function MatchesGrid({
         </div>
       )}
 
-      {/* ------------------------------------------ beneath: narrow, and take away */}
-      <div className="space-y-3 print:hidden">
-        <div className="rounded-xl border bg-card p-4 shadow-sm lg:p-5">
-          <Eyebrow className="mb-3 flex items-center gap-1.5">
-            <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden /> Filters
-          </Eyebrow>
+      {/* ----------------------------------------- beneath: narrow, and take away */}
+      {/* The work is the grid; narrowing it and taking it away are settings,
+          so each is one row that says what it holds and opens on a press
+          (the benchmark's fifth rule). Both summaries are real sentences
+          computed from the same rules the filtering uses. */}
+      <div className="space-y-2 pt-2 print:hidden">
+        <FoldCard
+          icon={<SlidersHorizontal className="h-4 w-4" aria-hidden />}
+          title="Filters"
+          summary={filtersSummary(filters, filtered.length, rows.length)}
+          defaultOpen={filtering}
+        >
           <MatchesFilters
             filters={filters}
             options={options}
             onChange={setFilters}
             onClear={() => setFilters(NO_FILTERS)}
           />
-        </div>
+        </FoldCard>
 
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-card p-4 shadow-sm lg:p-5">
-          <p className="basis-full text-xs text-muted-foreground lg:min-w-0 lg:flex-1 lg:basis-0">
-            {filtering
-              ? `${filtered.length} of ${rows.length} matches shown`
-              : `${rows.length} match${rows.length === 1 ? "" : "es"}`}{" "}
-            — the export and the print-out are exactly these.
-          </p>
-          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            Order by
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value as typeof sort)}
-              aria-label="Order the matches by"
-              className="touch rounded-md border border-input bg-card px-2 text-list lg:min-h-[36px]"
-            >
-              <option value="kickoff">Kick-off</option>
-              <option value="age">Age group (U7 → Vets)</option>
-              <option value="venue">Venue</option>
-            </select>
-          </label>
-          <Button type="button" variant="outline" size="touch" disabled={ordered.length === 0} onClick={() => exportCsv(ordered)}>
-            Export CSV
-          </Button>
-          <Button type="button" variant="outline" size="touch" disabled={ordered.length === 0} onClick={() => void exportPdf(ordered)}>
-            Export PDF
-          </Button>
-        </div>
+        <FoldCard
+          icon={<Download className="h-4 w-4" aria-hidden />}
+          title="Export"
+          summary={exportSummary(ordered.length, sort)}
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">
+              Of exactly what the filters show, never more — and the printed page is the same rows
+              in the same order.
+            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                Order by
+                <select
+                  value={sort}
+                  onChange={(event) => setSort(event.target.value as MatchesOrder)}
+                  aria-label="Order the matches by"
+                  className="touch rounded-md border border-input bg-card px-2 text-list lg:h-9"
+                >
+                  <option value="kickoff">Kick-off</option>
+                  <option value="age">Age group (U7 → Vets)</option>
+                  <option value="venue">Venue</option>
+                </select>
+              </label>
+              <Button type="button" variant="outline" size="touch" disabled={ordered.length === 0} onClick={() => exportCsv(ordered)}>
+                <Download className="h-4 w-4" aria-hidden /> Export CSV
+              </Button>
+              <Button type="button" variant="outline" size="touch" disabled={ordered.length === 0} onClick={() => void exportPdf(ordered)}>
+                <Download className="h-4 w-4" aria-hidden /> Export PDF
+              </Button>
+            </div>
+          </div>
+        </FoldCard>
       </div>
 
       <PrintTable rows={ordered} />
