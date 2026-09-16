@@ -9,102 +9,14 @@
  * nine controls over rows the server already scoped. The window itself (this
  * weekend / four weeks / all / results) stays in the URL where it has always
  * been, because that is the part worth sharing and going back from.
+ *
+ * The controls only. What the nine MEAN — and the sentence the folded row
+ * shows — is `./filters`, a plain module with a test beside it.
  */
 
 import { Input } from "@/components/ui/input";
 
-import type { DeskRow } from "./types";
-
-export type Filters = {
-  from: string;
-  to: string;
-  team: string;
-  opponent: string;
-  homeAway: "all" | "home" | "away";
-  competition: string;
-  venue: string;
-  pitch: string;
-  status: string;
-  replies: "all" | "short" | "quiet";
-};
-
-export const NO_FILTERS: Filters = {
-  from: "",
-  to: "",
-  team: "",
-  opponent: "",
-  homeAway: "all",
-  competition: "",
-  venue: "",
-  pitch: "",
-  status: "",
-  replies: "all",
-};
-
-/** A cancelled or postponed match is short of nobody. */
-export function shortOfReplies(row: DeskRow): boolean {
-  return row.status === "scheduled" && row.squad > 0 && row.accepted * 2 < row.squad;
-}
-
-export function applyFilters(rows: DeskRow[], f: Filters): DeskRow[] {
-  const opponent = f.opponent.trim().toLowerCase();
-  return rows.filter((row) => {
-    if (f.from && row.dateIso < f.from) return false;
-    if (f.to && row.dateIso > f.to) return false;
-    if (f.team && row.teamName !== f.team) return false;
-    if (opponent && !row.opponent.toLowerCase().includes(opponent)) return false;
-    if (f.homeAway === "home" && !row.isHome) return false;
-    if (f.homeAway === "away" && row.isHome) return false;
-    if (f.competition && row.competition !== f.competition) return false;
-    if (f.venue && row.venue !== f.venue) return false;
-    if (f.pitch && row.pitch !== f.pitch) return false;
-    if (f.status && row.status !== f.status) return false;
-    if (f.replies === "short" && !shortOfReplies(row)) return false;
-    if (f.replies === "quiet" && row.accepted + row.declined > 0) return false;
-    return true;
-  });
-}
-
-export function distinct(values: string[]): string[] {
-  return [...new Set(values)].sort((a, b) => a.localeCompare(b, "en-GB"));
-}
-
-/** Are any of the nine actually narrowing anything? */
-export function filtersActive(f: Filters): boolean {
-  return (
-    f.from !== "" ||
-    f.to !== "" ||
-    f.team !== "" ||
-    f.opponent.trim() !== "" ||
-    f.homeAway !== "all" ||
-    f.competition !== "" ||
-    f.venue !== "" ||
-    f.pitch !== "" ||
-    f.status !== "" ||
-    f.replies !== "all"
-  );
-}
-
-/** The options each select offers, taken from the rows themselves. */
-export type FilterOptions = {
-  teams: string[];
-  competitions: string[];
-  venues: string[];
-  pitches: string[];
-  statuses: string[];
-};
-
-export function filterOptions(rows: DeskRow[]): FilterOptions {
-  return {
-    teams: distinct(rows.map((row) => row.teamName)),
-    competitions: distinct(rows.map((row) => row.competition)),
-    venues: distinct(rows.map((row) => row.venue)),
-    pitches: distinct(rows.map((row) => row.pitch)),
-    statuses: distinct(rows.map((row) => row.status)),
-  };
-}
-
-// ---------------------------------------------------------------------------
+import { filtersActive, type FilterOptions, type Filters } from "./filters";
 
 const SELECT =
   "touch w-full min-w-0 rounded-md border border-input bg-card px-2 text-list lg:h-9";
