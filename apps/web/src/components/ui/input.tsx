@@ -1,3 +1,15 @@
+"use client";
+
+/**
+ * A client module, on purpose. `Input` attaches a wheel handler to number
+ * boxes (below), and a handler can only be created on the client: a server
+ * page rendering `<Input type="number">` from a plain module threw "Event
+ * handlers cannot be passed to Client Component props" on /room-bookings/rooms
+ * and /room-bookings/new (digest 1775074775, 2026-09-16, the day after the
+ * handler landed in PR 336). Marked client, the server page hands over only
+ * serialisable props and the handler is made here, where it belongs.
+ */
+
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
