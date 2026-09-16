@@ -87,15 +87,21 @@ export function dateSpanLabel(startsOn: string, endsOn: string): string {
   return startsOn === endsOn ? fmt(startsOn) : `${fmt(startsOn)} – ${fmt(endsOn)}`;
 }
 
+/**
+ * "4 Jan" — a plain date with no year. Anchored at noon UTC so a London date
+ * string never slips a day either side of the clocks changing.
+ */
+export function dayMonthLabel(date: string): string {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "short",
+  });
+}
+
 /** "20 Dec – 4 Jan" for a date off; a single day is just the day. */
 export function blackoutLabel(startsOn: string, endsOn: string): string {
-  const fmt = (date: string): string =>
-    new Date(`${date}T12:00:00Z`).toLocaleDateString("en-GB", {
-      timeZone: "UTC",
-      day: "numeric",
-      month: "short",
-    });
-  return startsOn === endsOn ? fmt(startsOn) : `${fmt(startsOn)} – ${fmt(endsOn)}`;
+  return startsOn === endsOn ? dayMonthLabel(startsOn) : `${dayMonthLabel(startsOn)} – ${dayMonthLabel(endsOn)}`;
 }
 
 export type SyncCounts = {
