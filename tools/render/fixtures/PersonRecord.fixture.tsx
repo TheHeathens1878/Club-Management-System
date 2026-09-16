@@ -24,7 +24,6 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 
-import { PersonTabs } from "@/app/(app)/people/[id]/person-tabs";
 import { Avatar } from "@/components/avatar";
 import { PersonFacts, type PersonFactsData } from "@/components/person/person-facts";
 import { PersonTeams, type PersonTeamRow } from "@/components/person/person-teams";
@@ -133,7 +132,7 @@ function Record({
           detail={quiet ? undefined : next.why}
           action={
             <a
-              href="#person-details"
+              href="?sheet=details"
               className={buttonVariants({ size: "touch", variant: quiet ? "outline" : "default" })}
             >
               {BUTTON[next.key]}
@@ -141,9 +140,7 @@ function Record({
           }
         />
 
-        <PersonFacts facts={facts} hrefFor={(key) => `#person-${key}`} />
-
-        <PersonTabs personId="p1" active="record" />
+        <PersonFacts facts={facts} hrefFor={(key) => (key === "teams" ? "#person-teams" : `?sheet=${key}`)} />
 
         {imports ? (
           <Callout tone="warning" icon={<Clock className="h-4 w-4" aria-hidden />} title="Waiting to be applied">
