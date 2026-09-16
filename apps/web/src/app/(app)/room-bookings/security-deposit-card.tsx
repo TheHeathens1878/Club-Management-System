@@ -70,11 +70,11 @@ export function SecurityDepositCard({
         A refundable <span className="font-medium text-foreground">{formatCurrency(amountPence)}</span>{" "}
         security deposit applies, due with the balance two weeks before the event.{" "}
         {paidPence >= amountPence ? (
-          <span className="font-medium text-green-700">Held in full.</span>
+          <span className="font-medium text-success">Held in full.</span>
         ) : paidPence > 0 ? (
-          <span className="font-medium text-amber-700">{formatCurrency(paidPence)} held so far.</span>
+          <span className="font-medium text-warning">{formatCurrency(paidPence)} held so far.</span>
         ) : (
-          <span className="font-medium text-amber-700">Not yet paid.</span>
+          <span className="font-medium text-warning">Not yet paid.</span>
         )}{" "}
         Record its return here once it has gone back.
       </p>
@@ -84,7 +84,7 @@ export function SecurityDepositCard({
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="block h-9 rounded-md border bg-background px-2 text-sm"
+            className="touch block h-10 w-full rounded-md border bg-background px-2 text-sm"
           >
             <option value="bank transfer">Bank transfer</option>
             <option value="cash">Cash</option>
@@ -93,9 +93,9 @@ export function SecurityDepositCard({
         </label>
         <label className="flex-1 space-y-1 text-xs text-muted-foreground">
           Note (optional)
-          <Input value={note} onChange={(e) => setNote(e.target.value)} className="h-9" />
+          <Input value={note} onChange={(e) => setNote(e.target.value)} className="touch" />
         </label>
-        <Button type="button" size="sm" onClick={() => void run()} disabled={saving}>
+        <Button type="button" size="touch" onClick={() => void run()} disabled={saving}>
           {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Mark returned"}
         </Button>
       </div>
