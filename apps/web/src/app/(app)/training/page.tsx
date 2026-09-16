@@ -1,21 +1,45 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { CalendarPlus, ClipboardCheck } from "lucide-react";
+import { AlertCircle, CalendarPlus, LineChart } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { LinkRow } from "@/components/link-row";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Callout } from "@/components/ui/callout";
+import { FoldCard } from "@/components/ui/fold-card";
+import { londonToday } from "@/lib/booking-time";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { resolveRoleView } from "@/lib/role-view";
-import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { createClient } from "@/lib/supabase/server";
+import {
+  sessionNextAction,
+  trainingWeekDays,
+  trainingWeekRows,
+  type TrainingWeekSession,
+  type TrainingWeekTeam,
+} from "@/lib/training-week";
+
+import { TrainingGrid } from "./training-grid";
+import { loadMarkedSessions, type SessionMeta } from "./training-reads";
 
 /**
- * Training — the week's sessions and the term's attendance (spec §2).
- * `training_sessions()` scopes exactly as Matches does; each row's register
- * is the booking's existing attendance sheet.
+ * `/training` — the week, for somebody standing on a pitch with a phone.
+ *
+ *   1. THE BAR — the session the coach is about to take, in a sentence
+ *      ("Tonight 18:00 · U14 Mavericks · Banky Lane 1 · 11 of 14 coming"), and
+ *      the one button that does it: **Take the register**, in a sheet, here.
+ *      It used to be two navigations away.
+ *   2. THE WEEK — a row per team, a column per day for the next seven, every
+ *      session on its card with its hour, its pitch, who is coming and whether
+ *      the register has been taken. An empty evening's `+` books a pitch with
+ *      the team and the date already in it.
+ *   3. FOLDED BENEATH — attendance this term, which is a report, not a job.
+ *
+ * `training_sessions()` scopes itself to the teams this caller staffs (or all
+ * of them, for an administrator), and the chosen hat narrows it again exactly
+ * as Matches does. The register gate is the one `/pitches/[bookingId]` applies
+ * — `(staff || admin) && !isMemberView(view)` — computed here and passed in, so
+ * a parent who is also a coach gets a week without registers while the parent
+ * hat is on.
  */
 
 export const dynamic = "force-dynamic";
@@ -42,25 +66,79 @@ export default async function TrainingPage() {
 
   const supabase = await createClient();
   const now = Date.now();
-  const [sessionsResult, termResult] = await Promise.all([
+  const [sessionsResult, termResult, teamsResult] = await Promise.all([
     supabase.rpc("training_sessions", {
       p_from: new Date(now - DAY_MS).toISOString(),
       p_to: new Date(now + 7 * DAY_MS).toISOString(),
     }),
     supabase.rpc("training_attendance_term"),
+    supabase.from("teams").select("id,name,age_group").eq("active", true).order("name"),
   ]);
   const sessions = (sessionsResult.data ?? []).filter((row) => inView(row.team_id));
   const term = (termResult.data ?? []).filter((row) => row.marked > 0 && inView(row.team_id));
+
+  // Who may mark a register at all. `loadSessionRegister` asks the database
+  // the same question again per booking when a sheet opens; this decides which
+  // door the grid draws.
+  const canMark = (capabilities.isTeamStaff || capabilities.isClubAdmin) && !isMemberView(view);
+
+  // Has anybody been marked yet? `training_sessions()` carries no such flag,
+  // so the whole week's answer comes back in one query beside it.
+  const marked = await loadMarkedSessions(sessions.map((row) => row.booking_id));
+
+  const weekSessions: TrainingWeekSession[] = sessions.map((row) => ({
+    bookingId: row.booking_id,
+    eventId: row.event_id,
+    teamId: row.team_id,
+    teamName: row.team_name,
+    startsAt: row.starts_at,
+    pitchName: row.pitch_name,
+    status: row.status,
+    accepted: row.accepted,
+    declined: row.declined,
+    squad: row.squad,
+    marked: marked.has(row.booking_id),
+  }));
+
+  // The rows: every team with a session this week, plus the coach's own teams
+  // whether or not they train — an empty row is where "when could we train?"
+  // gets answered.
+  const staffTeamIds = new Set(capabilities.staffTeams.map((team) => team.id));
+  const playing = new Set(weekSessions.map((session) => session.teamId));
+  const teams: TrainingWeekTeam[] = (teamsResult.data ?? [])
+    .filter((team) => inView(team.id) && (playing.has(team.id) || staffTeamIds.has(team.id)))
+    .map((team) => ({ id: team.id, name: team.name, ageGroup: team.age_group }));
+
+  const today = londonToday();
+  const days = trainingWeekDays(today);
+  const rows = trainingWeekRows(weekSessions, teams, days);
+  const next = sessionNextAction(weekSessions, today);
+  const meta: Record<string, SessionMeta> = Object.fromEntries(
+    sessions.map((row) => [row.booking_id, { bookedBy: row.booked_by, status: row.status }]),
+  );
+
+  const average =
+    term.length === 0
+      ? null
+      : Math.round(
+          (term.reduce((sum, row) => sum + row.there, 0) /
+            term.reduce((sum, row) => sum + row.marked, 0)) *
+            100,
+        );
+  const termSummary =
+    term.length === 0
+      ? "No registers taken yet this season"
+      : `${term.length} team${term.length === 1 ? "" : "s"} · ${average}% average`;
 
   return (
     <>
       <PageHeader
         title="Training"
-        subtitle={`${sessions.length} session${sessions.length === 1 ? "" : "s"} in the next seven days`}
+        subtitle={`${weekSessions.length} session${weekSessions.length === 1 ? "" : "s"} in the next seven days`}
         action={
           <span className="flex gap-2">
             <Link href="/pitches/book" className={buttonVariants({ variant: "outline", size: "sm" })}>
-              <CalendarPlus className="h-4 w-4" /> Book a pitch
+              <CalendarPlus className="h-4 w-4" aria-hidden /> Book a pitch
             </Link>
             <Link href="/events/new" className={buttonVariants({ size: "sm" })}>
               New session
@@ -69,152 +147,58 @@ export default async function TrainingPage() {
         }
       />
 
-      <div className="grid gap-4 p-4 lg:grid-cols-[3fr_2fr] lg:gap-6 lg:p-6">
-        <Card>
-          <CardHeader className="p-4 lg:p-6">
-            <CardTitle className="text-base">Sessions this week</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {sessionsResult.error ? (
-              <p className="px-5 py-4 text-sm text-destructive">
-                Could not load the sessions: {sessionsResult.error.message}
-              </p>
-            ) : sessions.length === 0 ? (
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                No training booked for the next seven days — “Book a pitch” reserves one, “New
-                session” creates one without a pitch.
-              </p>
-            ) : (
-              <>
-              {/* Phone: one card per session, with the register as a 44px
-                  control rather than a link at the end of a wide row. */}
-              <div className="space-y-3 px-4 pb-4 lg:hidden">
-                {sessions.map((row) => (
-                  <div key={row.booking_id} className="rounded-xl border bg-card p-4">
-                    <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                      {formatEventDate(row.starts_at)} · {formatEventTime(row.starts_at)}
-                    </p>
-                    <Link
-                      href={row.event_id ? `/events/${row.event_id}?from=/training` : `/teams/${row.team_id}`}
-                      className="mt-2 block text-[15px] font-semibold leading-tight"
-                    >
-                      {row.team_name}
-                    </Link>
-                    <p className="mt-1 text-[12.5px] leading-tight text-muted-foreground">
-                      {row.pitch_name ?? "No pitch"} · booked by {row.booked_by}
-                    </p>
-                    <div className="mt-3 flex flex-wrap items-center gap-1.5">
-                      <Badge variant={row.accepted > 0 ? "success" : "muted"}>
-                        {row.accepted}/{row.squad} coming
-                      </Badge>
-                      {row.status === "pending" ? (
-                        <Badge variant="warning">pitch awaiting confirmation</Badge>
-                      ) : null}
-                    </div>
-                    <Link
-                      href={`/pitches/${row.booking_id}`}
-                      className="mt-3 flex min-h-[44px] items-center justify-center gap-1.5 rounded-md border bg-card text-sm font-medium"
-                    >
-                      <ClipboardCheck className="h-4 w-4" /> Register
-                    </Link>
-                  </div>
-                ))}
-              </div>
+      <div className="space-y-4 p-4 lg:p-6">
+        {sessionsResult.error ? (
+          <Callout tone="danger" icon={<AlertCircle className="h-4 w-4" aria-hidden />}>
+            Could not load the sessions: {sessionsResult.error.message}
+          </Callout>
+        ) : null}
 
-              <div className="hidden overflow-x-auto lg:block">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b bg-secondary/40 text-left text-[11px] uppercase tracking-wide text-muted-foreground">
-                      <th className="px-4 py-2 font-medium">When</th>
-                      <th className="px-4 py-2 font-medium">Team</th>
-                      <th className="px-4 py-2 font-medium">Booked by</th>
-                      <th className="px-4 py-2 font-medium">Where</th>
-                      <th className="px-4 py-2 font-medium">Coming</th>
-                      <th className="px-4 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sessions.map((row) => (
-                      <LinkRow
-                        key={row.booking_id}
-                        href={row.event_id ? `/events/${row.event_id}?from=/training` : `/teams/${row.team_id}`}
-                        className="border-b last:border-b-0 hover:bg-secondary/40"
-                      >
-                        <td className="px-4 py-3 align-top text-muted-foreground">
-                          <span className="font-semibold">{formatEventDate(row.starts_at)}</span>
-                          <br />
-                          {formatEventTime(row.starts_at)}
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <Link
-                            href={row.event_id ? `/events/${row.event_id}?from=/training` : `/teams/${row.team_id}`}
-                            className="font-semibold hover:underline"
-                          >
-                            {row.team_name}
-                          </Link>
-                          {row.status === "pending" ? (
-                            <span className="block text-xs text-amber-700">pitch awaiting confirmation</span>
-                          ) : null}
-                        </td>
-                        <td className="px-4 py-3 align-top">{row.booked_by}</td>
-                        <td className="px-4 py-3 align-top">{row.pitch_name ?? "—"}</td>
-                        <td className="px-4 py-3 align-top">
-                          <Badge variant={row.accepted > 0 ? "success" : "muted"}>
-                            {row.accepted}/{row.squad}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <Link
-                            href={`/pitches/${row.booking_id}`}
-                            className="flex items-center gap-1 text-xs text-primary underline-offset-2 hover:underline"
-                          >
-                            <ClipboardCheck className="h-3.5 w-3.5" /> Register
-                          </Link>
-                        </td>
-                      </LinkRow>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <TrainingGrid
+          rows={rows}
+          days={days}
+          today={today}
+          next={next}
+          meta={meta}
+          canMark={canMark}
+        />
 
-        <Card className="self-start">
-          <CardHeader className="p-4 lg:p-6">
-            <CardTitle className="text-base">Attendance this term</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
-            {term.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No registers taken yet this season — each session&apos;s Register link is where
-                they start.
+        <div className="space-y-2 pt-2">
+          <FoldCard
+            icon={<LineChart className="h-4 w-4" aria-hidden />}
+            title="Attendance this term"
+            summary={termSummary}
+          >
+            <div className="space-y-4">
+              {term.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No registers taken yet this season — a session&apos;s card is where they start.
+                </p>
+              ) : (
+                term.map((row) => {
+                  const pct = Math.round((row.there / row.marked) * 100);
+                  const tone =
+                    pct >= 75 ? "bg-success" : pct >= 55 ? "bg-warning" : "bg-destructive";
+                  return (
+                    <div key={row.team_id}>
+                      <div className="mb-1 flex justify-between text-sm">
+                        <span>{row.team_name}</span>
+                        <span className="font-semibold">{pct}%</span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
+                        <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+              <p className="text-xs text-muted-foreground">
+                Of everyone marked on a register this season, the share who were there (arriving
+                late still counts as trained).
               </p>
-            ) : (
-              term.map((row) => {
-                const pct = Math.round((row.there / row.marked) * 100);
-                const tone =
-                  pct >= 75 ? "bg-emerald-600" : pct >= 55 ? "bg-amber-600" : "bg-destructive";
-                return (
-                  <div key={row.team_id}>
-                    <div className="mb-1 flex justify-between text-sm">
-                      <span>{row.team_name}</span>
-                      <span className="font-semibold">{pct}%</span>
-                    </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-secondary">
-                      <div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} />
-                    </div>
-                  </div>
-                );
-              })
-            )}
-            <p className="text-xs text-muted-foreground">
-              Of everyone marked on a register this season, the share who were there (arriving
-              late still counts as trained).
-            </p>
-          </CardContent>
-        </Card>
+            </div>
+          </FoldCard>
+        </div>
       </div>
     </>
   );
