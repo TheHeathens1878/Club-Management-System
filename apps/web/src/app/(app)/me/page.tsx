@@ -52,7 +52,7 @@ export default async function MePage() {
     rows: section.items.map((item) => ({
       href: linkHref(item, current),
       label: item.label,
-      icon: item.icon,
+      icon: <item.icon className="h-4 w-4" aria-hidden />,
       detail: item.detail,
       badge: item.href === "/notifications" && unread > 0 ? unread : undefined,
     })),

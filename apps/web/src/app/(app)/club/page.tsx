@@ -39,7 +39,7 @@ export default async function ClubPage() {
     rows: section.items.map((item) => ({
       href: linkHref(item, current),
       label: item.label,
-      icon: item.icon,
+      icon: <item.icon className="h-4 w-4" aria-hidden />,
       detail: item.detail,
       badge:
         item.badge && item.badge !== "messages" && item.badge !== "notifications"
@@ -63,7 +63,7 @@ export default async function ClubPage() {
       <div className="mx-auto max-w-2xl p-4 lg:p-6">
         {sections.length === 0 ? (
           <EmptyState
-            icon={Users}
+            icon={<Users className="h-5 w-5" aria-hidden />}
             title="No team yet"
             action={{ href: "/my-registrations", label: "Register a player" }}
           >

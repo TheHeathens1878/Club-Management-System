@@ -81,62 +81,62 @@ export function BlockVenuesCard({
         has its bookings offered on the timetable. The share is what the club has of the pitch, set
         under Venues.
       </p>
-        {chosen.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No venues yet — pick the ones this block trains at.</p>
-        ) : (
-          <ul className="flex flex-wrap gap-2">
-            {chosen.map((venue) => (
-              <li
-                key={venue.id}
-                className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border bg-card pl-3 pr-1 text-[13px] font-medium"
-              >
-                <span>{venue.name}</span>
-                <span className="text-muted-foreground">· {venueShare(venue)}</span>
-                <RemoveVenue blockId={blockId} venue={venue} slotsHere={slotsByVenue.get(venue.id) ?? 0} />
-              </li>
-            ))}
-          </ul>
-        )}
+      {chosen.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No venues yet — pick the ones this block trains at.</p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {chosen.map((venue) => (
+            <li
+              key={venue.id}
+              className="inline-flex min-h-[36px] items-center gap-1.5 rounded-full border bg-card pl-3 pr-1 text-list font-medium"
+            >
+              <span>{venue.name}</span>
+              <span className="text-muted-foreground">· {venueShare(venue)}</span>
+              <RemoveVenue blockId={blockId} venue={venue} slotsHere={slotsByVenue.get(venue.id) ?? 0} />
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {training.length + grounds.length > 0 ? (
-          <form action={action} className="flex flex-wrap items-end gap-2">
-            <div className="basis-full empty:hidden">
-              <PlanFeedback state={state} />
-            </div>
-            <input type="hidden" name="block_id" value={blockId} />
-            <div className="min-w-0 flex-1 basis-56 space-y-1">
-              <Label htmlFor={`block-venue-${blockId}`} className="text-xs">
-                Add a venue
-              </Label>
-              <Select id={`block-venue-${blockId}`} name="venue_id" defaultValue="" required>
-                <option value="" disabled>
-                  Choose a venue…
-                </option>
-                {training.length > 0 ? (
-                  <optgroup label="Training venues">
-                    {training.map((venue) => (
-                      <option key={venue.id} value={venue.id}>
-                        {venue.name} · {venueShare(venue)}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-                {grounds.length > 0 ? (
-                  <optgroup label="Match grounds">
-                    {grounds.map((venue) => (
-                      <option key={venue.id} value={venue.id}>
-                        {venue.name}
-                      </option>
-                    ))}
-                  </optgroup>
-                ) : null}
-              </Select>
-            </div>
-            <SubmitButton size="sm" variant="outline" className="min-h-[44px] lg:min-h-0" pendingLabel="Adding…">
-              <Plus className="h-4 w-4" aria-hidden /> Add
-            </SubmitButton>
-          </form>
-        ) : null}
+      {training.length + grounds.length > 0 ? (
+        <form action={action} className="flex flex-wrap items-end gap-2">
+          <div className="basis-full empty:hidden">
+            <PlanFeedback state={state} />
+          </div>
+          <input type="hidden" name="block_id" value={blockId} />
+          <div className="min-w-0 flex-1 basis-56 space-y-1">
+            <Label htmlFor={`block-venue-${blockId}`} className="text-xs">
+              Add a venue
+            </Label>
+            <Select id={`block-venue-${blockId}`} name="venue_id" defaultValue="" required>
+              <option value="" disabled>
+                Choose a venue…
+              </option>
+              {training.length > 0 ? (
+                <optgroup label="Training venues">
+                  {training.map((venue) => (
+                    <option key={venue.id} value={venue.id}>
+                      {venue.name} · {venueShare(venue)}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+              {grounds.length > 0 ? (
+                <optgroup label="Match grounds">
+                  {grounds.map((venue) => (
+                    <option key={venue.id} value={venue.id}>
+                      {venue.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null}
+            </Select>
+          </div>
+          <SubmitButton size="sm" variant="outline" className="touch" pendingLabel="Adding…">
+            <Plus className="h-4 w-4" aria-hidden /> Add
+          </SubmitButton>
+        </form>
+      ) : null}
     </div>
   );
 }

@@ -14,7 +14,9 @@
 
 import { useActionState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { LandPlot } from "lucide-react";
 
+import { ActionBar } from "@/components/ui/action-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { groupByVenue, splitVenue } from "@/lib/pitch-venue";
@@ -50,54 +52,58 @@ export function BulkHomeVenueBar({
   }, [state.notice]);
 
   return (
-    <div className="space-y-3 rounded-xl border border-primary/30 bg-card p-3">
-      <p className="text-sm font-medium">
-        {teamIds.length} {teamIds.length === 1 ? "team" : "teams"} ticked
-        <span className="ml-2 text-xs font-normal text-muted-foreground">
-          the ticks survive filtering — this sets every ticked team&apos;s home
-        </span>
-      </p>
-      <form action={action} className="flex flex-wrap items-end gap-x-3 gap-y-2">
-        {teamIds.map((id) => (
-          <input key={id} type="hidden" name="team_id" value={id} />
-        ))}
-        <label className="space-y-1 text-xs text-muted-foreground">
-          Home pitch (venue &amp; pitch)
-          {/* min-w-0: WebKit will not shrink a select below its longest
-              option without it, and pitch names run long. */}
-          <select
-            name="home_resource_id"
-            required
-            defaultValue=""
-            aria-label="Home pitch"
-            className="block h-9 w-full min-w-0 max-w-64 rounded-md border bg-background px-2 text-sm"
-          >
-            <option value="" disabled>
-              Choose a pitch…
-            </option>
-            {venues.map((group) => (
-              <optgroup key={group.venue} label={group.venue}>
-                {group.pitches.map((pitch) => (
-                  <option key={pitch.id} value={pitch.id}>
-                    {splitVenue(pitch.name).pitch}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-        </label>
-        <label className="space-y-1 text-xs text-muted-foreground">
-          Home KO (optional)
-          <Input name="home_kickoff_time" type="time" className="block h-9 w-28" />
-        </label>
-        <label className="flex min-h-9 items-center gap-2 text-xs">
-          <input type="checkbox" name="allocate_games" className="h-4 w-4" />
-          Allocate all their home games too
-        </label>
-        <Button type="submit" size="sm" disabled={saving || pitches.length === 0}>
-          {saving ? "Saving…" : "Set home venue"}
-        </Button>
-      </form>
+    <ActionBar
+      as="form"
+      formAction={action}
+      className="border-primary/30"
+      icon={<LandPlot className="h-4 w-4" aria-hidden />}
+      tone={state.error ? "error" : state.notice ? "done" : "idle"}
+      status={`${teamIds.length} ${teamIds.length === 1 ? "team" : "teams"} ticked`}
+      detail="The ticks survive filtering — this sets every ticked team's home."
+      action={
+        <div className="flex flex-wrap items-end gap-x-3 gap-y-2">
+          {teamIds.map((id) => (
+            <input key={id} type="hidden" name="team_id" value={id} />
+          ))}
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Home pitch (venue &amp; pitch)
+            {/* min-w-0: WebKit will not shrink a select below its longest
+                option without it, and pitch names run long. */}
+            <select
+              name="home_resource_id"
+              required
+              defaultValue=""
+              aria-label="Home pitch"
+              className="touch block h-9 w-full min-w-0 max-w-64 rounded-md border bg-background px-2 text-sm"
+            >
+              <option value="" disabled>
+                Choose a pitch…
+              </option>
+              {venues.map((group) => (
+                <optgroup key={group.venue} label={group.venue}>
+                  {group.pitches.map((pitch) => (
+                    <option key={pitch.id} value={pitch.id}>
+                      {splitVenue(pitch.name).pitch}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-xs text-muted-foreground">
+            Home KO (optional)
+            <Input name="home_kickoff_time" type="time" className="touch block h-9 w-28" />
+          </label>
+          <label className="flex min-h-9 items-center gap-2 text-xs">
+            <input type="checkbox" name="allocate_games" className="h-4 w-4" />
+            Allocate all their home games too
+          </label>
+          <Button type="submit" size="touch" disabled={saving || pitches.length === 0}>
+            {saving ? "Saving…" : "Set home venue"}
+          </Button>
+        </div>
+      }
+    >
       <p className="text-xs text-muted-foreground">
         A blank KO leaves each team&apos;s standing kick-off alone. Allocating books every future
         home fixture onto this pitch with the same clash check as a hire; central-venue teams are
@@ -105,18 +111,18 @@ export function BulkHomeVenueBar({
       </p>
       {state.error && <p className="text-sm text-destructive">{state.error}</p>}
       {state.notice && (
-        <p className="text-sm text-emerald-700">
+        <p className="text-sm text-success">
           {state.notice}{" "}
           <button type="button" onClick={onDone} className="font-medium underline underline-offset-2">
             Put the ticks down
           </button>
         </p>
       )}
-      {(state.warnings ?? []).map((warning, index) => (
-        <p key={index} className="text-sm text-amber-700">
+      {(state.warnings ?? []).map((warning) => (
+        <p key={warning} className="text-sm text-warning">
           {warning}
         </p>
       ))}
-    </div>
+    </ActionBar>
   );
 }

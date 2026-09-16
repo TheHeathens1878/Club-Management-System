@@ -42,7 +42,7 @@ function DeleteBlock({ blockId, sessionsOnCalendar }: { blockId: string; session
           type="button"
           variant="outline"
           size="sm"
-          className="min-h-[44px] text-destructive lg:min-h-0"
+          className="touch text-destructive"
           onClick={() => setArmed(true)}
         >
           Delete this block…
@@ -56,7 +56,7 @@ function DeleteBlock({ blockId, sessionsOnCalendar }: { blockId: string; session
       <input type="hidden" name="block_id" value={blockId} />
       <p className="text-sm font-medium">This cannot be undone.</p>
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="destructive" size="sm" disabled={pending} className="min-h-[44px] lg:min-h-0">
+        <Button type="submit" variant="destructive" size="sm" disabled={pending} className="touch">
           {pending ? "Deleting…" : "Delete the block and its sessions"}
         </Button>
         <Button
@@ -65,7 +65,7 @@ function DeleteBlock({ blockId, sessionsOnCalendar }: { blockId: string; session
           size="sm"
           onClick={() => setArmed(false)}
           disabled={pending}
-          className="min-h-[44px] lg:min-h-0"
+          className="touch"
         >
           Keep it
         </Button>
@@ -80,37 +80,37 @@ export function DetailsCard({ block, sessionsOnCalendar }: { block: BlockDetails
 
   return (
     <div className="space-y-4">
-        <form action={action} className="space-y-4">
-          <PlanFeedback state={state} />
-          <input type="hidden" name="block_id" value={block.id} />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="block-name">Name</Label>
-              <Input id="block-name" name="name" defaultValue={block.name} maxLength={80} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="block-starts">First day</Label>
-              <Input id="block-starts" type="date" name="starts_on" defaultValue={block.startsOn} required />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="block-ends">Last day</Label>
-              <Input id="block-ends" type="date" name="ends_on" defaultValue={block.endsOn} required />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="block-title">What the sessions are called</Label>
-              <Input id="block-title" name="session_title" defaultValue={block.sessionTitle} maxLength={80} required />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="block-notes">Notes</Label>
-              <Textarea id="block-notes" name="notes" defaultValue={block.notes ?? ""} maxLength={1000} rows={2} />
-            </div>
+      <form action={action} className="space-y-4">
+        <PlanFeedback state={state} />
+        <input type="hidden" name="block_id" value={block.id} />
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="block-name">Name</Label>
+            <Input id="block-name" name="name" defaultValue={block.name} maxLength={80} required />
           </div>
-          <SubmitButton size="sm" className="min-h-[44px] lg:min-h-0">
-            Save
-          </SubmitButton>
-        </form>
+          <div className="space-y-1.5">
+            <Label htmlFor="block-starts">First day</Label>
+            <Input id="block-starts" type="date" name="starts_on" defaultValue={block.startsOn} required />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="block-ends">Last day</Label>
+            <Input id="block-ends" type="date" name="ends_on" defaultValue={block.endsOn} required />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="block-title">What the sessions are called</Label>
+            <Input id="block-title" name="session_title" defaultValue={block.sessionTitle} maxLength={80} required />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label htmlFor="block-notes">Notes</Label>
+            <Textarea id="block-notes" name="notes" defaultValue={block.notes ?? ""} maxLength={1000} rows={2} />
+          </div>
+        </div>
+        <SubmitButton size="sm" className="touch">
+          Save
+        </SubmitButton>
+      </form>
 
-        <DeleteBlock blockId={block.id} sessionsOnCalendar={sessionsOnCalendar} />
+      <DeleteBlock blockId={block.id} sessionsOnCalendar={sessionsOnCalendar} />
     </div>
   );
 }

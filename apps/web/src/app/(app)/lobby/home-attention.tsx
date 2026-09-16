@@ -3,6 +3,8 @@ import { Bell, CalendarCheck, ChevronRight, ClipboardCheck, DoorOpen, MessageSqu
 
 import { RespondButtons } from "@/app/(app)/events/respond-buttons";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { IconTile } from "@/components/ui/icon-tile";
 import { loadHomeAttention } from "@/lib/home-attention-server";
 import type { AttentionItem } from "@/lib/home-attention";
 
@@ -31,26 +33,21 @@ export async function HomeAttention() {
 
   return (
     <section aria-labelledby="attention-heading" className="px-4 pt-4 lg:px-6">
-      <h2
-        id="attention-heading"
-        className="font-display mb-1.5 px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground"
-      >
+      <Eyebrow as="h2" id="attention-heading" className="mb-1.5 px-1">
         {items.length > 0 ? "Needs your attention" : "Next up"}
-      </h2>
+      </Eyebrow>
 
       {items.length === 0 && next ? (
         <Link
           href={`/events/${next.eventId}`}
           className="flex min-h-[52px] items-center gap-3 rounded-xl border bg-card px-4 py-3 hover:bg-secondary/50"
         >
-          <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <CalendarCheck className="h-4 w-4" aria-hidden />
-          </span>
+          <IconTile icon={<CalendarCheck className="h-4 w-4" aria-hidden />} />
           <span className="min-w-0 flex-1">
-            <span className="block text-[15px] font-medium leading-snug">
+            <span className="block text-row font-medium leading-snug">
               {next.title} · {next.teamName}
             </span>
-            <span className="mt-0.5 block text-[12.5px] text-muted-foreground">
+            <span className="mt-0.5 block text-xs text-muted-foreground">
               {formatEventDate(next.startsAt)} · {formatEventTime(next.startsAt)} — everyone has replied
             </span>
           </span>
@@ -66,12 +63,10 @@ export async function HomeAttention() {
                   href={item.href}
                   className="flex min-h-[52px] items-center gap-3 px-4 py-2.5 hover:bg-secondary/50"
                 >
-                  <span className="inline-flex h-8 w-8 flex-none items-center justify-center rounded-lg bg-accent/15 text-accent">
-                    <Icon className="h-4 w-4" aria-hidden />
-                  </span>
+                  <IconTile icon={<Icon className="h-4 w-4" aria-hidden />} className="bg-accent/15 text-accent" />
                   <span className="min-w-0 flex-1">
-                    <span className="block text-[15px] font-medium leading-snug">{item.title}</span>
-                    <span className="mt-0.5 block text-[12.5px] leading-snug text-muted-foreground">
+                    <span className="block text-row font-medium leading-snug">{item.title}</span>
+                    <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
                       {item.event
                         ? `${item.detail} · ${formatEventDate(item.event.startsAt)} ${formatEventTime(item.event.startsAt)}`
                         : item.detail}

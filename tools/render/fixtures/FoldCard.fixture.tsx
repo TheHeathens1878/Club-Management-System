@@ -8,13 +8,13 @@
  * and a screenshot of the open body is the cheapest proof the fold works at
  * all in a browser.
  *
- * The component still lives beside the winter-training block page; PR 3 moves
- * it to components/ui/fold-card.tsx and this import follows it.
+ * P8.0d moved the component to components/ui/fold-card.tsx; every screen in
+ * the makeover folds its settings beneath with it.
  */
 
 import { CalendarOff, MapPin, Settings2 } from "lucide-react";
 
-import { FoldCard } from "@/app/(app)/pitches/training/[id]/fold-card";
+import { FoldCard } from "@/components/ui/fold-card";
 
 import type { Fixture } from "./contract";
 

@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { CalendarDays, CalendarPlus, ChevronRight, LandPlot } from "lucide-react";
 
 import { FilterRail, type RailGroup } from "@/components/filter-rail";
+import { ChipStrip } from "@/components/ui/chip-strip";
+import { ToggleChipLink } from "@/components/ui/toggle-chip";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -169,45 +171,45 @@ export default async function EventsPage({
             to have disappeared from the menu"). */}
         <div className="flex flex-wrap gap-2">
           {canSeePitches ? (
-            <Chip href="/pitches/calendar">
+            <ToggleChipLink active={false} href="/pitches/calendar">
               <LandPlot className="h-3.5 w-3.5" aria-hidden /> Pitch calendar
-            </Chip>
+            </ToggleChipLink>
           ) : null}
           {canBookPitch ? (
-            <Chip href="/pitches/book">
+            <ToggleChipLink active={false} href="/pitches/book">
               <CalendarPlus className="h-3.5 w-3.5" aria-hidden /> Book a pitch
-            </Chip>
+            </ToggleChipLink>
           ) : null}
           {canBookPitch ? (
-            <Chip href="/pitches/mine">
+            <ToggleChipLink active={false} href="/pitches/mine">
               <CalendarDays className="h-3.5 w-3.5" aria-hidden /> My pitch bookings
-            </Chip>
+            </ToggleChipLink>
           ) : null}
-          <Chip href="/social">
+          <ToggleChipLink active={false} href="/social">
             <CalendarDays className="h-3.5 w-3.5" aria-hidden /> Socials
-          </Chip>
+          </ToggleChipLink>
         </div>
 
         {/* What kind, then which team — two strips, scrollable on a phone.
             Above lg the rail on the left carries the same filters. */}
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
+        <ChipStrip className="gap-2 pb-1 lg:hidden">
           {kindOptions.map((option) => (
-            <Chip key={option.label} href={option.href} active={option.active}>
+            <ToggleChipLink key={option.label} href={option.href} active={option.active}>
               {option.label}
-            </Chip>
+            </ToggleChipLink>
           ))}
-        </div>
+        </ChipStrip>
         {chips.length > 1 ? (
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 lg:hidden">
-            <Chip href={query({ team: null })} active={!filter}>
+          <ChipStrip className="gap-2 pb-1 lg:hidden">
+            <ToggleChipLink href={query({ team: null })} active={!filter}>
               Everyone
-            </Chip>
+            </ToggleChipLink>
             {chips.map((team) => (
-              <Chip key={team.id} href={query({ team: team.id })} active={filter?.id === team.id}>
+              <ToggleChipLink key={team.id} href={query({ team: team.id })} active={filter?.id === team.id}>
                 {team.name}
-              </Chip>
+              </ToggleChipLink>
             ))}
-          </div>
+          </ChipStrip>
         ) : null}
 
         {error ? (
@@ -272,30 +274,5 @@ export default async function EventsPage({
       </div>
       </FilterRail>
     </>
-  );
-}
-
-function Chip({
-  href,
-  active = false,
-  children,
-}: {
-  href: string;
-  active?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={
-        "inline-flex min-h-[36px] flex-none items-center gap-1.5 whitespace-nowrap rounded-full border px-3.5 text-[13px] font-medium transition-colors " +
-        (active
-          ? "border-primary bg-primary text-primary-foreground"
-          : "bg-card text-foreground hover:bg-secondary")
-      }
-    >
-      {children}
-    </Link>
   );
 }

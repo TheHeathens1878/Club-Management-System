@@ -1,5 +1,8 @@
 import Link from "next/link";
 
+import { Callout } from "@/components/ui/callout";
+import { Eyebrow } from "@/components/ui/eyebrow";
+
 /**
  * The filter rail (P7.5, the three-noun design): on a desktop a list's
  * filters stand in a column to its left — "Show me" (what kind), "Whose"
@@ -40,9 +43,7 @@ export function FilterRail({
       <aside className="hidden w-[222px] flex-none flex-col border-r border-border bg-card px-[13px] py-[18px] lg:flex">
         {groups.map((group, index) => (
           <div key={group.title} className={index === 0 ? "" : "mt-[22px]"}>
-            <p className="font-display mb-2.5 ml-1.5 text-[9px] font-medium uppercase leading-none tracking-[0.16em] text-muted-foreground">
-              {group.title}
-            </p>
+            <Eyebrow className="mb-2.5 ml-1.5 leading-none">{group.title}</Eyebrow>
             <div className="flex flex-col gap-0.5">
               {group.options.map((option) => (
                 <Link
@@ -50,7 +51,7 @@ export function FilterRail({
                   href={option.href}
                   aria-current={option.active ? "page" : undefined}
                   className={
-                    "flex items-center gap-2.5 rounded-lg px-2.5 py-[9px] text-[13px] leading-none transition-colors " +
+                    "flex items-center gap-2.5 rounded-lg px-2.5 py-[9px] text-list leading-none transition-colors " +
                     (option.active
                       ? "bg-secondary font-semibold text-foreground"
                       : "text-foreground hover:bg-secondary/60")
@@ -67,7 +68,7 @@ export function FilterRail({
                   {option.count !== undefined ? (
                     <span
                       className={
-                        "text-[11px] " + (option.active ? "text-foreground" : "text-muted-foreground")
+                        "text-2xs " + (option.active ? "text-foreground" : "text-muted-foreground")
                       }
                     >
                       {option.count}
@@ -79,13 +80,12 @@ export function FilterRail({
           </div>
         ))}
         {note ? (
-          <div className="mt-[22px] rounded-[9px] border border-amber-700/30 bg-amber-600/10 p-3">
-            <p className="mb-1 text-[11.5px] font-semibold leading-snug text-amber-900">{note.title}</p>
-            <p className="text-[11.5px] leading-snug text-amber-900">{note.body}</p>
-          </div>
+          <Callout tone="warning" title={note.title} className="mt-[22px] text-xs">
+            {note.body}
+          </Callout>
         ) : null}
         {footnote ? (
-          <p className="ml-1.5 mt-auto pt-6 text-[11.5px] leading-relaxed text-muted-foreground">{footnote}</p>
+          <p className="ml-1.5 mt-auto pt-6 text-xs leading-relaxed text-muted-foreground">{footnote}</p>
         ) : null}
       </aside>
       <div className="min-w-0 flex-1">{children}</div>

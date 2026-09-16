@@ -4,6 +4,7 @@ import { useMemo, useState, useActionState } from "react";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
+import { Callout } from "@/components/ui/callout";
 import { Input, Label } from "@/components/ui/input";
 import { formatCardRef, formatMemberNo } from "@/lib/finance-format";
 
@@ -44,10 +45,8 @@ function money(pence: number): string {
 }
 
 function Feedback({ state }: { state: ActionState }) {
-  if (state.error)
-    return <p className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">{state.error}</p>;
-  if (state.notice)
-    return <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">{state.notice}</p>;
+  if (state.error) return <Callout tone="danger">{state.error}</Callout>;
+  if (state.notice) return <Callout tone="success">{state.notice}</Callout>;
   return null;
 }
 

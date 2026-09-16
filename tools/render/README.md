@@ -58,6 +58,9 @@ ending `/actions`, `/actions.ts` or `-actions` is swapped for
    `getBoundingClientRect().right` exceeds `innerWidth + 1`. Elements that are
    `position: fixed` or `sticky` are skipped, and so is everything inside a
    fixed one: a pinned bar sitting at the edge is not what makes a page scroll.
+   The contents of a box that scrolls sideways on purpose (`overflow-x` `auto`
+   or `scroll`, already overflowing — a `ChipStrip`, a wide table) are skipped
+   for the same reason; the box itself is still measured.
 2. **No sideways scroll.** `document.scrollingElement.scrollWidth <= innerWidth + 1`.
 3. **Every tap target is 44px tall, at 390 only.** `button, a[href],
    [role=button], input, select, textarea, summary` with a non-zero box. The

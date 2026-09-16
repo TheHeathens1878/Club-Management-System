@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { CalendarOff, LandPlot, Settings2 } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
+import { FoldCard } from "@/components/ui/fold-card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { isClubAdmin } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
@@ -10,7 +11,6 @@ import { blackoutLabel, dateSpanLabel, slotOrder, type SyncCounts } from "@/lib/
 import { BlackoutsCard } from "./blackouts-card";
 import { BlockVenuesCard } from "./block-venues-card";
 import { DetailsCard } from "./details-card";
-import { FoldCard } from "./fold-card";
 import { Planner } from "./planner";
 import { SyncCard } from "./sync-card";
 import type { SlotRow, TeamOption, VenueOption } from "./types";

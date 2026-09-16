@@ -1,3 +1,5 @@
+import { Skeleton } from "@/components/ui/skeleton";
+
 /**
  * The instant answer to a tap.
  *
@@ -18,16 +20,16 @@ export default function Loading() {
     <div aria-busy="true" aria-label="Loading">
       {/* The PageHeader strip: title line over subtitle line. */}
       <div className="border-b border-border bg-card px-4 py-4 lg:px-6">
-        <div className="h-6 w-44 animate-pulse rounded bg-muted" />
-        <div className="mt-2 h-3.5 w-72 max-w-full animate-pulse rounded bg-muted" />
+        <Skeleton className="h-6 w-44" />
+        <Skeleton className="mt-2 h-3.5 w-72 max-w-full" />
       </div>
 
       <div className="space-y-4 p-4 lg:p-6">
         {[0, 1, 2].map((i) => (
           <div key={i} className="rounded-xl border border-border bg-card p-4">
-            <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
-            <div className="mt-3 h-3 w-2/3 animate-pulse rounded bg-muted" />
-            <div className="mt-2 h-3 w-1/2 animate-pulse rounded bg-muted" />
+            <Skeleton className="h-4 w-1/3" />
+            <Skeleton className="mt-3 h-3 w-2/3" />
+            <Skeleton className="mt-2 h-3 w-1/2" />
           </div>
         ))}
       </div>

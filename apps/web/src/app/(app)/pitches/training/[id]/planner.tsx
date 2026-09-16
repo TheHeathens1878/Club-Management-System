@@ -35,6 +35,10 @@ import { AlertCircle, GripVertical, Loader2, Plus } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
+import { ChipStrip } from "@/components/ui/chip-strip";
+import { Eyebrow } from "@/components/ui/eyebrow";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import {
   WEEKDAYS,
   busiestDay,
@@ -218,40 +222,47 @@ export function Planner({
 
   return (
     <section className="space-y-3">
-      {/* The day chips and the one add button */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-          <DayChip on={weekday === null} onClick={() => setWeekday(null)} label="Week" className="hidden lg:inline-flex" />
+      {/* The day chips and the one add button. The chips are one line that
+          scrolls on a phone rather than a ladder of wrapped rows, so the
+          timetable itself starts higher up the screen. */}
+      <div className="flex items-center gap-2">
+        {/* The strip bleeds left into the page's padding so the first chip
+            starts at the text margin, but its right edge stops at the button:
+            without that the chips scroll on underneath it. */}
+        <ChipStrip className="mr-0 min-w-0 flex-1 pr-0">
+          <ToggleChip on={weekday === null} onClick={() => setWeekday(null)} className="hidden lg:inline-flex">
+            Week
+          </ToggleChip>
           {[1, 2, 3, 4, 5, 6, 0].map((day) => (
-            <DayChip
+            <ToggleChip
               key={day}
               on={weekday === day}
+              count={dayCount(day)}
               onClick={() => {
                 setWeekday(day);
                 setAsking(null);
               }}
-              label={weekdayLabel(day, true)}
-              count={dayCount(day)}
-            />
+            >
+              {weekdayLabel(day, true)}
+            </ToggleChip>
           ))}
-        </div>
+        </ChipStrip>
         <Button
           type="button"
           variant="outline"
-          size="sm"
+          size="touch"
           onClick={() => openNew({ weekday: weekday ?? undefined, venueId: blockVenueIds[0] })}
-          className="ml-auto min-h-[44px] lg:min-h-0"
+          className="flex-none"
         >
           <Plus className="h-4 w-4" aria-hidden /> Add a slot
         </Button>
       </div>
 
-      {error ? (
-        <p className="flex items-start gap-1.5 rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{error}</span>
-        </p>
-      ) : null}
+      {/* Polite, not assertive: a refused drop is worth hearing about, but
+          not worth interrupting whatever is being read. */}
+      <div aria-live="polite" className="empty:hidden">
+        {error ? <Callout tone="danger" icon={<AlertCircle className="h-4 w-4" aria-hidden />}>{error}</Callout> : null}
+      </div>
 
       {/* "How much?" — the drop, waiting on a share. */}
       {asking ? (
@@ -267,13 +278,13 @@ export function Planner({
                 type="button"
                 size="sm"
                 variant={n === (asking.drag.shares ?? 1) ? "default" : "outline"}
-                className="min-h-[44px] lg:min-h-0"
+                className="touch"
                 onClick={() => place(asking.slot, asking.drag, n)}
               >
                 {shareLabel(n, asking.slot.parts).replace(" of the pitch", "")}
               </Button>
             ))}
-            <Button type="button" size="sm" variant="ghost" className="min-h-[44px] lg:min-h-0" onClick={() => setAsking(null)}>
+            <Button type="button" size="sm" variant="ghost" className="touch" onClick={() => setAsking(null)}>
               Cancel
             </Button>
           </span>
@@ -283,7 +294,7 @@ export function Planner({
           <span>
             <span className="font-medium">{armed.teamName}</span> — now tap the slot it goes in.
           </span>
-          <Button type="button" size="sm" variant="ghost" className="ml-auto min-h-[44px] lg:min-h-0" onClick={() => setArmed(null)}>
+          <Button type="button" size="sm" variant="ghost" className="ml-auto touch" onClick={() => setArmed(null)}>
             Cancel
           </Button>
         </div>
@@ -300,14 +311,14 @@ export function Planner({
                 Add the first one — the venue, the day and the hour — and the timetable builds itself from there.
                 {blockVenueIds.length === 0 ? " A venue picked on a slot joins the block on its own." : ""}
               </p>
-              <Button type="button" size="sm" className="mt-3 min-h-[44px] lg:min-h-0" onClick={() => openNew({ venueId: blockVenueIds[0] })}>
+              <Button type="button" size="sm" className="mt-3 touch" onClick={() => openNew({ venueId: blockVenueIds[0] })}>
                 <Plus className="h-4 w-4" aria-hidden /> Add a slot
               </Button>
             </div>
           ) : shownRows.length === 0 ? (
             <div className="rounded-xl border border-dashed bg-muted/20 p-6 text-center text-sm text-muted-foreground">
               <p>Nothing on {weekdayLabel(weekday ?? 1)}s yet.</p>
-              <Button type="button" size="sm" variant="outline" className="mt-3 min-h-[44px] lg:min-h-0" onClick={() => openNew({ weekday: weekday ?? undefined, venueId: blockVenueIds[0] })}>
+              <Button type="button" size="sm" variant="outline" className="mt-3 touch" onClick={() => openNew({ weekday: weekday ?? undefined, venueId: blockVenueIds[0] })}>
                 <Plus className="h-4 w-4" aria-hidden /> Add a slot on {weekdayLabel(weekday ?? 1)}s
               </Button>
             </div>
@@ -320,7 +331,7 @@ export function Planner({
                 {/* Header row */}
                 <div className="sticky left-0 z-10 border-b bg-card" />
                 {days.map((day) => (
-                  <div key={day} className="border-b border-l px-3 py-2 text-[13px] font-semibold">
+                  <div key={day} className="border-b border-l px-3 py-2 text-list font-semibold">
                     {weekdayLabel(day)}
                     <span className="ml-1.5 font-normal text-muted-foreground">{dayCount(day) || ""}</span>
                   </div>
@@ -434,13 +445,13 @@ function RowCells({
   return (
     <>
       <div className="sticky left-0 z-10 border-b bg-card px-3 py-2.5">
-        <p className="text-[13px] font-semibold leading-tight">{row.venueName}</p>
+        <p className="text-list font-semibold leading-tight">{row.venueName}</p>
         {row.pitchName ? (
-          <p className="text-[12px] font-medium text-primary">{row.pitchName}</p>
+          <p className="text-xs font-medium text-primary">{row.pitchName}</p>
         ) : venue && venue.pitches.length > 0 ? (
-          <p className="text-[11px] text-muted-foreground">No pitch named</p>
+          <p className="text-2xs text-muted-foreground">No pitch named</p>
         ) : null}
-        {share ? <p className="text-[11px] text-muted-foreground">{share}</p> : null}
+        {share ? <p className="text-2xs text-muted-foreground">{share}</p> : null}
       </div>
       {days.map((day) => {
         const here = row.slots.filter((slot) => slot.weekday === day);
@@ -461,16 +472,19 @@ function RowCells({
                 onChipDrag={onChipDrag}
               />
             ))}
-            {unused.map((booking, i) => (
-              <div key={i} className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2 text-xs">
+            {unused.map((booking) => (
+              <div
+                key={`${booking.pitchId ?? "none"}|${booking.startTime}|${booking.endTime}`}
+                className="rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2 text-xs"
+              >
                 <p className="font-medium">
                   {timeRange(booking.startTime, booking.endTime)}
                   <span className="ml-1 font-normal text-muted-foreground">
                     · booked{booking.parts > 1 && booking.shares < booking.parts ? `, ${shareChip(booking.shares, booking.parts)} pitch` : ""}
                   </span>
                 </p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">Not in the plan yet.</p>
-                <Button type="button" size="sm" variant="outline" className="mt-1.5 h-8 min-h-[36px] w-full lg:min-h-0" onClick={() => onUseBooking(booking)}>
+                <p className="mt-0.5 text-2xs text-muted-foreground">Not in the plan yet.</p>
+                <Button type="button" size="sm" variant="outline" className="mt-1.5 h-8 w-full touch" onClick={() => onUseBooking(booking)}>
                   <Plus className="h-3.5 w-3.5" aria-hidden /> Use it
                 </Button>
               </div>
@@ -481,7 +495,7 @@ function RowCells({
               aria-label={`Add a slot at ${row.venueName}${row.pitchName ? ` ${row.pitchName}` : ""} on ${weekdayLabel(day)}s`}
               title="Add a slot here"
               className={
-                "inline-flex min-h-[36px] w-full items-center justify-center gap-1 rounded-lg border border-dashed text-[12px] text-muted-foreground transition-opacity hover:border-primary/50 hover:text-primary lg:min-h-[28px] " +
+                "touch inline-flex w-full items-center justify-center gap-1 rounded-lg border border-dashed text-xs text-muted-foreground transition-opacity hover:border-primary/50 hover:text-primary lg:min-h-[28px] " +
                 (here.length + unused.length === 0 ? "opacity-70" : "opacity-40 hover:opacity-100 focus-visible:opacity-100")
               }
             >
@@ -549,7 +563,7 @@ function SlotCard({
             : armed && free > 0
               ? "border-primary/50 bg-primary/5 hover:bg-primary/10"
               : free === 0
-                ? "border-emerald-200 bg-emerald-50/70 hover:border-emerald-300"
+                ? "border-success/30 bg-success-tint hover:border-success/60"
                 : "border-border bg-card hover:border-primary/50")
       }
     >
@@ -558,12 +572,12 @@ function SlotCard({
           {timeRange(slot.startTime, slot.endTime)}
           {ours ? <span className="ml-1 font-normal text-muted-foreground">· {ours}</span> : null}
         </span>
-        <Badge variant={free === 0 ? "success" : "warning"} className="px-1.5 text-[10px]">
+        <Badge variant={free === 0 ? "success" : "muted"} className="px-1.5 text-2xs">
           {capacity === 1 ? (free === 0 ? "Taken" : "Free") : free === 0 ? "Full" : `${free} of ${capacity} free`}
         </Badge>
       </div>
       {slot.allocations.length === 0 ? (
-        <p className="mt-1 text-[11px] italic text-muted-foreground">No teams yet</p>
+        <p className="mt-1 text-2xs italic text-muted-foreground">No teams yet</p>
       ) : (
         <ul className="mt-1.5 space-y-1">
           {slot.allocations.map((allocation) => (
@@ -580,7 +594,7 @@ function SlotCard({
                   shares: allocation.shares,
                 });
               }}
-              className="flex cursor-grab items-center gap-1 rounded-md bg-primary/10 px-1.5 py-1 text-[12px] font-medium text-primary active:cursor-grabbing"
+              className="flex cursor-grab items-center gap-1 rounded-md bg-primary/10 px-1.5 py-1 text-xs font-medium text-primary active:cursor-grabbing"
               title={`${allocation.teamName} · drag to move`}
             >
               <GripVertical className="h-3 w-3 flex-none opacity-60" aria-hidden />
@@ -635,7 +649,7 @@ function TeamRail({
     <div className="space-y-3 lg:max-h-[70vh] lg:overflow-y-auto lg:pr-1">
       {groups.map((group) => (
         <div key={group.title}>
-          <p className="font-display mb-1 px-1 text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{group.title}</p>
+          <Eyebrow className="mb-1 px-1">{group.title}</Eyebrow>
           {group.teams.length === 0 ? (
             <p className="px-1 text-xs text-muted-foreground">{group.empty ?? "None."}</p>
           ) : (
@@ -652,18 +666,18 @@ function TeamRail({
                       onClick={() => onArm(isArmed ? null : { teamId: team.id, teamName: team.name })}
                       aria-pressed={isArmed}
                       className={
-                        "flex min-h-[40px] w-full cursor-grab items-center gap-1.5 rounded-md border px-2.5 text-left text-[13px] font-medium active:cursor-grabbing lg:min-h-[34px] " +
+                        "touch flex w-full cursor-grab items-center gap-1.5 rounded-md border px-2.5 text-left text-list font-medium active:cursor-grabbing lg:min-h-[34px] " +
                         (isArmed
                           ? "border-primary bg-primary text-primary-foreground"
                           : on
-                            ? "border-emerald-200 bg-emerald-50/70 text-emerald-900"
+                            ? "border-success/30 bg-success-tint text-success"
                             : "bg-card hover:border-primary/40")
                       }
                       title={on ? `${team.name} is in a slot${weekday !== null ? " on this day" : ""} — drag or tap to add it to another` : `Drag ${team.name} onto a slot, or tap it then a slot`}
                     >
                       <GripVertical className={"h-3.5 w-3.5 flex-none " + (isArmed ? "opacity-80" : "text-muted-foreground")} aria-hidden />
                       <span className="min-w-0 flex-1 truncate">{team.name}</span>
-                      {on && !isArmed ? <span className="text-[10px] uppercase tracking-wide text-emerald-700">placed</span> : null}
+                      {on && !isArmed ? <span className="text-2xs uppercase tracking-wide text-success">placed</span> : null}
                     </button>
                   </li>
                 );
@@ -676,30 +690,3 @@ function TeamRail({
   );
 }
 
-function DayChip({ on, onClick, label, count, className = "" }: { on: boolean; onClick: () => void; label: string; count?: number; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={on}
-      className={
-        "inline-flex min-h-[40px] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 text-[13px] font-medium transition-colors lg:min-h-[34px] " +
-        (on ? "border-primary bg-primary text-primary-foreground" : "bg-card text-foreground hover:bg-secondary") +
-        " " +
-        className
-      }
-    >
-      {label}
-      {count ? (
-        <span
-          className={
-            "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none " +
-            (on ? "bg-primary-foreground/20 text-primary-foreground" : "bg-secondary text-muted-foreground")
-          }
-        >
-          {count}
-        </span>
-      ) : null}
-    </button>
-  );
-}
