@@ -1,25 +1,33 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { MessageSquare } from "lucide-react";
+import { Archive, LandPlot, MapPin, MessageSquare, Users } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Callout } from "@/components/ui/callout";
+import { FoldCard } from "@/components/ui/fold-card";
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { isClubAdmin, nameOf, resolveNames } from "@/lib/person";
+import { isClubAdmin, resolveNames } from "@/lib/person";
 import { createClient } from "@/lib/supabase/server";
+import { partsLabel, shareChip } from "@/lib/training-plan";
+import { parseVenueSheet, venueNextAction } from "@/lib/venue-season";
 
 import { EditVenueForm, RetireVenueForm } from "../venue-forms";
-import { AddPitchForm } from "./add-pitch-form";
-import { AttachPitchForm, DetachPitchForm } from "./pitch-venue-forms";
-import { VenueBookingsCard, type SeasonOption, type VenueBookingRow } from "./venue-bookings-card";
+import { CoachesFold, PitchesFold } from "./venue-folds";
+import { VenueGrid } from "./venue-grid";
+import type { SeasonOption, VenueBookingRow } from "./types";
 
 /**
- * `/venues/[id]` — one ground: what it is, which pitches are on it, and who
- * its coaches' group has in it.
+ * `/venues/[id]` — one ground: what the club has booked here this season,
+ * which pitches are on it, and who its coaches' group has in it.
  *
- * The coaching staff panel is the interesting half. Membership of a venue's
+ * The page is the SEASON (P8.8, the makeover): a status bar saying what the
+ * hire comes to and offering the one thing to do about it, then the booked
+ * slots as a grid of pitch × day — the same grid the winter-training block
+ * page draws, out of the same `timetableRows()`. Everything else about a
+ * ground is settings, so it folds beneath.
+ *
+ * The coaching staff fold is the interesting half. Membership of a venue's
  * group is DERIVED (20260901190000) — every coach, assistant coach and manager
  * of an active team that plays here, by home pitch, by an allocated fixture or
  * by a training session — and adults only, strictly: SG-0 makes an unknown
@@ -32,12 +40,19 @@ import { VenueBookingsCard, type SeasonOption, type VenueBookingRow } from "./ve
 
 export const dynamic = "force-dynamic";
 
-export default async function VenuePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function VenuePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ sheet?: string }>;
+}) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   if (!isCommittee(session.profile?.role) && !(await isClubAdmin())) redirect("/lobby");
 
   const { id } = await params;
+  const { sheet } = await searchParams;
   const supabase = await createClient();
 
   const { data: venue } = await supabase
@@ -78,11 +93,7 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
   const here = pitches.filter((pitch) => pitch.venue_id === id);
   const elsewhere = pitches
     .filter((pitch) => pitch.venue_id !== id && pitch.active)
-    .map((pitch) => ({
-      id: pitch.id,
-      name: pitch.name,
-      currentVenue: pitch.venues?.name ?? null,
-    }));
+    .map((pitch) => ({ id: pitch.id, name: pitch.name, currentVenue: pitch.venues?.name ?? null }));
 
   const staff = staffRows ?? [];
   const staffNames = await resolveNames(staff.map((row) => row.person_id));
@@ -120,7 +131,39 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
         a.startsOn.localeCompare(b.startsOn),
     );
   const seasons: SeasonOption[] = (seasonRows ?? []).map((s) => ({ id: s.id, name: s.name, isCurrent: s.is_current }));
+  const current = seasons.find((season) => season.isCurrent) ?? null;
   const uncharged = (breakRows ?? []).map((b) => ({ startsOn: b.starts_on, endsOn: b.ends_on }));
+  const action = venueNextAction(venue, bookings, current, uncharged);
+
+  // The folds' closed summaries: real text, worked out here rather than
+  // "3 items" — a row nobody has to open to learn something from.
+  const usedFor =
+    venue.for_matches && venue.for_training
+      ? "matches & training"
+      : venue.for_matches
+        ? "matches"
+        : venue.for_training
+          ? "training"
+          : "not offered for either";
+  const share =
+    venue.training_parts > 1
+      ? `pitch in ${partsLabel(venue.training_parts).toLowerCase()}, ${
+          venue.training_shares >= venue.training_parts
+            ? "all of it"
+            : shareChip(venue.training_shares, venue.training_parts)
+        } ours`
+      : null;
+  const groundSummary = [venue.address || "No address recorded", usedFor, share].filter(Boolean).join(" · ");
+  const pitchSummary =
+    here.length === 0 ? "None yet — nothing links a team to this ground" : here.map((pitch) => pitch.name).join(" · ");
+  const coachSummary =
+    staff.length === 0
+      ? "Nobody yet — a coach joins when a team of theirs plays here"
+      : `${inGroup.length} in the group${
+          waiting.length > 0
+            ? ` · ${waiting.length === 1 ? "1 waiting on a date of birth" : `${waiting.length} waiting on a date of birth`}`
+            : ""
+        }`;
 
   return (
     <>
@@ -128,33 +171,39 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
         title={venue.name}
         subtitle={venue.address || "No address recorded"}
         action={
-          <div className="flex flex-wrap items-center gap-2">
-            {groupId && (
-              <Link
-                href={`/messages/${groupId}`}
-                className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5"}
-              >
-                <MessageSquare className="h-3.5 w-3.5" /> Coaches group
-              </Link>
-            )}
-          </div>
+          groupId ? (
+            <Link href={`/messages/${groupId}`} className={buttonVariants({ variant: "outline", size: "sm" }) + " gap-1.5"}>
+              <MessageSquare className="h-3.5 w-3.5" aria-hidden /> Coaches group
+            </Link>
+          ) : undefined
         }
         back={{ href: "/venues", label: "Venues" }}
       />
 
-      <div className="max-w-3xl space-y-4 p-4 lg:space-y-6 lg:p-6">
-        {!venue.active && (
-          <div className="rounded-lg border bg-secondary/40 px-4 py-3 text-sm text-muted-foreground">
-            This venue is retired. Its pitches still book and its coaches group is still readable —
-            nothing here was deleted, and bringing it back into use is one button below.
-          </div>
-        )}
+      <div className="space-y-4 p-4 lg:p-6">
+        {!venue.active ? (
+          <Callout tone="warning" title="This venue is retired">
+            Its pitches still book and its coaches group is still readable — nothing here was
+            deleted, and bringing it back into use is one button in the last fold below.
+          </Callout>
+        ) : null}
 
-        <Card>
-          <CardHeader className="p-4 lg:p-6">
-            <CardTitle className="text-base">The ground</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+        {venue.for_training || bookings.length > 0 ? (
+          <VenueGrid
+            venueId={venue.id}
+            venueName={venue.name}
+            action={action}
+            bookings={bookings}
+            seasons={seasons}
+            pitches={here.filter((pitch) => pitch.active).map((pitch) => ({ id: pitch.id, name: pitch.name }))}
+            uncharged={uncharged}
+            currentSeasonId={current?.id ?? null}
+            initialSheet={parseVenueSheet(sheet)}
+          />
+        ) : null}
+
+        <div className="space-y-2 pt-2">
+          <FoldCard icon={<MapPin className="h-4 w-4" aria-hidden />} title="The ground" summary={groundSummary}>
             <EditVenueForm
               venueId={venue.id}
               values={{
@@ -169,129 +218,38 @@ export default async function VenuePage({ params }: { params: Promise<{ id: stri
                 trainingNotes: venue.training_notes,
               }}
             />
-          </CardContent>
-        </Card>
+          </FoldCard>
 
-        {venue.for_training || bookings.length > 0 ? (
-          <VenueBookingsCard
-            venueId={venue.id}
-            bookings={bookings}
-            seasons={seasons}
-            pitches={here.filter((pitch) => pitch.active).map((pitch) => ({ id: pitch.id, name: pitch.name }))}
-            uncharged={uncharged}
-          />
-        ) : null}
+          <FoldCard
+            icon={<LandPlot className="h-4 w-4" aria-hidden />}
+            title={`Pitches on this ground (${here.length})`}
+            summary={pitchSummary}
+          >
+            <PitchesFold
+              venueId={venue.id}
+              forTraining={venue.for_training}
+              forMatches={venue.for_matches}
+              here={here}
+              elsewhere={elsewhere}
+            />
+          </FoldCard>
 
-        <Card>
-          <CardHeader className="p-4 lg:p-6">
-            <CardTitle className="text-base">
-              Pitches on this ground ({here.length})
-            </CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Which pitches are here is what decides who is in the coaches group: a team&rsquo;s home
-              pitch, a fixture allocated to one, or a training session on one all count as playing
-              here. Moving a pitch moves those coaches with it.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-3 p-4 pt-0 lg:p-6 lg:pt-0">
-            {here.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No pitches on this ground yet, so nothing links a team to it and the coaches group
-                is empty.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {here.map((pitch) => (
-                  <div
-                    key={pitch.id}
-                    className="flex flex-wrap items-center justify-between gap-2 rounded-lg border p-3"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Link
-                        href="/pitches/manage"
-                        className="text-sm font-medium underline underline-offset-2 hover:text-primary"
-                      >
-                        {pitch.name}
-                      </Link>
-                      {!pitch.active && <Badge variant="outline">Out of use</Badge>}
-                      <Badge variant="outline">
-                        {pitch.for_matches && pitch.for_training ? "Matches & training" : pitch.for_matches ? "Matches" : "Training"}
-                      </Badge>
-                    </div>
-                    <DetachPitchForm venueId={venue.id} pitch={pitch} />
-                  </div>
-                ))}
-              </div>
-            )}
+          <FoldCard
+            icon={<Users className="h-4 w-4" aria-hidden />}
+            title={`Coaches here (${inGroup.length})`}
+            summary={coachSummary}
+          >
+            <CoachesFold inGroup={inGroup} waiting={waiting} names={staffNames} />
+          </FoldCard>
 
-            <div className="flex flex-wrap items-start gap-3">
-              <AddPitchForm venueId={venue.id} forTraining={venue.for_training && !venue.for_matches} />
-            </div>
-            <AttachPitchForm venueId={venue.id} candidates={elsewhere} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="p-4 lg:p-6">
-            <CardTitle className="text-base">Coaches here ({inGroup.length})</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Worked out from the teams that play here, and kept in step on its own. Nobody is
-              added or removed by hand.
-            </p>
-          </CardHeader>
-          <CardContent className="space-y-4 p-4 pt-0 lg:p-6 lg:pt-0">
-            {inGroup.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Nobody yet. A coach appears here as soon as one of their teams has a home pitch, a
-                fixture or a training session on this ground.
-              </p>
-            ) : (
-              <div className="flex flex-wrap gap-2">
-                {inGroup.map((row) => (
-                  <Badge key={row.person_id} variant="muted">
-                    {nameOf(staffNames, row.person_id)}
-                  </Badge>
-                ))}
-              </div>
-            )}
-
-            {/* The ones the group will not take. Named rather than quietly
-                absent: every one of them is a date of birth the club has not
-                got, and that is a thing an administrator can actually fix. */}
-            {waiting.length > 0 && (
-              <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                <p className="text-sm font-medium text-amber-900">
-                  {waiting.length === 1
-                    ? "One coach here is not in the group"
-                    : `${waiting.length} coaches here are not in the group`}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  {waiting.map((row) => (
-                    <Link key={row.person_id} href={`/people/${row.person_id}`}>
-                      <Badge variant="outline" className="hover:bg-secondary">
-                        {nameOf(staffNames, row.person_id)}
-                      </Badge>
-                    </Link>
-                  ))}
-                </div>
-                <p className="text-xs text-amber-900/80">
-                  A venue&rsquo;s coaches group admits adults only, and the club counts an unknown
-                  date of birth as a minor. Each of these is waiting on a date of birth — they join
-                  the moment the club has one, and the app asks them for it at their next sign-in.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="p-4 lg:p-6">
-            <CardTitle className="text-base">Retire this venue</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 pt-0 lg:p-6 lg:pt-0">
+          <FoldCard
+            icon={<Archive className="h-4 w-4" aria-hidden />}
+            title="Retire this venue"
+            summary={venue.active ? "In use — retiring keeps the room, the history and the address" : "Retired — one button brings it back"}
+          >
             <RetireVenueForm venueId={venue.id} active={venue.active} />
-          </CardContent>
-        </Card>
+          </FoldCard>
+        </div>
       </div>
     </>
   );
