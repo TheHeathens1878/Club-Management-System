@@ -8,6 +8,12 @@
  * so what comes back is the database's answer. A P0001 refusal — the SG-4
  * guard explaining why a guardianship cannot exist, or the dob guard explaining
  * what a correction would break — is rendered exactly as it arrived.
+ *
+ * These bodies used to live inside `app/(app)/people/[id]/panels.tsx`. They sit
+ * in `components/person/` now (P8.3) because a person's record is about to be
+ * opened from three places — the member record itself, a team's squad and a
+ * parent's Children screen — and each of those needs the same fields rather
+ * than its own copy of them. Nothing about the actions changed in the move.
  */
 
 import Link from "next/link";
@@ -15,6 +21,7 @@ import { useActionState, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Callout } from "@/components/ui/callout";
 import { Input, Label } from "@/components/ui/input";
 import { Select, Textarea } from "@/components/ui/field";
 import { PersonPicker } from "@/components/person-picker";
@@ -27,7 +34,7 @@ import {
   restorePerson,
   softDeletePerson,
   type PersonActionState,
-} from "../actions";
+} from "@/app/(app)/people/actions";
 import {
   addGuardianship,
   endGuardianship,
@@ -36,7 +43,7 @@ import {
   setPersonEmergencyContacts,
   setPersonReferee,
   type PersonDetailState,
-} from "./actions";
+} from "@/app/(app)/people/[id]/actions";
 
 const EMPTY: PersonDetailState = {};
 const EMPTY_PERSON: PersonActionState = {};
@@ -79,20 +86,17 @@ export type GuardianshipRow = {
 };
 
 function Feedback({ state }: { state: PersonDetailState | PersonActionState }) {
+  // A refusal keeps its line breaks: the SG-4 guard sends back a paragraph
+  // naming every rule the link would have broken, and folding that onto one
+  // line is how it stops being readable.
   if (state.error) {
     return (
-      <p className="whitespace-pre-line rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+      <Callout tone="danger" className="whitespace-pre-line">
         {state.error}
-      </p>
+      </Callout>
     );
   }
-  if (state.notice) {
-    return (
-      <p className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-        {state.notice}
-      </p>
-    );
-  }
+  if (state.notice) return <Callout tone="success">{state.notice}</Callout>;
   return null;
 }
 
@@ -152,7 +156,7 @@ export function RolesPanel({ personId, roles }: { personId: string; roles: RoleR
               <form action={revokeAction}>
                 <input type="hidden" name="person_id" value={personId} />
                 <input type="hidden" name="role_id" value={role.id} />
-                <Button type="submit" size="sm" variant="outline" className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0">
+                <Button type="submit" size="sm" variant="outline" className="touch px-2 text-xs lg:h-8">
                   Revoke
                 </Button>
               </form>
@@ -189,7 +193,7 @@ export function RolesPanel({ personId, roles }: { personId: string; roles: RoleR
           type="submit"
           size="sm"
           disabled={granting}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          className="touch w-full lg:w-auto"
         >
           {granting ? "Granting…" : "Grant role"}
         </Button>
@@ -245,7 +249,7 @@ export function GuardianshipsPanel({
               <form action={endAction}>
                 <input type="hidden" name="person_id" value={personId} />
                 <input type="hidden" name="guardianship_id" value={link.id} />
-                <Button type="submit" size="sm" variant="outline" className="min-h-[44px] px-2 text-xs lg:h-8 lg:min-h-0">
+                <Button type="submit" size="sm" variant="outline" className="touch px-2 text-xs lg:h-8">
                   End
                 </Button>
               </form>
@@ -323,7 +327,7 @@ export function GuardianshipsPanel({
           type="submit"
           size="sm"
           disabled={adding}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          className="touch w-full lg:w-auto"
         >
           {adding ? "Saving…" : "Add guardianship"}
         </Button>
@@ -361,7 +365,7 @@ export function RetirePanel({
             size="sm"
             variant="outline"
             disabled={restoring}
-            className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+            className="touch w-full lg:w-auto"
           >
             {restoring ? "Restoring…" : "Restore"}
           </Button>
@@ -393,7 +397,7 @@ export function RetirePanel({
           size="sm"
           variant="destructive"
           disabled={deleting}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          className="touch w-full lg:w-auto"
         >
           {deleting ? "Retiring…" : "Retire this person"}
         </Button>
@@ -550,7 +554,7 @@ export function PurgePanel({
           size="sm"
           variant="destructive"
           disabled={!armed || pending}
-          className="min-h-[44px] w-full lg:min-h-0 lg:w-auto"
+          className="touch w-full lg:w-auto"
         >
           {pending ? "Deleting…" : "Delete permanently"}
         </Button>
