@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 
-import { ChevronLeft, Wrench } from "lucide-react";
+import { CalendarDays, ChevronLeft, Users } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
@@ -10,6 +10,8 @@ import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { FoldCard } from "@/components/ui/fold-card";
+import { StatRow, StatTile } from "@/components/ui/stat-tile";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
@@ -22,23 +24,34 @@ import { type FullTimeLinkView } from "./fulltime-panel";
 import { type MatchDayPitch } from "./matchday-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
 import { FixturesTable, type TeamFixture } from "./fixtures-list";
-import { ManageMatchesPanel } from "../../matches/manage-matches-panel";
 import { fixtureHref, lineupHref } from "./fixtures-shared";
-import { BoardPanel, type BoardPost } from "./board-panel";
+import { type BoardPost } from "./board-panel";
+import { CommunicationsTab, TeamConversations, initialsOf } from "./board-tab";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
 import { EMPTY_SETTINGS, SettingsTab, loadSettingsTab, type SettingsTabData } from "./settings-tab";
 import { EMPTY_SQUAD, loadSquadTab, type SquadTabData } from "./squad-data";
 import { SquadTab } from "./squad-tab";
 import { squadSheetModeFrom, type SquadSheetMode } from "./squad-sheet-modes";
 import { SubsTab, loadSubsTab, type SubsRow } from "./subs-tab";
-import { formatBookingDateShort } from "@/lib/booking-time";
+import { TeamOverviewGrid } from "./team-overview-grid";
+import { loadMarkedSessions } from "../../training/training-reads";
+import { instantToLocal, londonToday } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
+import { fixtureGridRows, type FixtureGridFixture, type FixtureGridTeam } from "@/lib/fixture-grid";
+import { teamNextAction } from "@/lib/team-next-action";
+import { dayMonthLabel, weekdayLabel } from "@/lib/training-plan";
+import {
+  londonWeekday,
+  trainingWeekDays,
+  trainingWeekRows,
+  dayWord,
+  type TrainingWeekSession,
+} from "@/lib/training-week";
 
 // The team's name would mean re-reading `teams` in `generateMetadata`, a query
 // this page already makes for itself; a tab is not worth a second one.
 export const metadata = { title: "Team" };
 import { loadThread } from "../../messages/[id]/thread-data";
-import { ThreadPanel } from "../../messages/[id]/thread-panel";
 import { googleMapsUrl } from "../../events/shared";
 
 /** Next 20 fixtures, read-only — the importer (P2.4) is what writes them. */
@@ -324,6 +337,8 @@ export default async function TeamPage({
   let overviewPosts: BoardPost[] = [];
   let overviewThread: Awaited<ReturnType<typeof loadThread>> = null;
   let availabilityList: OverviewAvailability[] = [];
+  /** This team's pitch slots that are not a match's own allocated slot. */
+  let overviewSessions: TrainingWeekSession[] = [];
 
   if (tab === "matchday") {
     const squadIds = staffTools ? await teamPlayerIds(userClient, id) : [];
@@ -437,6 +452,45 @@ export default async function TeamPage({
           (a, b) => weight(a.status) - weight(b.status) || a.name.localeCompare(b.name, "en-GB"),
         );
     }
+
+    // ------------------------------------------------------------------
+    // The week's training row (P8.7b). The same read the Training tab
+    // makes — `loadTeamPitchBookings`, which is `bookings_team_staff_read`
+    // for a coach and `pitch_calendar()` (no booker PII) for everyone else
+    // — plus the register flag `/training` reads beside its own sessions,
+    // because no session read carries one and "11 of 14 coming, register
+    // not taken" is the fact a week is for.
+    //
+    // A booking that IS a match's allocated slot is left out: it is already
+    // on the fixtures row, and one game drawn twice is a week that does not
+    // add up.
+    // ------------------------------------------------------------------
+    const slots = (await loadTeamPitchBookings(id, PITCH_BOOKING_LIMIT)).filter(
+      (slot) => !slot.fixtureId,
+    );
+    const slotIds = slots.map((slot) => slot.id);
+    const [slotCounts, markedSlots] = await Promise.all([
+      staffTools
+        ? bookingHeadcounts(userClient, slotIds, squadIds)
+        : Promise.resolve(new Map<string, Headcount>()),
+      loadMarkedSessions(slotIds),
+    ]);
+    overviewSessions = slots.map((slot) => {
+      const count = slotCounts.get(slot.id);
+      return {
+        bookingId: slot.id,
+        eventId: null,
+        teamId: id,
+        teamName: team.name,
+        startsAt: slot.startsAt,
+        pitchName: slot.resourceName,
+        status: slot.status,
+        accepted: count?.going ?? 0,
+        declined: count?.notGoing ?? 0,
+        squad: count?.squad ?? 0,
+        marked: markedSlots.has(slot.id),
+      } satisfies TrainingWeekSession;
+    });
   }
 
   // --------------------------------------------------------------------
@@ -487,65 +541,94 @@ export default async function TeamPage({
     subsRows = await loadSubsTab({ admin, teamId: id });
   }
 
-  // Overview derivations: the FA rules strip, the availability tallies, and
-  // the chat tail. All cheap, all from data already in hand.
+  // Overview derivations: the FA rules strip, the week's grid, the
+  // availability tallies and the chat tail. All cheap, all from data already
+  // in hand.
   const formatRules = faFormatFor(team.age_group);
   // The club's own answer wins over the FA table where it has given one
   // (20260902150000): an adult side playing 9v9 is a thing no age group says.
   const playedFormat = team.playing_format ?? formatRules?.format ?? null;
-  // The phone's next-match card (mobile artboard) says the same thing as the
-  // ink card, on one line under the opponent.
-  const nextMatch = fixtures[0] ?? null;
-  const nextMatchLine = nextMatch
-    ? [
-        new Date(nextMatch.kickoffAt).toLocaleString("en-GB", {
-          timeZone: "Europe/London",
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-          hourCycle: "h23",
-        }),
-        nextMatch.isHome ? "Home" : "Away",
-        nextMatch.pitchName ?? nextMatch.venueText,
-        nextMatch.competition,
-      ]
-        .filter(Boolean)
-        .join(" · ")
-    : "";
+
+  // --------------------------------------------------------------------
+  // The week (P8.7b). The grid's columns are seven fixed days starting
+  // today — an empty Thursday is the answer to "when could we train?", and
+  // its `+` books a pitch with the team and the date already in it.
+  //
+  // The BAR, though, is about the team and not about the window: a fixture
+  // eleven days out is still the next thing this team is waiting on, so
+  // `teamNextAction()` is asked over every kick-off the page read. When that
+  // fixture is outside the seven days the grid draws, the bar's button
+  // becomes a door to Pitches rather than a sheet over a card that is not
+  // on screen — the grid works that out for itself.
+  // --------------------------------------------------------------------
+  const todayIso = londonToday();
+  const weekDays = trainingWeekDays(todayIso);
+  const gridTeam: FixtureGridTeam = {
+    id: team.id,
+    name: team.name,
+    ageGroup: team.age_group,
+    centralVenueName: team.central_venue_name,
+  };
+  const gridFixtures: FixtureGridFixture[] = fixtures.map((row) => {
+    const local = instantToLocal(row.kickoffAt);
+    return {
+      id: row.id,
+      eventId: row.eventId,
+      teamId: team.id,
+      teamName: team.name,
+      ageGroup: team.age_group,
+      opponent: row.opponent,
+      isHome: row.isHome,
+      status: row.status,
+      time: local.time,
+      dateIso: local.date,
+      // The desk's three pitch words, from the name this page already
+      // resolved (which folds in the central venue).
+      pitch: row.pitchName ?? (row.isHome ? "Unallocated" : "Away"),
+      allocated: !!row.bookingId,
+      accepted: row.headcount?.going ?? 0,
+      declined: row.headcount?.notGoing ?? 0,
+      squad: row.headcount?.squad ?? 0,
+    } satisfies FixtureGridFixture;
+  });
+  const allFixtureDays = Array.from(new Set(gridFixtures.map((row) => row.dateIso))).sort();
+  const nextFixtureCard =
+    fixtureGridRows(gridFixtures, [gridTeam], allFixtureDays)[0]?.cards.find(
+      (card) => card.dayIso >= todayIso,
+    ) ?? null;
+  const allSessionDays = Array.from(
+    new Set(overviewSessions.map((session) => instantToLocal(session.startsAt).date)),
+  ).sort();
+  const nextSessionCard =
+    trainingWeekRows(
+      overviewSessions,
+      [{ id: team.id, name: team.name, ageGroup: team.age_group }],
+      allSessionDays,
+    )[0]?.cards.find((card) => card.dayIso >= todayIso) ?? null;
+  const nextAction = teamNextAction({
+    nextFixture: nextFixtureCard,
+    nextSession: nextSessionCard,
+    today: todayIso,
+  });
+  // Two labels per column: the long one the sheet prints as a date, and the
+  // short one a chip can hold at 390. Both made here, once, on the server.
+  const dayLabels: Record<string, string> = {};
+  const dayChips: Record<string, string> = {};
+  for (const iso of weekDays) {
+    dayLabels[iso] = `${weekdayLabel(londonWeekday(iso), true)} ${dayMonthLabel(iso)}`;
+    const word = dayWord(iso, "00:00", todayIso);
+    dayChips[iso] =
+      word === "Today" || word === "Tomorrow"
+        ? word
+        : `${weekdayLabel(londonWeekday(iso), true)} ${Number(iso.slice(8, 10))}`;
+  }
+
   const availTally = {
     available: availabilityList.filter((row) => row.status === "available").length,
     away: availabilityList.filter((row) => row.status === "unavailable").length,
     maybe: availabilityList.filter((row) => row.status === "maybe").length,
     noReply: availabilityList.filter((row) => row.status === null).length,
   };
-  const chatMessages = overviewThread
-    ? overviewThread.messages.filter((message) => !message.deleted_at).slice(-3)
-    : [];
-  let chatUnread = 0;
-  if (overviewThread) {
-    const lastRead = overviewThread.myLive?.last_read_message_id ?? null;
-    const index = lastRead
-      ? overviewThread.messages.findIndex((message) => message.id === lastRead)
-      : -1;
-    chatUnread =
-      index >= 0 ? overviewThread.messages.length - index - 1 : overviewThread.messages.length;
-  }
-  const initialsOf = (name: string): string =>
-    name
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((word) => word[0]?.toLocaleUpperCase("en-GB") ?? "")
-      .join("");
-  const chatTime = (iso: string): string =>
-    new Date(iso).toLocaleTimeString("en-GB", {
-      timeZone: "Europe/London",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    });
 
   return (
     <>
@@ -572,10 +655,10 @@ export default async function TeamPage({
             <ChevronLeft className="h-[22px] w-[22px]" />
           </Link>
           <div className="min-w-0 flex-1">
-            <p className="font-display truncate text-[10.5px] uppercase tracking-[0.16em] text-foreground/55">
+            <p className="font-display truncate text-2xs uppercase tracking-[0.16em] text-foreground/55">
               {[team.age_group, team.league].filter(Boolean).join(" · ") || "Team"}
             </p>
-            <h1 className="font-display mt-1 truncate text-[21px] font-semibold uppercase leading-none tracking-wide">
+            <h1 className="font-display mt-1 truncate text-xl font-semibold uppercase leading-none tracking-wide">
               {team.name}
             </h1>
           </div>
@@ -585,25 +668,9 @@ export default async function TeamPage({
         </div>
       </div>
 
-      {/* The format strip the artboard puts under the tabs: the FA's rules for
-          this age group, derived from it and never stored. */}
-      {tab === "matchday" && formatRules && (
-        <div className="theme-ink grid grid-cols-4 gap-2 border-b border-border bg-card px-4 py-3 text-foreground lg:hidden">
-          {[
-            ["Format", playedFormat ?? formatRules.format],
-            ["Halves", formatRules.matchLength],
-            ["Pitch", formatRules.pitchSize],
-            ["Ball", formatRules.ball],
-          ].map(([label, value]) => (
-            <div key={label} className="min-w-0">
-              <p className="font-display text-[8px] font-medium uppercase tracking-[0.14em] text-foreground/50">
-                {label}
-              </p>
-              <p className="mt-1 truncate text-[12.5px] font-semibold">{value}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* The FA rules used to be printed twice on the Overview: an ink strip
+          under the phone's tabs and again in the desk's next-match card. They
+          are one `StatRow` in the body now, which a phone reads two across. */}
 
       <div className="space-y-6 p-4 lg:p-6">
         <div className="flex flex-wrap items-center gap-2">
@@ -628,74 +695,14 @@ export default async function TeamPage({
         {/* Communications — the bulletin board and the team chat (§2.4)     */}
         {/* ---------------------------------------------------------------- */}
         {tab === "board" && (
-          <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-            <Card>
-              <CardHeader>
-                <CardTitle>Team Lobby</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Visible to squad, parents and staff. A post marked Club-wide came from the club
-                  lobby — replies to it belong on the club post, so its link takes you there.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <BoardPanel teamId={team.id} posts={boardPosts} canPost={staffTools} />
-              </CardContent>
-            </Card>
-
-            <div className="space-y-6">
-              {threadData ? (
-                <ThreadPanel data={threadData} showLeave={false} />
-              ) : (
-                <Card>
-                  <CardContent className="p-6 text-sm text-muted-foreground">
-                    This team&apos;s chat room isn&apos;t open to you. Players, their parents and
-                    the team&apos;s staff are added automatically when they join the team — if
-                    that&apos;s you and you still can&apos;t see it, ask a club administrator.
-                  </CardContent>
-                </Card>
-              )}
-
-              {staffTools && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-base">Team at a glance</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <dl className="space-y-2 text-sm">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <dt className="text-muted-foreground">Squad</dt>
-                      <dd className="font-medium">
-                        {glancePlayers} {glancePlayers === 1 ? "player" : "players"}
-                      </dd>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <dt className="text-muted-foreground">Next pitch slot</dt>
-                      <dd className="text-right font-medium">
-                        {glanceNextSlot ? (
-                          <Link
-                            href={`/teams/${team.id}?tab=training`}
-                            className="underline underline-offset-2"
-                          >
-                            {formatBookingDateShort(glanceNextSlot.date)} ·{" "}
-                            {glanceNextSlot.startTime}
-                          </Link>
-                        ) : (
-                          "None booked"
-                        )}
-                      </dd>
-                    </div>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <dt className="text-muted-foreground">Board</dt>
-                      <dd className="font-medium">
-                        {boardPosts.length} {boardPosts.length === 1 ? "post" : "posts"}
-                      </dd>
-                    </div>
-                  </dl>
-                </CardContent>
-              </Card>
-              )}
-            </div>
-          </div>
+          <CommunicationsTab
+            team={team}
+            boardPosts={boardPosts}
+            threadData={threadData}
+            staffTools={staffTools}
+            glancePlayers={glancePlayers}
+            glanceNextSlot={glanceNextSlot}
+          />
         )}
 
         {/* ---------------------------------------------------------------- */}
@@ -714,231 +721,119 @@ export default async function TeamPage({
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Matchday — the next match up top, then every coming kick-off     */}
+        {/* Overview — the team's week as a grid, and the one thing it needs */}
         {/* ---------------------------------------------------------------- */}
         {tab === "matchday" && (
           <div className="space-y-6">
-            {/* The artboard's next-match card: paper, accent rim, the kickoff
-                details, then the availability count against "Pick the team".
-                The ink card that follows is the lg+ view of the same fixture. */}
-            {nextMatch && (
-              <div className="overflow-hidden rounded-xl border border-accent/30 bg-card lg:hidden">
-                <div className="border-b px-4 py-3.5">
-                  <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-primary">
-                    Next match
-                  </p>
-                  <p className="mt-2 text-[17px] font-semibold leading-tight">
-                    v {nextMatch.opponent}
-                  </p>
-                  <p className="mt-1.5 text-[12.5px] leading-snug text-muted-foreground">
-                    {nextMatchLine}
-                  </p>
-                  {(nextMatch.pitchName || nextMatch.venueText) && (
-                    <a
-                      href={googleMapsUrl(
-                        (nextMatch.isHome ? nextMatch.pitchAddress : null) ??
-                          nextMatch.pitchName ??
-                          nextMatch.venueText ??
-                          "",
-                      )}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="mt-1.5 inline-flex min-h-[32px] items-center text-xs text-primary underline underline-offset-2"
-                    >
-                      Open in Google Maps
-                    </a>
-                  )}
-                </div>
-                <div className="flex items-center justify-between gap-3 px-4 py-3">
-                  {nextMatch.headcount ? (
-                    <div>
-                      <p className="text-[19px] font-semibold leading-none">
-                        {nextMatch.headcount.going}
-                        <span className="text-[13px] text-muted-foreground">
-                          /{nextMatch.headcount.squad}
-                        </span>
-                      </p>
-                      <p className="mt-1.5 text-[11.5px] text-muted-foreground">available</p>
-                    </div>
-                  ) : (
-                    <p className="text-[12.5px] text-muted-foreground">
-                      {nextMatch.isHome ? "At home" : "Away"}
-                    </p>
-                  )}
-                  <Link
-                    href={
-                      staffTools ? lineupHref(team.id, nextMatch) : fixtureHref(team.id, nextMatch)
-                    }
-                    className={
-                      buttonVariants({ size: "sm" }) + " min-h-[44px] shrink-0 px-4 text-[12.5px]"
-                    }
-                  >
-                    {staffTools ? "Pick the team" : "Event & RSVP"}
-                  </Link>
-                </div>
-              </div>
-            )}
+            <TeamOverviewGrid
+              team={gridTeam}
+              fixtures={gridFixtures}
+              sessions={overviewSessions}
+              days={weekDays}
+              dayLabels={dayLabels}
+              dayChips={dayChips}
+              today={todayIso}
+              next={nextAction}
+              canManage={allocationTools}
+              pitches={matchDayPitches}
+              canTakeRegister={staffTools}
+            />
 
+            {/* The three doors the next-match card carried. The card itself is
+                the grid now, but "Pick the team" is this page's only way into
+                the line-up and the map is how a parent finds the ground, so
+                they keep a press each of their own. */}
             {fixtures[0] && (
-              <div className="theme-ink hidden rounded-xl border border-border bg-background p-5 text-foreground lg:block">
-                <p className="font-display text-[10px] font-medium uppercase tracking-[0.16em] text-accent">
-                  Next match
-                </p>
-                <div className="mt-1 flex flex-wrap items-end justify-between gap-4">
-                  <div>
-                    <p className="text-xl font-semibold leading-tight">
-                      {team.name} <span className="font-normal text-muted-foreground">v</span>{" "}
-                      {fixtures[0].opponent}
-                    </p>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {new Date(fixtures[0].kickoffAt).toLocaleString("en-GB", {
-                        timeZone: "Europe/London",
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                        hourCycle: "h23",
-                      })}
-                      {" · "}
-                      {fixtures[0].isHome ? "Home" : "Away"}
-                      {fixtures[0].pitchName ? ` · ${fixtures[0].pitchName}` : ""}
-                      {!fixtures[0].pitchName && fixtures[0].venueText
-                        ? ` · ${fixtures[0].venueText}`
-                        : ""}
-                      {fixtures[0].competition ? ` · ${fixtures[0].competition}` : ""}
-                    </p>
-                    {(fixtures[0].pitchName || fixtures[0].venueText) && (
-                      <a
-                        href={googleMapsUrl(
-                          (fixtures[0].isHome ? fixtures[0].pitchAddress : null) ??
-                            fixtures[0].pitchName ??
-                            fixtures[0].venueText ??
-                            "",
-                        )}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-1 inline-block text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
-                      >
-                        Open in Google Maps
-                      </a>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  href={fixtureHref(team.id, fixtures[0])}
+                  className={buttonVariants({ variant: "outline", size: "touch" })}
+                >
+                  Event &amp; RSVP for the next match
+                </Link>
+                {staffTools && (
+                  <Link
+                    href={lineupHref(team.id, fixtures[0])}
+                    className={buttonVariants({ variant: "outline", size: "touch" })}
+                  >
+                    Pick the team
+                  </Link>
+                )}
+                {(fixtures[0].pitchName || fixtures[0].venueText) && (
+                  <a
+                    href={googleMapsUrl(
+                      (fixtures[0].isHome ? fixtures[0].pitchAddress : null) ??
+                        fixtures[0].pitchName ??
+                        fixtures[0].venueText ??
+                        "",
                     )}
-                  </div>
-                  <div className="text-right">
-                    {fixtures[0].headcount && (
-                      <>
-                        <p className="text-2xl font-semibold leading-none">
-                          {fixtures[0].headcount.going}/{fixtures[0].headcount.squad}
-                        </p>
-                        <p className="text-xs text-muted-foreground">available</p>
-                      </>
-                    )}
-                    <Link
-                      href={
-                        staffTools ? lineupHref(team.id, fixtures[0]) : fixtureHref(team.id, fixtures[0])
-                      }
-                      className={buttonVariants({ size: "sm" }) + " mt-2"}
-                    >
-                      {staffTools ? "Pick the team" : "Event & RSVP"}
-                    </Link>
-                  </div>
-                </div>
-
-                {/* The format strip: the FA's rules for this age group, derived
-                    — never stored — so rollover changes them automatically. */}
-                {formatRules && (
-                  <div className="mt-4 flex flex-wrap items-end gap-x-8 gap-y-3 border-t border-border pt-4">
-                    {[
-                      ["Format", playedFormat ?? formatRules.format],
-                      ["Match length", formatRules.matchLength],
-                      ["Pitch size", formatRules.pitchSize],
-                      ["Ball", formatRules.ball],
-                    ].map(([label, value]) => (
-                      <div key={label}>
-                        <p className="font-display text-[9px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                          {label}
-                        </p>
-                        <p className="mt-0.5 text-sm font-semibold">{value}</p>
-                      </div>
-                    ))}
-                    <p className="ml-auto max-w-[34ch] text-xs text-muted-foreground">
-                      FA rules for {formatRules.age}. Changes automatically when the age group
-                      moves up at rollover.
-                    </p>
-                  </div>
+                    target="_blank"
+                    rel="noreferrer"
+                    className={buttonVariants({ variant: "ghost", size: "touch" })}
+                  >
+                    Open the ground in Google Maps
+                  </a>
                 )}
               </div>
             )}
 
-            {/* -------------------------------------------------------------- */}
-            {/* The Overview grid: availability + jobs on the left, the board  */}
-            {/* and chat previews on the right (design build, 2026-08-25).     */}
-            {/* -------------------------------------------------------------- */}
+            {/* The FA's rules for this age group, derived and never stored, so
+                rollover changes them on its own. Four figures, said the way
+                every other band of figures in the app is said. */}
+            {formatRules && (
+              <div className="space-y-2">
+                <StatRow>
+                  <StatTile label="Format" value={playedFormat ?? formatRules.format} />
+                  <StatTile label="Match length" value={formatRules.matchLength} />
+                  <StatTile label="Pitch size" value={formatRules.pitchSize} />
+                  <StatTile label="Ball" value={formatRules.ball} />
+                </StatRow>
+                <p className="text-xs text-muted-foreground">
+                  FA rules for {formatRules.age}. Changes automatically when the age group moves up
+                  at rollover.
+                </p>
+              </div>
+            )}
+
             {/* The phone stacks these the way the artboard does — the board and
                 the chat first, the availability summary underneath; on lg+ the
                 source order is the column order again. */}
             <div className="grid items-start gap-4 lg:grid-cols-2">
               <div className="order-2 space-y-4 lg:order-1">
-                {staffTools && fixtures[0] && availabilityList.length > 0 && (
-                  <Card className="overflow-hidden">
-                    <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-4">
-                      <CardTitle className="text-base">Availability</CardTitle>
-                      {availTally.noReply > 0 && (
-                        <Link
-                          href={fixtureHref(team.id, fixtures[0])}
-                          className="inline-flex min-h-[44px] items-center rounded-full bg-amber-100 px-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-200 lg:min-h-0 lg:py-1"
-                        >
-                          Chase the {availTally.noReply} no-
-                          {availTally.noReply === 1 ? "reply" : "replies"}
-                        </Link>
-                      )}
-                    </CardHeader>
-                    <CardContent className="p-0">
-                      <div className="px-4 pb-1 pt-4">
-                        <div className="flex h-2 overflow-hidden rounded-full bg-muted">
-                          {availTally.available > 0 && (
-                            <div
-                              className="bg-emerald-600"
-                              style={{
-                                width: `${(availTally.available / availabilityList.length) * 100}%`,
-                              }}
-                            />
-                          )}
-                          {availTally.away + availTally.maybe > 0 && (
-                            <div
-                              className="bg-primary"
-                              style={{
-                                width: `${((availTally.away + availTally.maybe) / availabilityList.length) * 100}%`,
-                              }}
-                            />
-                          )}
-                        </div>
-                        <p className="mt-2 flex flex-wrap gap-x-4 text-xs text-muted-foreground">
-                          <span>
-                            <strong className="text-emerald-700">{availTally.available}</strong>{" "}
-                            available
-                          </span>
-                          <span>
-                            <strong className="text-primary">{availTally.away}</strong> away
-                          </span>
-                          {availTally.maybe > 0 && (
-                            <span>
-                              <strong className="text-amber-700">{availTally.maybe}</strong> maybe
-                            </span>
-                          )}
-                          <span>
-                            <strong className="text-foreground">{availTally.noReply}</strong> no
-                            reply
-                          </span>
-                        </p>
+                {/* Who has answered, by name. The grid above says how many; this
+                    says who, and it folds because the count is usually enough. */}
+                {staffTools && availabilityList.length > 0 && (
+                  <FoldCard
+                    icon={<Users className="h-4 w-4" aria-hidden />}
+                    title="Availability"
+                    summary={`${availTally.available} available · ${availTally.away} away${availTally.maybe > 0 ? ` · ${availTally.maybe} maybe` : ""} · ${availTally.noReply} no reply`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex h-2 overflow-hidden rounded-full bg-muted">
+                        {availTally.available > 0 && (
+                          <div
+                            className="bg-success"
+                            style={{
+                              width: `${(availTally.available / availabilityList.length) * 100}%`,
+                            }}
+                          />
+                        )}
+                        {availTally.away + availTally.maybe > 0 && (
+                          <div
+                            className="bg-primary"
+                            style={{
+                              width: `${((availTally.away + availTally.maybe) / availabilityList.length) * 100}%`,
+                            }}
+                          />
+                        )}
                       </div>
-                      <ul className="mt-2">
+                      <ul className="-mx-4 divide-y border-y lg:-mx-5">
                         {availabilityList.slice(0, 5).map((row) => (
                           <li
                             key={row.personId}
-                            className="flex min-h-[44px] items-center gap-3 border-t px-4 py-2.5"
+                            className="touch flex items-center gap-3 px-4 py-2.5 lg:px-5"
                           >
-                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-muted text-2xs font-semibold text-muted-foreground">
                               {initialsOf(row.name)}
                             </span>
                             <span className="min-w-0 flex-1 truncate text-sm">{row.name}</span>
@@ -946,12 +841,10 @@ export default async function TeamPage({
                               className={
                                 "text-xs font-semibold " +
                                 (row.status === "available"
-                                  ? "text-emerald-700"
+                                  ? "text-success"
                                   : row.status === "unavailable"
                                     ? "text-primary"
-                                    : row.status === "maybe"
-                                      ? "text-amber-700"
-                                      : "text-amber-700")
+                                    : "text-warning")
                               }
                             >
                               {row.status === "available"
@@ -965,156 +858,65 @@ export default async function TeamPage({
                           </li>
                         ))}
                       </ul>
-                      <Link
-                        href={`/teams/${team.id}?tab=squad`}
-                        className="flex min-h-[44px] items-center border-t px-4 py-2.5 text-xs text-primary hover:underline lg:min-h-0 lg:block"
-                      >
-                        Show all {availabilityList.length} in the squad
-                      </Link>
-                    </CardContent>
-                  </Card>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Link
+                          href={`/teams/${team.id}?tab=squad`}
+                          className={buttonVariants({ variant: "outline", size: "touch" })}
+                        >
+                          All {availabilityList.length} in the squad
+                        </Link>
+                        {availTally.noReply > 0 && fixtures[0] && (
+                          <Link
+                            href={fixtureHref(team.id, fixtures[0])}
+                            className={buttonVariants({ size: "touch" })}
+                          >
+                            Chase the {availTally.noReply} no-
+                            {availTally.noReply === 1 ? "reply" : "replies"}
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  </FoldCard>
                 )}
               </div>
 
               <div className="order-1 space-y-4 lg:order-2">
-                <Card className="overflow-hidden">
-                  <CardHeader className="flex-row items-baseline justify-between space-y-0 border-b py-4">
-                    <CardTitle className="text-base">Team Lobby</CardTitle>
-                    <Link
-                      href={`/teams/${team.id}?tab=board`}
-                      className="inline-flex min-h-[44px] items-center text-xs text-primary hover:underline lg:min-h-0"
-                    >
-                      All posts
-                    </Link>
-                  </CardHeader>
-                  <CardContent className="p-0">
-                    {overviewPosts.length === 0 ? (
-                      <p className="px-4 py-4 text-sm text-muted-foreground">
-                        Nothing on the board yet.
-                      </p>
-                    ) : (
-                      overviewPosts.map((post, index) => (
-                        <div
-                          key={post.postId}
-                          className={
-                            "px-4 py-3" +
-                            (index > 0 ? " border-t" : "") +
-                            (post.pinned ? " bg-primary/5" : "")
-                          }
-                        >
-                          <p className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            {post.pinned && (
-                              <span className="font-display text-[9.5px] font-semibold uppercase tracking-[0.14em] text-primary">
-                                Pinned
-                              </span>
-                            )}
-                            {post.audience === "club" ? "Club-wide" : post.authorName}
-                            {" · "}
-                            {new Date(post.createdAt).toLocaleDateString("en-GB", {
-                              timeZone: "Europe/London",
-                              day: "numeric",
-                              month: "short",
-                            })}
-                          </p>
-                          <p className="mt-1 text-sm font-semibold">{post.title}</p>
-                          {post.pinned && post.body && (
-                            <p className="mt-1 line-clamp-3 max-w-[52ch] text-sm text-muted-foreground">
-                              {post.body}
-                            </p>
-                          )}
-                          <p className="mt-1.5 flex gap-4 text-xs text-muted-foreground">
-                            <span>
-                              {post.readCount} of {post.readOf} read
-                            </span>
-                            <span>
-                              {post.replyCount} {post.replyCount === 1 ? "reply" : "replies"}
-                            </span>
-                          </p>
-                        </div>
-                      ))
-                    )}
-                  </CardContent>
-                </Card>
-
-                {overviewThread && (
-                  <Card className="overflow-hidden">
-                    <CardHeader className="flex-row items-center justify-between space-y-0 border-b py-4">
-                      <CardTitle className="text-base">Team chat</CardTitle>
-                      {chatUnread > 0 && (
-                        <span className="rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
-                          {chatUnread > 9 ? "9+" : chatUnread}
-                        </span>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-3 bg-secondary/30 p-4">
-                      {chatMessages.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">No messages yet.</p>
-                      ) : (
-                        chatMessages.map((message) => {
-                          const mine = message.sender_person_id === overviewThread.personId;
-                          const senderName =
-                            overviewThread.nameMap[message.sender_person_id] ??
-                            overviewThread.unnamedLabel;
-                          return (
-                            <div
-                              key={message.id}
-                              className={"flex gap-2.5" + (mine ? " flex-row-reverse" : "")}
-                            >
-                              <span
-                                className={
-                                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold " +
-                                  (mine
-                                    ? "bg-primary text-primary-foreground"
-                                    : "bg-muted text-muted-foreground")
-                                }
-                              >
-                                {initialsOf(senderName)}
-                              </span>
-                              <div className={"min-w-0" + (mine ? " text-right" : "")}>
-                                <p className="text-[11px] text-muted-foreground">
-                                  {senderName} · {chatTime(message.created_at)}
-                                </p>
-                                <p
-                                  className={
-                                    "mt-1 inline-block max-w-[38ch] rounded-lg px-3 py-2 text-left text-sm " +
-                                    (mine
-                                      ? "bg-foreground text-background"
-                                      : "border bg-card")
-                                  }
-                                >
-                                  {message.body}
-                                </p>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                      <Link
-                        href={`/teams/${team.id}?tab=board`}
-                        className="flex min-h-[44px] items-center pt-1 text-xs text-primary hover:underline lg:block lg:min-h-0"
-                      >
-                        Open the chat
-                      </Link>
-                    </CardContent>
-                  </Card>
-                )}
+                <TeamConversations team={team} posts={overviewPosts} thread={overviewThread} />
               </div>
             </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Upcoming fixtures</CardTitle>
+            {/* The week is the grid; the rest of the season folds. Bulk work
+                on a match further out than seven days lives on the fixture
+                desk, which P8.4 gave filters and a Select mode of its own. */}
+            <FoldCard
+              icon={<CalendarDays className="h-4 w-4" aria-hidden />}
+              title="Every coming kick-off"
+              summary={
+                fixturesFailed
+                  ? "Could not load this team's fixtures"
+                  : fixtures.length === 0
+                    ? "Nothing on the fixture list"
+                    : `The next ${fixtures.length} ${fixtures.length === 1 ? "match" : "matches"}, in Europe/London`
+              }
+            >
+              <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  The next {UPCOMING_LIMIT} kick-offs for this team, in Europe/London. Read-only
-                  here — fixtures arrive from the importer or the manual entry screen. Home fixtures
-                  are given a pitch on{" "}
-                  <Link href="/pitches" className="underline underline-offset-2">
+                  Read-only here — fixtures arrive from the importer or the manual entry screen.
+                  Home fixtures are given a pitch on{" "}
+                  <Link
+                    href="/pitches"
+                    className="touch inline-flex items-center underline underline-offset-2"
+                  >
                     Pitches
                   </Link>
-                  .
+                  , and{" "}
+                  <Link
+                    href="/matches"
+                    className="touch inline-flex items-center underline underline-offset-2"
+                  >
+                    the fixture desk
+                  </Link>{" "}
+                  works on several at once beyond this week.
                 </p>
-              </CardHeader>
-              <CardContent>
                 {fixturesFailed ? (
                   <p className="text-sm text-destructive">
                     Could not load this team&apos;s fixtures.
@@ -1122,43 +924,8 @@ export default async function TeamPage({
                 ) : (
                   <FixturesTable fixtures={fixtures} canManage={staffTools} teamId={team.id} />
                 )}
-              </CardContent>
-            </Card>
-
-            {/* Bulk cancel, delete and kick-off for this team (Adam,
-                2026-09-02: "…for an individual team and the matches tab").
-                Shut until an administrator opens it, and admin-only — under
-                the ADMIN hat, the same rule as the photos export and the
-                allocate door: a coach (or an admin wearing the coach hat)
-                still deletes and moves one match at a time on the match
-                itself, where the counts of what goes with it are in front of
-                them. */}
-            {clubAdmin && (view === "admin" || view === null) && fixtures.length > 0 && (
-              <details className="rounded-xl border bg-card">
-                <summary className="flex min-h-[44px] cursor-pointer list-none flex-wrap items-center gap-2 px-4 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
-                  <Wrench className="h-4 w-4 text-muted-foreground" />
-                  Manage these matches
-                  <span className="text-xs font-normal text-muted-foreground">
-                    cancel, delete or set a kick-off for several at once
-                  </span>
-                </summary>
-                <div className="border-t p-4">
-                  <ManageMatchesPanel
-                    heading={`${fixtures.length} upcoming ${fixtures.length === 1 ? "match" : "matches"}`}
-                    matches={fixtures.map((fixture) => ({
-                      id: fixture.id,
-                      kickoffAt: fixture.kickoffAt,
-                      isHome: fixture.isHome,
-                      opponent: fixture.opponent,
-                      status: fixture.status,
-                      notInFullTime: !!fixture.noLongerPublishedAt,
-                      hasPitch: !!fixture.bookingId,
-                    }))}
-                  />
-                </div>
-              </details>
-            )}
-
+              </div>
+            </FoldCard>
           </div>
         )}
 
