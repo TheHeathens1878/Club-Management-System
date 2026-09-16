@@ -11,37 +11,36 @@ import {
   UserRoundCheck,
 } from "lucide-react";
 
-import type { Json } from "@club/db";
-
 import { Avatar } from "@/components/avatar";
 import { PageHeader } from "@/components/page-header";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { ActionBar } from "@/components/ui/action-bar";
-import { Callout } from "@/components/ui/callout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FoldCard } from "@/components/ui/fold-card";
 import { PersonFacts, type PersonFactKey } from "@/components/person/person-facts";
+import { PersonSheet } from "@/components/person/person-sheet";
+import {
+  PERSON_SHEET_MODES,
+  PERSON_TAB_REDIRECTS,
+  personSheetModeFrom,
+} from "@/components/person/person-sheet-modes";
 import { PersonTeams, type PersonTeamRow } from "@/components/person/person-teams";
 import { getSessionProfile, isCommittee, isSuperUser } from "@/lib/auth";
 import { signPeoplePhotos, signPersonPhotoPath } from "@/lib/avatars";
 import { signIdentityDocumentPaths } from "@/lib/identity-docs";
 import {
   currentMembership,
-  membershipKindHint,
-  membershipKindLabel,
-  membershipKindVariant,
   membershipKindWord,
-  membershipPeopleSummary,
   type PersonMembershipRow,
 } from "@/lib/membership-kind";
 import { isClubAdmin, resolveNames, nameOf } from "@/lib/person";
+import { resolveUserNames } from "@/lib/registration-verifiers";
 import {
   personNextAction,
   type PersonActionKey,
   type PersonSheetMode,
 } from "@/lib/person-record-state";
-import { idDocumentKindLabel } from "@/lib/registration-questions";
 import {
   RegistrationDetailsBody,
   registrationDetailsCaption,
@@ -50,38 +49,24 @@ import {
   loadLivePhotoConsents,
   loadRegistrationDetails,
 } from "@/lib/registration-details-server";
-import { resolveUserNames, verifierName } from "@/lib/registration-verifiers";
-import {
-  addressToFields,
-  formatDate,
-  formatStamp,
-  isMinorDob,
-  personLabel,
-} from "@/lib/people-display";
+import { formatDate, formatStamp, isMinorDob, personLabel } from "@/lib/people-display";
+import { idDocumentKindLabel } from "@/lib/registration-questions";
 import { ageGroupFromDobString } from "@/lib/waiting-list";
 import { createClient } from "@/lib/supabase/server";
-import { FamilyTreeView } from "@/components/family-tree-view";
-import { parseFamilyTree, familyTreePersonIds, isFamilyTreeEmpty } from "@/lib/family-tree";
-import { formatCurrency } from "@/lib/utils";
+import { parseFamilyTree, familyTreePersonIds } from "@/lib/family-tree";
 
-import { PersonTabs, personTabFrom } from "./person-tabs";
-
-import { IdVerifiedForm } from "../../registrations/decision-forms";
-import { PersonForm } from "../person-form";
 import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 
+import type { GuardianshipRow, RoleRow } from "@/components/person/person-panels";
+
 import {
-  EmergencyContactsPanel,
-  GuardianshipsPanel,
-  PurgePanel,
-  RetirePanel,
-  RolesPanel,
-  type GuardianshipRow,
-  type RoleRow,
-} from "@/components/person/person-panels";
+  IdentityDocumentList,
+  PersonSheetBody,
+  type PersonSheetData,
+} from "./sheet-bodies";
 
 /**
- * One person's record (gap 2), as one object with a status line (P8.3).
+ * One person's record (gap 2), as one object with a status line and a panel.
  *
  *   1. THE STATUS BAR — the ONE thing this record needs next, from
  *      `personNextAction()`: imports the migration cannot apply, a missing
@@ -90,9 +75,13 @@ import {
  *      outstanding, "Record complete" and the ordinary door into the details.
  *   2. THE FACTS BAND — the eight things an administrator opened the record to
  *      find out, each one press from the place it is changed.
- *   3. THE PANELS, then FOLDED BENEATH — the record itself, what the latest
- *      registration said, and the proof of identity. Each fold's closed line
- *      is real text, computed here, so it is worth reading shut.
+ *   3. THE TEAMS, then the RECORD, the latest REGISTRATION and the PROOF OF
+ *      IDENTITY folded beneath, each fold's closed line real text computed
+ *      here so the row is worth reading shut.
+ *   4. EVERYTHING YOU CHANGE opens in `PersonSheet` over the top, addressed by
+ *      `?sheet=<mode>`. That is what keeps the expensive reads lazy: the
+ *      family tree, the subscriptions and the payments are fetched only when
+ *      the mode that wants them is the mode being asked for.
  *
  * Everything is read through the caller's own client. Where a policy says no —
  * `registrations.form` is club_admin, safeguarding_lead, the subject or their
@@ -102,12 +91,12 @@ import {
  * inherits the rule: an absent membership number is a reader who was not shown
  * the billing row, not a person without one.
  *
- * THE CLUB MEMBERSHIP CARD (Adam, 2026-08-26) is the same rule: it reads
+ * THE MEMBERSHIP MODE (Adam, 2026-08-26) is the same rule: it reads
  * `person_memberships`, a security_invoker view over `memberships` and
  * `membership_people`, so it renders only for a reader those policies already
  * admit (the lead contact, club_admin, safeguarding_lead). Individual or
  * Family is the DATABASE's answer, derived from the number of PLAYERS on the
- * membership in that season, and the card lists the other people on it so an
+ * membership in that season, and it lists the other people on it so an
  * administrator can click straight through to the rest of the family.
  */
 
@@ -116,12 +105,8 @@ import {
 // places a member's name would travel further than the page itself.
 export const metadata = { title: "Member record" };
 
-/** The queue payload `migrate_neon()` wrote, read defensively. */
-function payloadField(payload: Json | null, key: string): string | null {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) return null;
-  const value = (payload as Record<string, Json | undefined>)[key];
-  return typeof value === "string" ? value : null;
-}
+/** The modes only a club administrator is offered. */
+const ADMIN_MODES: readonly PersonSheetMode[] = ["roles", "guardianships", "danger"];
 
 /**
  * `/people` hands its own query string over in `from`, so Back returns to the
@@ -136,23 +121,36 @@ function backHref(from: string | undefined): string {
   return text ? `/people?${text}` : "/people";
 }
 
-/** The two sections that live on the Membership and payments tab. */
-const MEMBERSHIP_TAB_SECTIONS = new Set(["membership", "money", "member-no"]);
-
 export default async function PersonPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string; tab?: string | string[] }>;
+  searchParams: Promise<{ from?: string; tab?: string | string[]; sheet?: string | string[] }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   if (!isCommittee(session.profile?.role)) redirect("/lobby");
 
   const { id } = await params;
-  const { from, tab: rawTab } = await searchParams;
-  const tab = personTabFrom(rawTab);
+  const { from, tab: rawTab, sheet: rawSheet } = await searchParams;
+
+  /**
+   * The record used to be two tabs. `?tab=membership` is in emails, in the
+   * billing links on this very page and in everybody's history, so it is
+   * answered rather than ignored: it becomes the membership panel.
+   */
+  if (rawTab !== undefined) {
+    const key = Array.isArray(rawTab) ? rawTab[0] : rawTab;
+    const asMode = PERSON_TAB_REDIRECTS[key ?? ""] ?? null;
+    const moved = new URLSearchParams();
+    if (asMode) moved.set("sheet", asMode);
+    if (from) moved.set("from", from);
+    const text = moved.toString();
+    redirect(`/people/${id}${text ? `?${text}` : ""}`);
+  }
+
+  const sheet = personSheetModeFrom(rawSheet);
   const supabase = await createClient();
 
   const { data: person } = await supabase.from("people").select("*").eq("id", id).maybeSingle();
@@ -254,8 +252,8 @@ export default async function PersonPage({
 
   // The club membership this person is tagged with, and the rest of the family
   // on it. Two small reads of `person_memberships`; both carry the view's
-  // security_invoker RLS, so a reader who may not see the membership sees no
-  // card at all rather than a card with the names missing.
+  // security_invoker RLS, so a reader who may not see the membership sees
+  // nothing at all rather than a panel with the names missing.
   const { data: membershipTagRows } = await supabase
     .from("person_memberships")
     .select(
@@ -277,7 +275,7 @@ export default async function PersonPage({
 
   // The membership NUMBER (billing account, 20260904170000): the household
   // this person is billed under. Read under the caller's RLS — club_admin
-  // holds the finance gate; a reader without it simply sees no number card.
+  // holds the finance gate; a reader without it simply sees no number.
   const { data: billingRow } = await supabase
     .from("billing_account_people")
     .select("account_id,letter,billing_accounts(member_no,lead_person_id,status)")
@@ -293,22 +291,25 @@ export default async function PersonPage({
         .order("letter")
     : { data: [] as never[] };
 
-  // The Membership and payments tab. Only loaded when it is the tab being
-  // shown — a record opened to read a phone number should not pay for a family
-  // tree and two money reads.
+  // The expensive parts of the record, loaded only for the panel that asks for
+  // them — a record opened to read a phone number should not pay for a family
+  // tree and two money reads. This was the `?tab=membership` gate; it is finer
+  // now, because the family tree and the money are two different modes.
   //
   // `family_tree_for()` (20260827130000) is the person-shaped twin of
   // `my_family_tree()`: asking the caller-scoped one here would draw the
   // ADMINISTRATOR'S own family under somebody else's name. It refuses anyone
   // who is not club_admin or safeguarding_lead, which is the readership this
   // page already requires.
-  const membershipTab = tab === "membership";
-  const { data: treeData, error: treeError } = membershipTab
+  const membershipMode = sheet === "membership";
+  const moneyMode = sheet === "money";
+
+  const { data: treeData, error: treeError } = membershipMode
     ? await supabase.rpc("family_tree_for", { p_person_id: id })
     : { data: null, error: null };
   const familyTree = parseFamilyTree(treeData ?? null);
 
-  const treePhotoIds = membershipTab ? familyTreePersonIds(familyTree) : [];
+  const treePhotoIds = membershipMode ? familyTreePersonIds(familyTree) : [];
   const { data: treePhotoRows } =
     treePhotoIds.length > 0
       ? await supabase.from("people").select("id,photo_path").in("id", treePhotoIds)
@@ -317,7 +318,7 @@ export default async function PersonPage({
 
   // Subscriptions this person is the SUBJECT of, and the ones they PAY for —
   // a parent's record should show the bills they carry for their children.
-  const { data: subscriptionRows } = membershipTab
+  const { data: subscriptionRows } = moneyMode
     ? await supabase
         .from("subscriptions")
         .select(
@@ -329,7 +330,7 @@ export default async function PersonPage({
   const subscriptions = subscriptionRows ?? [];
 
   const { data: paymentRows } =
-    membershipTab && subscriptions.length > 0
+    moneyMode && subscriptions.length > 0
       ? await supabase
           .from("payments")
           .select("id,subscription_id,amount_pence,paid_at,method,kind,refunded_pence")
@@ -349,7 +350,7 @@ export default async function PersonPage({
   // What the latest registration said about this person — the read-only copy
   // on the contact record (20260825260000). It carries the `registrations`
   // read policies, so a reader who is not entitled to the form gets nothing
-  // back and the card is not rendered. The SG-5 photo consents beside it are
+  // back and the fold is not rendered. The SG-5 photo consents beside it are
   // `guardian_consents` rows, read the same way.
   const [snapshots, photoConsents, { data: questionRows }, verifierNames] = await Promise.all([
     loadRegistrationDetails([id]),
@@ -380,7 +381,7 @@ export default async function PersonPage({
     : new Map<string, string>();
 
   // -------------------------------------------------------------------------
-  // What this record needs next, and where every tile goes
+  // What this record needs next, and where every press goes
   // -------------------------------------------------------------------------
 
   const next = personNextAction({
@@ -392,30 +393,41 @@ export default async function PersonPage({
   });
 
   /**
-   * Every press on this page is a URL. A section on the tab already open is a
-   * plain anchor; one on the other tab carries `?tab=` so the press lands with
-   * the right half of the record on screen. `from` rides along so Back still
-   * returns to the list the reader came from.
-   *
-   * These become `?sheet=<mode>` when the sheet lands; the keys do not move.
+   * Every press on this page is a URL. `from` rides along so Back still
+   * returns to the list the reader came from, and a panel typed into the
+   * address bar opens the same way a pressed tile does.
    */
-  function sectionHref(section: string): string {
-    const onMembershipTab = MEMBERSHIP_TAB_SECTIONS.has(section);
+  function personHref(mode: PersonSheetMode | null): string {
     const query = new URLSearchParams();
-    if (onMembershipTab) query.set("tab", "membership");
+    if (mode) query.set("sheet", mode);
     if (from) query.set("from", from);
     const text = query.toString();
-    return `/people/${id}${text ? `?${text}` : ""}#person-${section}`;
+    return `/people/${id}${text ? `?${text}` : ""}`;
   }
 
-  const FACT_SECTIONS: Record<PersonFactKey, string> = {
+  const modeHrefs = Object.fromEntries(
+    PERSON_SHEET_MODES.map((mode) => [mode, personHref(mode)]),
+  ) as Record<PersonSheetMode, string>;
+  const closeHref = personHref(null);
+
+  // `/people/[id]` is committee-only, so everyone who is here may edit; only a
+  // club administrator is offered roles, guardianships and retiring. The SHEET
+  // is told the answer, it never works it out — `/teams/[id]`'s squad and
+  // `/family` reuse it with different answers.
+  const canEdit = true;
+  const canAdmin = admin;
+  const superUser = isSuperUser(session.profile?.role);
+  const mode = sheet && ADMIN_MODES.includes(sheet) && !canAdmin ? null : sheet;
+
+  /** Where a fact tile goes. Teams are on the page itself, so they anchor. */
+  const FACT_MODE: Record<PersonFactKey, PersonSheetMode | null> = {
     age: "details",
     login: "details",
     membership: "membership",
-    memberNo: "member-no",
+    memberNo: "membership",
     roles: "roles",
     guardianships: "guardianships",
-    teams: "teams",
+    teams: null,
     identity: "identity",
   };
 
@@ -465,16 +477,39 @@ export default async function PersonPage({
     "record-complete": "Edit details",
   };
   const quiet = next.key === "record-complete";
-  const NEXT_SECTION: Record<PersonSheetMode, string> = {
-    details: "details",
-    contacts: "contacts",
-    roles: "roles",
-    guardianships: "guardianships",
-    identity: "identity",
-    membership: "membership",
-    money: "money",
-    registration: "registration",
-    danger: "danger",
+
+  // Everything the panel might show, gathered once. Each mode is handed only
+  // what it was given: the family tree, the subscriptions and the payments are
+  // empty arrays unless THIS request asked for their mode.
+  const sheetData: PersonSheetData = {
+    person,
+    personName: name,
+    admin,
+    superUser,
+    pending,
+    emergencyContacts,
+    roles,
+    guardianships,
+    documents,
+    documentUrls,
+    verifierNames,
+    billingAccount: billingRow?.billing_accounts ?? null,
+    billingAccountId: billingRow?.account_id ?? null,
+    memberNo,
+    household: billingHousehold ?? [],
+    clubMembership,
+    familyOthers,
+    familyNames,
+    familyTree,
+    familyTreeError: treeError?.message ?? null,
+    treePhotoUrls,
+    subscriptions,
+    payments,
+    subjectNames,
+    snapshot,
+    registrationSummary,
+    photoConsents: isMinorDob(person.dob) ? photoConsents.get(id) : undefined,
+    questionLabels,
   };
 
   return (
@@ -503,7 +538,7 @@ export default async function PersonPage({
           detail={quiet ? undefined : next.why}
           action={
             <Link
-              href={sectionHref(NEXT_SECTION[next.mode])}
+              href={modeHrefs[next.mode]}
               className={buttonVariants({ size: "touch", variant: quiet ? "outline" : "default" })}
             >
               {NEXT_BUTTON[next.key]}
@@ -533,116 +568,15 @@ export default async function PersonPage({
             idNeeded: childFacingRoles.length > 0 && !person.id_verified,
             retired: !!person.deleted_at,
           }}
-          hrefFor={(key) => sectionHref(FACT_SECTIONS[key])}
+          hrefFor={(key) => {
+            const target = FACT_MODE[key];
+            return target ? modeHrefs[target] : "#person-teams";
+          }}
         />
 
-        <PersonTabs personId={person.id} active={tab} from={from} />
-
-        {tab === "record" && (
-        <>
-        {pending.length > 0 && (
-          <Callout
-            tone="warning"
-            icon={<Clock className="h-4 w-4" aria-hidden />}
-            title="Waiting to be applied"
-          >
-            <p>
-              Records imported from the pitch-booking app that SG-4 and SG-6 will not accept until
-              this person&apos;s date of birth is known. Save a date of birth below and they are
-              applied straight away.
-            </p>
-            <ul className="mt-2 space-y-1">
-              {pending.map((row) => (
-                <li key={row.id}>
-                  <span className="font-medium capitalize">{row.kind}</span>
-                  <span>
-                    {payloadField(row.payload, "role") ? ` · ${payloadField(row.payload, "role")}` : ""}
-                    {` · queued ${formatStamp(row.created_at)}`}
-                    {row.attempts > 0
-                      ? ` · ${row.attempts} attempt${row.attempts === 1 ? "" : "s"}`
-                      : ""}
-                  </span>
-                  {row.last_error && <span className="block text-xs">{row.last_error}</span>}
-                </li>
-              ))}
-            </ul>
-          </Callout>
-        )}
-
-        <Card id="person-details" className="scroll-mt-20">
-          <CardHeader>
-            <CardTitle>Details</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <PersonForm
-              mode="edit"
-              personId={person.id}
-              pendingImports={pending.length}
-              values={{
-                first_name: person.first_name,
-                last_name: person.last_name,
-                preferred_name: person.preferred_name ?? "",
-                dob: person.dob ?? "",
-                sex: person.sex ?? "",
-                email: person.email ?? "",
-                phone: person.phone ?? "",
-                address: addressToFields(person.address),
-                notes: person.notes ?? "",
-              }}
-            />
-          </CardContent>
-        </Card>
-
-        <Card id="person-contacts" className="scroll-mt-20">
-          <CardHeader>
-            <CardTitle>Emergency contacts</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Up to two, kept on the person&apos;s record rather than on a registration form.
-              Only a club administrator can change them here; the person and their guardians
-              change them from their own screens.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <EmergencyContactsPanel
-              personId={person.id}
-              personName={name}
-              contacts={emergencyContacts}
-              canEdit={admin}
-            />
-          </CardContent>
-        </Card>
-
-        <Card id="person-roles" className="scroll-mt-20">
-          <CardHeader>
-            <CardTitle>Roles</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              The real role model — <code>person_roles</code>, not the login&apos;s
-              <code> profiles.role</code>. Only a club administrator may grant or revoke, and every
-              change is written to the audit log by a trigger.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <RolesPanel personId={person.id} roles={roles} />
-          </CardContent>
-        </Card>
-
-        <Card id="person-guardianships" className="scroll-mt-20">
-          <CardHeader>
-            <CardTitle>Guardianships</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              SG-4. A guardian must be an adult with a known date of birth and a child must be a
-              minor, so the database refuses the rest and says why. Links end; they are not deleted,
-              and turning 18 is not an ending — the reading policies lapse on their own.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <GuardianshipsPanel personId={person.id} personName={name} links={guardianships} />
-          </CardContent>
-        </Card>
-
-        {/* Every membership this person has held, in every season — the
-            season heads its own group, so the six-column table that used to
-            scroll sideways on a phone is gone. */}
+        {/* Every membership this person has held, in every season — the season
+            heads its own group, so the six-column table that used to scroll
+            sideways on a phone is gone. */}
         <Card id="person-teams" className="scroll-mt-20">
           <CardHeader className="pb-3">
             <CardTitle>Teams</CardTitle>
@@ -652,27 +586,32 @@ export default async function PersonPage({
           </CardContent>
         </Card>
 
-        {/* The settings and the history fold beneath the work, the way every
-            screen in the makeover ends. Each summary is real text, so the row
-            is worth reading without opening it. */}
-        <div className="space-y-2 pt-2">
+        {/* The history folds beneath the work, the way every screen in the
+            makeover ends. Each summary is real text, so the row is worth
+            reading shut; what you CHANGE is a press away in the panel. */}
+        <div className="space-y-2">
           <FoldCard
             icon={<History className="h-4 w-4" aria-hidden />}
             title="Record"
             summary={recordSummary}
-            className="scroll-mt-20"
           >
-            <div id="person-danger" className="scroll-mt-20">
-              <RetirePanel
-                personId={person.id}
-                personName={name}
-                deletedAt={person.deleted_at}
-              />
-              {/* Adam, the club owner and sole super user, asked for a real
-                  delete for GDPR erasure and for test accounts. Nobody else is
-                  offered it, and `purge_person()` would refuse them anyway. */}
-              {isSuperUser(session.profile?.role) && (
-                <PurgePanel personId={person.id} personName={name} />
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Retiring a person hides them from the lists. It is a soft delete and always has
+                been: the row, their history and every audit trail stay exactly where they are
+                (SG-2).
+              </p>
+              {canAdmin ? (
+                <Link
+                  href={modeHrefs.danger}
+                  className={buttonVariants({ variant: "outline", size: "touch" })}
+                >
+                  {person.deleted_at ? "Restore this person" : "Retire this person"}
+                </Link>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Only a club administrator can retire a record.
+                </p>
               )}
             </div>
           </FoldCard>
@@ -682,9 +621,8 @@ export default async function PersonPage({
               icon={<FileText className="h-4 w-4" aria-hidden />}
               title="From the latest registration"
               summary={registrationSummary}
-              className="scroll-mt-20"
             >
-              <div id="person-registration" className="scroll-mt-20 space-y-3">
+              <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">
                   Read-only here: each new registration overwrites these answers, and they are
                   changed by registering again.
@@ -705,304 +643,31 @@ export default async function PersonPage({
             title="Proof of identity"
             summary={idSummary}
             defaultOpen={next.key === "record-id-seen"}
-            className="scroll-mt-20"
           >
-            <div id="person-identity" className="scroll-mt-20 space-y-3">
-              <p className="text-sm text-muted-foreground">
-                A passport or birth certificate is asked for at registration unless a club
-                administrator has recorded that the club has already seen one. Documents are held
-                for three years and then destroyed automatically; the record that one was held
-                survives.
-              </p>
-              {documents.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing on file.</p>
-              ) : (
-                <ul className="space-y-1 text-sm">
-                  {documents.map((document) => {
-                    const url = document.storage_path
-                      ? documentUrls.get(document.storage_path)
-                      : undefined;
-                    return (
-                      <li key={document.id} className="flex flex-wrap items-center gap-2">
-                        {url ? (
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="touch flex items-center font-medium text-primary hover:underline"
-                          >
-                            {idDocumentKindLabel(document.kind)}
-                          </a>
-                        ) : (
-                          <span className="font-medium">{idDocumentKindLabel(document.kind)}</span>
-                        )}
-                        <span className="text-xs text-muted-foreground">
-                          uploaded {formatStamp(document.created_at)} · destroyed{" "}
-                          {document.purge_after}
-                        </span>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-              {admin ? (
-                <IdVerifiedForm
-                  personId={person.id}
-                  verified={person.id_verified}
-                  verifiedAt={person.id_verified_at}
-                  verifiedByName={
-                    person.id_verified ? verifierName(verifierNames, person.id_verified_by) : null
-                  }
-                />
-              ) : (
-                person.id_verified && (
-                  <p className="text-sm text-success">
-                    ID seen and verified by {verifierName(verifierNames, person.id_verified_by)}
-                    {person.id_verified_at ? ` · ${formatStamp(person.id_verified_at)}` : ""}
-                  </p>
-                )
-              )}
+            <div className="space-y-3">
+              <IdentityDocumentList documents={documents} documentUrls={documentUrls} />
+              <Link
+                href={modeHrefs.identity}
+                className={buttonVariants({ variant: "outline", size: "touch" })}
+              >
+                {person.id_verified ? "Change the ID record" : "Record ID seen"}
+              </Link>
             </div>
           </FoldCard>
         </div>
-        </>
-        )}
-
-        {tab === "membership" && (
-          <>
-        {billingRow?.billing_accounts && (
-          <Card id="person-member-no" className="scroll-mt-20">
-            <CardHeader>
-              <CardTitle>Membership number</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                The household number this person is billed under. Every charge lands on the lead
-                member (the bill-payer); each person keeps their own card letter.
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xl font-bold tabular-nums">
-                  {String(billingRow.billing_accounts.member_no).padStart(5, "0")}
-                  {billingRow.letter}
-                </span>
-                {billingRow.billing_accounts.status !== "active" && (
-                  <Badge variant="muted">{billingRow.billing_accounts.status}</Badge>
-                )}
-                {billingRow.billing_accounts.lead_person_id === id ? (
-                  <Badge>Lead member · bill-payer</Badge>
-                ) : (
-                  <Link
-                    href={`/people/${billingRow.billing_accounts.lead_person_id}?tab=membership`}
-                    className="touch flex items-center text-sm font-medium underline underline-offset-2"
-                  >
-                    Billed to the lead member →
-                  </Link>
-                )}
-              </div>
-              <ul className="space-y-1 text-sm">
-                {(billingHousehold ?? []).map((member) => (
-                  <li key={member.person_id} className="flex items-center gap-2">
-                    <span className="font-mono text-xs tabular-nums text-muted-foreground">
-                      {String(billingRow.billing_accounts!.member_no).padStart(5, "0")}
-                      {member.letter}
-                    </span>
-                    {member.person_id === id ? (
-                      <span className="font-medium">
-                        {member.people ? `${member.people.first_name} ${member.people.last_name}` : "(unknown)"}
-                      </span>
-                    ) : (
-                      <Link
-                        href={`/people/${member.person_id}?tab=membership`}
-                        className="touch flex items-center font-medium underline underline-offset-2"
-                      >
-                        {member.people ? `${member.people.first_name} ${member.people.last_name}` : "(unknown)"}
-                      </Link>
-                    )}
-                    {member.person_id === billingRow.billing_accounts!.lead_person_id && (
-                      <Badge variant="muted">lead</Badge>
-                    )}
-                  </li>
-                ))}
-              </ul>
-              <Link
-                href={`/finance/charges?account=${billingRow.account_id}`}
-                className="text-xs text-muted-foreground underline"
-              >
-                Charges &amp; payments for this membership (Finance)
-              </Link>
-            </CardContent>
-          </Card>
-        )}
-
-        <Card id="person-membership" className="scroll-mt-20">
-          <CardHeader>
-            <CardTitle>Club membership</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              Individual or family is worked out by the database from the number of{" "}
-              <strong>players</strong> on the membership in that season — a live squad place, or a
-              registration still pending or approved. Two or more players is a family; a parent who
-              is on the record as the lead contact is not a player.
-            </p>
-          </CardHeader>
-          <CardContent>
-            {!clubMembership || !clubMembership.kind ? (
-              <p className="text-sm text-muted-foreground">
-                No club membership recorded for this person.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant={membershipKindVariant(clubMembership.kind)}>
-                    {membershipKindLabel(clubMembership.kind)}
-                  </Badge>
-                  <span className="text-sm text-muted-foreground">
-                    {clubMembership.season_name ?? "Season unknown"}
-                    {clubMembership.season_is_current ? " · current season" : ""}
-                    {clubMembership.is_primary ? " · lead contact" : ""}
-                  </span>
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  {membershipKindHint(clubMembership.kind)}{" "}
-                  {membershipPeopleSummary(familyOthers.length)}
-                </p>
-                {familyOthers.length > 0 && (
-                  <ul className="space-y-1 text-sm">
-                    {familyOthers.map((row) => (
-                      <li key={row.person_id} className="flex flex-wrap items-center gap-2">
-                        <Link
-                          href={`/people/${row.person_id}`}
-                          className="touch flex items-center font-medium underline underline-offset-2"
-                        >
-                          {nameOf(familyNames, row.person_id)}
-                        </Link>
-                        <Badge variant={row.is_primary ? "default" : "muted"}>
-                          {row.is_primary ? "Lead contact" : "On the membership"}
-                        </Badge>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-            {/* Adam, 2026-08-26: "The family tree should appear in here."
-                Drawn by the same component /family-linking uses, from
-                family_tree_for() rather than my_family_tree() — the
-                caller-scoped one would draw the ADMINISTRATOR'S own family
-                under this person's name. */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Family</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {name} at the top, the children the club has them down as a guardian for, each of
-                  those children&apos;s other guardians, and the adults connected to their account.
-                  Ages are shown as an age group rather than a date of birth.
-                </p>
-              </CardHeader>
-              <CardContent>
-                {treeError ? (
-                  <p className="text-sm text-destructive">{treeError.message}</p>
-                ) : isFamilyTreeEmpty(familyTree) ? (
-                  <p className="text-sm text-muted-foreground">
-                    The club has nobody linked to {name}.
-                  </p>
-                ) : (
-                  <FamilyTreeView
-                    tree={familyTree}
-                    photoUrls={treePhotoUrls}
-                    hrefFor={(node) =>
-                      node.personId === person.id ? null : `/people/${node.personId}`
-                    }
-                  />
-                )}
-              </CardContent>
-            </Card>
-
-            <Card id="person-money" className="scroll-mt-20">
-              <CardHeader>
-                <CardTitle>Subscriptions</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  What {name} is signed up to pay, and anything they pay on somebody else&apos;s
-                  behalf.
-                </p>
-              </CardHeader>
-              <CardContent>
-                {subscriptions.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">
-                    No subscription on record for {name}.
-                  </p>
-                ) : (
-                  <ul className="divide-y">
-                    {subscriptions.map((row) => {
-                      const plan = row.subscription_plans as {
-                        name: string;
-                        billing: string | null;
-                        amount_pence: number | null;
-                      } | null;
-                      const forSomeoneElse = row.person_id !== person.id;
-                      return (
-                        <li key={row.id} className="flex flex-wrap items-baseline gap-2 py-2 text-sm">
-                          <span className="font-medium">{plan?.name ?? "Subscription"}</span>
-                          <Badge variant={row.ended_at ? "muted" : "success"}>
-                            {row.ended_at ? "Ended" : (row.status ?? "Active")}
-                          </Badge>
-                          {forSomeoneElse && row.person_id && (
-                            <span className="text-xs text-muted-foreground">
-                              for {nameOf(subjectNames, row.person_id)}
-                            </span>
-                          )}
-                          <span className="ml-auto tabular-nums">
-                            {row.amount_due_pence != null
-                              ? formatCurrency(row.amount_due_pence)
-                              : "—"}
-                            {plan?.billing ? ` · ${plan.billing}` : ""}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Payments</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  Against the subscriptions above. Room hire is paid on the booking, not here.
-                </p>
-              </CardHeader>
-              <CardContent>
-                {payments.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Nothing paid yet.</p>
-                ) : (
-                  <ul className="divide-y">
-                    {payments.map((row) => (
-                      <li key={row.id} className="flex flex-wrap items-baseline gap-2 py-2 text-sm">
-                        <span className="tabular-nums">{formatCurrency(row.amount_pence)}</span>
-                        {row.refunded_pence ? (
-                          <Badge variant="warning">
-                            {formatCurrency(row.refunded_pence)} refunded
-                          </Badge>
-                        ) : null}
-                        <span className="text-xs text-muted-foreground">
-                          {row.method ?? "—"}
-                          {row.kind ? ` · ${row.kind}` : ""}
-                        </span>
-                        <span className="ml-auto text-xs text-muted-foreground">
-                          {row.paid_at ? formatStamp(row.paid_at) : "Not paid"}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </CardContent>
-            </Card>
-          </>
-        )}
       </div>
+
+      <PersonSheet
+        personName={name}
+        mode={mode}
+        closeHref={closeHref}
+        modeHrefs={modeHrefs}
+        canEdit={canEdit}
+        canAdmin={canAdmin}
+        isSuperUser={superUser}
+      >
+        {mode ? <PersonSheetBody mode={mode} data={sheetData} /> : null}
+      </PersonSheet>
     </>
   );
 }
