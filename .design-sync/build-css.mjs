@@ -14,7 +14,12 @@ const outDir = join(web, ".ds-css");
 mkdirSync(outDir, { recursive: true });
 
 const bin = join(root, "node_modules", ".bin", process.platform === "win32" ? "tailwindcss.CMD" : "tailwindcss");
-execFileSync(bin, ["-c", "tailwind.config.ts", "-i", "src/app/globals.css", "-o", join(outDir, "tailwind.css"), "--content", "./src/**/*.{ts,tsx},../../.design-sync/previews/*.tsx"], {
+// The content list is what Tailwind keeps. A utility used only by a preview or
+// only by a render-check fixture is in no app source file, so leaving either
+// path out does not error — the class is simply dropped and the shot comes back
+// unstyled, which reads as "the component is broken". Add the folder here when
+// a new kind of file starts using classes.
+execFileSync(bin, ["-c", "tailwind.config.ts", "-i", "src/app/globals.css", "-o", join(outDir, "tailwind.css"), "--content", "./src/**/*.{ts,tsx},../../.design-sync/previews/*.tsx,../../tools/render/fixtures/*.tsx"], {
   cwd: web,
   stdio: "inherit",
   shell: process.platform === "win32",
