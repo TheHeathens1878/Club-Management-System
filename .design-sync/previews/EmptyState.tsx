@@ -4,7 +4,7 @@ import { CalendarDays, Inbox } from "lucide-react";
 export const WithAction = () => (
   <div style={{ maxWidth: 420 }}>
     <EmptyState
-      icon={CalendarDays}
+      icon={<CalendarDays className="h-5 w-5" aria-hidden />}
       title="No fixtures yet"
       action={{ href: "/matches/new", label: "Add a fixture" }}
     >
@@ -15,7 +15,7 @@ export const WithAction = () => (
 
 export const Plain = () => (
   <div style={{ maxWidth: 420 }}>
-    <EmptyState icon={Inbox} title="Nothing waiting for you">
+    <EmptyState icon={<Inbox className="h-5 w-5" aria-hidden />} title="Nothing waiting for you">
       Registrations you need to review will show up here.
     </EmptyState>
   </div>

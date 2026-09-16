@@ -38,3 +38,39 @@ export { NounTabs } from "../apps/web/src/components/noun-tabs";
 export type { NounTab, NounTabGroup } from "../apps/web/src/components/noun-tabs";
 export { FilterRail } from "../apps/web/src/components/filter-rail";
 export type { RailGroup, RailOption } from "../apps/web/src/components/filter-rail";
+
+// Overlays (P8.0c). Both own Escape, the press outside and focus; nothing in
+// the app should hand-roll a `fixed inset-0` again.
+export { Sheet } from "../apps/web/src/components/ui/sheet";
+export type { SheetSide } from "../apps/web/src/components/ui/sheet";
+export { Popover } from "../apps/web/src/components/ui/popover";
+
+// The small shapes (P8.0d) — the pieces the winter-training block page was
+// built from, lifted out of its folder so every screen composes instead of
+// copy-pastes. Every `icon` here is a RENDERED element, never a component.
+export { IconTile, iconTileVariants } from "../apps/web/src/components/ui/icon-tile";
+export type { IconTileProps } from "../apps/web/src/components/ui/icon-tile";
+export { FoldCard } from "../apps/web/src/components/ui/fold-card";
+export { ToggleChip, ToggleChipLink, toggleChipVariants } from "../apps/web/src/components/ui/toggle-chip";
+export type { ToggleChipProps, ToggleChipLinkProps } from "../apps/web/src/components/ui/toggle-chip";
+export { ChipStrip } from "../apps/web/src/components/ui/chip-strip";
+export { Callout, calloutVariants } from "../apps/web/src/components/ui/callout";
+export type { CalloutProps } from "../apps/web/src/components/ui/callout";
+export { StatTile, StatRow } from "../apps/web/src/components/ui/stat-tile";
+export type { StatTone } from "../apps/web/src/components/ui/stat-tile";
+export { ActionBar } from "../apps/web/src/components/ui/action-bar";
+export type { ActionBarProps, ActionBarTone } from "../apps/web/src/components/ui/action-bar";
+export { Eyebrow } from "../apps/web/src/components/ui/eyebrow";
+export { Skeleton } from "../apps/web/src/components/ui/skeleton";
+export { Kbd } from "../apps/web/src/components/ui/kbd";
+
+// Lists (P8.0e). `Table` and its five parts are the app's table class strings,
+// named; `DataListFrame` is the list that draws itself twice — a dense table at
+// `lg`, a stack of cards on a phone — from one filtered set of rows. All six
+// table exports are here because that is what every screen imports, but only
+// Table, THead and TBody are pinned in config.json: the extractor reads a
+// SCREAMING-CASE export as an enum, so TH, TR and TD can never be entries of
+// their own and are documented inside Table's props instead.
+export { Table, THead, TH, TBody, TR, TD } from "../apps/web/src/components/ui/table";
+export { DataListFrame } from "../apps/web/src/components/ui/data-list";
+export type { DataColumn, DataItem, DataListFrameProps } from "../apps/web/src/components/ui/data-list";
