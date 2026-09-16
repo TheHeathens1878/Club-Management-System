@@ -10,7 +10,7 @@
  * page and a `"use client"` grid can both call it.
  */
 
-import type { DeskRow } from "@/app/(app)/matches/matches-desk";
+import type { DeskRow } from "@/app/(app)/matches/types";
 import { compareAgeGroups } from "@/lib/age-group";
 
 /**

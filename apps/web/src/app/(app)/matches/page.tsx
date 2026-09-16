@@ -3,24 +3,32 @@ import { redirect } from "next/navigation";
 import { CalendarPlus, LandPlot } from "lucide-react";
 
 import { PageHeader } from "@/components/page-header";
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ChipStrip } from "@/components/ui/chip-strip";
+import { ToggleChipLink } from "@/components/ui/toggle-chip";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { resolveRoleView } from "@/lib/role-view";
+import { isMemberView, resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { instantToLocal } from "@/lib/booking-time";
+import { matchesNextAction, type FixtureGridTeam } from "@/lib/fixture-grid";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
-import { AddFixtureForm } from "./add-fixture-form";
-import { MatchesDesk, type DeskRow } from "./matches-desk";
+import { AddFixtureButton } from "./add-fixture-form";
+import { MatchesGrid } from "./matches-grid";
+import type { DeskRow } from "./types";
 
 /**
  * Matches — the Matchday desk (spec §2). A coach sees their teams, an admin
  * the club; `matchday_fixtures()` does the scoping. Three period tabs, the
- * needs-attention chips, and every row links into the fixture's event where
- * the RSVP, remind and detail already live.
+ * needs-attention chips, and every fixture opens where it sits.
+ *
+ * The desk is a GRID (P8.4): a row per team in age order, a column per day in
+ * the window, and every fixture on its own card. Everything the page reads —
+ * the RPC, its `p_scope`, the central-venue rule below — is unchanged; what
+ * changed is that the rows are handed to `lib/fixture-grid.ts`, which is pure,
+ * and drawn as a timetable instead of a table. The table itself survives for
+ * the printer, where a grid is no use.
  */
 
 export const dynamic = "force-dynamic";
@@ -94,8 +102,15 @@ export default async function MatchesPage({
           : true;
 
   // The desk's whole management strip is one gate, page-wide (the teams-page
-  // lesson): the admin capability, worn as the admin hat.
-  const canManage = capabilities.isClubAdmin && (view === "admin" || view === null);
+  // lesson): the admin capability, worn as a hat that RUNS the club.
+  //
+  // `isMemberView()` is the rule (`lib/role-view.ts`) — a capability admits
+  // you, the hat is what puts it away. The coach hat is named beside it
+  // because on THIS screen it is deliberately a member-ish hat: an admin
+  // looking at the fixture desk as a coach is meant to see what a coach sees
+  // (Adam, 2026-08-25), and the same rule governs the Allocate door below.
+  const runningTheClub = !isMemberView(view) && view !== "coach";
+  const canManage = capabilities.isClubAdmin && runningTheClub;
 
   const supabase = await createClient();
   const adminDb = createAdminClient();
@@ -151,19 +166,6 @@ export default async function MatchesPage({
       ? capabilities.staffTeams.map(({ id, name }) => ({ id, name }))
       : [];
 
-  const needPitch = fixtures.filter(
-    (row) =>
-      period !== "results" &&
-      row.status === "scheduled" &&
-      row.is_home &&
-      !row.allocated &&
-      playsCentrally(row.team_id) === "",
-  ).length;
-  const shortOfPlayers = fixtures.filter(
-    (row) =>
-      period !== "results" && row.status === "scheduled" && row.squad > 0 && row.accepted * 2 < row.squad,
-  ).length;
-
   // The desk's rows, formatted once on the server: London wall clock for the
   // display strings, the ISO day for the date-range filter, and one honest
   // word for the pitch column.
@@ -209,6 +211,47 @@ export default async function MatchesPage({
     };
   });
 
+  // The grid's rows: the teams that actually have a fixture in this window,
+  // with their age group (the row order) and their central venue (a home game
+  // there is never waiting for one of our pitches).
+  const teamsInView = new Set(deskRows.map((row) => row.teamId));
+  const gridTeams: FixtureGridTeam[] = (teamVenuesResult.data ?? [])
+    .filter((team) => teamsInView.has(team.id))
+    .map((team) => ({
+      id: team.id,
+      name: team.name,
+      ageGroup: team.age_group,
+      centralVenueName: team.central_venue_name,
+    }));
+
+  // The column headings, formatted once here: "Sat 6 Sept". Doing it in the
+  // grid would mean Intl running in both Node and the browser, and the two
+  // abbreviate September differently.
+  const dayLabel = new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "Europe/London",
+  });
+  const dayLabels: Record<string, string> = {};
+  for (const row of deskRows) {
+    // Midday keeps the label on the right side of midnight whatever the offset.
+    dayLabels[row.dateIso] ??= dayLabel.format(new Date(`${row.dateIso}T12:00:00Z`));
+  }
+
+  // What the desk is waiting for, and the one button that does it. Results are
+  // history — nothing there needs a pitch or a squad — so that tab gets a
+  // count instead of a demand, which is the rule the attention chips followed.
+  const nextAction =
+    period === "results"
+      ? {
+          label: "Add a fixture",
+          detail: `${deskRows.length} match${deskRows.length === 1 ? "" : "es"} in the last four weeks`,
+          action: "add" as const,
+          fixtureIds: [],
+        }
+      : matchesNextAction(deskRows);
+
   const tabs: { key: Period; label: string }[] = [
     { key: "weekend", label: "This weekend" },
     { key: "month", label: "Next 4 weeks" },
@@ -229,14 +272,13 @@ export default async function MatchesPage({
                 they are wearing the admin hat. An admin looking at the
                 fixture desk as a coach sees what a coach sees; the same rule
                 the team page and the event page follow. */}
-            {(capabilities.isCommittee || capabilities.isClubAdmin) &&
-            (view === "admin" || view === null) ? (
+            {(capabilities.isCommittee || capabilities.isClubAdmin) && runningTheClub ? (
               <Link href="/pitches" className={buttonVariants({ variant: "outline", size: "sm" })}>
                 <LandPlot className="h-4 w-4" /> Allocate pitches
               </Link>
             ) : null}
             {addableTeams.length > 0 ? (
-              <AddFixtureForm teams={addableTeams} />
+              <AddFixtureButton teams={addableTeams} />
             ) : (
               <Link href="/teams" className={buttonVariants({ size: "sm" })}>
                 <CalendarPlus className="h-4 w-4" /> Add a fixture
@@ -247,71 +289,37 @@ export default async function MatchesPage({
       />
 
       <div className="space-y-4 p-4 lg:p-6">
-        {/* The period chips scroll in their own strip on a phone rather than
-            wrapping into three lines; on lg they are the row they always were
-            (`lg:contents` puts them straight back into the parent flex). */}
-        <div className="space-y-2 lg:flex lg:flex-wrap lg:items-center lg:gap-2 lg:space-y-0">
-          <div className="-mx-4 flex gap-2 overflow-x-auto whitespace-nowrap px-4 lg:mx-0 lg:contents lg:overflow-visible lg:px-0">
-            {tabs.map((tab) => (
-              <Link
-                key={tab.key}
-                href={`/matches?period=${tab.key}${wholeClub ? "&scope=club" : ""}`}
-                className={
-                  "inline-flex min-h-[44px] flex-none items-center rounded-full px-4 py-1.5 text-xs font-semibold transition lg:min-h-0 lg:px-3 " +
-                  (period === tab.key
-                    ? "bg-foreground text-background"
-                    : "bg-secondary text-secondary-foreground hover:bg-secondary/70")
-                }
-              >
-                {tab.label}
-              </Link>
-            ))}
-          </div>
-          {/* A narrowed desk (a coach's, or a team pick) can widen to the
-              whole club and back (Adam, 2026-09-04). An admin hat already
-              sees everything, so it gets no switch. On a phone the pair has
-              its own row rather than trailing off the end of the period strip
-              where nobody scrolls to (Adam, 2026-09-08: "being able to see
-              the whole club" on the mobile view). */}
-          <div className="flex gap-2 lg:contents">
-            {narrowedByDefault && (
-              <>
-                <Link
-                  href={`/matches?period=${period}`}
-                  className={
-                    "inline-flex min-h-[44px] flex-none items-center rounded-full border px-4 py-1.5 text-xs font-semibold transition lg:min-h-0 lg:px-3 " +
-                    (!wholeClub
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-input text-muted-foreground hover:bg-secondary")
-                  }
-                >
-                  My teams
-                </Link>
-                <Link
-                  href={`/matches?period=${period}&scope=club`}
-                  className={
-                    "inline-flex min-h-[44px] flex-none items-center rounded-full border px-4 py-1.5 text-xs font-semibold transition lg:min-h-0 lg:px-3 " +
-                    (wholeClub
-                      ? "border-foreground bg-foreground text-background"
-                      : "border-input text-muted-foreground hover:bg-secondary")
-                  }
-                >
-                  Whole club
-                </Link>
-              </>
-            )}
-          </div>
-          <span className="flex flex-wrap items-center gap-2 lg:ml-auto">
-            {needPitch > 0 ? (
-              <Badge variant="destructive">
-                {needPitch} need{needPitch === 1 ? "s" : ""} a pitch
-              </Badge>
-            ) : null}
-            {shortOfPlayers > 0 ? (
-              <Badge variant="warning">{shortOfPlayers} short of replies</Badge>
-            ) : null}
-          </span>
-        </div>
+        {/* The window, and who it is about. Both stay in the URL, which is
+            what makes a desk shareable and the back button undo a tap. The
+            strip scrolls on a phone rather than wrapping into three lines.
+            A narrowed desk (a coach's, or a team pick) can widen to the whole
+            club and back (Adam, 2026-09-04); an admin hat already sees
+            everything, so it gets no switch.
+            What used to be two attention chips on this row is the status
+            bar's own sentence now — "8 to place, 3 short of replies" — said
+            once, beside the button that acts on it. */}
+        <ChipStrip className="gap-2">
+          {tabs.map((tab) => (
+            <ToggleChipLink
+              key={tab.key}
+              href={`/matches?period=${tab.key}${wholeClub ? "&scope=club" : ""}`}
+              active={period === tab.key}
+            >
+              {tab.label}
+            </ToggleChipLink>
+          ))}
+          {narrowedByDefault ? (
+            <>
+              <span className="mx-1 h-5 w-px flex-none bg-border" aria-hidden />
+              <ToggleChipLink href={`/matches?period=${period}`} active={!wholeClub}>
+                My teams
+              </ToggleChipLink>
+              <ToggleChipLink href={`/matches?period=${period}&scope=club`} active={wholeClub}>
+                Whole club
+              </ToggleChipLink>
+            </>
+          ) : null}
+        </ChipStrip>
 
         {/* The PDF says what it is: on paper the chips above are gone. */}
         <p className="hidden text-sm text-muted-foreground print:block">
@@ -332,24 +340,16 @@ export default async function MatchesPage({
           </p>
         ) : null}
 
-        {fixtures.length === 0 ? (
-          <Card>
-            <CardContent className="p-0">
-              <p className="px-5 py-8 text-center text-sm text-muted-foreground">
-                {period === "results"
-                  ? "No fixtures played in the last four weeks."
-                  : "Nothing on the fixture list for this window."}
-              </p>
-            </CardContent>
-          </Card>
-        ) : (
-          <MatchesDesk
-            rows={deskRows}
-            canManage={canManage}
-            pitches={canManage ? pitchRows.map(({ id, name }) => ({ id, name })) : []}
-            focusFirst={period !== "results"}
-          />
-        )}
+        <MatchesGrid
+          rows={deskRows}
+          teams={gridTeams}
+          dayLabels={dayLabels}
+          nextAction={nextAction}
+          canManage={canManage}
+          pitches={canManage ? pitchRows.map(({ id, name }) => ({ id, name })) : []}
+          addableTeams={addableTeams}
+          focusFirst={period !== "results"}
+        />
 
         <p className="text-xs text-muted-foreground">
           Replies come from the accept/decline on each fixture&apos;s event — open a fixture to
