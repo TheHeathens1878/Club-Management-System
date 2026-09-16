@@ -30,7 +30,7 @@ export function DeleteBookingButton({ id, label }: { id: string; label?: string 
         size="sm"
         onClick={handleClick}
         disabled={busy}
-        className="min-h-[44px] w-full gap-2 lg:min-h-0 lg:w-auto"
+        className="touch w-full gap-2 lg:w-auto"
       >
         <Trash2 className="h-4 w-4" />
         {busy ? "Deleting…" : label}

@@ -218,14 +218,14 @@ export function StatusForm({
                 confirmed within three days, one follow-up goes out automatically.
               </p>
               <div className="flex gap-2">
-                <Button size="sm" onClick={runQuote} disabled={loading !== null} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
+                <Button size="sm" onClick={runQuote} disabled={loading !== null} className="touch flex-1 lg:flex-none">
                   {loading === "quote" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send quote"}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="min-h-[44px] lg:min-h-0">Back</Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="touch">Back</Button>
               </div>
             </div>
           ) : (
-            <Button size="sm" variant="outline" onClick={() => setConfirm("quote")} disabled={loading !== null} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
+            <Button size="sm" variant="outline" onClick={() => setConfirm("quote")} disabled={loading !== null} className="touch w-full lg:w-auto">
               {currentStatus === "quoted"
                 ? "Re-quote"
                 : currentStatus === "cancelled"
@@ -249,16 +249,16 @@ export function StatusForm({
                 {currentTotalPence ? ", repeating the quoted price" : ""}. Nothing is held.
               </p>
               <div className="flex gap-2">
-                <Button size="sm" onClick={runChaser} disabled={loading !== null} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
+                <Button size="sm" onClick={runChaser} disabled={loading !== null} className="touch flex-1 lg:flex-none">
                   {loading === "chaser" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send chaser"}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="min-h-[44px] lg:min-h-0">Back</Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="touch">Back</Button>
               </div>
             </div>
           ) : confirm === "final" ? (
-            <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-3">
-              <p className="text-sm font-medium text-amber-900">Final offer — half off the room hire</p>
-              <p className="text-xs text-amber-900">
+            <div className="space-y-2 rounded-md border border-warning/25 bg-warning-tint p-3">
+              <p className="text-sm font-medium text-warning">Final offer — half off the room hire</p>
+              <p className="text-xs text-warning">
                 The quote is amended to the new price before the email goes, the booking becomes a quote,
                 and this cannot be sent twice.
                 {currentTotalPence
@@ -266,19 +266,19 @@ export function StatusForm({
                   : " Send a quote first: there is no price to halve."}
               </p>
               <div className="flex gap-2">
-                <Button size="sm" onClick={runFinalChaser} disabled={loading !== null || !currentTotalPence} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
+                <Button size="sm" onClick={runFinalChaser} disabled={loading !== null || !currentTotalPence} className="touch flex-1 lg:flex-none">
                   {loading === "final" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Amend quote & send final offer"}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="min-h-[44px] lg:min-h-0">Back</Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="touch">Back</Button>
               </div>
             </div>
           ) : (
             <div className="flex flex-col gap-2 lg:flex-row lg:flex-wrap">
-              <Button size="sm" variant="outline" onClick={() => setConfirm("chaser")} disabled={loading !== null} className="min-h-[44px] lg:min-h-0">
+              <Button size="sm" variant="outline" onClick={() => setConfirm("chaser")} disabled={loading !== null} className="touch">
                 {chaserSentAt ? "Send chaser again" : "Send chaser"}
               </Button>
               {!finalChaserSentAt && (
-                <Button size="sm" variant="outline" onClick={() => setConfirm("final")} disabled={loading !== null} className="min-h-[44px] border-amber-400 text-amber-900 hover:bg-amber-50 lg:min-h-0">
+                <Button size="sm" variant="outline" onClick={() => setConfirm("final")} disabled={loading !== null} className="touch border-warning/40 text-warning hover:bg-warning-tint">
                   Final offer: half off room hire
                 </Button>
               )}
@@ -305,7 +305,7 @@ export function StatusForm({
       {(currentStatus === "enquiry" || currentStatus === "quoted" || currentStatus === "pending" || needsTerms) && (
         <>
           {needsTerms && confirm !== "confirm" && (
-            <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            <div className="flex items-start gap-2 rounded-lg border border-warning/25 bg-warning-tint p-3 text-sm text-warning">
               <AlertTriangle className="mt-0.5 h-4 w-4 flex-shrink-0" />
               <p>
                 This booking is confirmed but has no payment terms — no deposit deadline, so no
@@ -388,14 +388,14 @@ export function StatusForm({
                 before — and a portal link to pay each.
               </p>
               <div className="flex gap-2">
-                <Button size="sm" onClick={runConfirm} disabled={loading !== null} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
+                <Button size="sm" onClick={runConfirm} disabled={loading !== null} className="touch flex-1 lg:flex-none">
                   {loading === "confirm" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Confirm & notify booker"}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="min-h-[44px] lg:min-h-0">Back</Button>
+                <Button size="sm" variant="outline" onClick={() => setConfirm(null)} className="touch">Back</Button>
               </div>
             </div>
           ) : (
-            <Button size="sm" onClick={() => setConfirm("confirm")} disabled={loading !== null} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
+            <Button size="sm" onClick={() => setConfirm("confirm")} disabled={loading !== null} className="touch w-full lg:w-auto">
               Confirm booking
             </Button>
           )}
@@ -431,11 +431,11 @@ export function StatusForm({
                   variant="destructive"
                   onClick={runCancel}
                   disabled={loading !== null || !cancelReason.trim()}
-                  className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none"
+                  className="touch flex-1 lg:flex-none"
                 >
                   {loading === "cancel" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send cancellation"}
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => { setConfirm(null); setCancelReason(""); }} className="min-h-[44px] lg:min-h-0">
+                <Button size="sm" variant="outline" onClick={() => { setConfirm(null); setCancelReason(""); }} className="touch">
                   Back
                 </Button>
               </div>
@@ -446,7 +446,7 @@ export function StatusForm({
               variant="outline"
               onClick={() => setConfirm("cancel")}
               disabled={loading !== null}
-              className="min-h-[44px] w-full border-destructive/40 text-destructive hover:bg-destructive/10 lg:min-h-0 lg:w-auto"
+              className="touch w-full border-destructive/40 text-destructive hover:bg-destructive/10 lg:w-auto"
             >
               Cancel booking
             </Button>

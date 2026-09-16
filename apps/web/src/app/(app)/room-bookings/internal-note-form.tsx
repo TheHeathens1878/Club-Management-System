@@ -43,7 +43,7 @@ export function InternalNoteForm({
         className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
       />
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {saved && <p className="text-sm text-emerald-600">Notes saved.</p>}
+      {saved && <p className="text-sm text-success">Notes saved.</p>}
       <button
         type="submit"
         disabled={loading}

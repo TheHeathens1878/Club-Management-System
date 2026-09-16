@@ -11,6 +11,8 @@ import { addPayment, deletePayment } from "./actions";
 export type PaymentRow = {
   id: string;
   amount_pence: number;
+  /** Netted off the amount everywhere money is counted (20260912…, refunds net). */
+  refunded_pence?: number | null;
   paid_at: string;
   method: string | null;
   reference: string | null;
@@ -69,7 +71,6 @@ export function PaymentsPanel({
   // the security deposit is held for the event, not paid for the room.
   const paidPence = sumHirePaid(payments);
   const securityPaid = sumSecurityPaid(payments);
-  const outstanding = Math.max(0, totalPence - paidPence);
   const depositSatisfied = depositPence > 0 && paidPence >= depositPence;
 
   function handleAdd(e: React.FormEvent) {
@@ -108,38 +109,26 @@ export function PaymentsPanel({
 
   return (
     <div className="space-y-4">
-      {/* Totals */}
-      <div className="grid grid-cols-3 gap-2 text-center">
-        <div className="rounded-md border bg-muted/30 p-2">
-          <p className="text-xs text-muted-foreground">Total</p>
-          <p className="text-sm font-semibold">{totalPence > 0 ? formatCurrency(totalPence) : "—"}</p>
-        </div>
-        <div className="rounded-md border bg-muted/30 p-2">
-          <p className="text-xs text-muted-foreground">Paid</p>
-          <p className="text-sm font-semibold text-green-700">{formatCurrency(paidPence)}</p>
-        </div>
-        <div className="rounded-md border bg-muted/30 p-2">
-          <p className="text-xs text-muted-foreground">Outstanding</p>
-          <p className="text-sm font-semibold">{totalPence > 0 ? formatCurrency(outstanding) : "—"}</p>
-        </div>
-      </div>
-
+      {/* Total / Paid / Outstanding used to be repeated here in a third type
+          size. The facts band above the page says it once now (P8.1), so this
+          panel only says the two things the band does not: how the deposit
+          stands, and how much security deposit is held. */}
       {depositPence > 0 && (
         <p className="text-xs text-muted-foreground">
           Non-refundable deposit {formatCurrency(depositPence)} —{" "}
           {depositSatisfied
-            ? <span className="text-green-700 font-medium">paid</span>
-            : <span className="text-amber-700 font-medium">outstanding</span>}
+            ? <span className="font-medium text-success">paid</span>
+            : <span className="font-medium text-warning">outstanding</span>}
         </p>
       )}
       {securityDepositPence > 0 && (
         <p className="text-xs text-muted-foreground">
           Refundable security deposit {formatCurrency(securityDepositPence)} —{" "}
           {securityPaid >= securityDepositPence
-            ? <span className="text-green-700 font-medium">held</span>
+            ? <span className="font-medium text-success">held</span>
             : securityPaid > 0
-              ? <span className="text-amber-700 font-medium">{formatCurrency(securityPaid)} held, {formatCurrency(securityDepositPence - securityPaid)} to come</span>
-              : <span className="text-amber-700 font-medium">not yet paid</span>}
+              ? <span className="font-medium text-warning">{formatCurrency(securityPaid)} held, {formatCurrency(securityDepositPence - securityPaid)} to come</span>
+              : <span className="font-medium text-warning">not yet paid</span>}
           {" "}(due with the balance; not counted in the total)
         </p>
       )}
@@ -153,13 +142,13 @@ export function PaymentsPanel({
                 <div className="flex items-center gap-2">
                   <span className="font-semibold">{formatCurrency(p.amount_pence)}</span>
                   {p.purpose ? (
-                    <span className={"rounded px-1.5 py-0.5 text-[10px] font-medium " + (p.purpose === "security_deposit" ? "bg-amber-100 text-amber-900" : "bg-secondary text-muted-foreground")}>
+                    <span className={"rounded px-1.5 py-0.5 text-2xs font-medium " + (p.purpose === "security_deposit" ? "bg-warning-tint text-warning" : "bg-secondary text-muted-foreground")}>
                       {PURPOSE_LABELS[p.purpose] ?? p.purpose}
                     </span>
                   ) : null}
                   <span className="text-muted-foreground">{METHOD_LABELS[p.method ?? ""] ?? p.method ?? "—"}</span>
                   {p.source === "sumup" && (
-                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">SumUp</span>
+                    <span className="rounded bg-primary/10 px-1.5 py-0.5 text-2xs font-medium text-primary">SumUp</span>
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -173,7 +162,7 @@ export function PaymentsPanel({
                 <button
                   onClick={() => handleDelete(p.id)}
                   disabled={isPending}
-                  className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:text-destructive lg:min-h-0 lg:min-w-0"
+                  className="touch flex min-w-[44px] shrink-0 items-center justify-center rounded-md p-1 text-muted-foreground transition-colors hover:text-destructive lg:min-w-0"
                   title="Delete payment"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -191,7 +180,14 @@ export function PaymentsPanel({
         <form onSubmit={handleAdd} className="space-y-3 rounded-lg border bg-muted/20 p-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground uppercase">Amount (£)</label>
+              <label className="text-xs font-medium text-muted-foreground uppercase">
+                Amount (£)
+                {/* What is still owed, beside the box it is typed into — the
+                    figure the desk would otherwise scroll up for. */}
+                {totalPence > 0
+                  ? ` — ${formatCurrency(Math.max(0, totalPence - paidPence))} outstanding`
+                  : ""}
+              </label>
               <Input
                 type="number" min="0" step="0.01"
                 value={amount}
@@ -211,7 +207,7 @@ export function PaymentsPanel({
               <select
                 value={method}
                 onChange={(e) => setMethod(e.target.value)}
-                className="h-10 min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
+                className="touch h-10 w-full rounded-md border bg-background px-3 py-2 text-sm"
               >
                 <option value="cash">Cash</option>
                 <option value="card">Card</option>
@@ -230,7 +226,7 @@ export function PaymentsPanel({
               <select
                 value={purpose}
                 onChange={(e) => setPurpose(e.target.value as "hire" | PaymentPurpose)}
-                className="h-10 min-h-[44px] w-full rounded-md border bg-background px-3 py-2 text-sm lg:min-h-0"
+                className="touch h-10 w-full rounded-md border bg-background px-3 py-2 text-sm"
               >
                 <option value="hire">Room hire (deposit or balance)</option>
                 <option value="deposit">Deposit</option>
@@ -243,16 +239,16 @@ export function PaymentsPanel({
               <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" />
             </div>
           </div>
-          <label className="flex min-h-[44px] items-center gap-2 text-sm lg:min-h-0">
+          <label className="touch flex items-center gap-2 text-sm">
             <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
             Email the booker a payment confirmation
           </label>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
-            <Button type="submit" size="sm" disabled={isPending} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
+            <Button type="submit" size="sm" disabled={isPending} className="touch flex-1 lg:flex-none">
               {isPending ? "Saving…" : "Record payment"}
             </Button>
-            <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(false); setError(null); }} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
+            <Button type="button" size="sm" variant="outline" onClick={() => { setAdding(false); setError(null); }} className="touch flex-1 lg:flex-none">
               Cancel
             </Button>
           </div>
@@ -260,7 +256,7 @@ export function PaymentsPanel({
       ) : (
         <>
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="min-h-[44px] w-full gap-1.5 lg:min-h-0 lg:w-auto">
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)} className="touch w-full gap-1.5 lg:w-auto">
             <Plus className="h-4 w-4" /> Record payment
           </Button>
         </>

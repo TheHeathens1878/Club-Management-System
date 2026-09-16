@@ -1,31 +1,29 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { extrasSummary } from "@/lib/booking-extras";
-import { SecurityDepositCard } from "../security-deposit-card";
-import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth";
-import { DeleteBookingButton } from "../delete-booking-button";
-import { EditBookingForm } from "../edit-booking-form";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { splitContactName } from "@/lib/person-name";
-import { getSettings } from "@/lib/settings";
+
 import { PageHeader } from "@/components/page-header";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { formatCurrency } from "@/lib/utils";
-import { bookingDepositPence, depositRuleFrom, depositRuleLabel, sumSecurityPaid } from "@/lib/hire-terms";
-import { StatusForm } from "../status-form";
-import { PaymentsPanel } from "../payments-panel";
-import { ReplyForm } from "../reply-form";
-import { addInternalNote } from "../actions";
+import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth";
+import { bookingMoney, bookingNeedsTerms, bookingNextAction } from "@/lib/booking-next-action";
 import { formatBookingDate, instantsToLocalWindow } from "@/lib/booking-time";
 import { FUNCTION_ROOM } from "@/lib/booking-types";
+import { bookingDepositPence, depositRuleFrom, depositRuleLabel, sumSecurityPaid } from "@/lib/hire-terms";
+import { splitContactName } from "@/lib/person-name";
+import { getSettings } from "@/lib/settings";
+import { createAdminClient } from "@/lib/supabase/admin";
 
-function statusVariant(s: string): "success" | "muted" | "destructive" | "default" {
-  if (s === "confirmed") return "success";
-  if (s === "cancelled") return "destructive";
-  return "default";
-}
+import { addInternalNote } from "../actions";
+import { BookingRecord, type BookingClashLine, type BookingEmailLine } from "./record";
 
+export const metadata = { title: "Booking" };
+
+/**
+ * `/room-bookings/[id]` — one hire (P8.1).
+ *
+ * The page reads; `record.tsx` draws. Everything below is the reads this page
+ * has always made, unchanged: the booking through the admin client (the desk
+ * sees every booking, whoever made it), the two email logs merged into one,
+ * and the `booking_conflicts()` RPC that says whether somebody else has this
+ * night. The only new call is `bookingNextAction()`, which is pure.
+ */
 export default async function RoomBookingDetailPage({
   params,
 }: {
@@ -65,7 +63,7 @@ export default async function RoomBookingDetailPage({
       .order("created_at", { ascending: false }),
   ]);
 
-  const emailLog = [
+  const emailLog: BookingEmailLine[] = [
     ...(outbound ?? []).map((m) => ({
       id: `o-${m.id}`,
       at: m.sent_at ?? m.created_at,
@@ -85,7 +83,7 @@ export default async function RoomBookingDetailPage({
   if (!booking) notFound();
 
   // The period is timestamptz; this page has always shown London wall clock.
-  const window = instantsToLocalWindow(booking.starts_at, booking.ends_at);
+  const when = instantsToLocalWindow(booking.starts_at, booking.ends_at);
 
   // Does a row that is NOT holding the room sit on top of one that is? An
   // enquiry or a quote about a taken night is allowed (asking is free), but
@@ -100,7 +98,7 @@ export default async function RoomBookingDetailPage({
     p_ends_at: booking.ends_at,
     p_exclude_booking_id: id,
   });
-  const clashes = (clashRows ?? []).map((row) => {
+  const clashes: BookingClashLine[] = (clashRows ?? []).map((row) => {
     const w = instantsToLocalWindow(row.starts_at, row.ends_at);
     return {
       id: row.id,
@@ -116,20 +114,26 @@ export default async function RoomBookingDetailPage({
     paid_at: p.paid_at,
     method: p.method,
     reference: p.reference,
+    refunded_pence: p.refunded_pence,
     source: p.source,
     authorised_by_name: p.authorised_by_name,
     note: p.note,
     purpose: p.purpose,
   }));
-  const totalPence = booking.total_pence ?? 0;
-  const depositPence = booking.deposit_pence ?? 0;
+
   const settings = await getSettings();
   const memberDiscountDefault = Number(settings.room_member_discount_pence) || 0;
   // The deposit rule (Adam, 2026-09-15): half the total cost, capped — worked
   // out for this booking, and offered to the desk as the prefill.
   const depositRule = depositRuleFrom(settings);
-  const defaultDepositPence = bookingDepositPence(booking, depositRule);
   const securityPaidPence = sumSecurityPaid(paymentRows ?? []);
+
+  // The one thing this hire needs next, in the desk's voice. The same call in
+  // the booker's voice is what `/portal` shows the hirer (P8.9), so the two
+  // sides of the counter cannot disagree about where a booking stands.
+  const nextActionInput = { booking, payments, clashes };
+  const money = bookingMoney(nextActionInput);
+  const nextAction = bookingNextAction(nextActionInput, { voice: "desk", now: new Date() });
 
   const roomName = (rooms ?? []).find((r) => r.id === booking.resource_id)?.name ?? "Unknown room";
   const canEdit = isStaff(session.profile?.role);
@@ -146,398 +150,50 @@ export default async function RoomBookingDetailPage({
     <>
       <PageHeader
         title={`Booking #${shortRef}`}
-        subtitle={`${roomName} · ${formatBookingDate(window.date)}`}
+        subtitle={`${roomName} · ${formatBookingDate(when.date)}`}
+        back={{ href: "/room-bookings", label: "Room bookings" }}
       />
 
-      <div className="grid gap-4 p-4 lg:grid-cols-3 lg:gap-6 lg:p-6">
-        <div className="space-y-4 lg:col-span-2 lg:space-y-6">
-          {clashes.length > 0 && (
-            <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-4 text-sm">
-              <p className="font-semibold text-destructive">
-                {holdsRoom
-                  ? "Another booking overlaps this one on the same room"
-                  : booking.status === "cancelled"
-                    ? "This slot has since been taken — it cannot be re-quoted"
-                    : "This slot is already taken — this request is not holding the room"}
-              </p>
-              <ul className="mt-2 space-y-1">
-                {clashes.map((c) => (
-                  <li key={c.id}>
-                    <Link href={`/room-bookings/${c.id}`} className="text-primary hover:underline">
-                      {c.who}
-                    </Link>{" "}
-                    <span className="text-muted-foreground">
-                      · {c.when} · {c.status}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-              {!holdsRoom && booking.status !== "cancelled" && (
-                <p className="mt-2 text-muted-foreground">
-                  Confirming this one will be refused while the other stands. Reply with alternatives, or cancel the other booking first.
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* Booking details */}
-          <Card>
-            <CardHeader className="flex-row items-center justify-between gap-2">
-              <CardTitle>Booking details</CardTitle>
-              <div className="flex gap-2">
-                <Badge variant={statusVariant(booking.status)} className="capitalize">
-                  {booking.status}
-                </Badge>
-                {(booking.status === "enquiry" || booking.status === "quoted") && (
-                  <Badge variant="muted">Not holding the room</Badge>
-                )}
-                {booking.payment_status === "paid" && (
-                  <Badge variant="success">Paid</Badge>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
-              <Detail label="Room" value={roomName} />
-              <Detail label="Date" value={formatBookingDate(window.date)} />
-              <Detail label="Time" value={`${window.startTime} – ${window.endTime}`} />
-              {booking.occasion && <Detail label="Occasion" value={booking.occasion} />}
-              {booking.estimated_guests !== null && <Detail label="Estimated guests" value={String(booking.estimated_guests)} />}
-              {(booking.member_discount_pence ?? 0) > 0 && (
-                <Detail label="Member discount" value={`−${formatCurrency(booking.member_discount_pence ?? 0)}`} />
-              )}
-              {booking.member_checked_at && (
-                <Detail
-                  label="Membership checked"
-                  value={`${booking.member_checked_by_email ?? "staff"}, ${new Date(booking.member_checked_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/London" })}`}
-                />
-              )}
-              {booking.team_name && <Detail label="Plays for" value={booking.team_name} />}
-              {booking.child_name && (
-                <Detail
-                  label="Club child"
-                  value={[booking.child_name, booking.child_team].filter(Boolean).join(' — ')}
-                />
-              )}
-              {booking.is_member && (
-                <Detail
-                  label="Club member"
-                  value={[booking.membership_type, booking.member_number].filter(Boolean).join(" · ") || "Yes"}
-                />
-              )}
-              {extrasSummary(booking.selected_extras) && (
-                <Detail label="Extras" value={extrasSummary(booking.selected_extras)} />
-              )}
-              {booking.security_deposit_pence !== null && booking.security_deposit_pence > 0 && (
-                <Detail
-                  label="Security deposit"
-                  value={`${formatCurrency(booking.security_deposit_pence)} (refundable — 18th birthday)`}
-                />
-              )}
-              {booking.quote_accepted_at && (
-                <Detail
-                  label="Quote accepted"
-                  value={`By the booker in their portal, ${new Date(booking.quote_accepted_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}`}
-                />
-              )}
-              {booking.total_pence !== null && (
-                <Detail
-                  label={
-                    booking.final_chaser_discount_pence
-                      ? "Quoted price (final offer)"
-                      : booking.status === "enquiry" || booking.status === "pending"
-                        ? "Estimated price"
-                        : booking.status === "confirmed"
-                          ? "Agreed price"
-                          : "Quoted price"
-                  }
-                  value={
-                    booking.final_chaser_discount_pence
-                      ? `${formatCurrency(booking.total_pence)} — was ${formatCurrency(booking.total_pence + booking.final_chaser_discount_pence)}`
-                      : formatCurrency(booking.total_pence)
-                  }
-                />
-              )}
-            </CardContent>
-          </Card>
-
-          {/* The cost, in its parts (Adam, 2026-09-11: "the cost details need
-              to pull through to enquiries"). The public form records the room
-              hire and the extras separately; older rows have only a total. */}
-          {(booking.total_pence !== null || booking.base_hire_pence > 0 || booking.extras_total_pence > 0) && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {booking.status === "enquiry" || booking.status === "pending"
-                    ? "Estimated cost"
-                    : booking.status === "confirmed"
-                      ? "Agreed cost"
-                      : "Quoted cost"}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="space-y-1.5 text-sm">
-                  {booking.base_hire_pence > 0 && (
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-muted-foreground">Room hire ({window.startTime}–{window.endTime})</dt>
-                      <dd className="tabular-nums">{formatCurrency(booking.base_hire_pence)}</dd>
-                    </div>
-                  )}
-                  {booking.extras_total_pence > 0 && (
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-muted-foreground">
-                        Extras{extrasSummary(booking.selected_extras) ? ` — ${extrasSummary(booking.selected_extras)}` : ""}
-                      </dt>
-                      <dd className="tabular-nums">{formatCurrency(booking.extras_total_pence)}</dd>
-                    </div>
-                  )}
-                  {(booking.member_discount_pence ?? 0) > 0 && (
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-muted-foreground">Member discount</dt>
-                      <dd className="tabular-nums">−{formatCurrency(booking.member_discount_pence ?? 0)}</dd>
-                    </div>
-                  )}
-                  {(booking.final_chaser_discount_pence ?? 0) > 0 && (
-                    <div className="flex justify-between gap-4">
-                      <dt className="text-muted-foreground">Final offer — half off room hire</dt>
-                      <dd className="tabular-nums">−{formatCurrency(booking.final_chaser_discount_pence ?? 0)}</dd>
-                    </div>
-                  )}
-                  <div className="flex justify-between gap-4 border-t pt-1.5 font-semibold">
-                    <dt>Total</dt>
-                    <dd className="tabular-nums">{booking.total_pence !== null ? formatCurrency(booking.total_pence) : "—"}</dd>
-                  </div>
-                  {(booking.security_deposit_pence ?? 0) > 0 && (
-                    <div className="flex justify-between gap-4 text-muted-foreground">
-                      <dt>Refundable security deposit (18th birthday), on top</dt>
-                      <dd className="tabular-nums">{formatCurrency(booking.security_deposit_pence ?? 0)}</dd>
-                    </div>
-                  )}
-                </dl>
-                {(booking.status === "enquiry" || booking.status === "pending") && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    The public form&apos;s estimate at the room&apos;s current prices. Send a quote to put the club&apos;s price on it; a member discount is applied at confirmation once the claim is checked.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Email the booker (Adam, 2026-09-11): a plain reply from the desk,
-              logged and audited. Any booking with an address, not only an
-              enquiry. */}
-          {booking.kind !== "block" && booking.booker_email.includes("@") && (
-            <Card>
-              <CardHeader><CardTitle>Email the booker</CardTitle></CardHeader>
-              <CardContent>
-                <ReplyForm
-                  bookingId={id}
-                  bookerEmail={booking.booker_email}
-                  defaultSubject={`Re: your ${booking.status === "enquiry" ? "enquiry" : "booking"} — ${roomName}, ${formatBookingDate(window.date)}`}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Booker details */}
-          <Card>
-            <CardHeader><CardTitle>Booker</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
-              {booking.booker_first_name
-                ? <>
-                    <Detail label="First name" value={booking.booker_first_name} />
-                    <Detail label="Last name" value={booking.booker_last_name ?? "—"} />
-                  </>
-                : <Detail label="Name" value={booking.booker_name} />
-              }
-              <Detail label="Email" value={booking.booker_email} />
-              <Detail label="Mobile" value={booking.booker_phone ?? "—"} />
-            </CardContent>
-          </Card>
-
-          {/* Edit booking */}
-          {canEditBooking && (
-            <Card>
-              <CardHeader><CardTitle>Edit booking</CardTitle></CardHeader>
-              <CardContent>
-                <EditBookingForm
-                  bookingId={id}
-                  rooms={rooms ?? []}
-                  initial={{
-                    resource_id: booking.resource_id,
-                    date: window.date,
-                    start_time: window.startTime,
-                    end_time: window.endTime,
-                    booker_first_name: booking.booker_first_name ?? splitContactName(booking.booker_name).firstName,
-                    booker_last_name: booking.booker_last_name ?? splitContactName(booking.booker_name).lastName,
-                    booker_email: booking.booker_email,
-                    booker_phone: booking.booker_phone ?? "",
-                    occasion: booking.occasion ?? "",
-                    estimated_guests: booking.estimated_guests === null ? "" : String(booking.estimated_guests),
-                    notes: booking.notes ?? "",
-                  }}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Notes from booker (read-only when not editing) */}
-          {!canEditBooking && booking.notes && (
-            <Card>
-              <CardHeader><CardTitle>Notes from booker</CardTitle></CardHeader>
-              <CardContent>
-                <p className="text-sm whitespace-pre-wrap">{booking.notes}</p>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Internal notes */}
-          <Card>
-            <CardHeader><CardTitle>Internal notes <span className="text-sm font-normal text-muted-foreground">(staff only)</span></CardTitle></CardHeader>
-            <CardContent>
-              <form action={saveNote} className="space-y-3">
-                <textarea
-                  name="internal_notes"
-                  rows={4}
-                  defaultValue={booking.internal_notes ?? ""}
-                  placeholder="Add notes visible only to staff…"
-                  className="w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-y"
-                />
-                <button
-                  type="submit"
-                  className="min-h-[44px] w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 lg:min-h-0 lg:w-auto"
-                >
-                  Save notes
-                </button>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-4 lg:space-y-6">
-          {/* Status / actions */}
-          {canEdit && (
-            <Card>
-              <CardHeader><CardTitle>Actions</CardTitle></CardHeader>
-              <CardContent>
-                <StatusForm
-                  defaultMemberDiscountPence={booking.is_member ? memberDiscountDefault : null}
-                  bookingId={id}
-                  currentStatus={booking.status}
-                  isStaff={canEdit}
-                  defaultDepositPence={defaultDepositPence}
-                  currentTotalPence={totalPence || null}
-                  currentDepositPence={depositPence || null}
-                  currentSecurityDepositPence={booking.security_deposit_pence}
-                  depositRuleLabel={depositRuleLabel(depositRule)}
-                  depositRule={depositRule}
-                  defaultSecurityDepositPence={Number(settings.security_deposit_default_pence) || 0}
-                  isMember={booking.is_member}
-                  memberLabel={[booking.membership_type, booking.member_number].filter(Boolean).join(" · ") || null}
-                  needsTerms={booking.status === "confirmed" && !booking.deposit_due_date && booking.starts_at > new Date().toISOString()}
-                  chaserSentAt={booking.chaser_sent_at}
-                  finalChaserSentAt={booking.final_chaser_sent_at}
-                  finalChaserDiscountPence={booking.final_chaser_discount_pence}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Payments */}
-          <Card>
-            <CardHeader className="flex-row items-center justify-between gap-2">
-              <CardTitle>Payments</CardTitle>
-              <Badge variant={booking.payment_status === "paid" ? "success" : "muted"} className="capitalize">
-                {booking.payment_status.replace("_", " ")}
-              </Badge>
-            </CardHeader>
-            <CardContent>
-              <PaymentsPanel
-                bookingId={id}
-                payments={payments}
-                totalPence={totalPence}
-                depositPence={depositPence}
-                securityDepositPence={booking.security_deposit_pence ?? 0}
-                canDelete={canDelete}
-              />
-            </CardContent>
-          </Card>
-
-          {(booking.security_deposit_pence ?? 0) > 0 && (
-            <Card>
-              <CardHeader><CardTitle>Security deposit</CardTitle></CardHeader>
-              <CardContent>
-                <SecurityDepositCard
-                  bookingId={id}
-                  amountPence={booking.security_deposit_pence ?? 0}
-                  paidPence={securityPaidPence}
-                  returnedAt={booking.security_deposit_returned_at}
-                  returnedMethod={booking.security_deposit_returned_method}
-                  returnedNote={booking.security_deposit_returned_note}
-                />
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader><CardTitle>Emails sent</CardTitle></CardHeader>
-            <CardContent>
-              {emailLog.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Nothing sent about this booking yet.</p>
-              ) : (
-                <ul className="space-y-2 text-sm">
-                  {emailLog.slice(0, 12).map((m) => (
-                    <li key={m.id} className="border-b pb-2 last:border-b-0 last:pb-0">
-                      <p className="font-medium leading-snug">{m.subject}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {m.at
-                          ? new Date(m.at).toLocaleString("en-GB", {
-                              day: "numeric", month: "short", year: "numeric",
-                              hour: "2-digit", minute: "2-digit",
-                            })
-                          : "—"}{" "}
-                        · {m.to} · {m.via}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Meta */}
-          <Card>
-            <CardHeader><CardTitle>Request info</CardTitle></CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Received</span>
-                <span>{new Date(booking.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric" })}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Reference</span>
-                <span className="font-mono text-xs">#{shortRef}</span>
-              </div>
-            </CardContent>
-          </Card>
-
-          {canDelete && (
-            <Card className="border-destructive/30">
-              <CardHeader><CardTitle className="text-destructive text-sm">Danger zone</CardTitle></CardHeader>
-              <CardContent>
-                <DeleteBookingButton id={id} label="Delete this booking" />
-              </CardContent>
-            </Card>
-          )}
-        </div>
-      </div>
+      <BookingRecord
+        bookingId={id}
+        shortRef={shortRef}
+        roomName={roomName}
+        when={when}
+        booking={booking}
+        money={money}
+        nextAction={nextAction}
+        clashes={clashes}
+        holdsRoom={holdsRoom}
+        payments={payments}
+        securityPaidPence={securityPaidPence}
+        emailLog={emailLog}
+        rooms={rooms ?? []}
+        editInitial={{
+          resource_id: booking.resource_id,
+          date: when.date,
+          start_time: when.startTime,
+          end_time: when.endTime,
+          booker_first_name: booking.booker_first_name ?? splitContactName(booking.booker_name).firstName,
+          booker_last_name: booking.booker_last_name ?? splitContactName(booking.booker_name).lastName,
+          booker_email: booking.booker_email,
+          booker_phone: booking.booker_phone ?? "",
+          occasion: booking.occasion ?? "",
+          estimated_guests: booking.estimated_guests === null ? "" : String(booking.estimated_guests),
+          notes: booking.notes ?? "",
+        }}
+        terms={{
+          defaultDepositPence: bookingDepositPence(booking, depositRule),
+          defaultSecurityDepositPence: Number(settings.security_deposit_default_pence) || 0,
+          defaultMemberDiscountPence: booking.is_member ? memberDiscountDefault : null,
+          depositRuleLabel: depositRuleLabel(depositRule),
+          depositRule,
+          needsTerms: bookingNeedsTerms(booking),
+        }}
+        canEdit={canEdit}
+        canDelete={canDelete}
+        canEditBooking={canEditBooking}
+        saveNote={saveNote}
+      />
     </>
-  );
-}
-
-function Detail({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs uppercase text-muted-foreground">{label}</p>
-      <p className="mt-0.5 font-medium">{value || "—"}</p>
-    </div>
   );
 }

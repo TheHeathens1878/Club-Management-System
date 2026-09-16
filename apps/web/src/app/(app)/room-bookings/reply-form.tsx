@@ -54,6 +54,7 @@ export function ReplyForm({
         <Label htmlFor="reply-subject">Subject</Label>
         <Input
           id="reply-subject"
+          className="touch"
           value={subject}
           onChange={(e) => { setSubject(e.target.value); setSent(false); }}
           required
@@ -72,8 +73,8 @@ export function ReplyForm({
         />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      {sent && <p className="text-sm text-emerald-600">Sent — it is in the email log below.</p>}
-      <Button type="submit" disabled={loading || !message.trim() || !subject.trim()} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
+      {sent && <p className="text-sm text-success">Sent — it is in the email log below.</p>}
+      <Button type="submit" disabled={loading || !message.trim() || !subject.trim()} className="touch w-full lg:w-auto">
         {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         Send email
       </Button>
