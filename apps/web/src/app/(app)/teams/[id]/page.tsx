@@ -1,17 +1,12 @@
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 
-import { contextHref } from "@/lib/destinations";
 import { ChevronLeft, Wrench } from "lucide-react";
 
 import { getSessionProfile, isCommittee } from "@/lib/auth";
-import { signPeoplePhotos } from "@/lib/avatars";
-import { emergencyContactLine, type EmergencyContact } from "@/lib/emergency-contacts";
-import { loadEmergencyContacts } from "@/lib/emergency-contacts-server";
 import { getCapabilities, getStoredRoleView } from "@/lib/capabilities";
 import { nameOf, resolveNames } from "@/lib/person";
 import { isMemberView, resolveRoleView } from "@/lib/role-view";
-import { personLabel } from "@/lib/people-display";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -23,34 +18,25 @@ import { bookingHeadcounts, fixtureHeadcounts, teamPlayerIds } from "@/lib/event
 import type { Headcount } from "@/lib/headcount";
 import type { PitchBookingItem } from "@/lib/pitch-booking";
 
-import { FullTimePanel, type ClubSeasonView, type FullTimeLinkView } from "./fulltime-panel";
-import { ManualImportPanel, type ImportRunView } from "./import-panel";
-import {
-  MembersPanel,
-  type MemberRow,
-  type PendingRow,
-  type SquadAvailability,
-  type SquadLeave,
-  type SquadSubs,
-} from "./members-panel";
-import { MatchDayPanel, type MatchDayPitch } from "./matchday-panel";
-import { AllocateAllPanel } from "./allocate-all-panel";
+import { type FullTimeLinkView } from "./fulltime-panel";
+import { type MatchDayPitch } from "./matchday-panel";
 import { TeamPitchBookings } from "./pitch-bookings-card";
-import { RecruitingPanel } from "./recruiting-panel";
 import { FixturesTable, type TeamFixture } from "./fixtures-list";
 import { ManageMatchesPanel } from "../../matches/manage-matches-panel";
 import { fixtureHref, lineupHref } from "./fixtures-shared";
 import { BoardPanel, type BoardPost } from "./board-panel";
 import { TeamTabs, type TeamTab, type TeamTabKey } from "./team-tabs";
-import { TrainingDayCard } from "./training-day-card";
+import { EMPTY_SETTINGS, SettingsTab, loadSettingsTab, type SettingsTabData } from "./settings-tab";
+import { EMPTY_SQUAD, loadSquadTab, type SquadTabData } from "./squad-data";
+import { SquadTab } from "./squad-tab";
+import { squadSheetModeFrom, type SquadSheetMode } from "./squad-sheet-modes";
+import { SubsTab, loadSubsTab, type SubsRow } from "./subs-tab";
 import { formatBookingDateShort } from "@/lib/booking-time";
 import { faFormatFor } from "@/lib/fa-formats";
-import { fixtureDayLabel, fixtureWhenLabel, type AvailabilityStatus } from "@/lib/squad-cards";
 
 // The team's name would mean re-reading `teams` in `generateMetadata`, a query
 // this page already makes for itself; a tab is not worth a second one.
 export const metadata = { title: "Team" };
-import { setTeamActive } from "../actions";
 import { loadThread } from "../../messages/[id]/thread-data";
 import { ThreadPanel } from "../../messages/[id]/thread-panel";
 import { googleMapsUrl } from "../../events/shared";
@@ -59,9 +45,6 @@ import { googleMapsUrl } from "../../events/shared";
 const UPCOMING_LIMIT = 20;
 /** Next pitch bookings shown on the Bookings tab (gap 3). */
 const PITCH_BOOKING_LIMIT = 10;
-/** Enough import history to see a pattern without becoming a log viewer. */
-const RUN_LIMIT = 10;
-
 /**
  * One string literal, not a concatenation: supabase-js infers the row type
  * from the select text, and only a literal carries that type.
@@ -69,33 +52,18 @@ const RUN_LIMIT = 10;
 const FIXTURE_SELECT =
   "id,booking_id,kickoff_at,no_longer_published_at,is_home,opponent,competition,status,venue_text,allocation_conflict,seasons(name),resources!fixtures_venue_resource_id_fkey(name,address)";
 
-/** The payload `migrate_neon()` queues for a held-back membership. */
-function pendingMembershipPayload(payload: unknown): {
-  teamId: string | null;
-  role: string | null;
-  displayName: string | null;
-} {
-  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-    return { teamId: null, role: null, displayName: null };
-  }
-  const record = payload as Record<string, unknown>;
-  const read = (key: string): string | null =>
-    typeof record[key] === "string" ? (record[key] as string) : null;
-  return { teamId: read("team_id"), role: read("role"), displayName: read("display_name") };
-}
-
 export default async function TeamPage({
   params,
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ tab?: string }>;
+  searchParams: Promise<{ tab?: string; sheet?: string | string[]; person?: string }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
 
   const { id } = await params;
-  const { tab: requestedTab } = await searchParams;
+  const { tab: requestedTab, sheet: rawSheet, person: rawPerson } = await searchParams;
 
   // --------------------------------------------------------------------
   // Who may be here. Committee sign-ins run the teams (and hold club_admin
@@ -139,12 +107,17 @@ export default async function TeamPage({
   // the header — answers to the hat as well. Being on the committee is what
   // ADMITS you to it; wearing a member's hat is what puts it away.
   const committeeTools = committee && !memberView;
+  // The hat you wear to RUN something rather than to belong to something.
+  // This was written out longhand here as `view === "admin" || view === null`;
+  // it is the named helper now, the same sentence `/matches` writes (P8.4),
+  // so the rule lives in one place rather than being remembered screen by
+  // screen. The coach carve-out is deliberate and is Adam's (2026-08-25).
+  const adminHat = !isMemberView(view) && view !== "coach";
   // Adam, 2026-08-25: "make sure coaches cannot assign pitches". Allocation
   // — the season in one go, and the team's home-pitch defaults the allocator
   // starts from — is the club admin's, and only while wearing the admin hat.
   // The RPCs behind it are club_admin-only already; this is the screen agreeing.
-  const allocationTools =
-    (committee || capabilities.isClubAdmin) && (view === "admin" || view === null);
+  const allocationTools = (committee || capabilities.isClubAdmin) && adminHat;
 
   const admin = createAdminClient();
   const nowIso = new Date().toISOString();
@@ -229,6 +202,24 @@ export default async function TeamPage({
     ? (requested as TeamTabKey)
     : "matchday";
 
+  /**
+   * The Squad tab's panel is a URL (P8.7a): `?tab=squad&sheet=details&person=`.
+   * The mode is addressed rather than held in state, so a half-typed shirt
+   * number survives a refresh, the exact panel can be sent to a colleague, and
+   * a server action re-rendering the page underneath does not slam it shut.
+   * `?tab=` keeps its place in front, so every existing team link is untouched.
+   */
+  const squadSheet: SquadSheetMode | null = squadSheetModeFrom(rawSheet);
+  const squadPerson = typeof rawPerson === "string" && rawPerson ? rawPerson : null;
+  const sheetHref = (mode: SquadSheetMode | null, personId?: string | null): string => {
+    const query = new URLSearchParams({ tab: "squad" });
+    if (mode && personId) {
+      query.set("sheet", mode);
+      query.set("person", personId);
+    }
+    return `/teams/${id}?${query.toString()}`;
+  };
+
   // --------------------------------------------------------------------
   // Chat / Notice board — the team's own conversation rooms (P5.3), found
   // AS THE CALLER: the participant policies decide whether there is a room
@@ -287,26 +278,15 @@ export default async function TeamPage({
   let bookingCounts: Record<string, Headcount> = {};
 
   // --------------------------------------------------------------------
-  // Members — the season's roster and the held-back imports.
+  // Squad — the season's roster and the held-back imports, read in
+  // `squad-data.ts` (P8.7a) with every query and every comment it had.
   //
-  // The roster is read through the caller's own client, so `team_memberships`
-  // RLS decides: `_admin_read` for a club_admin or the safeguarding lead,
-  // `_staff_read` for this team's own child-facing staff. Editing is offered
-  // only to a club_admin, which is who `_admin_insert` / `_admin_update`
-  // accept — and if the app ever got that wrong, the policy would still
-  // refuse and the refusal is what the panel shows.
-  //
-  // NO DATE OF BIRTH IS READ HERE. `is_minor()` is SECURITY DEFINER and
-  // returns a boolean, which is all a roster needs; the date itself lives on
-  // the person's record behind /people.
+  // The roster is the coach's and the club's screen. Adam, 2026-08-25:
+  // "parents should not see emergency contacts in the Squad page" — so the
+  // tab follows the hat, not just the capability. A coach who is also a
+  // parent, looking at the team as a parent, gets the team's life and not
+  // its management, and `?tab=squad` typed by hand lands on Overview.
   // --------------------------------------------------------------------
-  let members: MemberRow[] = [];
-  let pending: PendingRow[] = [];
-  let squadLeave: SquadLeave = { canRequest: false, pendingMembershipIds: [] };
-  // The two extra columns on a squad card. Both stay null unless the reader is
-  // entitled to the whole answer — see where they are filled in below.
-  let squadAvailability: SquadAvailability | null = null;
-  let squadSubs: SquadSubs | null = null;
   // One answer for the whole page, hat included. This used to be a `let`
   // filled in ONLY by the Squad tab's branch — so the rename field on
   // Settings and the bulk match panel on Match day, both gated on it, never
@@ -314,206 +294,25 @@ export default async function TeamPage({
   // for club admin"). `my_capabilities()` already answered, so this costs no
   // extra round trip.
   const clubAdmin = capabilities.isClubAdmin && !memberView;
-  let memberSeason: { id: string; name: string } | null = null;
-
-  // The roster is the coach's and the club's screen. Adam, 2026-08-25:
-  // "parents should not see emergency contacts in the Squad page" — so the
-  // tab follows the hat, not just the capability. A coach who is also a
-  // parent, looking at the team as a parent, gets the team's life and not
-  // its management, and `?tab=squad` typed by hand lands on Overview.
+  let squad: SquadTabData = EMPTY_SQUAD;
   if (tab === "squad" && staffTools) {
-    const [seasonsResult, pendingResult] = await Promise.all([
-      userClient.from("seasons").select("id,name,is_current").order("starts_on", {
-        ascending: false,
-      }),
-      // Imported memberships the SG-0 gate is holding back.
-      // `neon_import_pending` RLS is club_admin (or the subject), so a
-      // non-admin simply gets no rows — which is the right answer, not a
-      // failure to handle. The team lives inside the payload
-      // `migrate_neon()` wrote, so the filter is applied here.
-      userClient
-        .from("neon_import_pending")
-        .select(
-          "id,person_id,payload,created_at,attempts,last_error,people(first_name,last_name,preferred_name)",
-        )
-        .eq("kind", "membership")
-        .is("applied_at", null)
-        .order("created_at"),
-    ]);
-
-    const currentSeason = (seasonsResult.data ?? []).find((season) => season.is_current) ?? null;
-    memberSeason = currentSeason ? { id: currentSeason.id, name: currentSeason.name } : null;
-
-    if (currentSeason) {
-      const { data: membershipRows } = await userClient
-        .from("team_memberships")
-        .select("id,person_id,role,shirt_number,joined_at")
-        .eq("team_id", id)
-        .eq("season_id", currentSeason.id)
-        .is("left_at", null)
-        .order("role")
-        .order("joined_at");
-
-      // `resolveNames` reads `people` first and falls back to `display_name()`,
-      // the SECURITY DEFINER helper that names a member to their team's staff.
-      // A coach reading this roster holds no `people` grant, so without the
-      // fallback every row would read "Club member".
-      const memberNames = await resolveNames((membershipRows ?? []).map((row) => row.person_id));
-
-      // The face by the name (Adam, 2026-08-25). Read through the CALLER'S own
-      // client, which is the whole safety of `signPeoplePhotos`: it only ever
-      // signs `photo_path` values that reader's own `people` row returned.
-      // `people_staff_read` (20260825280000, Adam: "I want coaches to … see
-      // photos") lets a team's staff read their live members' rows, so a
-      // coach sees faces too; anyone the policies refuse gets initials.
-      const memberPersonIds = Array.from(
-        new Set((membershipRows ?? []).map((row) => row.person_id)),
-      );
-      const { data: memberPhotoRows } = memberPersonIds.length
-        ? await userClient.from("people").select("id,photo_path").in("id", memberPersonIds)
-        : { data: [] as { id: string; photo_path: string | null }[] };
-      const memberPhotos = await signPeoplePhotos(memberPhotoRows ?? []);
-      // Emergency contacts beside the player (Adam, 2026-08-25: "I want
-      // coaches to read emergency contacts"): `emergency_contacts_staff_read`
-      // admits the team's staff for its live members; a reader the policies
-      // refuse simply gets none. Read through the caller's client.
-      // Only the people who ring them: the emergency contacts are drawn on
-      // the roster for staff wearing the coach or admin hat and nobody else.
-      const memberContacts = staffTools
-        ? await loadEmergencyContacts(memberPersonIds)
-        : new Map<string, EmergencyContact[]>();
-
-      // What is already on the administrator's desk, so a row that has been
-      // reported says so instead of offering the button again.
-      // `_staff_read` / `_admin_read` decide; a reader entitled to neither
-      // simply gets nothing back, which reads as "no requests".
-      const { data: leaveRows } = await userClient
-        .from("team_membership_leave_requests")
-        .select("team_membership_id")
-        .eq("team_id", id)
-        .eq("status", "pending");
-      squadLeave = {
-        // A club administrator has End, which does it immediately; offering
-        // them the queue as well would only be a slower End.
-        canRequest: teamStaff === true && !clubAdmin,
-        pendingMembershipIds: (leaveRows ?? []).map((row) => row.team_membership_id),
-      };
-
-      members = await Promise.all(
-        (membershipRows ?? []).map(async (row) => {
-          const minor = await userClient.rpc("is_minor", { person_id: row.person_id });
-          return {
-            id: row.id,
-            personId: row.person_id,
-            name: nameOf(memberNames, row.person_id),
-            role: row.role,
-            shirtNumber: row.shirt_number,
-            joinedAt: row.joined_at,
-            isMinor: minor.data === true,
-            photoUrl: memberPhotos.get(row.person_id) ?? null,
-            emergencyContacts: (memberContacts.get(row.person_id) ?? []).map(emergencyContactLine),
-          } satisfies MemberRow;
-        }),
-      );
-
-      const squadPlayerIds = members
-        .filter((member) => member.role === "player")
-        .map((member) => member.personId);
-
-      // ----------------------------------------------------------------
-      // The card's "Saturday" row, and the line above the grid.
-      //
-      // Exactly what the Overview tab does: the next fixture, then the
-      // `availability` rows against it. STAFF AND ADMINISTRATORS ONLY —
-      // which the Squad tab already is (`staffTools` gates the tab and
-      // its render) — because a parent's client returns only their own
-      // household's availability rows, and a partial read shown as a squad
-      // status would lie.
-      // ----------------------------------------------------------------
-      if (staffTools && squadPlayerIds.length > 0) {
-        const { data: nextFixture } = await userClient
-          .from("fixtures")
-          .select("id,kickoff_at")
-          .eq("team_id", id)
-          .gte("kickoff_at", nowIso)
-          .order("kickoff_at")
-          .limit(1)
-          .maybeSingle();
-        if (nextFixture) {
-          const { data: availRows } = await userClient
-            .from("availability")
-            .select("person_id,status")
-            .eq("fixture_id", nextFixture.id);
-          // Everyone starts silent; an answer overwrites it. A player with no
-          // row has not replied, which is the thing worth chasing.
-          const statusByPerson: Record<string, AvailabilityStatus> = {};
-          for (const personId of squadPlayerIds) statusByPerson[personId] = null;
-          for (const row of availRows ?? []) {
-            if (row.person_id in statusByPerson) {
-              statusByPerson[row.person_id] = row.status as AvailabilityStatus;
-            }
-          }
-          squadAvailability = {
-            fixtureLabel: fixtureWhenLabel(nextFixture.kickoff_at),
-            dayLabel: fixtureDayLabel(nextFixture.kickoff_at),
-            statusByPerson,
-          };
-        }
-      }
-
-      // ----------------------------------------------------------------
-      // The card's "Subs" row — COMMITTEE ONLY, and the row is not rendered
-      // at all for anyone else (`subs` stays null). Same read as the Subs
-      // tab: the newest `subscriptions` row per player through the admin
-      // client, which is where money already lives on this page. No policy
-      // is widened; a reader who is not committee simply never asks.
-      // ----------------------------------------------------------------
-      if (committee && squadPlayerIds.length > 0) {
-        const { data: subRows } = await admin
-          .from("subscriptions")
-          .select("person_id,status,amount_due_pence,created_at")
-          .in("person_id", squadPlayerIds)
-          .order("created_at", { ascending: false });
-        const byPerson: Record<string, { status: string | null; amountDuePence: number | null }> =
-          {};
-        for (const row of subRows ?? []) {
-          // Newest first, so the first row seen per player is the current one.
-          if (!(row.person_id in byPerson)) {
-            byPerson[row.person_id] = {
-              status: row.status,
-              amountDuePence: row.amount_due_pence,
-            };
-          }
-        }
-        squadSubs = { byPerson };
-      }
-    }
-
-    pending = (pendingResult.data ?? [])
-      .map((row) => ({ row, parsed: pendingMembershipPayload(row.payload) }))
-      .filter((entry) => entry.parsed.teamId === id)
-      .map(({ row, parsed }) => ({
-        id: row.id,
-        personId: row.person_id,
-        personName: row.people ? personLabel(row.people) : "Club member",
-        role: parsed.role,
-        displayName: parsed.displayName,
-        createdAt: row.created_at,
-        attempts: row.attempts,
-        lastError: row.last_error,
-      }));
+    squad = await loadSquadTab({
+      userClient,
+      admin,
+      teamId: id,
+      nowIso,
+      staffTools,
+      committee,
+      clubAdmin,
+      teamStaff,
+    });
   }
 
   // --------------------------------------------------------------------
-  // Fixtures — the list everyone the page admits may read, plus the
-  // committee's Full-Time link and manual importer.
+  // Fixtures — the list everyone the page admits may read.
   // --------------------------------------------------------------------
   let fixtures: TeamFixture[] = [];
   let fixturesFailed = false;
-  let clubSeasons: ClubSeasonView[] = [];
-  let currentSeason: ClubSeasonView | null = null;
-  let defaultFtName = "";
-  let runs: ImportRunView[] = [];
 
   // Overview extras: the board's latest posts, the chat's tail and — for
   // staff — the next match's availability by name.
@@ -642,45 +441,19 @@ export default async function TeamPage({
 
   // --------------------------------------------------------------------
   // Settings — the committee's feed machinery: match day, the Full-Time
-  // link and the importer with its run history. Admin-only by tab guard,
-  // and every write still meets the same RLS as anywhere else.
+  // link and the importer with its run history, read in `settings-tab.tsx`
+  // (P8.7a). Admin-only by tab guard, and every write still meets the same
+  // RLS as anywhere else.
   // --------------------------------------------------------------------
+  let settings: SettingsTabData = EMPTY_SETTINGS;
   if (tab === "settings" && staffTools) {
-    const [seasonsResult, runRows, clubNameResult] = await Promise.all([
-      userClient
-        .from("seasons")
-        .select("id,name,is_current")
-        .order("starts_on", { ascending: false }),
-      admin
-        .from("fixture_import_runs")
-        .select("id,trigger,status,inserted,updated,unchanged,retired,kept_back,error,source_url,created_at")
-        .eq("team_id", id)
-        .order("created_at", { ascending: false })
-        .limit(RUN_LIMIT)
-        .then((result) => result.data ?? []),
-      admin.from("site_settings").select("value").eq("key", "fulltime_club_name").maybeSingle(),
-    ]);
-
-    defaultFtName = `${(clubNameResult.data?.value ?? "").trim() || "Ashton On Mersey FC"} ${team.name}`;
-    clubSeasons = (seasonsResult.data ?? []).map((season) => ({
-      id: season.id,
-      name: season.name,
-      is_current: season.is_current,
-    }));
-    currentSeason = clubSeasons.find((season) => season.is_current) ?? null;
-    runs = runRows.map((run) => ({
-      id: run.id,
-      trigger: run.trigger,
-      status: run.status,
-      inserted: run.inserted,
-      updated: run.updated,
-      unchanged: run.unchanged,
-      retired: run.retired,
-      keptBack: run.kept_back,
-      error: run.error,
-      source_url: run.source_url,
-      created_at: run.created_at,
-    }));
+    settings = await loadSettingsTab({
+      userClient,
+      admin,
+      teamId: id,
+      teamName: team.name,
+      nowIso,
+    });
   }
 
   // --------------------------------------------------------------------
@@ -704,72 +477,14 @@ export default async function TeamPage({
   }
 
   // --------------------------------------------------------------------
-  // Subs — committee only: each player's latest subscription, plainly. The
-  // club bills people, not teams, so this is a per-player read joined to the
+  // Subs — committee only: each player's latest subscription, read in
+  // `subs-tab.tsx` (P8.7a) with the same queries it always made. The club
+  // bills people, not teams, so this is a per-player read joined to the
   // roster; a squad with no subscriptions says so instead of pretending.
   // --------------------------------------------------------------------
-  type SubsRow = {
-    personId: string;
-    name: string;
-    planName: string | null;
-    status: string | null;
-    amountDuePence: number | null;
-    payerName: string | null;
-  };
   let subsRows: SubsRow[] = [];
   if (tab === "subs" && committeeTools) {
-    const { data: roster } = await admin
-      .from("team_memberships")
-      .select("person_id,people(first_name,last_name,preferred_name)")
-      .eq("team_id", id)
-      .is("left_at", null)
-      .eq("role", "player");
-    const playerRows = roster ?? [];
-    const playerIdList = Array.from(new Set(playerRows.map((row) => row.person_id)));
-    const { data: subs } = playerIdList.length
-      ? await admin
-          .from("subscriptions")
-          .select("person_id,status,amount_due_pence,payer_person_id,created_at,subscription_plans(name)")
-          .in("person_id", playerIdList)
-          .order("created_at", { ascending: false })
-      : { data: [] };
-    // Newest subscription per player is the one that speaks for them.
-    const latest = new Map<string, NonNullable<typeof subs>[number]>();
-    for (const row of subs ?? []) {
-      if (!latest.has(row.person_id)) latest.set(row.person_id, row);
-    }
-    const payerIds = Array.from(
-      new Set(
-        Array.from(latest.values())
-          .map((row) => row.payer_person_id)
-          .filter((value): value is string => !!value),
-      ),
-    );
-    const { data: payers } = payerIds.length
-      ? await admin.from("people").select("id,first_name,last_name,preferred_name").in("id", payerIds)
-      : { data: [] };
-    const payerName = new Map(
-      (payers ?? []).map((person) => [
-        person.id,
-        `${person.preferred_name || person.first_name} ${person.last_name}`.trim(),
-      ]),
-    );
-    subsRows = playerRows
-      .map((row) => {
-        const person = row.people;
-        const sub = latest.get(row.person_id) ?? null;
-        return {
-          personId: row.person_id,
-          name: person
-            ? `${person.preferred_name || person.first_name} ${person.last_name}`.trim()
-            : "Club member",
-          planName: sub?.subscription_plans?.name ?? null,
-          status: sub?.status ?? null,
-          amountDuePence: sub?.amount_due_pence ?? null,
-          payerName: sub?.payer_person_id ? payerName.get(sub.payer_person_id) ?? null : null,
-        };
-      })
-      .sort((a, b) => a.name.localeCompare(b.name, "en-GB"));
+    subsRows = await loadSubsTab({ admin, teamId: id });
   }
 
   // Overview derivations: the FA rules strip, the availability tallies, and
@@ -984,93 +699,18 @@ export default async function TeamPage({
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Squad — the roster, the paperwork, and what recruitment says     */}
+        {/* Squad — the roster as one list, a member opened over it          */}
         {/* ---------------------------------------------------------------- */}
         {tab === "squad" && staffTools && (
-          <div className="space-y-6">
-            <Card>
-              <CardHeader>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <CardTitle>Squad</CardTitle>
-                  {/* Club administrators only, wearing the admin hat (Adam,
-                      2026-08-25: "coaches should not be able to download photos
-                      in a zip file") — and the route refuses anyone else again. */}
-                  {clubAdmin && (view === "admin" || view === null) && (
-                    <span className="flex flex-wrap gap-2">
-                      {/* The Portal's spreadsheet for this one team (Adam,
-                          2026-09-06: "also be available to admins in the
-                          squad section of the team page"). */}
-                      <a
-                        href={`/teams/clubs-portal/export.csv?team=${team.id}`}
-                        className={`${buttonVariants({ variant: "outline", size: "sm" })} min-h-11 sm:min-h-0`}
-                      >
-                        Export for FA Clubs Portal
-                      </a>
-                      <a
-                        href={`/teams/${team.id}/photos.zip`}
-                        className={`${buttonVariants({ variant: "outline", size: "sm" })} min-h-11 sm:min-h-0`}
-                      >
-                        Export photos for FA Clubs Portal
-                      </a>
-                    </span>
-                  )}
-                </div>
-                <p className="text-sm text-muted-foreground">
-                  Everyone in this team for the current season, players included — a card each,
-                  with the next match&apos;s answer and the person to ring. Adding someone,
-                  changing their role or ending their membership (under <strong>Manage</strong> on
-                  the card) goes straight to <code>team_memberships</code> as you, so the database
-                  decides and any refusal is shown as it arrived. Memberships end; they are never
-                  deleted.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <MembersPanel
-                  teamId={team.id}
-                  seasonId={memberSeason?.id ?? null}
-                  seasonName={memberSeason?.name ?? null}
-                  members={members}
-                  pending={pending}
-                  canEdit={clubAdmin}
-                  squadLeave={squadLeave}
-                  availability={squadAvailability}
-                  subs={squadSubs}
-                  ageGroup={team.age_group}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Gap 10: what the public /recruitment page says about this team.
-                Written through the caller's own client, so `teams_staff_update`
-                lets a coach maintain it and the guard refuses anything else. */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Recruiting</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  What a parent looking for a team sees on the club&apos;s public recruitment page.
-                  The team&apos;s name and age group are a club administrator&apos;s to change;
-                  everything here belongs to the people who run the team.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <RecruitingPanel
-                  teamId={team.id}
-                  canEdit={staffTools}
-                  values={{
-                    recruiting: team.recruiting,
-                    gender: team.gender,
-                    join_type: team.join_type,
-                    join_instructions: team.join_instructions,
-                    session_details: team.session_details,
-                    contact_name: team.contact_name,
-                    contact_email: team.contact_email,
-                    contact_phone: team.contact_phone,
-                    show_coach_contact: team.show_coach_contact,
-                  }}
-                />
-              </CardContent>
-            </Card>
-          </div>
+          <SquadTab
+            team={team}
+            data={squad}
+            sheet={squadSheet}
+            personId={squadPerson}
+            sheetHref={sheetHref}
+            canEdit={clubAdmin}
+            canExportPortal={clubAdmin && adminHat}
+          />
         )}
 
         {/* ---------------------------------------------------------------- */}
@@ -1523,196 +1163,19 @@ export default async function TeamPage({
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* Settings — admin-only: match day, Full-Time link, import runs    */}
+        {/* Settings — six folds that say what they are set to               */}
         {/* ---------------------------------------------------------------- */}
         {tab === "settings" && staffTools && (
-          <div className="space-y-6">
-            {/* The home pitch and "Allocate the season" are the admin hat's
-                (Adam, 2026-08-25: "make sure coaches cannot assign pitches").
-                A committee member wearing the coach hat lands here and finds
-                them read-only, so say where they went (Adam, 2026-09-08: "How
-                do I allocate a pitch to a team … It used to be in team
-                settings"). */}
-            {!allocationTools ? (
-              <p className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-                <span>
-                  The home pitch, kick-off and &ldquo;Allocate the season&rdquo; are set under Club
-                  administration.
-                </span>
-                <Link
-                  href={contextHref({ view: "admin" }, `/teams/${team.id}?tab=settings`)}
-                  className="font-medium underline underline-offset-2"
-                >
-                  Open these settings as Club administration
-                </Link>
-              </p>
-            ) : null}
-            {/* Where this team plays and how long a match takes. Written
-                through the caller's own client, so `teams_staff_update` lets a
-                coach maintain it and `trg_teams_home_resource_guard` is what
-                refuses a home resource that is not a pitch. */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Match day</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  The team&apos;s home pitch and the shape of its matches. Allocating a home fixture
-                  on{" "}
-                  <Link href="/pitches" className="underline underline-offset-2">
-                    Pitches
-                  </Link>{" "}
-                  starts from the home pitch, and the halves and half time give new fixtures their
-                  pitch slot in place of the club&apos;s standard 90 minutes.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <MatchDayPanel
-                  teamId={team.id}
-                  canEdit={allocationTools}
-                  canRename={clubAdmin}
-                  pitches={matchDayPitches}
-                  values={{
-                    name: team.name,
-                    playing_format: team.playing_format,
-                    derived_format: faFormatFor(team.age_group)?.format ?? null,
-                    home_resource_id: team.home_resource_id,
-                    home_kickoff_time: team.home_kickoff_time,
-                    central_venue_name: team.central_venue_name,
-                    league: team.league,
-                    division: team.division,
-                    match_halves: team.match_halves,
-                    half_length_minutes: team.half_length_minutes,
-                    half_time_minutes: team.half_time_minutes,
-                    default_pre_buffer_minutes: team.default_pre_buffer_minutes,
-                    default_post_buffer_minutes: team.default_post_buffer_minutes,
-                  }}
-                />
-              </CardContent>
-            </Card>
-
-            {/* Which evening the team trains (2026-09-13): what the training
-                planner offers first for that day. The club's to set, like the
-                home pitch; the bulk version is the ticks bar on the Teams table. */}
-            {committeeTools && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Training</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  The evening this team usually trains. The winter training planner offers a
-                  day&apos;s teams first, so a Tuesday team lands on a Tuesday slot.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <TrainingDayCard teamId={team.id} trainingDay={team.default_training_day} />
-              </CardContent>
-            </Card>
-            )}
-
-            {/* The whole season in one go: every future home fixture onto one
-                pitch at one kick-off — or, for a central-venue team, every
-                fixture pointed at the league's venue and our pitches freed.
-                The RPCs are club_admin-only; committee holds that through the
-                profiles → person_roles sync. */}
-            {allocationTools && (
-            <Card>
-              <CardHeader>
-                <CardTitle>
-                  {team.central_venue_name ? "Central venue" : "Allocate the season"}
-                </CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  {team.central_venue_name
-                    ? `${team.name} plays at ${team.central_venue_name}, which the club does not manage — its fixtures never occupy our pitch calendar.`
-                    : "Put every future home fixture on a pitch in one go, starting from the team's saved defaults. Individual fixtures can still be moved afterwards on the Pitches screen."}
-                </p>
-              </CardHeader>
-              <CardContent>
-                <AllocateAllPanel
-                  teamId={team.id}
-                  pitches={matchDayPitches}
-                  homeResourceId={team.home_resource_id}
-                  homeKickoffTime={team.home_kickoff_time}
-                  centralVenueName={team.central_venue_name}
-                />
-              </CardContent>
-            </Card>
-            )}
-
-            <Card>
-              <CardHeader>
-                <CardTitle>FA Full-Time link</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  The FA publishes no fixtures API, so fixtures and results are read from the
-                  team&apos;s Full-Time code snippet. Copy it from Full-Time admin (the steps are
-                  below), paste it, preview what the parser reads, then save. Imports run
-                  nightly; re-linking for a new season updates this link and keeps the fixtures
-                  already imported.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <FullTimePanel
-                  teamId={team.id}
-                  teamName={team.name}
-                  defaultFtName={defaultFtName}
-                  link={link}
-                  clubSeasons={clubSeasons}
-                />
-              </CardContent>
-            </Card>
-
-            {committeeTools && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Manual import &amp; run history</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  The fallback that keeps working when the nightly importer does not: paste a
-                  Full-Time address, or paste the fixtures as CSV. Either way you see them
-                  before anything is written, and the import reconciles by fixture reference —
-                  reschedules become updates, never duplicates.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <ManualImportPanel
-                  teamId={team.id}
-                  teamName={team.name}
-                  ftTeamName={link?.ft_team_name ?? team.name}
-                  currentSeason={
-                    currentSeason ? { id: currentSeason.id, name: currentSeason.name } : null
-                  }
-                  runs={runs}
-                />
-              </CardContent>
-            </Card>
-            )}
-
-            {/* Active/inactive moved here from the teams table (the design
-                drops that column — the list's "Active only" filter shows the
-                state, this is where it changes). */}
-            {committeeTools && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Team status</CardTitle>
-                <p className="text-sm text-muted-foreground">
-                  An inactive team keeps its history but drops out of the default teams list, the
-                  rollover and the allocator&apos;s work lists.
-                </p>
-              </CardHeader>
-              <CardContent>
-                <form action={setTeamActive} className="flex items-center gap-3">
-                  <input type="hidden" name="team_id" value={team.id} />
-                  <input type="hidden" name="active" value={team.active ? "false" : "true"} />
-                  <Badge variant={team.active ? "success" : "muted"}>
-                    {team.active ? "Active" : "Inactive"}
-                  </Badge>
-                  <button
-                    type="submit"
-                    className={buttonVariants({ variant: "outline", size: "sm" })}
-                  >
-                    {team.active ? "Mark inactive" : "Mark active"}
-                  </button>
-                </form>
-              </CardContent>
-            </Card>
-            )}
-          </div>
+          <SettingsTab
+            team={team}
+            data={settings}
+            link={link}
+            pitches={matchDayPitches}
+            homePitchName={homePitch?.name ?? null}
+            allocationTools={allocationTools}
+            committeeTools={committeeTools}
+            clubAdmin={clubAdmin}
+          />
         )}
 
         {/* ---------------------------------------------------------------- */}
@@ -1744,130 +1207,7 @@ export default async function TeamPage({
         {/* ---------------------------------------------------------------- */}
         {/* Subs — committee only: who is billed what, player by player      */}
         {/* ---------------------------------------------------------------- */}
-        {tab === "subs" && committeeTools && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Subs</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Each player&apos;s latest subscription. The club bills the payer — usually a parent
-                — so &ldquo;billed to&rdquo; names them. Payments themselves are handled on the
-                money screens; this is the team&apos;s view of where everyone stands.
-              </p>
-            </CardHeader>
-            <CardContent>
-              {subsRows.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No players on the roster yet.</p>
-              ) : (
-                <>
-                  <div className="mb-4 flex flex-wrap gap-4 text-sm">
-                    <p>
-                      <span className="text-2xl font-semibold">
-                        {subsRows.filter((row) => row.status === "active" || row.status === "completed").length}
-                      </span>{" "}
-                      <span className="text-muted-foreground">of {subsRows.length} covered</span>
-                    </p>
-                    {subsRows.some((row) => row.status === "past_due") && (
-                      <p className="text-amber-700">
-                        <span className="text-2xl font-semibold">
-                          {subsRows.filter((row) => row.status === "past_due").length}
-                        </span>{" "}
-                        owing
-                      </p>
-                    )}
-                    {subsRows.some((row) => row.status === null) && (
-                      <p className="text-muted-foreground">
-                        <span className="text-2xl font-semibold">
-                          {subsRows.filter((row) => row.status === null).length}
-                        </span>{" "}
-                        no subscription yet
-                      </p>
-                    )}
-                  </div>
-                  {/* A phone reads the roster as cards; the table is lg+. */}
-                  <ul className="divide-y rounded-lg border lg:hidden">
-                    {subsRows.map((row) => (
-                      <li
-                        key={row.personId}
-                        className="flex min-h-[44px] items-start justify-between gap-3 px-3 py-3"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{row.name}</p>
-                          <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                            {row.planName ?? "No plan"}
-                            {row.payerName ? ` · billed to ${row.payerName}` : ""}
-                          </p>
-                        </div>
-                        <div className="shrink-0">
-                          {row.status === null ? (
-                            <span className="text-xs text-muted-foreground">No subscription</span>
-                          ) : row.status === "past_due" ? (
-                            <Badge variant="warning">
-                              {row.amountDuePence !== null
-                                ? `£${(row.amountDuePence / 100).toFixed(2)} owing`
-                                : "Owing"}
-                            </Badge>
-                          ) : row.status === "completed" ? (
-                            <Badge variant="success">Paid</Badge>
-                          ) : row.status === "active" ? (
-                            <Badge variant="success">On plan</Badge>
-                          ) : row.status === "cancelled" ? (
-                            <Badge variant="muted">Cancelled</Badge>
-                          ) : (
-                            <Badge variant="muted">Pending</Badge>
-                          )}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                  <div className="hidden overflow-x-auto lg:block">
-                    <table className="w-full text-left text-sm">
-                      <thead className="border-b text-xs text-muted-foreground">
-                        <tr>
-                          <th className="py-2 pr-3 font-medium">Player</th>
-                          <th className="py-2 pr-3 font-medium">Plan</th>
-                          <th className="py-2 pr-3 font-medium">Billed to</th>
-                          <th className="py-2 pr-3 font-medium">Status</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y">
-                        {subsRows.map((row) => (
-                          <tr key={row.personId}>
-                            <td className="py-2 pr-3 font-medium">{row.name}</td>
-                            <td className="py-2 pr-3 text-muted-foreground">
-                              {row.planName ?? "—"}
-                            </td>
-                            <td className="py-2 pr-3 text-muted-foreground">
-                              {row.payerName ?? "—"}
-                            </td>
-                            <td className="py-2 pr-3">
-                              {row.status === null ? (
-                                <span className="text-muted-foreground">No subscription</span>
-                              ) : row.status === "past_due" ? (
-                                <Badge variant="warning">
-                                  {row.amountDuePence !== null
-                                    ? `£${(row.amountDuePence / 100).toFixed(2)} owing`
-                                    : "Owing"}
-                                </Badge>
-                              ) : row.status === "completed" ? (
-                                <Badge variant="success">Paid</Badge>
-                              ) : row.status === "active" ? (
-                                <Badge variant="success">On plan</Badge>
-                              ) : row.status === "cancelled" ? (
-                                <Badge variant="muted">Cancelled</Badge>
-                              ) : (
-                                <Badge variant="muted">Pending</Badge>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        )}
+        {tab === "subs" && committeeTools && <SubsTab rows={subsRows} />}
       </div>
     </>
   );
