@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isAdminHat,
   isMemberView,
   parseViewOption,
   roleSwitchAnnouncement,
@@ -97,6 +98,34 @@ describe("roleSwitchAnnouncement", () => {
  * which hat they were wearing. `isMemberView` is the missing half, written
  * once so the next screen cannot forget it by accident.
  */
+describe("isAdminHat", () => {
+  it("is true only for the admin hat, or no hat chosen yet", () => {
+    expect(isAdminHat("admin")).toBe(true);
+    expect(isAdminHat(null)).toBe(true);
+  });
+
+  /**
+   * P8.4 and P8.7 rewrote the longhand `view === "admin" || view === null` as
+   * `!isMemberView(view) && view !== "coach"`, which let the referee and
+   * function-room hats through to the pitch-allocation doors. The database
+   * refused them, but the screen offered them. This pins the narrow reading.
+   */
+  it("is false for every other hat, including referee and function room", () => {
+    expect(isAdminHat("coach")).toBe(false);
+    expect(isAdminHat("referee")).toBe(false);
+    expect(isAdminHat("function_room")).toBe(false);
+    expect(isAdminHat("parent")).toBe(false);
+    expect(isAdminHat("player")).toBe(false);
+    expect(isAdminHat("me")).toBe(false);
+  });
+
+  it("answers for every view the club has", () => {
+    for (const view of ROLE_VIEWS) {
+      expect(typeof isAdminHat(view)).toBe("boolean");
+    }
+  });
+});
+
 describe("isMemberView", () => {
   it("is true for the three hats you wear to look at the club as a member", () => {
     expect(isMemberView("me")).toBe(true);

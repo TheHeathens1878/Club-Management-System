@@ -7,7 +7,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { ChipStrip } from "@/components/ui/chip-strip";
 import { ToggleChipLink } from "@/components/ui/toggle-chip";
 import { getCapabilities, getStoredRoleView, getTeamScope } from "@/lib/capabilities";
-import { isMemberView, resolveRoleView } from "@/lib/role-view";
+import { isAdminHat, isMemberView, resolveRoleView } from "@/lib/role-view";
 import { formatEventDate, formatEventTime } from "@/app/(app)/events/shared";
 import { instantToLocal } from "@/lib/booking-time";
 import { matchesNextAction, type FixtureGridTeam } from "@/lib/fixture-grid";
@@ -109,7 +109,7 @@ export default async function MatchesPage({
   // because on THIS screen it is deliberately a member-ish hat: an admin
   // looking at the fixture desk as a coach is meant to see what a coach sees
   // (Adam, 2026-08-25), and the same rule governs the Allocate door below.
-  const runningTheClub = !isMemberView(view) && view !== "coach";
+  const runningTheClub = isAdminHat(view);
   const canManage = capabilities.isClubAdmin && runningTheClub;
 
   const supabase = await createClient();
