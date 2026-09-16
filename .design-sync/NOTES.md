@@ -11,7 +11,14 @@ Repo-specific facts a future sync needs. Config lives in `.design-sync/config.js
   1:1.** All three are hand-maintained lists of the same set, and nothing checks them against each
   other. A pin with no export syncs an empty component; an export with no pin is simply never seen;
   a preview whose filename does not match a pin is not scanned for Tailwind classes, so the
-  component arrives unstyled. Count them before a re-sync (24 today).
+  component arrives unstyled. Count them before a re-sync (42 today). Two deliberate exceptions on
+  the export side: the `*Variants` cva helpers (`buttonVariants`, `badgeVariants`,
+  `iconTileVariants`, `toggleChipVariants`, `calloutVariants`), which are not components; and `TH`,
+  `TR` and `TD`, which **cannot** be pinned — `lib/dts.mjs`'s `isComponentName` rejects
+  `/^[A-Z][A-Z0-9_]+$/`, so a SCREAMING-CASE export reads as an enum and is dropped from the build
+  with its preview called stale. They are exported for the app and for the previews, and documented
+  inside `Table`'s props body. `THead` and `TBody` are PascalCase and sync as their own entries, as
+  the five `Card` parts do.
 - pnpm uses `node-linker=hoisted` (`.npmrc`), so `--node-modules ./node_modules` at the REPO ROOT is
   where react, lucide-react and cva resolve. `apps/web/node_modules` holds only workspace links.
 - `PKG_DIR` resolves to the repo root (the entry walks up to the root package.json), so every
@@ -41,12 +48,30 @@ node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules ./node
 with `DS_CHROMIUM_PATH` set as above.
 
 ## Decisions
-- All 24 components sit in one group ("general"). (SidebarNav left with the three-noun navigation, P7.5.) Regrouping needs a matched doc with a `category`
+- All 42 components sit in one group ("general"). (SidebarNav left with the three-noun navigation, P7.5.) Regrouping needs a matched doc with a `category`
   frontmatter, and a matched doc replaces the synthesized prompt including its `## Examples` — the
   examples matter more to the design agent than grouping. Revisit only if the converter grows a
   group override.
 - `MobileTabBar` renders as a single card at a phone viewport (`cfg.overrides`): the bar is
   `lg:hidden`, so a grid card wider than 1024px shows an empty frame.
+- **A portalled overlay photographs fine, and does it by escaping the preview.** `Sheet` portals to
+  `document.body` and is `fixed inset-0`, so no frame inside the story can contain it: the
+  converter's `.ds-single` wrapper is the containing block for `fixed` DESCENDANTS only, and the
+  portal host is a sibling of it. It is given `cardMode: "single"` at `420x560` instead — a phone,
+  which is the sheet's phone shape — and the framed page in the preview is simply what its scrim
+  dims. The validator already counts roots under `document.body`, so a portalled panel is never read
+  as an empty render, and `Sheet` came back clean on the first try; no static stand-in was needed.
+  The sheet also makes every other child of `<body>` `inert` while it is open, which includes the
+  preview's own mount root — `inert` is an interaction and AT concern only, so the screenshot is
+  unaffected. `Popover` is only `absolute`, so it hangs inside its frame exactly as it does in the
+  app; it gets `single` at `420x420` only so the two open menus in its two stories do not paint over
+  each other in a grid.
+- `DataListFrame` is a **column** card (`cfg.overrides`): both its stories are wider than a grid
+  cell (a six-column desk table, and a 390px phone frame beside it), and a column card gives each
+  story the card's full width instead of cropping it. Its phone story forces the `lg:` classes back
+  off with a scoped `!important` block, because the capture viewport is 1200 wide and `lg:` is live
+  there — the same trick `previews/FilterRail.tsx` uses in the other direction. At `520` tall the
+  phone story is cropped below its fourth row; that is the declared grading viewport, not a fault.
 - `SubmitButton` previews show the idle state only; the pending spinner needs a live form action.
 - Data-bound components (registration blocks, role switcher, notice bell, command palette, person
   picker, notification prompt, family tree, header tools, mobile header, address/DOB/emergency
