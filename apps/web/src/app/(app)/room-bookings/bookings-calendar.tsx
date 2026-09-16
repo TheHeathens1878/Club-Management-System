@@ -1,11 +1,50 @@
 "use client";
 
+/**
+ * The desk's month, and what a press on it does (P8.2).
+ *
+ * The calendar used to be a picture with links in it: every chip navigated to
+ * `/room-bookings/[id]`, so answering an enquiry meant leaving the month,
+ * doing the thing, and finding your place again. Now a chip opens the booking
+ * where it sits — `BookingSheet`, on the door that booking actually needs —
+ * and an empty day is a press too: a new booking with that date already in it.
+ *
+ * Two things this file used to do wrong, both of them about width:
+ *
+ *   · the month sat in a `min-w-[640px]` box below `lg`, so a phone scrolled
+ *     the whole grid sideways to read seven columns 55px wide. A phone gets a
+ *     WEEK now — day chips, and the chosen day's bookings full width.
+ *   · the chips were painted in raw palette classes. They are the one thing on
+ *     this screen that is data rather than tone — a key has to stay legible on
+ *     a printer — so the colours moved to `desk-shared.ts` as CSS strings and
+ *     everything else on the screen is a token.
+ *
+ * The print path is unchanged in what it produces: the overlay draws whole
+ * months, the legend is the same seven swatches, and "This month" is one month
+ * through the same overlay (it used to call `window.print()` against a page the
+ * print stylesheet hides, which printed nothing at all).
+ */
+
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
-import { ChevronLeft, ChevronRight, Printer, CalendarRange, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Printer, CalendarRange, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ChipStrip } from "@/components/ui/chip-strip";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { londonToday } from "@/lib/booking-time";
-import type { BookingKind, BookingListItem, BookingStatus } from "@/lib/booking-types";
+import type { BookingListItem, BookingStatus } from "@/lib/booking-types";
+
+import {
+  BOOKING_SWATCH,
+  CALENDAR_LEGEND,
+  bookingSwatch,
+  dayChipLabel,
+  dayHeading,
+  openingWeek,
+  shiftWeek,
+  weekDays,
+  type BookingSwatch,
+} from "./desk-shared";
 
 type AwayEntry = {
   id: string;
@@ -47,19 +86,6 @@ function getCalendarGrid(year: number, month: number): (number | null)[] {
   return grid;
 }
 
-// Status-based colour. Only `confirmed` (and a block) holds the room, and only
-// it is green: an enquiry or a quote is a conversation about a date, not a
-// claim on it, and painting those green is how one confirmed booking looked
-// like three bookings on the same night.
-function bookingColor(status: BookingStatus, kind: BookingKind): string {
-  if (kind === "block") return "bg-amber-100 text-amber-800 border-amber-200";
-  if (status === "cancelled") return "bg-red-100 text-red-800 border-red-200";
-  if (status === "pending") return "bg-amber-50 text-yellow-800 border-yellow-300";
-  if (status === "enquiry") return "border-dashed bg-slate-50 text-slate-600 border-slate-300";
-  if (status === "quoted") return "border-dashed bg-violet-50 text-violet-800 border-violet-300";
-  return "bg-green-100 text-green-800 border-green-200"; // confirmed
-}
-
 /** The bracketed word after the booker's name on a chip, for anything not holding the room. */
 export function statusTag(status: BookingStatus): string {
   if (status === "pending") return " (PENDING)";
@@ -86,6 +112,28 @@ function awayOnDate(entries: AwayEntry[], ds: string): AwayEntry[] {
   return entries.filter((e) => e.fromDate <= ds && e.toDate >= ds);
 }
 
+/** What one booking's chip says, wherever it is drawn. */
+function chipLabel(b: BookingListItem, roomName: Record<string, string>): string {
+  if (b.kind === "block") return "Blocked";
+  const room = roomName[b.resource_id] ?? "";
+  return `${b.start_time} ${b.booker_name}${statusTag(b.status)}${room ? ` (${room})` : ""}`;
+}
+
+/** A swatch as the inline style a chip wears — the colours are data, not tone. */
+function swatchStyle(swatch: BookingSwatch): React.CSSProperties {
+  return {
+    background: swatch.bg,
+    color: swatch.ink,
+    borderColor: swatch.edge,
+    borderStyle: swatch.dashed ? "dashed" : "solid",
+  };
+}
+
+/** Where "New booking" on an empty day goes — the date already filled in. */
+function newBookingHref(dateIso: string): string {
+  return `/room-bookings/new?date=${dateIso}`;
+}
+
 function MonthGrid({
   ym,
   byDate,
@@ -93,6 +141,7 @@ function MonthGrid({
   forPrint = false,
   roomName,
   awayEntries = [],
+  onOpen,
 }: {
   ym: string;
   byDate: Map<string, BookingListItem[]>;
@@ -100,6 +149,8 @@ function MonthGrid({
   forPrint?: boolean;
   roomName: Record<string, string>;
   awayEntries?: AwayEntry[];
+  /** A press on a chip opens that booking in the desk's sheet. */
+  onOpen?: (booking: BookingListItem) => void;
 }) {
   const { year, month } = parseYm(ym);
   const label = new Date(year, month - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
@@ -107,21 +158,30 @@ function MonthGrid({
 
   const cellClass = forPrint
     ? "border-b border-r p-1 min-h-[80px]"
-    : "min-h-[90px] border-b border-r p-1.5";
+    : "group/cell relative min-h-[90px] border-b border-r p-1.5";
 
   return (
     <div>
       <h2 className={`font-semibold mb-2 ${forPrint ? "text-sm" : "text-base hidden"}`}>
         {label} — Room Bookings
       </h2>
-      <div className="grid grid-cols-7 border border-b-0 overflow-hidden rounded-t-lg">
+      {/* Seven columns that may shrink to nothing rather than push the page
+          wider: `minmax(0, 1fr)` is what stops a long booker name forcing a
+          horizontal scrollbar across the whole desk. */}
+      <div
+        className="grid border border-b-0 overflow-hidden rounded-t-lg"
+        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
+      >
         {DAY_LABELS.map((d) => (
-          <div key={d} className="bg-gray-100 px-2 py-1.5 text-center text-[10px] font-medium uppercase text-gray-500 border-b">
+          <div key={d} className="bg-secondary px-2 py-1.5 text-center text-2xs font-medium uppercase text-muted-foreground border-b">
             {d}
           </div>
         ))}
       </div>
-      <div className="grid grid-cols-7 border-l border-t rounded-b-lg overflow-hidden">
+      <div
+        className="grid border-l border-t rounded-b-lg overflow-hidden"
+        style={{ gridTemplateColumns: "repeat(7, minmax(0, 1fr))" }}
+      >
         {grid.map((day, i) => {
           const ds = day ? `${year}-${pad(month)}-${pad(day)}` : null;
           const dayBookings = ds ? (byDate.get(ds) ?? []) : [];
@@ -132,12 +192,12 @@ function MonthGrid({
           return (
             <div
               key={i}
-              className={`${cellClass} ${!day ? "bg-gray-50" : isPast && !forPrint ? "bg-gray-50/50" : ""}`}
+              className={`${cellClass} ${!day ? "bg-muted/40" : isPast && !forPrint ? "bg-muted/20" : ""}`}
             >
               {day && (
                 <>
-                  <div className={`mb-1 flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-medium
-                    ${isToday && !forPrint ? "bg-blue-600 text-white" : "text-gray-700"}`}>
+                  <div className={`mb-1 flex h-5 w-5 items-center justify-center rounded-full text-2xs font-medium
+                    ${isToday && !forPrint ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}>
                     {day}
                   </div>
                   {dayAway.length > 0 && (
@@ -146,7 +206,8 @@ function MonthGrid({
                         <span
                           key={a.id}
                           title={a.note ? `${a.staffName}: ${a.note}` : a.staffName}
-                          className="block rounded border border-red-200 bg-red-50 px-1 py-0.5 text-[9px] leading-tight font-medium text-red-700 truncate"
+                          style={swatchStyle(BOOKING_SWATCH.away)}
+                          className="block rounded border px-1 py-0.5 text-2xs leading-tight font-medium truncate"
                         >
                           {a.staffName} away
                         </span>
@@ -155,27 +216,42 @@ function MonthGrid({
                   )}
                   <div className="space-y-0.5">
                     {dayBookings.map((b, bi) => {
-                      const rName = roomName[b.resource_id] ?? "";
-                      const label =
-                        b.kind === "block"
-                          ? "Blocked"
-                          : `${b.start_time} ${b.booker_name}${statusTag(b.status)} (${rName})`;
-
-                      const chip = (
-                        <span className={`cal-chip block rounded border px-1 py-0.5 text-[9px] leading-tight font-medium truncate ${bookingColor(b.status, b.kind)} ${bi >= 3 && !forPrint ? "hidden" : ""}`}>
-                          {label}
-                        </span>
-                      );
-                      return forPrint ? (
-                        <div key={b.id}>{chip}</div>
+                      const hidden = bi >= 3 && !forPrint ? " hidden" : "";
+                      const chipClass = `cal-chip block w-full rounded border px-1 py-0.5 text-2xs leading-tight font-medium truncate${hidden}`;
+                      const style = swatchStyle(bookingSwatch(b.status, b.kind));
+                      return forPrint || !onOpen ? (
+                        <div key={b.id}>
+                          <span className={chipClass} style={style}>
+                            {chipLabel(b, roomName)}
+                          </span>
+                        </div>
                       ) : (
-                        <Link key={b.id} href={`/room-bookings/${b.id}`} className="block hover:opacity-80 transition-opacity">
-                          {chip}
-                        </Link>
+                        <button
+                          key={b.id}
+                          type="button"
+                          onClick={() => onOpen(b)}
+                          style={style}
+                          className={`${chipClass} text-left transition-opacity hover:opacity-80`}
+                        >
+                          {chipLabel(b, roomName)}
+                        </button>
                       );
                     })}
                     {dayBookings.length > 3 && !forPrint && (
-                      <p className="cal-no-print px-1 text-[9px] text-gray-400">+{dayBookings.length - 3} more</p>
+                      <p className="cal-no-print px-1 text-2xs text-muted-foreground">+{dayBookings.length - 3} more</p>
+                    )}
+                    {/* An empty day is a door too: the new-booking form with
+                        this date already in it. Quiet until the mouse is on
+                        the cell, so a month of them is not a month of plus
+                        signs. */}
+                    {ds && dayBookings.length === 0 && !forPrint && (
+                      <Link
+                        href={newBookingHref(ds)}
+                        title={`New booking on ${ds}`}
+                        className="cal-no-print flex items-center gap-1 rounded border border-dashed px-1 py-0.5 text-2xs text-muted-foreground opacity-0 transition-opacity hover:bg-secondary focus-visible:opacity-100 group-hover/cell:opacity-100"
+                      >
+                        <Plus className="h-3 w-3" aria-hidden /> New
+                      </Link>
                     )}
                   </div>
                 </>
@@ -188,16 +264,154 @@ function MonthGrid({
   );
 }
 
+/**
+ * What a phone gets: one week, one day at a time.
+ *
+ * Seven columns cannot usefully compress to 390px — the old month kept its
+ * width and scrolled sideways, which is the regression this replaces. The
+ * chips are the week's days with their counts; the body is the chosen day's
+ * bookings at full width, with the same press as a month cell.
+ */
+function WeekView({
+  weekStart,
+  day,
+  byDate,
+  today,
+  roomName,
+  awayEntries,
+  onDay,
+  onWeek,
+  onOpen,
+}: {
+  weekStart: string;
+  day: string;
+  byDate: Map<string, BookingListItem[]>;
+  today: string;
+  roomName: Record<string, string>;
+  awayEntries: AwayEntry[];
+  onDay: (dateIso: string) => void;
+  onWeek: (weeks: number) => void;
+  onOpen?: (booking: BookingListItem) => void;
+}) {
+  const days = weekDays(weekStart);
+  const dayBookings = byDate.get(day) ?? [];
+  const dayAway = awayOnDate(awayEntries, day);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <Button variant="outline" size="touch" onClick={() => onWeek(-1)} aria-label="The week before">
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+        </Button>
+        <p className="min-w-0 flex-1 text-center text-row font-semibold">{dayHeading(day)}</p>
+        <Button variant="outline" size="touch" onClick={() => onWeek(1)} aria-label="The week after">
+          <ChevronRight className="h-4 w-4" aria-hidden />
+        </Button>
+      </div>
+
+      <ChipStrip>
+        {days.map((iso) => (
+          <ToggleChip
+            key={iso}
+            on={iso === day}
+            count={(byDate.get(iso) ?? []).length}
+            onClick={() => onDay(iso)}
+            // Today keeps a ring even when the desk has walked off it, which is
+            // the only thing a week of chips cannot say on its own.
+            className={iso === today && iso !== day ? "ring-1 ring-primary/40" : undefined}
+          >
+            {dayChipLabel(iso)}
+          </ToggleChip>
+        ))}
+      </ChipStrip>
+
+      <div className="rounded-xl border bg-card">
+        {dayAway.length > 0 && (
+          <div className="space-y-1 border-b p-3">
+            {dayAway.map((a) => (
+              <p
+                key={a.id}
+                style={swatchStyle(BOOKING_SWATCH.away)}
+                className="rounded border px-2 py-1 text-list font-medium"
+              >
+                {a.staffName} away{a.note ? ` · ${a.note}` : ""}
+              </p>
+            ))}
+          </div>
+        )}
+        {dayBookings.length === 0 ? (
+          <div className="space-y-3 p-4 text-center">
+            <p className="text-sm text-muted-foreground">Nothing booked on this day.</p>
+            <Link
+              href={newBookingHref(day)}
+              className="touch inline-flex items-center gap-1.5 rounded-md border border-dashed px-3 text-sm font-medium"
+            >
+              <Plus className="h-4 w-4" aria-hidden /> New booking on this day
+            </Link>
+          </div>
+        ) : (
+          <ul className="divide-y">
+            {dayBookings.map((b) => {
+              const swatch = bookingSwatch(b.status, b.kind);
+              const body = (
+                <>
+                  <span
+                    aria-hidden
+                    className="mt-1 h-3 w-3 flex-none rounded-sm border"
+                    style={swatchStyle(swatch)}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">
+                      {b.kind === "block" ? "Blocked by the club" : b.booker_name}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground">
+                      {b.start_time}–{b.end_time} · {roomName[b.resource_id] ?? "—"} ·{" "}
+                      <span className="capitalize">{b.kind === "block" ? "blocked" : b.status}</span>
+                    </span>
+                  </span>
+                </>
+              );
+              return (
+                <li key={b.id}>
+                  {onOpen ? (
+                    <button
+                      type="button"
+                      onClick={() => onOpen(b)}
+                      className="touch flex w-full items-start gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-muted/40"
+                    >
+                      {body}
+                    </button>
+                  ) : (
+                    <Link
+                      href={`/room-bookings/${b.id}`}
+                      className="touch flex w-full items-start gap-2.5 px-3 py-2.5 text-left text-sm hover:bg-muted/40"
+                    >
+                      {body}
+                    </Link>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BookingsCalendar({
   bookings,
   roomName,
   initialMonth,
   awayEntries = [],
+  onOpen,
 }: {
   bookings: BookingListItem[];
   roomName: Record<string, string>;
   initialMonth?: string;
   awayEntries?: AwayEntry[];
+  /** A press on a booking. Without one every chip is a link to the record. */
+  onOpen?: (booking: BookingListItem) => void;
 }) {
   const today = londonToday();
   const [ym, setYm] = useState<string>(() => {
@@ -209,19 +423,43 @@ export function BookingsCalendar({
   const [exportTo, setExportTo] = useState(ym);
   const [printMonths, setPrintMonths] = useState<string[] | null>(null);
   const [roomFilter, setRoomFilter] = useState<string>("all");
+  // The phone's week and the day it is open on. Set beside the month rather
+  // than in an effect, so the two never disagree for a render.
+  const [weekStart, setWeekStart] = useState<string>(() => openingWeek(ym, today));
+  const [day, setDay] = useState<string>(() => {
+    const start = openingWeek(ym, today);
+    return weekDays(start).includes(today) ? today : start;
+  });
 
   const { year, month } = parseYm(ym);
   const monthLabel = new Date(year, month - 1, 1).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
   const roomIds = useMemo(() => Object.keys(roomName), [roomName]);
 
+  /** Move both the month and the week the phone is showing inside it. */
+  function goToMonth(next: string) {
+    setYm(next);
+    const start = openingWeek(next, today);
+    setWeekStart(start);
+    setDay(weekDays(start).includes(today) ? today : start);
+  }
+
   function prevMonth() {
     const d = new Date(year, month - 2, 1);
-    setYm(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+    goToMonth(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
   }
   function nextMonth() {
     const d = new Date(year, month, 1);
-    setYm(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+    goToMonth(`${d.getFullYear()}-${pad(d.getMonth() + 1)}`);
+  }
+  function stepWeek(weeks: number) {
+    const start = shiftWeek(weekStart, weeks);
+    setWeekStart(start);
+    setDay(start);
+    // A week that has walked out of the month on screen takes the month with
+    // it, so the desktop grid and the phone's chips stay the same fortnight.
+    const startMonth = start.slice(0, 7);
+    if (startMonth !== ym) setYm(startMonth);
   }
 
   const filteredBookings = roomFilter === "all" ? bookings : bookings.filter((b) => b.resource_id === roomFilter);
@@ -277,19 +515,11 @@ export function BookingsCalendar({
               <MonthGrid ym={m} byDate={byDate} today={today} forPrint roomName={roomName} awayEntries={awayEntries} />
             </div>
           ))}
-          {/* Print legend */}
+          {/* Print legend — the same swatches the screen uses. */}
           <div style={{ display: "flex", gap: "1rem", marginTop: "0.5rem", fontSize: "9px", color: "#666", flexWrap: "wrap" }}>
-            {[
-              { label: "Confirmed", color: "#dcfce7", border: "#86efac" },
-              { label: "Pending", color: "#fefce8", border: "#fde047" },
-              { label: "Enquiry (not held)", color: "#f8fafc", border: "#cbd5e1" },
-              { label: "Quoted (not held)", color: "#f5f3ff", border: "#c4b5fd" },
-              { label: "Cancelled", color: "#fee2e2", border: "#fca5a5" },
-              { label: "Staff away", color: "#fef2f2", border: "#fca5a5" },
-              { label: "Blocked", color: "#fef9c3", border: "#fde047" },
-            ].map(({ label, color, border }) => (
+            {CALENDAR_LEGEND.map(({ label, swatch }) => (
               <div key={label} style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                <span style={{ display: "inline-block", width: 10, height: 10, background: color, border: `1px solid ${border}`, borderRadius: 2 }} />
+                <span style={{ display: "inline-block", width: 10, height: 10, background: swatch.bg, border: `1px solid ${swatch.edge}`, borderRadius: 2 }} />
                 {label}
               </div>
             ))}
@@ -301,16 +531,17 @@ export function BookingsCalendar({
           the tools scroll sideways beneath it rather than wrapping. */}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex w-full items-center justify-between gap-2 cal-no-print lg:w-auto lg:justify-start">
-          <Button variant="outline" size="sm" onClick={prevMonth} className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"><ChevronLeft className="h-4 w-4" /></Button>
-          <h2 className="text-base font-semibold min-w-[160px] text-center">{monthLabel}</h2>
-          <Button variant="outline" size="sm" onClick={nextMonth} className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0"><ChevronRight className="h-4 w-4" /></Button>
+          <Button variant="outline" size="touch" onClick={prevMonth} aria-label="The month before"><ChevronLeft className="h-4 w-4" aria-hidden /></Button>
+          <h2 className="min-w-0 flex-1 text-center text-base font-semibold lg:w-40 lg:flex-none">{monthLabel}</h2>
+          <Button variant="outline" size="touch" onClick={nextMonth} aria-label="The month after"><ChevronRight className="h-4 w-4" aria-hidden /></Button>
         </div>
         <div className="-mx-4 flex w-[calc(100%+2rem)] items-center gap-2 overflow-x-auto px-4 pb-1 cal-no-print lg:mx-0 lg:w-auto lg:flex-wrap lg:overflow-visible lg:px-0 lg:pb-0">
           {showRoomFilter && (
             <select
               value={roomFilter}
               onChange={(e) => setRoomFilter(e.target.value)}
-              className="min-h-[44px] shrink-0 rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0"
+              aria-label="Which room"
+              className="touch shrink-0 rounded-md border bg-background px-3 py-1.5 text-sm"
             >
               <option value="all">All rooms</option>
               {roomIds.map((id) => (
@@ -318,12 +549,12 @@ export function BookingsCalendar({
               ))}
             </select>
           )}
-          <Button variant="outline" size="sm" onClick={() => setYm(today.slice(0, 7))} className="min-h-[44px] shrink-0 lg:min-h-0">Today</Button>
-          <Button variant="outline" size="sm" onClick={() => window.print()} className="min-h-[44px] shrink-0 lg:min-h-0">
-            <Printer className="h-4 w-4" /> This month
+          <Button variant="outline" size="touch" onClick={() => goToMonth(today.slice(0, 7))} className="shrink-0">Today</Button>
+          <Button variant="outline" size="touch" onClick={() => setPrintMonths([ym])} className="shrink-0">
+            <Printer className="h-4 w-4" aria-hidden /> This month
           </Button>
-          <Button variant="outline" size="sm" onClick={() => { setExportFrom(ym); setExportTo(ym); setRangeOpen((v) => !v); }} className="min-h-[44px] shrink-0 lg:min-h-0">
-            <CalendarRange className="h-4 w-4" /> Multi-month
+          <Button variant="outline" size="touch" onClick={() => { setExportFrom(ym); setExportTo(ym); setRangeOpen((v) => !v); }} className="shrink-0">
+            <CalendarRange className="h-4 w-4" aria-hidden /> Multi-month
           </Button>
         </div>
       </div>
@@ -332,60 +563,66 @@ export function BookingsCalendar({
       {rangeOpen && (
         <div className="cal-no-print flex flex-col items-stretch gap-3 rounded-lg border bg-muted/30 px-4 py-3 lg:flex-row lg:flex-wrap lg:items-end lg:gap-4">
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">From</label>
+            <label htmlFor="cal-export-from" className="text-xs font-medium text-muted-foreground">From</label>
             <input
+              id="cal-export-from"
               type="month"
               value={exportFrom}
               onChange={(e) => setExportFrom(e.target.value)}
-              className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
+              className="touch w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:w-auto"
             />
           </div>
           <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">To</label>
+            <label htmlFor="cal-export-to" className="text-xs font-medium text-muted-foreground">To</label>
             <input
+              id="cal-export-to"
               type="month"
               value={exportTo}
               min={exportFrom}
               onChange={(e) => setExportTo(e.target.value)}
-              className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
+              className="touch w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:w-auto"
             />
           </div>
           <div className="flex items-center gap-2">
-            <Button size="sm" onClick={handleMultiExport} disabled={!!printMonths} className="min-h-[44px] flex-1 lg:min-h-0 lg:flex-none">
-              <Printer className="h-4 w-4" />
+            <Button size="touch" onClick={handleMultiExport} disabled={!!printMonths} className="flex-1 lg:flex-none">
+              <Printer className="h-4 w-4" aria-hidden />
               {printMonths ? "Preparing…" : `Export ${buildMonthRange(exportFrom, exportTo).length} month${buildMonthRange(exportFrom, exportTo).length !== 1 ? "s" : ""}`}
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setRangeOpen(false)} className="min-h-[44px] min-w-[44px] lg:min-h-0 lg:min-w-0">
-              <X className="h-4 w-4" />
+            <Button variant="ghost" size="touch" onClick={() => setRangeOpen(false)} aria-label="Close the export picker">
+              <X className="h-4 w-4" aria-hidden />
             </Button>
           </div>
           {buildMonthRange(exportFrom, exportTo).length >= 24 && (
-            <p className="text-xs text-amber-600 w-full">Maximum 24 months per export.</p>
+            <p className="text-xs text-warning w-full">Maximum 24 months per export.</p>
           )}
         </div>
       )}
 
-      {/* Live calendar. Seven day columns cannot usefully compress to a phone,
-          so below lg the month keeps its width and scrolls in its own lane. */}
-      <div className="-mx-4 overflow-x-auto px-4 lg:mx-0 lg:overflow-visible lg:px-0">
-        <div className="min-w-[640px] lg:min-w-0">
-          <MonthGrid ym={ym} byDate={byDate} today={today} roomName={roomName} awayEntries={awayEntries} />
-        </div>
+      {/* The month, at a desk. */}
+      <div className="hidden lg:block">
+        <MonthGrid ym={ym} byDate={byDate} today={today} roomName={roomName} awayEntries={awayEntries} onOpen={onOpen} />
+      </div>
+
+      {/* The week, on a phone — the same bookings, nothing sideways. */}
+      <div className="lg:hidden">
+        <WeekView
+          weekStart={weekStart}
+          day={day}
+          byDate={byDate}
+          today={today}
+          roomName={roomName}
+          awayEntries={awayEntries}
+          onDay={setDay}
+          onWeek={stepWeek}
+          onOpen={onOpen}
+        />
       </div>
 
       {/* Legend */}
       <div className="flex flex-wrap gap-3 pt-1 cal-no-print">
-        {[
-          { label: "Confirmed", color: "bg-green-100 border-green-200" },
-          { label: "Pending", color: "bg-amber-50 border-yellow-300" },
-          { label: "Enquiry (not held)", color: "border-dashed bg-slate-50 border-slate-300" },
-          { label: "Quoted (not held)", color: "border-dashed bg-violet-50 border-violet-300" },
-          { label: "Cancelled", color: "bg-red-100 border-red-200" },
-          { label: "Staff away", color: "bg-red-50 border-red-200" },
-          { label: "Blocked", color: "bg-amber-100 border-amber-200" },
-        ].map(({ label, color }) => (
+        {CALENDAR_LEGEND.map(({ label, swatch }) => (
           <div key={label} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            <span className={`h-3 w-3 rounded border ${color}`} />
+            <span className="h-3 w-3 rounded border" style={swatchStyle(swatch)} />
             {label}
           </div>
         ))}

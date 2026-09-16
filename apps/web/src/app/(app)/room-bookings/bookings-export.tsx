@@ -136,14 +136,14 @@ export function BookingsExportButtons({
   }
 
   return (
-    <div className="flex gap-2 shrink-0">
-      <Button variant="outline" size="sm" onClick={exportCsv} className="min-h-[44px] lg:min-h-0">
+    <div className="flex flex-wrap gap-2">
+      <Button variant="outline" size="touch" onClick={exportCsv}>
         <Download className="h-3.5 w-3.5" /> CSV
       </Button>
-      <Button variant="outline" size="sm" onClick={exportExcel} className="min-h-[44px] lg:min-h-0">
+      <Button variant="outline" size="touch" onClick={exportExcel}>
         <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
       </Button>
-      <Button variant="outline" size="sm" onClick={exportPdf} className="min-h-[44px] lg:min-h-0">
+      <Button variant="outline" size="touch" onClick={exportPdf}>
         <Printer className="h-3.5 w-3.5" /> PDF
       </Button>
     </div>
