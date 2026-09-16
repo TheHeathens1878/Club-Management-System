@@ -28,7 +28,7 @@
 import Link from "next/link";
 
 import { formatBookingDate, type BookingWindow } from "@/lib/booking-time";
-import type { BookingMoney, BookingSheetMode as BookingActionMode } from "@/lib/booking-next-action";
+import type { BookingMoney } from "@/lib/booking-next-action";
 import { Callout } from "@/components/ui/callout";
 import { Sheet } from "@/components/ui/sheet";
 
@@ -39,37 +39,10 @@ import { ReplyForm } from "./reply-form";
 import { SecurityDepositCard } from "./security-deposit-card";
 import { CancelForm, ChaseForm, ConfirmForm, QuoteForm } from "./status-form";
 
-/**
- * The doors this sheet has. It is the desk's list: `bookingNextAction()`'s
- * desk modes, plus `edit` and `delete`, which are gated acts no status bar
- * ever proposes.
- */
-export const BOOKING_SHEET_MODES = [
-  "quote",
-  "confirm",
-  "chase",
-  "cancel",
-  "payment",
-  "security",
-  "email",
-  "edit",
-  "delete",
-] as const;
-
-export type BookingSheetMode = (typeof BOOKING_SHEET_MODES)[number];
-
-export function isBookingSheetMode(value: unknown): value is BookingSheetMode {
-  return typeof value === "string" && (BOOKING_SHEET_MODES as readonly string[]).includes(value);
-}
-
-/**
- * The mode a status bar's action opens. `bookingNextAction()` also answers in
- * the booker's voice, whose `accept` / `pay` / `view` are `/portal`'s doors and
- * not the desk's, so those come back as null here.
- */
-export function deskSheetMode(mode: BookingActionMode | undefined): BookingSheetMode | null {
-  return mode && isBookingSheetMode(mode) ? mode : null;
-}
+// The doors, their type guard and `deskSheetMode()` live in a plain module so a
+// server page can call them; re-exported here for the client callers.
+export { BOOKING_SHEET_MODES, deskSheetMode, isBookingSheetMode, type BookingSheetMode } from "./booking-sheet-modes";
+import { isBookingSheetMode, type BookingSheetMode } from "./booking-sheet-modes";
 
 /** The columns every mode of the sheet reads off the booking. */
 export type BookingSheetBooking = {
