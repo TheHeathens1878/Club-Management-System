@@ -218,6 +218,38 @@
   }
 
   /*
+   * The same floor, applied to every control inside a box (P8.6).
+   *
+   * `.touch` goes on a control the caller owns. A sheet full of SHARED field
+   * components — the emergency-contact fields, the address fields, the
+   * registration form's question blocks — is a form nobody owns field by
+   * field, and threading a `className` prop through four shared components so
+   * a panel can be thumb-sized would be four props that mean "you are in a
+   * sheet". One class on the box says the same thing once.
+   */
+  .touch-fields :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]) {
+    min-height: 44px;
+  }
+
+  /*
+   * A tick-box is the exception: stretching the box itself to 44px draws a
+   * 44px tick-box, which is not what anybody means. The LABEL is the target —
+   * clicking the words toggles the box — so the floor goes there instead.
+   * (The render harness measures the input rather than its label, so it still
+   * reports these as 16px; the thumb does not.)
+   */
+  .touch-fields label:has(:is(input[type="checkbox"], input[type="radio"])) {
+    min-height: 44px;
+  }
+
+  @media (min-width: 1024px) {
+    .touch-fields :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]),
+    .touch-fields label:has(:is(input[type="checkbox"], input[type="radio"])) {
+      min-height: 0;
+    }
+  }
+
+  /*
    * A strip that scrolls sideways without a scrollbar drawn across it — day
    * chips, filter chips, a row of tiles. The bar itself is noise on a phone
    * (the content is obviously swipeable) and on a desk it lands on top of the
