@@ -27,12 +27,12 @@ async function submitAction(formData: FormData): Promise<void> {
 export default async function NewInternalBookingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; date?: string }>;
 }) {
   const session = await getSessionProfile();
   if (!session) redirect("/login");
   if (!isStaff(session.profile?.role)) redirect("/lobby");
-  const { error } = await searchParams;
+  const { error, date } = await searchParams;
 
   const admin = createAdminClient();
   const [{ data: rooms }, { data: contacts }] = await Promise.all([
@@ -82,7 +82,7 @@ export default async function NewInternalBookingPage({
                   ))}
                 </select>
               </div>
-              <DateTimingFields />
+              <DateTimingFields initialDate={date} />
             </CardContent>
           </Card>
 

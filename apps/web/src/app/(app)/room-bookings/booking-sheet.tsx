@@ -25,6 +25,8 @@
  * it did not rewrite them.
  */
 
+import Link from "next/link";
+
 import { formatBookingDate, type BookingWindow } from "@/lib/booking-time";
 import type { BookingMoney, BookingSheetMode as BookingActionMode } from "@/lib/booking-next-action";
 import { Callout } from "@/components/ui/callout";
@@ -118,6 +120,14 @@ export type BookingSheetProps = {
   canDelete: boolean;
   /** `isSuperUser` — edit the booking's own fields. */
   canEditBooking: boolean;
+  /**
+   * Where the whole record is, when the sheet was opened from somewhere that
+   * is not it (the desk, P8.2). The booker's details, the internal notes, the
+   * email log and the clash banner live on the record and nowhere else, so a
+   * sheet opened over a month needs a way through to them. Omitted on the
+   * record page itself, where the link would lead back to where you are.
+   */
+  recordHref?: string;
 };
 
 /** What the sheet is called, which depends on where the booking stands. */
@@ -165,6 +175,7 @@ export function BookingSheet(props: BookingSheetProps) {
     canEdit,
     canDelete,
     canEditBooking,
+    recordHref,
   } = props;
 
   if (!mode) return null;
@@ -183,6 +194,16 @@ export function BookingSheet(props: BookingSheetProps) {
       width={480}
       title={titleFor(mode, booking, terms.needsTerms)}
       subtitle={`${roomName} · ${formatBookingDate(when.date)} · ${when.startTime}–${when.endTime}`}
+      headerAction={
+        recordHref ? (
+          <Link
+            href={recordHref}
+            className="touch inline-flex items-center text-list font-medium text-primary hover:underline"
+          >
+            The record
+          </Link>
+        ) : undefined
+      }
     >
       {!allowed ? (
         <Callout tone="warning" title="Not yours to do">

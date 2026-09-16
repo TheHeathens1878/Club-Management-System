@@ -6,10 +6,15 @@ import { Input, Label } from "@/components/ui/input";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ORDINALS = ["", "1st", "2nd", "3rd", "4th", "5th"];
 
-export function DateTimingFields() {
+export function DateTimingFields({
+  initialDate,
+}: {
+  /** An empty day pressed on the desk's calendar (P8.2): `?date=YYYY-MM-DD`. */
+  initialDate?: string;
+}) {
   const [recurring, setRecurring] = useState(false);
   const [freq, setFreq] = useState("weekly");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(initialDate ?? "");
 
   function weekdayHint() {
     if (freq !== "monthly_weekday" || !date) return null;

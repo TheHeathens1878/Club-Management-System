@@ -4,18 +4,30 @@ import { getSessionProfile, isStaff, isCommittee, isSuperUser } from "@/lib/auth
 import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { buttonVariants } from "@/components/ui/button";
+import { ChipStrip } from "@/components/ui/chip-strip";
+import { ToggleChipLink } from "@/components/ui/toggle-chip";
 import { ExternalLink, Settings, Plus, LayoutList, CalendarDays } from "lucide-react";
 import { BlockBookingForm } from "./block-booking-form";
-import { BookingsTable } from "./bookings-table";
-import { BookingsCalendar } from "./bookings-calendar";
+import { BookingsDesk } from "./bookings-desk";
 import { StaffAwayPanel } from "./staff-away-panel";
 import type { StaffMember, AwayEntry } from "./staff-away-panel";
-import { BOOKING_LIST_SELECT, FUNCTION_ROOM, toBookingListItem } from "@/lib/booking-types";
-import { londonToday } from "@/lib/booking-time";
+import type { ChipGroup } from "./bookings-table";
+import { deskClashes, deskSummary, type DeskBooking } from "./desk-shared";
+import { bookingMoney, bookingNeedsTerms, bookingNextAction } from "@/lib/booking-next-action";
+import {
+  FUNCTION_ROOM,
+  toBookingListItem,
+  type BookingRow,
+  type PaymentRow as PaymentDbRow,
+} from "@/lib/booking-types";
+import { instantsToLocalWindow, londonToday } from "@/lib/booking-time";
+import { bookingDepositPence, depositRuleFrom, depositRuleLabel, sumSecurityPaid } from "@/lib/hire-terms";
+import { splitContactName } from "@/lib/person-name";
+import { getSettings } from "@/lib/settings";
 
 export const metadata = { title: "Room Bookings" };
 
-type SearchParams = { status?: string; room?: string; period?: string; view?: string };
+type SearchParams = { status?: string; room?: string; period?: string; view?: string; q?: string };
 
 export default async function RoomBookingsPage({
   searchParams,
@@ -28,7 +40,7 @@ export default async function RoomBookingsPage({
   // IS signed in back to the sign-in page is the loop Adam hit.
   if (!isStaff(session.profile?.role)) redirect("/lobby");
 
-  const { status: statusFilter, room: roomFilter, period: periodFilter, view } = await searchParams;
+  const { status: statusFilter, room: roomFilter, period: periodFilter, view, q } = await searchParams;
   const canDelete = isSuperUser(session.profile?.role);
   // Declining a block booking is a committee decision, which is what the
   // database has always said: bookings_admin_delete is is_club_admin().
@@ -50,11 +62,15 @@ export default async function RoomBookingsPage({
   const roomResourceIds = (roomResourceRows ?? []).map((row) => row.id);
 
   const [{ data: bookingRows }, { data: rooms }, { data: staffProfiles }, { data: awayRows }, { data: nonUserStaffRows }, authUsersResult] = await Promise.all([
+    // The whole row, not the list's dozen columns: a press on the calendar
+    // opens `BookingSheet` on the booking, and the sheet wants the terms, the
+    // deadlines and the chaser stamps. Forty-eight rows on the club's
+    // database — the desk has always read every one of them anyway.
     roomResourceIds.length === 0
-      ? Promise.resolve({ data: [] })
+      ? Promise.resolve({ data: [] as BookingRow[] })
       : admin
           .from("bookings")
-          .select(BOOKING_LIST_SELECT)
+          .select("*")
           .in("resource_id", roomResourceIds)
           .order("starts_at", { ascending: true }),
     admin
@@ -68,6 +84,26 @@ export default async function RoomBookingsPage({
     admin.from("non_user_staff").select("id,name").eq("active", true).order("name"),
     admin.auth.admin.listUsers({ perPage: 1000 }),
   ]);
+
+  const rawBookings = bookingRows ?? [];
+
+  // The ledger for every booking on the desk, in one query rather than one per
+  // row: what has been paid is what decides whether a deposit is overdue.
+  const bookingIds = rawBookings.map((row) => row.id);
+  const paymentQuery = bookingIds.length
+    ? await admin.from("payments").select("*").in("booking_id", bookingIds).order("paid_at", { ascending: false })
+    : null;
+  const paymentRows: PaymentDbRow[] = paymentQuery?.data ?? [];
+  const paymentsByBooking = new Map<string, PaymentDbRow[]>();
+  for (const payment of paymentRows) {
+    // `payments.booking_id` is nullable (a subs payment belongs to a person,
+    // not a hire); the `in` above only asked for hires, but the type is honest.
+    const bookingId = payment.booking_id;
+    if (!bookingId) continue;
+    const existing = paymentsByBooking.get(bookingId);
+    if (existing) existing.push(payment);
+    else paymentsByBooking.set(bookingId, [payment]);
+  }
 
   // Use email as a fallback for profile users who haven't set their name yet
   const authEmailById = new Map(
@@ -107,9 +143,95 @@ export default async function RoomBookingsPage({
     (rooms ?? []).map((r) => [r.id, r.name])
   );
 
+  // The club's terms, read once: the same deposit rule the record page offers
+  // at confirmation, so the desk's sheet prefills what the record's would.
+  const settings = await getSettings();
+  const depositRule = depositRuleFrom(settings);
+  const memberDiscountDefault = Number(settings.room_member_discount_pence) || 0;
+  const securityDefaultPence = Number(settings.security_deposit_default_pence) || 0;
+
+  const now = new Date();
+
   // `bookings` stores a timestamptz period; every screen below still works in
-  // Europe/London wall clock, so flatten it once here.
-  const allBookings = (bookingRows ?? []).map(toBookingListItem);
+  // Europe/London wall clock, so flatten it once here — and, beside each row,
+  // work out the one thing it needs next and everything its sheet will ask for.
+  const desk: DeskBooking[] = rawBookings.map((row) => {
+    const when = instantsToLocalWindow(row.starts_at, row.ends_at);
+    const payments = (paymentsByBooking.get(row.id) ?? []).map((p) => ({
+      id: p.id,
+      amount_pence: p.amount_pence,
+      paid_at: p.paid_at,
+      method: p.method,
+      reference: p.reference,
+      refunded_pence: p.refunded_pence,
+      source: p.source,
+      authorised_by_name: p.authorised_by_name,
+      note: p.note,
+      purpose: p.purpose,
+    }));
+    const input = { booking: row, payments, clashes: deskClashes(rawBookings, row) };
+    const action = bookingNextAction(input, { voice: "desk" as const, now });
+    const names = splitContactName(row.booker_name);
+
+    return {
+      id: row.id,
+      createdAt: row.created_at,
+      item: toBookingListItem(row),
+      roomName: roomNameRecord[row.resource_id] ?? "Unknown room",
+      next: {
+        key: action.key,
+        label: action.label,
+        why: action.why,
+        tone: action.tone,
+        ...(action.mode ? { mode: action.mode } : {}),
+      },
+      sheet: {
+        booking: {
+          status: row.status,
+          kind: row.kind,
+          booker_email: row.booker_email,
+          total_pence: row.total_pence,
+          security_deposit_pence: row.security_deposit_pence,
+          security_deposit_returned_at: row.security_deposit_returned_at,
+          security_deposit_returned_method: row.security_deposit_returned_method,
+          security_deposit_returned_note: row.security_deposit_returned_note,
+          is_member: row.is_member,
+          membership_type: row.membership_type,
+          member_number: row.member_number,
+          chaser_sent_at: row.chaser_sent_at,
+          final_chaser_sent_at: row.final_chaser_sent_at,
+          final_chaser_discount_pence: row.final_chaser_discount_pence,
+        },
+        when,
+        money: bookingMoney(input),
+        payments,
+        securityPaidPence: sumSecurityPaid(payments),
+        editInitial: {
+          resource_id: row.resource_id,
+          date: when.date,
+          start_time: when.startTime,
+          end_time: when.endTime,
+          booker_first_name: row.booker_first_name ?? names.firstName,
+          booker_last_name: row.booker_last_name ?? names.lastName,
+          booker_email: row.booker_email,
+          booker_phone: row.booker_phone ?? "",
+          occasion: row.occasion ?? "",
+          estimated_guests: row.estimated_guests === null ? "" : String(row.estimated_guests),
+          notes: row.notes ?? "",
+        },
+        terms: {
+          defaultDepositPence: bookingDepositPence(row, depositRule),
+          defaultSecurityDepositPence: securityDefaultPence,
+          defaultMemberDiscountPence: row.is_member ? memberDiscountDefault : null,
+          depositRuleLabel: depositRuleLabel(depositRule),
+          depositRule,
+          needsTerms: bookingNeedsTerms(row),
+        },
+      },
+    };
+  });
+
+  const allBookings = desk.map((b) => b.item);
 
   // --- List view filtering ---
   const effectivePeriod = periodFilter ?? "upcoming";
@@ -128,7 +250,7 @@ export default async function RoomBookingsPage({
     if (roomFilter) filtered = filtered.filter((b) => b.resource_id === roomFilter);
   }
 
-  // Status counts for tab badges
+  // Status counts for the chips
   const base = allBookings.filter((b) => {
     if (effectivePeriod === "upcoming") return b.date >= todayStr;
     if (effectivePeriod === "past") return b.date < todayStr;
@@ -144,16 +266,75 @@ export default async function RoomBookingsPage({
     cancelled: base.filter((b) => b.status === "cancelled").length,
   };
 
+  // What the desk owes the world, over the upcoming bookings — the same window
+  // the chips count, so the bar and the chips cannot disagree.
+  const upcomingIds = new Set(base.map((b) => b.id));
+  const summary = deskSummary(desk.filter((b) => upcomingIds.has(b.id)));
+
   function filterHref(overrides: Partial<SearchParams>) {
     const p: Record<string, string> = {};
-    const merged = { status: statusFilter, room: roomFilter, period: periodFilter, view, ...overrides };
+    const merged = { status: statusFilter, room: roomFilter, period: periodFilter, view, q, ...overrides };
     if (merged.status) p.status = merged.status;
     if (merged.room) p.room = merged.room;
     if (merged.period && merged.period !== "upcoming") p.period = merged.period;
     if (merged.view === "list") p.view = "list"; // calendar is default — only store "list"
+    if (merged.q) p.q = merged.q;
     const qs = new URLSearchParams(p).toString();
     return `/room-bookings${qs ? `?${qs}` : ""}`;
   }
+
+  // The list's three filter strips, as chips above the rows. Every one is a
+  // URL, so a narrowed desk can be sent to a colleague.
+  const chipGroups: ChipGroup[] = [
+    {
+      key: "period",
+      label: "When",
+      options: (["upcoming", "past", "all"] as const).map((p) => ({
+        key: p,
+        href: filterHref({ period: p, status: undefined }),
+        label: p === "upcoming" ? "Upcoming" : p === "past" ? "Past" : "All dates",
+        active: effectivePeriod === p,
+      })),
+    },
+    {
+      key: "status",
+      label: "Where it stands",
+      options: (["all", "open", "enquiry", "quoted", "pending", "confirmed", "cancelled"] as const).map((s) => ({
+        key: s,
+        href: filterHref({ status: s === "all" ? undefined : s }),
+        label:
+          s === "open"
+            ? "Waiting"
+            : s === "all"
+              ? "Everything"
+              : s.charAt(0).toUpperCase() + s.slice(1),
+        count: s === "all" ? counts.all : counts[s],
+        active: (s === "all" && !statusFilter) || statusFilter === s,
+      })),
+    },
+    ...((rooms ?? []).length > 1
+      ? [
+          {
+            key: "room",
+            label: "Which room",
+            options: [
+              {
+                key: "all",
+                href: filterHref({ room: undefined }),
+                label: "All rooms",
+                active: !roomFilter,
+              },
+              ...(rooms ?? []).map((r) => ({
+                key: r.id,
+                href: filterHref({ room: r.id }),
+                label: r.name,
+                active: roomFilter === r.id,
+              })),
+            ],
+          },
+        ]
+      : []),
+  ];
 
   return (
     <>
@@ -167,29 +348,25 @@ export default async function RoomBookingsPage({
             <Link
               href="/book"
               target="_blank"
-              className={buttonVariants({ variant: "outline", size: "sm" }) + " min-h-[44px] lg:min-h-0"}
+              className={buttonVariants({ variant: "outline", size: "touch" })}
             >
-              <ExternalLink className="h-4 w-4" /> Public page
+              <ExternalLink className="h-4 w-4" aria-hidden /> Public page
             </Link>
-            <Link
-              href="/room-bookings/new"
-              className={buttonVariants({ size: "sm" }) + " min-h-[44px] lg:min-h-0"}
-            >
-              <Plus className="h-4 w-4" /> New booking
+            <Link href="/room-bookings/new" className={buttonVariants({ size: "touch" })}>
+              <Plus className="h-4 w-4" aria-hidden /> New booking
             </Link>
             {isCommittee(session.profile?.role) && (
               <>
-                <div className="col-span-2 lg:col-span-1 [&>button]:min-h-[44px] [&>button]:w-full lg:[&>button]:min-h-0 lg:[&>button]:w-auto">
+                <div className="col-span-2 lg:col-span-1 [&>button]:touch [&>button]:w-full lg:[&>button]:w-auto">
                   <BlockBookingForm rooms={rooms ?? []} />
                 </div>
                 <Link
                   href="/room-bookings/rooms"
                   className={
-                    buttonVariants({ variant: "outline", size: "sm" }) +
-                    " col-span-2 min-h-[44px] lg:col-span-1 lg:min-h-0"
+                    buttonVariants({ variant: "outline", size: "touch" }) + " col-span-2 lg:col-span-1"
                   }
                 >
-                  <Settings className="h-4 w-4" /> Manage rooms
+                  <Settings className="h-4 w-4" aria-hidden /> Manage rooms
                 </Link>
               </>
             )}
@@ -198,96 +375,34 @@ export default async function RoomBookingsPage({
       />
 
       <div className="space-y-3 p-4 lg:p-6">
-        {/* View toggle + list filters. On a phone the whole strip scrolls
-            sideways in its own lane rather than wrapping into four rows. */}
-        <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 pb-1 lg:mx-0 lg:flex-wrap lg:gap-3 lg:overflow-visible lg:px-0 lg:pb-0">
-          {/* View toggle */}
-          <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
-            <Link
-              href={filterHref({ view: undefined })}
-              className={`flex min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
-                isCalendar ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <CalendarDays className="h-3.5 w-3.5" /> Calendar
-            </Link>
-            <Link
-              href={filterHref({ view: "list" })}
-              className={`flex min-h-[36px] items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
-                !isCalendar ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <LayoutList className="h-3.5 w-3.5" /> List
-            </Link>
-          </div>
+        {/* The diary or the list. Two chips, and the choice lives in the URL:
+            the calendar is the default, so only `view=list` is ever stored. */}
+        <ChipStrip aria-label="How to read the desk">
+          <ToggleChipLink href={filterHref({ view: undefined })} active={isCalendar}>
+            <CalendarDays className="h-3.5 w-3.5" aria-hidden /> Calendar
+          </ToggleChipLink>
+          <ToggleChipLink href={filterHref({ view: "list" })} active={!isCalendar}>
+            <LayoutList className="h-3.5 w-3.5" aria-hidden /> List
+          </ToggleChipLink>
+        </ChipStrip>
 
-          {!isCalendar && (
-            <>
-              {/* Period */}
-              <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
-                {(["upcoming", "past", "all"] as const).map((p) => (
-                  <Link
-                    key={p}
-                    href={filterHref({ period: p, status: undefined })}
-                    className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors lg:min-h-0 ${
-                      effectivePeriod === p
-                        ? "bg-background shadow-sm text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {p}
-                  </Link>
-                ))}
-              </div>
-
-              {/* Status */}
-              <div className="flex shrink-0 rounded-lg border bg-muted/30 p-1 gap-0.5">
-                {(["all", "open", "enquiry", "quoted", "pending", "confirmed", "cancelled"] as const).map((s) => (
-                  <Link
-                    key={s}
-                    href={filterHref({ status: s === "all" ? undefined : s })}
-                    className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium capitalize transition-colors lg:min-h-0 ${
-                      (s === "all" && !statusFilter) || statusFilter === s
-                        ? "bg-background shadow-sm text-foreground"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    {s === "open" ? "Waiting" : s}{" "}
-                    <span className="ml-1 text-xs opacity-60">({s === "all" ? counts.all : counts[s]})</span>
-                  </Link>
-                ))}
-              </div>
-
-              {/* Room */}
-              {(rooms ?? []).length > 1 && (
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className="whitespace-nowrap text-sm text-muted-foreground">Room:</span>
-                  <div className="flex rounded-lg border bg-muted/30 p-1 gap-0.5">
-                    <Link
-                      href={filterHref({ room: undefined })}
-                      className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
-                        !roomFilter ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      All
-                    </Link>
-                    {(rooms ?? []).map((r) => (
-                      <Link
-                        key={r.id}
-                        href={filterHref({ room: r.id })}
-                        className={`inline-flex min-h-[36px] items-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium transition-colors lg:min-h-0 ${
-                          roomFilter === r.id ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        {r.name}
-                      </Link>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <BookingsDesk
+          bookings={desk}
+          calendarItems={allBookings}
+          listItems={filtered}
+          roomName={roomNameRecord}
+          rooms={rooms ?? []}
+          awayEntries={awayEntries}
+          isCalendar={isCalendar}
+          summary={summary}
+          chipGroups={chipGroups}
+          initialQuery={q ?? ""}
+          canDelete={canDelete}
+          canDecline={canDecline}
+          sheetCanEdit={isStaff(session.profile?.role)}
+          sheetCanDelete={isCommittee(session.profile?.role)}
+          sheetCanEditBooking={isSuperUser(session.profile?.role)}
+        />
 
         <StaffAwayPanel
           staffList={staffList}
@@ -295,21 +410,6 @@ export default async function RoomBookingsPage({
           currentUserId={session.userId}
           isCommittee={isCommittee(session.profile?.role)}
         />
-
-        {isCalendar ? (
-          <BookingsCalendar
-            bookings={allBookings}
-            roomName={roomNameRecord}
-            awayEntries={awayEntries}
-          />
-        ) : (
-          <BookingsTable
-            bookings={filtered}
-            roomName={roomNameRecord}
-            canDelete={canDelete}
-          canDecline={canDecline}
-          />
-        )}
       </div>
     </>
   );

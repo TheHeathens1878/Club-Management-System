@@ -76,13 +76,13 @@ export function StaffAwayPanel({
     <div className="cal-no-print rounded-lg border bg-card">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="flex min-h-[44px] w-full items-center justify-between px-4 py-3 text-sm font-medium hover:bg-muted/30 transition-colors rounded-lg"
+        className="touch flex w-full items-center justify-between rounded-lg px-4 py-3 text-sm font-medium transition-colors hover:bg-muted/30"
       >
         <span className="flex items-center gap-2">
           <UserX className="h-4 w-4 text-muted-foreground" />
           Staff availability
           {relevantEntries.length > 0 && (
-            <span className="ml-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+            <span className="ml-1 rounded-full bg-warning-tint px-2 py-0.5 text-2xs font-semibold text-warning">
               {relevantEntries.length} away
             </span>
           )}
@@ -98,20 +98,20 @@ export function StaffAwayPanel({
           ) : (
             <div className="space-y-1.5">
               {relevantEntries.map((e) => (
-                <div key={e.id} className="flex items-center justify-between gap-3 rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-sm">
+                <div key={e.id} className="flex items-center justify-between gap-3 rounded-md border border-warning/30 bg-warning-tint px-3 py-2 text-sm">
                   <div className="min-w-0">
-                    <span className="font-medium text-amber-900">{e.staffName}</span>
-                    <span className="text-amber-700 lg:ml-2 block lg:inline">
+                    <span className="font-medium text-foreground">{e.staffName}</span>
+                    <span className="block text-warning lg:ml-2 lg:inline">
                       {formatDate(e.fromDate)}{e.fromDate !== e.toDate ? ` – ${formatDate(e.toDate)}` : ""}
                     </span>
-                    {e.note && <span className="text-amber-600 lg:ml-2 text-xs block lg:inline">· {e.note}</span>}
+                    {e.note && <span className="block text-xs text-muted-foreground lg:ml-2 lg:inline">· {e.note}</span>}
                   </div>
                   {(isCommittee || e.staffId === currentUserId) && (
                     <button
                       onClick={() => handleRemove(e.id)}
                       disabled={removing === e.id}
                       title="Remove"
-                      className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded p-1 text-amber-600 hover:text-destructive hover:bg-destructive/10 transition-colors lg:min-h-0 lg:min-w-0"
+                      className="touch flex w-11 shrink-0 items-center justify-center rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive lg:w-9"
                     >
                       {removing === e.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
                     </button>
@@ -151,7 +151,7 @@ export function StaffAwayPanel({
                     <select
                       value={selectedStaff}
                       onChange={(e) => setSelectedStaff(e.target.value)}
-                      className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
+                      className="touch w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:w-auto"
                       required
                     >
                       {manageableStaff.map((s) => (
@@ -166,7 +166,7 @@ export function StaffAwayPanel({
                     type="date"
                     value={fromDate}
                     onChange={(e) => { setFromDate(e.target.value); if (toDate < e.target.value) setToDate(e.target.value); }}
-                    className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
+                    className="touch w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:w-auto"
                     required
                   />
                 </div>
@@ -177,21 +177,21 @@ export function StaffAwayPanel({
                     value={toDate}
                     min={fromDate}
                     onChange={(e) => setToDate(e.target.value)}
-                    className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0 lg:w-auto"
+                    className="touch w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:w-auto"
                     required
                   />
                 </div>
-                <div className="space-y-1 lg:flex-1 lg:min-w-[140px]">
+                <div className="space-y-1 lg:min-w-0 lg:flex-1">
                   <label className="text-xs text-muted-foreground">Note (optional)</label>
                   <input
                     type="text"
                     value={note}
                     onChange={(e) => setNote(e.target.value)}
                     placeholder="e.g. Holiday"
-                    className="min-h-[44px] w-full rounded-md border bg-background px-3 py-1.5 text-sm lg:min-h-0"
+                    className="touch w-full rounded-md border bg-background px-3 py-1.5 text-sm"
                   />
                 </div>
-                <Button type="submit" size="sm" disabled={saving} className="min-h-[44px] w-full lg:min-h-0 lg:w-auto">
+                <Button type="submit" size="sm" disabled={saving} className="touch w-full lg:w-auto">
                   {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
                   {saving ? "Saving…" : "Add"}
                 </Button>
