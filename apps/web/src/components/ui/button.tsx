@@ -19,6 +19,11 @@ const buttonVariants = cva(
         sm: "h-9 rounded-md px-3",
         lg: "h-11 rounded-md px-8",
         icon: "h-10 w-10",
+        // `default` with a thumb-sized floor on a phone and nothing extra on a
+        // desk — the shape 52 files were spelling out by hand as
+        // `min-h-[44px] lg:min-h-0`. Reach for it whenever the button is
+        // something a coach presses standing on a pitch.
+        touch: "min-h-[44px] h-10 px-4 py-2 lg:min-h-0",
       },
     },
     defaultVariants: { variant: "default", size: "default" },

@@ -44,6 +44,41 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // The three states that are not danger. `tint` is the wash a chip or
+        // callout sits on, DEFAULT is the ink that reads on it, `foreground`
+        // is the text for the rare solid fill. Defined in globals.css for
+        // :root, .dark and .theme-ink, so a status keeps its meaning inside
+        // the dark crest rail.
+        success: {
+          DEFAULT: "hsl(var(--success))",
+          foreground: "hsl(var(--success-foreground))",
+          tint: "hsl(var(--success-tint))",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning))",
+          foreground: "hsl(var(--warning-foreground))",
+          tint: "hsl(var(--warning-tint))",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info))",
+          foreground: "hsl(var(--info-foreground))",
+          tint: "hsl(var(--info-tint))",
+        },
+      },
+      // Four sizes named for what they label, filling the gaps Tailwind's
+      // stock scale leaves between 12px and 20px. The app had drifted to 16
+      // distinct `text-[Npx]` literals — 11px, 12.5px, 13px, 15px, 17px and
+      // so on — which is a scale nobody agreed to and nothing can enforce.
+      // With stock xs/sm/lg/xl these four absorb all of them: `2xs` for a
+      // micro-label over a tile, `list` for a dense row of data, `row` for a
+      // card's own line of text, `panel` for the heading of a sheet or a
+      // figure on a stat tile. Landing on a named size sometimes shifts a
+      // number by half a pixel; that is the point.
+      fontSize: {
+        "2xs": ["0.625rem", { lineHeight: "0.875rem" }],
+        list: ["0.8125rem", { lineHeight: "1.125rem" }],
+        row: ["0.9375rem", { lineHeight: "1.25rem" }],
+        panel: ["1.0625rem", { lineHeight: "1.375rem" }],
       },
       borderRadius: {
         lg: "var(--radius)",

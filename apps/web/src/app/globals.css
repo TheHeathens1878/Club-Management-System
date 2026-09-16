@@ -31,6 +31,34 @@
     --radius: 0.75rem;
 
     /*
+     * The three states that are not "danger". Until now the app had a word for
+     * a problem (`destructive`) and no word at all for "this went well",
+     * "somebody should look at this soon" or "here is a fact" — so 126 files
+     * reached past the theme for `emerald-100`, `amber-700`, `sky-50` and
+     * friends. Those literals are fixed sRGB: they ignore `.dark`, they ignore
+     * `.theme-ink`, and a green chosen in one file never matches the green
+     * chosen in the next. Naming them here makes a status the same colour
+     * everywhere and lets the ink rail and dark scheme restate it.
+     *
+     * Each state comes as a trio, and which one to use follows from where it
+     * sits: `--success` is the INK (text or an icon, and dark enough to read
+     * on paper), `--success-tint` is the quiet wash a chip or callout sits on,
+     * and `--success-foreground` is the text for the rare case where the solid
+     * colour is the background. `info` is deliberately the Diary rail's
+     * existing training blue, so the one blue the app already had keeps its
+     * exact hue and simply gains a name.
+     */
+    --success: 151 40% 30%;
+    --success-foreground: 34 30% 96%;
+    --success-tint: 151 44% 94%;
+    --warning: 33 85% 38%;
+    --warning-foreground: 34 30% 96%;
+    --warning-tint: 40 90% 94%;
+    --info: 200 51% 37%;
+    --info-foreground: 34 30% 96%;
+    --info-tint: 200 55% 94%;
+
+    /*
      * The phone shell's two fixed strips, named once so that nothing has to
      * guess at them again. They used to be guessed at, and disagreed: `<main>`
      * padded itself by a hardcoded 64px to clear a tab bar that is really 55px
@@ -61,6 +89,24 @@
     --border: 24 8% 22%;
     --input: 24 8% 22%;
     --ring: 12 76% 51%;
+
+    /*
+     * On a dark surface the light trio inverts. The tint is no longer a wash
+     * of white — a 94%-lightness chip on near-black ink glares — so it becomes
+     * a dim surface a shade above the card (14–18% lightness), and the ink
+     * becomes the light colour that reads on top of it. `-foreground` follows:
+     * where the solid colour is the background it is now a light green, amber
+     * or blue, so the text on it is the near-black ink, not paper.
+     */
+    --success: 151 44% 62%;
+    --success-foreground: 20 18% 7%;
+    --success-tint: 151 28% 15%;
+    --warning: 40 85% 62%;
+    --warning-foreground: 20 18% 7%;
+    --warning-tint: 36 42% 15%;
+    --info: 200 58% 65%;
+    --info-foreground: 20 18% 7%;
+    --info-tint: 200 38% 16%;
   }
 
   /*
@@ -82,6 +128,20 @@
     --accent-foreground: 34 30% 96%;
     --border: 24 8% 24%;
     --input: 24 8% 24%;
+
+    /* The rail is dark whatever the page around it is doing, so it restates
+       the dark trio rather than inheriting the paper one — a "confirmed"
+       badge dropped into the crest drawer must not arrive as a white chip. */
+    --success: 151 44% 62%;
+    --success-foreground: 20 18% 7%;
+    --success-tint: 151 28% 16%;
+    --warning: 40 85% 62%;
+    --warning-foreground: 20 18% 7%;
+    --warning-tint: 36 42% 16%;
+    --info: 200 58% 65%;
+    --info-foreground: 20 18% 7%;
+    --info-tint: 200 38% 17%;
+
     /* Native form controls (the role dropdown's option list, scrollbars)
        follow the UA, not our tokens — without this the popup opens WHITE with
        the rail's pale text inherited into it, which is unreadable. */
@@ -133,6 +193,44 @@
       height: auto;
       margin-bottom: 0;
     }
+  }
+
+  /*
+   * A thumb-sized hit target. Apple and Google both put the smallest
+   * comfortable tap at 44px, and a coach standing on a pitch in the rain is
+   * exactly who needs it — but on a desk, where the pointer is precise, a
+   * 44px floor turns a row of controls into a ladder. So the floor is only
+   * there below `lg`, which is the same line the rest of the shell draws
+   * between phone and desk.
+   *
+   * This existed already, spelled `min-h-[44px] lg:min-h-0` in 52 files and
+   * 125 places, which is 125 chances to type one half of it and not the other.
+   * One class, one place to change our mind.
+   */
+  .touch {
+    min-height: 44px;
+  }
+
+  @media (min-width: 1024px) {
+    .touch {
+      min-height: 0;
+    }
+  }
+
+  /*
+   * A strip that scrolls sideways without a scrollbar drawn across it — day
+   * chips, filter chips, a row of tiles. The bar itself is noise on a phone
+   * (the content is obviously swipeable) and on a desk it lands on top of the
+   * chips rather than beside them. The overflow still works and the strip is
+   * still reachable by keyboard; only the paint is suppressed.
+   */
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
   }
 }
 

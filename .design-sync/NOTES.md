@@ -7,6 +7,11 @@ Repo-specific facts a future sync needs. Config lives in `.design-sync/config.js
   `.design-sync/entry.tsx` (relative re-exports of the app's real components). Add a line there AND a
   `componentSrcMap` pin in config to sync a new component — with a custom entry the converter takes
   the component list from the pins, not from a `.d.ts` tree.
+- **Invariant: `componentSrcMap` keys, `entry.tsx` exports and `previews/*.tsx` filenames must match
+  1:1.** All three are hand-maintained lists of the same set, and nothing checks them against each
+  other. A pin with no export syncs an empty component; an export with no pin is simply never seen;
+  a preview whose filename does not match a pin is not scanned for Tailwind classes, so the
+  component arrives unstyled. Count them before a re-sync (24 today).
 - pnpm uses `node-linker=hoisted` (`.npmrc`), so `--node-modules ./node_modules` at the REPO ROOT is
   where react, lucide-react and cva resolve. `apps/web/node_modules` holds only workspace links.
 - `PKG_DIR` resolves to the repo root (the entry walks up to the root package.json), so every
@@ -36,7 +41,7 @@ node .ds-sync/resync.mjs --config .design-sync/config.json --node-modules ./node
 with `DS_CHROMIUM_PATH` set as above.
 
 ## Decisions
-- All 22 components sit in one group ("general"). (SidebarNav left with the three-noun navigation, P7.5.) Regrouping needs a matched doc with a `category`
+- All 24 components sit in one group ("general"). (SidebarNav left with the three-noun navigation, P7.5.) Regrouping needs a matched doc with a `category`
   frontmatter, and a matched doc replaces the synthesized prompt including its `## Examples` — the
   examples matter more to the design agent than grouping. Revisit only if the converter grows a
   group override.
