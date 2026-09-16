@@ -60,6 +60,19 @@ export type PersonSheetProps = {
   canAdmin: boolean;
   /** The one account that is offered a permanent delete. */
   isSuperUser: boolean;
+  /**
+   * The modes this caller offers, in strip order. Left out, the strip is the
+   * whole of `PERSON_SHEET_MODES` filtered by the hat, which is what
+   * `/people/[id]` wants. A screen that holds only part of a person — the
+   * team squad knows a member's details, their contacts and their place in
+   * the team, and nothing about their money or their registration — names
+   * the three it can actually draw, so no chip opens an empty panel.
+   */
+  modes?: readonly PersonSheetMode[];
+  /** Chip-strip overrides, for a mode that is called something else here. */
+  labels?: Partial<Record<PersonSheetMode, string>>;
+  /** Subtitle overrides, for a mode that means something narrower here. */
+  captions?: Partial<Record<PersonSheetMode, string>>;
   /** The body for `mode`, rendered by the caller on the server. */
   children: React.ReactNode;
 };
@@ -81,10 +94,14 @@ export function PersonSheet({
   canEdit,
   canAdmin,
   isSuperUser,
+  modes: offered,
+  labels,
+  captions,
   children,
 }: PersonSheetProps) {
   const router = useRouter();
-  const modes = modesFor(canEdit, canAdmin);
+  const modes = offered ?? modesFor(canEdit, canAdmin);
+  const caption = mode ? (captions?.[mode] ?? PERSON_SHEET_CAPTIONS[mode]) : undefined;
 
   // Nine chips do not fit in a 520px drawer, so the one you are on has to be
   // brought to you: without this, opening the record at `?sheet=money` shows a
@@ -103,7 +120,7 @@ export function PersonSheet({
       open={!!mode}
       onClose={() => router.push(closeHref)}
       title={personName}
-      subtitle={mode ? PERSON_SHEET_CAPTIONS[mode] : undefined}
+      subtitle={caption}
       width={520}
       footer={
         <div className="flex justify-end">
@@ -124,7 +141,7 @@ export function PersonSheet({
         <ChipStrip>
           {modes.map((key) => (
             <ToggleChipLink key={key} size="sm" href={modeHrefs[key]} active={key === mode}>
-              {PERSON_SHEET_LABELS[key]}
+              {labels?.[key] ?? PERSON_SHEET_LABELS[key]}
             </ToggleChipLink>
           ))}
         </ChipStrip>
