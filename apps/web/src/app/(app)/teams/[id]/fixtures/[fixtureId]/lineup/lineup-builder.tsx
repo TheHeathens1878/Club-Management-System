@@ -33,13 +33,14 @@
  */
 
 import { useActionState, useEffect, useMemo, useState } from "react";
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 
 import type { Database } from "@club/db";
 
 import { PlayerToken } from "@/components/player-token";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Sheet } from "@/components/ui/sheet";
 import {
   benchKeys,
   benchLabel,
@@ -413,80 +414,22 @@ function PlayerPicker({
   /** A bench place is "taken off the bench", not "off the pitch". */
   bench?: boolean;
 }) {
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previous;
-    };
-  }, [onClose]);
-
   return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col justify-end lg:justify-center"
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Choose a player for ${slotLabel}`}
-    >
-      <button type="button" aria-label="Close" onClick={onClose} className="absolute inset-0 bg-black/45" />
-      <div className="relative mx-auto max-h-[80vh] w-full overflow-y-auto rounded-t-2xl bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3 text-card-foreground shadow-2xl lg:max-w-md lg:rounded-2xl">
-        <div className="flex justify-center pb-3 lg:hidden">
-          <span className="h-1 w-10 rounded-full bg-foreground/20" />
-        </div>
-        <div className="flex items-start gap-2 border-b border-border px-5 pb-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-semibold leading-tight">{slotLabel}</p>
-            <p className="mt-1 text-[12.5px] leading-snug text-muted-foreground">
-              {occupant
-                ? `${occupant.name} is here. Pick someone else to swap, or take them off.`
-                : bench
-                  ? "Pick a substitute for this place."
-                  : "Pick a player for this position."}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="-mr-2 flex h-9 w-9 flex-none items-center justify-center text-muted-foreground"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        {choices.length === 0 ? (
-          <p className="px-5 py-6 text-center text-sm text-muted-foreground">
-            Everyone else is already on the pitch or on the bench.
-          </p>
-        ) : (
-          choices.map((player) => (
-            <button
-              key={player.personId}
-              type="button"
-              onClick={() => onPick(player.personId)}
-              className="flex min-h-[44px] w-full items-center gap-3 border-t border-border/60 px-5 py-3 text-left first-of-type:border-t-0 active:bg-secondary/60"
-            >
-              <PlayerToken
-                name={player.name}
-                shirtNumber={player.shirtNumber}
-                className="h-9 w-9 flex-none"
-              />
-              <span className="min-w-0 flex-1 truncate text-sm">{player.name}</span>
-              {player.availability && (
-                <Badge variant={availabilityVariant(player.availability)}>
-                  {AVAILABILITY_LABEL[player.availability]}
-                </Badge>
-              )}
-            </button>
-          ))
-        )}
-
-        <div className="space-y-2 px-5 pt-4">
+    <Sheet
+      open
+      onClose={onClose}
+      title={slotLabel}
+      subtitle={
+        occupant
+          ? `${occupant.name} is here. Pick someone else to swap, or take them off.`
+          : bench
+            ? "Pick a substitute for this place."
+            : "Pick a player for this position."
+      }
+      side="modal"
+      width={448}
+      footer={
+        <div className="space-y-2">
           {onClear && (
             <button
               type="button"
@@ -504,7 +447,38 @@ function PlayerPicker({
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+      }
+    >
+      {choices.length === 0 ? (
+        <p className="py-2 text-center text-sm text-muted-foreground">
+          Everyone else is already on the pitch or on the bench.
+        </p>
+      ) : (
+        // The rows run the full width of the sheet, so they come back out of
+        // the body's own padding.
+        <div className="-mx-4 -mt-4 lg:-mx-5">
+          {choices.map((player) => (
+            <button
+              key={player.personId}
+              type="button"
+              onClick={() => onPick(player.personId)}
+              className="flex min-h-[44px] w-full items-center gap-3 border-t border-border/60 px-4 py-3 text-left first-of-type:border-t-0 active:bg-secondary/60 lg:px-5"
+            >
+              <PlayerToken
+                name={player.name}
+                shirtNumber={player.shirtNumber}
+                className="h-9 w-9 flex-none"
+              />
+              <span className="min-w-0 flex-1 truncate text-sm">{player.name}</span>
+              {player.availability && (
+                <Badge variant={availabilityVariant(player.availability)}>
+                  {AVAILABILITY_LABEL[player.availability]}
+                </Badge>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
+    </Sheet>
   );
 }

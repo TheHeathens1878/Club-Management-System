@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarDays, Contact, DoorOpen, FileText, Loader2, Search, Shirt } from "lucide-react";
 
+import { Sheet } from "@/components/ui/sheet";
 import type { PaletteEntry } from "@/lib/destinations";
 import { rankPages } from "@/lib/search-terms";
 
@@ -163,18 +164,11 @@ export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
   const nothing = rows.length === 0 && !searching && remoteState !== "failed";
 
   return (
-    <div
-      className="fixed inset-0 z-[70] flex items-start justify-center bg-black/40 p-4 pt-[12vh]"
-      onClick={() => setOpen(false)}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Search"
-    >
-      <div
-        className="w-full max-w-lg overflow-hidden rounded-xl border bg-card shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-center gap-2 border-b px-3">
+    <Sheet open onClose={() => setOpen(false)} title="Search" side="top" width={512}>
+      {/* The field and the results are the whole panel: they come back out of
+          the sheet body's padding and run to its edges. */}
+      <div className="-m-4 lg:-mx-5">
+        <div className="flex items-center gap-2 border-b px-4 lg:px-5">
           {searching ? (
             <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" aria-hidden />
           ) : (
@@ -253,6 +247,6 @@ export function CommandPalette({ pages }: { pages: PaletteEntry[] }) {
           )}
         </ul>
       </div>
-    </div>
+    </Sheet>
   );
 }

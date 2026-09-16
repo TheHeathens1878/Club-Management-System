@@ -26,7 +26,6 @@
  * One option renders the trigger inert — nothing to switch to.
  */
 
-import { useEffect } from "react";
 import {
   Baby,
   Check,
@@ -41,6 +40,7 @@ import {
 } from "lucide-react";
 
 import type { RoleSwitcherOption } from "@/components/role-switcher";
+import { Sheet } from "@/components/ui/sheet";
 import { useRoleSwitcher } from "@/components/use-role-switcher";
 import { roleSwitchAnnouncement } from "@/lib/role-view";
 
@@ -67,18 +67,10 @@ export function RoleSwitcherSheet({
   current: string;
   trigger: "role-line" | "tile";
 }) {
-  const { open, pending, stalled, busy, openPanel, dismiss, choose, triggerRef, panelRef } =
+  // `panelRef` is the sidebar popover's; the sheet leaves focus to `Sheet`,
+  // which puts it back where it was whichever way the panel is closed.
+  const { open, pending, stalled, busy, openPanel, dismiss, choose, triggerRef } =
     useRoleSwitcher(current);
-
-  useEffect(() => {
-    if (!open) return;
-    // The page behind the sheet should not scroll under a thumb.
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = previous;
-    };
-  }, [open]);
 
   const active = options.find((option) => option.value === current) ?? options[0];
   if (!active) return null;
@@ -145,104 +137,87 @@ export function RoleSwitcherSheet({
   return (
     <>
       {triggerNode}
-      {open ? (
-        <div
-          ref={panelRef}
-          className="fixed inset-0 z-50 flex flex-col justify-end"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Viewing as"
-          aria-busy={busy}
-        >
+      <Sheet
+        open={open}
+        onClose={dismiss}
+        title="Viewing as"
+        subtitle="Each role shows its own menu. Nothing is combined, so pick the hat you are wearing right now."
+        side="modal"
+        busy={busy}
+        footer={
           <button
             type="button"
-            aria-label="Close"
             onClick={dismiss}
-            className="absolute inset-0 bg-black/45"
-          />
-          <div className="relative max-h-[85vh] overflow-y-auto rounded-t-2xl bg-card pb-[calc(env(safe-area-inset-bottom)+16px)] pt-3 text-card-foreground shadow-2xl">
-            <div className="flex justify-center pb-3">
-              <span className="h-1 w-10 rounded-full bg-foreground/20" />
-            </div>
-            <div className="border-b border-border px-5 pb-3">
-              <p className="text-base font-semibold leading-tight">Viewing as</p>
-              <p className="mt-1 text-[12.5px] leading-snug text-muted-foreground">
-                Each role shows its own menu. Nothing is combined, so pick the hat
-                you are wearing right now.
-              </p>
-            </div>
-            {options.map((option) => {
-              const isActive = option.value === current;
-              const isPending = option.value === pending;
-              const Icon = VIEW_ICONS[viewOf(option.value)] ?? UserCircle;
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => choose(option.value)}
+            className="w-full rounded-lg border border-border py-3.5 text-center text-sm font-semibold"
+          >
+            Cancel
+          </button>
+        }
+      >
+        {/* The rows run edge to edge, out of the body's own padding. */}
+        <div className="-mx-4 -mt-4 lg:-mx-5">
+          {options.map((option) => {
+            const isActive = option.value === current;
+            const isPending = option.value === pending;
+            const Icon = VIEW_ICONS[viewOf(option.value)] ?? UserCircle;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                disabled={busy}
+                onClick={() => choose(option.value)}
+                className={
+                  "flex w-full items-center gap-3 border-t border-border/60 px-4 py-3.5 text-left first-of-type:border-t-0 lg:px-5 " +
+                  (isActive || isPending ? "bg-accent/10" : "active:bg-secondary/60") +
+                  (busy && !isPending ? " opacity-50" : "")
+                }
+              >
+                <span
                   className={
-                    "flex w-full items-center gap-3 border-t border-border/60 px-5 py-3.5 text-left first-of-type:border-t-0 " +
-                    (isActive || isPending ? "bg-accent/10" : "active:bg-secondary/60") +
-                    (busy && !isPending ? " opacity-50" : "")
+                    "inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg " +
+                    (isActive || isPending
+                      ? "bg-accent text-accent-foreground"
+                      : "bg-secondary text-secondary-foreground")
                   }
                 >
+                  <Icon className="h-[17px] w-[17px]" />
+                </span>
+                <span className="min-w-0 flex-1">
                   <span
                     className={
-                      "inline-flex h-9 w-9 flex-none items-center justify-center rounded-lg " +
-                      (isActive || isPending
-                        ? "bg-accent text-accent-foreground"
-                        : "bg-secondary text-secondary-foreground")
+                      "block truncate text-sm leading-tight " +
+                      (isActive || isPending ? "font-semibold" : "font-normal")
                     }
                   >
-                    <Icon className="h-[17px] w-[17px]" />
+                    {option.role}
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span
-                      className={
-                        "block truncate text-sm leading-tight " +
-                        (isActive || isPending ? "font-semibold" : "font-normal")
-                      }
-                    >
-                      {option.role}
-                    </span>
-                    <span className="block truncate text-xs leading-tight text-muted-foreground">
-                      {isPending && !stalled ? "Switching…" : option.scope}
-                    </span>
+                  <span className="block truncate text-xs leading-tight text-muted-foreground">
+                    {isPending && !stalled ? "Switching…" : option.scope}
                   </span>
-                  {isPending && !stalled ? (
-                    <Loader2 className="h-5 w-5 flex-none animate-spin text-accent" />
-                  ) : isActive ? (
-                    <Check className="h-5 w-5 flex-none text-accent" />
-                  ) : null}
-                </button>
-              );
-            })}
-            {/* The greyed row is not enough on its own — say what is happening. */}
-            <p
-              role="status"
-              aria-live="polite"
-              className={
-                announcement
-                  ? "px-5 pt-3 text-[12px] leading-snug " +
-                    (stalled ? "text-destructive" : "text-muted-foreground")
-                  : "sr-only"
-              }
-            >
-              {announcement}
-            </p>
-            <div className="px-5 pt-4">
-              <button
-                type="button"
-                onClick={dismiss}
-                className="w-full rounded-lg border border-border py-3.5 text-center text-sm font-semibold"
-              >
-                Cancel
+                </span>
+                {isPending && !stalled ? (
+                  <Loader2 className="h-5 w-5 flex-none animate-spin text-accent" />
+                ) : isActive ? (
+                  <Check className="h-5 w-5 flex-none text-accent" />
+                ) : null}
               </button>
-            </div>
-          </div>
+            );
+          })}
+          {/* The greyed row is not enough on its own — say what is happening. */}
+          <p
+            role="status"
+            aria-live="polite"
+            className={
+              announcement
+                ? "px-4 pt-3 text-xs leading-snug lg:px-5 " +
+                  (stalled ? "text-destructive" : "text-muted-foreground")
+                : "sr-only"
+            }
+          >
+            {announcement}
+          </p>
         </div>
-      ) : null}
+      </Sheet>
     </>
   );
 }
