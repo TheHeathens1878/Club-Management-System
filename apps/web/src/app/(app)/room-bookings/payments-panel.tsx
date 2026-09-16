@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2, Plus } from "lucide-react";
+import { CheckSquare, Plus, Square, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { ToggleChip } from "@/components/ui/toggle-chip";
 import { formatCurrency } from "@/lib/utils";
 import { sumHirePaid, sumSecurityPaid, type PaymentPurpose } from "@/lib/hire-terms";
 import { addPayment, deletePayment } from "./actions";
@@ -189,6 +190,7 @@ export function PaymentsPanel({
                   : ""}
               </label>
               <Input
+                className="touch"
                 type="number" min="0" step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -198,7 +200,7 @@ export function PaymentsPanel({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground uppercase">Date received</label>
-              <Input type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
+              <Input className="touch" type="date" value={paidAt} onChange={(e) => setPaidAt(e.target.value)} />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -217,7 +219,7 @@ export function PaymentsPanel({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground uppercase">Reference</label>
-              <Input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" />
+              <Input className="touch" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="Optional" />
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -236,13 +238,15 @@ export function PaymentsPanel({
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground uppercase">Note</label>
-              <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" />
+              <Input className="touch" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Optional" />
             </div>
           </div>
-          <label className="touch flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
+          {/* A 13px checkbox is not a tap target on a phone; the shared chip is,
+              and it says which way it is set without reading the box. */}
+          <ToggleChip on={sendEmail} onClick={() => setSendEmail(!sendEmail)} className="w-full justify-start">
+            {sendEmail ? <CheckSquare className="h-4 w-4" aria-hidden /> : <Square className="h-4 w-4" aria-hidden />}
             Email the booker a payment confirmation
-          </label>
+          </ToggleChip>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <div className="flex gap-2">
             <Button type="submit" size="sm" disabled={isPending} className="touch flex-1 lg:flex-none">

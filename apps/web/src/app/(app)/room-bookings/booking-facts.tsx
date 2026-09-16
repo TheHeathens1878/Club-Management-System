@@ -166,12 +166,19 @@ export function BookingFacts({
   roomName,
   when,
   money,
+  paymentHref,
 }: {
   booking: BookingFactsRow;
   roomName: string;
   /** The London wall clock the page has always shown. */
   when: BookingWindow;
   money: BookingMoney;
+  /**
+   * Where "Paid" and "Outstanding" lead — `?sheet=payment` on the record. A
+   * figure that is wrong is a figure somebody wants to change, so the tile
+   * showing it is the door to the ledger behind it.
+   */
+  paymentHref?: string;
 }) {
   const look = bookingStatusLook(booking.status);
   const discount = booking.member_discount_pence ?? 0;
@@ -291,6 +298,7 @@ export function BookingFacts({
             <StatTile
               label="Paid"
               value={formatCurrency(money.hirePaidPence)}
+              href={paymentHref}
               tone={money.hirePaidPence > 0 ? "success" : "default"}
               hint={
                 money.depositPence > 0
@@ -301,6 +309,7 @@ export function BookingFacts({
             <StatTile
               label="Outstanding"
               value={money.totalPence > 0 ? formatCurrency(money.outstandingPence) : "—"}
+              href={paymentHref}
               tone={money.outstandingPence > 0 ? "warning" : "success"}
               hint={
                 money.securityOutstandingPence > 0

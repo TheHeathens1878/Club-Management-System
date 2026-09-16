@@ -1,6 +1,6 @@
 /**
  * The booking record — one hire, and the next thing the desk does about it
- * (P8.1a).
+ * (P8.1).
  *
  * The page used to be three columns of nine `<Card>`s, and finding "what do I
  * press now" meant reading all of them: the actions were bottom-right, the
@@ -12,49 +12,45 @@
  *      constraint error waiting to happen.
  *   2. THE STATUS BAR — `bookingNextAction()` in the desk's voice: one
  *      sentence of where this hire stands, one line of why, and the ONE
- *      button that moves it on. Sticky under the header on a phone, so the
+ *      button that moves it on. Under it, the other doors this booking's
+ *      status allows, small. Sticky under the header on a phone, so the
  *      answer stays on screen while the desk scrolls the detail.
  *   3. THE FACTS — eight tiles, the cost in its parts, and Total / Paid /
- *      Outstanding.
- *   4. WHAT THE DESK DOES — the status, payments, security deposit and reply
- *      panels, each behind the gate it has always had. The bar's button
- *      scrolls to whichever of them it means. (P8.1b lifts these four into
- *      `BookingSheet`; the bar's button opens the matching mode instead, and
- *      everything above this line stays exactly as it is.)
- *   5. FOLDED BENEATH — booker, internal notes, emails sent, and the record
- *      itself (edit, reference, delete), each row saying what it holds.
+ *      Outstanding, the last two of which are themselves the door to the
+ *      payments.
+ *   4. FOLDED BENEATH — booker, internal notes, emails sent, and the record
+ *      itself (received, reference, edit, delete), each row saying what it
+ *      holds.
+ *
+ * Every door is a link to `?sheet=<mode>`, and `BookingSheet` is what opens
+ * there: nine forms that used to be nine panels permanently on the page. The
+ * mode being a URL is what makes it survive a server-action refresh.
  *
  * Every read is the page's; every write is the same server action with the
  * same gate. Nothing here is `"use client"`, so the fixture can mount it.
  */
 
+import { Suspense } from "react";
 import Link from "next/link";
-import {
-  ClipboardList,
-  Mail,
-  NotebookPen,
-  TriangleAlert,
-  UserRound,
-} from "lucide-react";
+import { ClipboardList, Mail, NotebookPen, TriangleAlert, UserRound } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
 import { Callout } from "@/components/ui/callout";
 import { FoldCard } from "@/components/ui/fold-card";
 import { ActionBar } from "@/components/ui/action-bar";
-import type { BookingMoney, BookingNextAction, BookingSheetMode } from "@/lib/booking-next-action";
-import { formatBookingDate, type BookingWindow } from "@/lib/booking-time";
-import type { DepositRule } from "@/lib/hire-terms";
-import { formatCurrency } from "@/lib/utils";
+import type { BookingMoney, BookingNextAction } from "@/lib/booking-next-action";
+import { type BookingWindow } from "@/lib/booking-time";
 
-import { BookingFacts, bookingActionIcon, bookingStatusLook, type BookingFactsRow } from "../booking-facts";
-import { DeleteBookingButton } from "../delete-booking-button";
-import { EditBookingForm } from "../edit-booking-form";
+import { BookingFacts, bookingActionIcon, type BookingFactsRow } from "../booking-facts";
+import {
+  deskSheetMode,
+  type BookingSheetBooking,
+  type BookingSheetMode,
+  type BookingSheetProps,
+  type BookingSheetTerms,
+} from "../booking-sheet";
 import type { PaymentRow } from "../payments-panel";
-import { PaymentsPanel } from "../payments-panel";
-import { ReplyForm } from "../reply-form";
-import { SecurityDepositCard } from "../security-deposit-card";
-import { StatusForm } from "../status-form";
+import { BookingSheetRoute } from "./sheet-route";
 
 /** A row `booking_conflicts()` gave back, already put into words by the page. */
 export type BookingClashLine = { id: string; who: string; status: string; when: string };
@@ -67,34 +63,21 @@ export type BookingEmailLine = {
   via: string;
 };
 
-/** Everything the record draws that is not a fact or a figure. */
-export type BookingRecordRow = BookingFactsRow & {
-  kind: string;
-  booker_name: string;
-  booker_first_name: string | null;
-  booker_last_name: string | null;
-  booker_email: string;
-  booker_phone: string | null;
-  notes: string | null;
-  internal_notes: string | null;
-  payment_status: string;
-  security_deposit_returned_at: string | null;
-  security_deposit_returned_method: string | null;
-  security_deposit_returned_note: string | null;
-  chaser_sent_at: string | null;
-  final_chaser_sent_at: string | null;
-  created_at: string;
-};
+/** Everything the record draws that is not a fact, a figure or a sheet's field. */
+export type BookingRecordRow = BookingFactsRow &
+  BookingSheetBooking & {
+    booker_name: string;
+    booker_first_name: string | null;
+    booker_last_name: string | null;
+    booker_phone: string | null;
+    notes: string | null;
+    internal_notes: string | null;
+    payment_status: string;
+    created_at: string;
+  };
 
-/** The confirm/quote/chase/cancel panel's own prefills, worked out by the page. */
-export type BookingTermsPrefill = {
-  defaultDepositPence: number;
-  defaultSecurityDepositPence: number;
-  defaultMemberDiscountPence: number | null;
-  depositRuleLabel: string;
-  depositRule: DepositRule | null;
-  needsTerms: boolean;
-};
+/** The confirm form's prefills, worked out by the page from the club's rule. */
+export type BookingTermsPrefill = BookingSheetTerms;
 
 export type BookingRecordProps = {
   bookingId: string;
@@ -111,7 +94,7 @@ export type BookingRecordProps = {
   securityPaidPence: number;
   emailLog: BookingEmailLine[];
   rooms: { id: string; name: string }[];
-  editInitial: React.ComponentProps<typeof EditBookingForm>["initial"];
+  editInitial: BookingSheetProps["editInitial"];
   terms: BookingTermsPrefill;
   canEdit: boolean;
   canDelete: boolean;
@@ -137,23 +120,8 @@ const MODE_BUTTON: Record<BookingSheetMode, string> = {
   payment: "Record a payment",
   security: "Mark it returned",
   email: "Email the booker",
-  accept: "Accept the quote",
-  pay: "Take a payment",
-  view: "See the detail",
-};
-
-/** Where the bar's button lands while the panels are still on the page. */
-const ANCHOR: Record<BookingSheetMode, string> = {
-  quote: "#booking-actions",
-  confirm: "#booking-actions",
-  chase: "#booking-actions",
-  cancel: "#booking-actions",
-  payment: "#booking-payments",
-  security: "#booking-security",
-  email: "#booking-email",
-  accept: "#booking-actions",
-  pay: "#booking-payments",
-  view: "#booking-facts",
+  edit: "Edit the booking",
+  delete: "Delete the booking",
 };
 
 /** "3 Sep 2026", the way a stamp reads in a fold's summary. */
@@ -175,29 +143,6 @@ function dayAndTime(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
-}
-
-/** A card in the working area — a plain surface with a title above it. */
-function Panel({
-  id,
-  title,
-  badge,
-  children,
-}: {
-  id: string;
-  title: string;
-  badge?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section id={id} className="scroll-mt-24 rounded-xl border bg-card p-4 shadow-sm lg:p-5">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="text-row font-semibold leading-tight">{title}</h2>
-        {badge}
-      </div>
-      {children}
-    </section>
-  );
 }
 
 function Detail({ label, value }: { label: string; value: string }) {
@@ -232,10 +177,35 @@ export function BookingRecord(props: BookingRecordProps) {
     saveNote,
   } = props;
 
-  const look = bookingStatusLook(booking.status);
   const canEmail = booking.kind !== "block" && booking.booker_email.includes("@");
-  const anchor = nextAction.mode ? ANCHOR[nextAction.mode] : "#booking-facts";
-  const buttonWords = nextAction.mode ? MODE_BUTTON[nextAction.mode] : nextAction.label;
+  const door = (mode: BookingSheetMode) => `/room-bookings/${bookingId}?sheet=${mode}`;
+  const primary = deskSheetMode(nextAction.mode);
+
+  // Which doors this booking's status allows, exactly as the old sidebar's five
+  // buttons decided which of themselves to draw. The one the status bar is
+  // already offering is left out of the row, so it is never on screen twice.
+  const status = booking.status;
+  const doors: { mode: BookingSheetMode; label: string }[] = [];
+  if (canEdit && ["enquiry", "pending", "quoted", "cancelled"].includes(status)) {
+    doors.push({
+      mode: "quote",
+      label:
+        status === "quoted" ? "Re-quote" : status === "cancelled" ? "Re-quote & reopen" : "Send a quote",
+    });
+  }
+  if (canEdit && ["enquiry", "quoted"].includes(status)) {
+    doors.push({ mode: "chase", label: booking.chaser_sent_at ? "Chase again" : "Send a chaser" });
+  }
+  if (canEdit && (["enquiry", "quoted", "pending"].includes(status) || terms.needsTerms)) {
+    doors.push({ mode: "confirm", label: terms.needsTerms ? "Set the price and terms" : "Confirm" });
+  }
+  doors.push({ mode: "payment", label: "Payments" });
+  if (money.securityDepositPence > 0) doors.push({ mode: "security", label: "Security deposit" });
+  if (canEmail) doors.push({ mode: "email", label: "Email the booker" });
+  if (canEdit && ["enquiry", "quoted", "pending", "confirmed"].includes(status)) {
+    doors.push({ mode: "cancel", label: "Cancel booking" });
+  }
+  const otherDoors = doors.filter((d) => d.mode !== primary);
 
   // The four folds' closed summaries — real text, worked out here, so a row is
   // worth reading without opening it.
@@ -298,7 +268,7 @@ export function BookingRecord(props: BookingRecordProps) {
         </Callout>
       )}
 
-      {/* 2. The one thing to do next. */}
+      {/* 2. The one thing to do next, and the other doors under it. */}
       <ActionBar
         className="sticky top-[var(--mobile-header-h)] z-20 lg:static"
         icon={bookingActionIcon(nextAction.key)}
@@ -306,8 +276,9 @@ export function BookingRecord(props: BookingRecordProps) {
         status={nextAction.label}
         detail={nextAction.why}
         action={
-          <a
-            href={anchor}
+          <Link
+            href={door(primary ?? "payment")}
+            scroll={false}
             className={buttonVariants({
               size: "touch",
               // Nothing is outstanding: the bar goes quiet and the button with it.
@@ -315,110 +286,42 @@ export function BookingRecord(props: BookingRecordProps) {
             })}
           >
             {bookingActionIcon(nextAction.key)}
-            {buttonWords}
-          </a>
-        }
-      />
-
-      {/* 3. The facts. */}
-      <div id="booking-facts" className="scroll-mt-24">
-        <BookingFacts booking={booking} roomName={roomName} when={when} money={money} />
-      </div>
-
-      {/* 4. What the desk does. */}
-      {canEdit && (
-        <Panel
-          id="booking-actions"
-          title="What happens next"
-          badge={
-            <Badge variant={look.badge} className="capitalize">
-              {booking.status}
-            </Badge>
-          }
-        >
-          <StatusForm
-            bookingId={bookingId}
-            currentStatus={booking.status}
-            isStaff={canEdit}
-            defaultDepositPence={terms.defaultDepositPence}
-            currentTotalPence={money.totalPence || null}
-            currentDepositPence={money.depositPence || null}
-            currentSecurityDepositPence={booking.security_deposit_pence}
-            depositRuleLabel={terms.depositRuleLabel}
-            depositRule={terms.depositRule}
-            defaultSecurityDepositPence={terms.defaultSecurityDepositPence}
-            defaultMemberDiscountPence={terms.defaultMemberDiscountPence}
-            isMember={booking.is_member}
-            memberLabel={[booking.membership_type, booking.member_number].filter(Boolean).join(" · ") || null}
-            needsTerms={terms.needsTerms}
-            chaserSentAt={booking.chaser_sent_at}
-            finalChaserSentAt={booking.final_chaser_sent_at}
-            finalChaserDiscountPence={booking.final_chaser_discount_pence}
-          />
-        </Panel>
-      )}
-
-      <Panel
-        id="booking-payments"
-        title="Payments"
-        badge={
-          <Badge variant={booking.payment_status === "paid" ? "success" : "muted"} className="capitalize">
-            {booking.payment_status.replace("_", " ")}
-          </Badge>
+            {MODE_BUTTON[primary ?? "payment"]}
+          </Link>
         }
       >
-        <PaymentsPanel
-          bookingId={bookingId}
-          payments={payments}
-          totalPence={money.totalPence}
-          depositPence={money.depositPence}
-          securityDepositPence={money.securityDepositPence}
-          canDelete={canDelete}
-        />
-      </Panel>
+        {otherDoors.length > 0 && (
+          <div className="flex flex-wrap gap-2 border-t pt-3">
+            {otherDoors.map((d) => (
+              <Link
+                key={d.mode}
+                href={door(d.mode)}
+                scroll={false}
+                className={buttonVariants({
+                  size: "touch",
+                  variant: d.mode === "cancel" ? "ghost" : "outline",
+                  className: d.mode === "cancel" ? "text-destructive hover:bg-destructive/10" : undefined,
+                })}
+              >
+                {d.label}
+              </Link>
+            ))}
+          </div>
+        )}
+      </ActionBar>
 
-      {money.securityDepositPence > 0 && (
-        <Panel
-          id="booking-security"
-          title="Security deposit"
-          badge={
-            <Badge variant={booking.security_deposit_returned_at ? "success" : "muted"}>
-              {booking.security_deposit_returned_at
-                ? "Returned"
-                : `${formatCurrency(securityPaidPence)} held`}
-            </Badge>
-          }
-        >
-          <SecurityDepositCard
-            bookingId={bookingId}
-            amountPence={money.securityDepositPence}
-            paidPence={securityPaidPence}
-            returnedAt={booking.security_deposit_returned_at}
-            returnedMethod={booking.security_deposit_returned_method}
-            returnedNote={booking.security_deposit_returned_note}
-          />
-        </Panel>
-      )}
+      {/* 3. The facts. */}
+      <BookingFacts
+        booking={booking}
+        roomName={roomName}
+        when={when}
+        money={money}
+        paymentHref={door("payment")}
+      />
 
-      {/* A plain reply from the desk (Adam, 2026-09-11), logged and audited.
-          Any booking with an address, not only an enquiry. */}
-      {canEmail && (
-        <Panel id="booking-email" title="Email the booker">
-          <ReplyForm
-            bookingId={bookingId}
-            bookerEmail={booking.booker_email}
-            defaultSubject={`Re: your ${booking.status === "enquiry" ? "enquiry" : "booking"} — ${roomName}, ${formatBookingDate(when.date)}`}
-          />
-        </Panel>
-      )}
-
-      {/* 5. Folded beneath. */}
+      {/* 4. Folded beneath. */}
       <div className="space-y-2 pt-2">
-        <FoldCard
-          icon={<UserRound className="h-4 w-4" aria-hidden />}
-          title="Booker"
-          summary={bookerSummary}
-        >
+        <FoldCard icon={<UserRound className="h-4 w-4" aria-hidden />} title="Booker" summary={bookerSummary}>
           <div className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
             {booking.booker_first_name ? (
               <>
@@ -436,6 +339,15 @@ export function BookingRecord(props: BookingRecordProps) {
               <p className="text-xs uppercase text-muted-foreground">Notes from the booker</p>
               <p className="mt-0.5 whitespace-pre-wrap text-sm">{booking.notes}</p>
             </div>
+          )}
+          {canEmail && (
+            <Link
+              href={door("email")}
+              scroll={false}
+              className={buttonVariants({ size: "touch", variant: "outline", className: "mt-4" })}
+            >
+              Email the booker
+            </Link>
           )}
         </FoldCard>
 
@@ -462,11 +374,7 @@ export function BookingRecord(props: BookingRecordProps) {
           </form>
         </FoldCard>
 
-        <FoldCard
-          icon={<Mail className="h-4 w-4" aria-hidden />}
-          title="Emails sent"
-          summary={emailSummary}
-        >
+        <FoldCard icon={<Mail className="h-4 w-4" aria-hidden />} title="Emails sent" summary={emailSummary}>
           {emailLog.length === 0 ? (
             <p className="text-sm text-muted-foreground">Nothing sent about this booking yet.</p>
           ) : (
@@ -504,22 +412,56 @@ export function BookingRecord(props: BookingRecordProps) {
               </div>
             </dl>
 
-            {canEditBooking ? (
-              <div className="border-t pt-4">
-                <p className="mb-3 text-xs uppercase text-muted-foreground">Edit this booking</p>
-                <EditBookingForm bookingId={bookingId} rooms={rooms} initial={editInitial} />
+            {(canEditBooking || canDelete) && (
+              <div className="flex flex-wrap gap-2 border-t pt-4">
+                {canEditBooking && (
+                  <Link
+                    href={door("edit")}
+                    scroll={false}
+                    className={buttonVariants({ size: "touch", variant: "outline" })}
+                  >
+                    Edit the booking
+                  </Link>
+                )}
+                {canDelete && (
+                  <Link
+                    href={door("delete")}
+                    scroll={false}
+                    className={buttonVariants({
+                      size: "touch",
+                      variant: "ghost",
+                      className: "text-destructive hover:bg-destructive/10",
+                    })}
+                  >
+                    Delete this booking
+                  </Link>
+                )}
               </div>
-            ) : null}
-
-            {canDelete ? (
-              <div className="border-t pt-4">
-                <p className="mb-3 text-xs uppercase text-muted-foreground">Danger zone</p>
-                <DeleteBookingButton id={bookingId} label="Delete this booking" />
-              </div>
-            ) : null}
+            )}
           </div>
         </FoldCard>
       </div>
+
+      {/* The doors above are links; this is what opens at the end of one. It
+          reads `?sheet=` out of the URL, so a server action refreshing the page
+          underneath leaves the sheet exactly where it was. */}
+      <Suspense fallback={null}>
+        <BookingSheetRoute
+          bookingId={bookingId}
+          booking={booking}
+          roomName={roomName}
+          when={when}
+          money={money}
+          payments={payments}
+          securityPaidPence={securityPaidPence}
+          rooms={rooms}
+          editInitial={editInitial}
+          terms={terms}
+          canEdit={canEdit}
+          canDelete={canDelete}
+          canEditBooking={canEditBooking}
+        />
+      </Suspense>
     </div>
   );
 }
